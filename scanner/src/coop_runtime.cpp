@@ -447,6 +447,47 @@ std::uint64_t g_nadine_per_view_rifle_sampled_generation = 0;
 std::uint32_t g_nadine_per_view_rifle_generation_samples = 0;
 ULONGLONG g_nadine_per_view_rifle_last_sample_ms = 0;
 
+// Build aca: the old five-mesh probe proved only that a renderable Nadine body
+// existed; it did not prove whether the externally correct grip came from the
+// retained screen-one Player or from the still-live campaign NadineBuddy.  The
+// game thread now publishes both exact object -> DrawControl -> FgAnimData
+// ownership chains.  The proven main SceneWindow post-cull seam compares only
+// their concrete FgInstance pointers with the completed draw lists.
+constexpr std::size_t kNadineBodyVisualOwnerCount = 2;
+constexpr std::size_t kNadineBodyVisualMaxMeshes = 32;
+constexpr std::size_t kNadineBodyVisualMaxInstances = 64;
+struct NadineBodyVisualOwnerTarget {
+    std::uintptr_t object = 0;
+    std::uintptr_t draw_control = 0;
+    std::uintptr_t fg_anim_data = 0;
+    std::uintptr_t vtable_rva = 0;
+    std::uint32_t runtime_id = 0;
+    std::uint32_t look_id = 0;
+    std::uint32_t mesh_count = 0;
+    std::uint32_t instance_count = 0;
+    std::uint32_t active_instance_count = 0;
+    std::uint32_t driven_instance_count = 0;
+    std::uint32_t primary_gate_meshes = 0;
+    std::uint32_t secondary_gate_meshes = 0;
+    std::uint64_t fg_world_hash = 0;
+    std::array<std::uint32_t, kNadineBodyVisualMaxMeshes> mesh_ids{};
+    std::array<std::uintptr_t, kNadineBodyVisualMaxInstances> instances{};
+    std::array<std::uint32_t, kNadineBodyVisualMaxInstances> resource_ids{};
+};
+struct NadineBodyVisualTarget {
+    std::uint64_t generation = 0;
+    std::uint64_t published_ms = 0;
+    std::array<NadineBodyVisualOwnerTarget,
+               kNadineBodyVisualOwnerCount> owners{};
+};
+SRWLOCK g_nadine_body_visual_target_lock = SRWLOCK_INIT;
+NadineBodyVisualTarget g_nadine_body_visual_target{};
+std::uint64_t g_nadine_body_visual_target_signature = 0;
+SRWLOCK g_nadine_body_visual_census_lock = SRWLOCK_INIT;
+std::uint64_t g_nadine_body_visual_sampled_generation = 0;
+std::uint32_t g_nadine_body_visual_generation_samples = 0;
+ULONGLONG g_nadine_body_visual_last_sample_ms = 0;
+
 // Build fy: IDrawControl_AddMesh resolves each ArtItemGeo resource id through
 // ArtItemGeo_ResolveFgGeometry and FgInstance_Init stores that shared FgGeometry*
 // at instance+0x1B0. Learn the six resolved pointers from the live LOD instances
@@ -2301,6 +2342,11 @@ constexpr bool kEnableStaleRifleCullProbe = false;
 // current rifle LOD0/LOD2 instances are selected in the local main view while
 // controller current=-1. The bounded census has answered its question.
 constexpr bool kEnableNadinePerViewRifleCensus = false;
+// Build aca is a bounded, read-only identity census.  It is enabled only long
+// enough to distinguish which exact Nadine body reaches the primary colour
+// view: native NadineBuddy, retained Player1, both, or neither.  It never edits
+// an actor, DrawControl, FgInstance, cull row or matrix.
+constexpr bool kEnableNadineBodyVisualOwnerCensus = true;
 // Build aah: the completed aaf census plus the exact descriptor/cull audit
 // proves that current LOD0/list0 is view type 3 and is admitted only while
 // FgInstance+0x18 bit 0x40 is clear. Apply that one exclusion to the exact
@@ -17482,6 +17528,365 @@ std::uint64_t hash_nadine_render_words(
         hash *= 1099511628211ULL;
     }
     return hash;
+}
+
+enum class NadineBodyVisualCaptureStage : std::uint8_t {
+    kObject = 1,
+    kDrawControl = 2,
+    kFgAnimData = 3,
+    kFgOwner = 4,
+    kDrivenInstances = 5,
+    kMeshes = 6,
+    kInstances = 7,
+    kComplete = 8,
+};
+
+bool seh_capture_nadine_body_visual_owner(
+    void* object, bool native_nadine,
+    NadineBodyVisualOwnerTarget* output,
+    NadineBodyVisualCaptureStage* stage_out) {
+    if (output == nullptr || stage_out == nullptr) {
+        return false;
+    }
+    *output = {};
+    *stage_out = NadineBodyVisualCaptureStage::kObject;
+    __try {
+        auto* const object_bytes = static_cast<const std::byte*>(object);
+        if (object_bytes == nullptr || readable_bytes(object_bytes) < 0x1B0) {
+            return false;
+        }
+        const std::uintptr_t vtable =
+            *reinterpret_cast<const std::uintptr_t*>(object_bytes);
+        if (native_nadine) {
+            if (vtable != g_module + kNadineBuddyVtableRva ||
+                std::memcmp(object_bytes + 0x8, "nadine-buddy", 12) != 0) {
+                return false;
+            }
+            output->look_id = *reinterpret_cast<const std::uint32_t*>(
+                object_bytes + 0x170);
+        } else {
+            std::uint32_t look = 0;
+            if (vtable != g_module + kPlayerVtableRva ||
+                object != retained_player_object(1) ||
+                !player_object_stable(object) ||
+                !player_screen_index_is(object, 1) ||
+                !seh_read_player_look(object, &look) ||
+                look != 0xD27C074Fu) {
+                return false;
+            }
+            output->look_id = look;
+        }
+        output->object = reinterpret_cast<std::uintptr_t>(object);
+        output->vtable_rva = vtable - g_module;
+        output->runtime_id = *reinterpret_cast<const std::uint32_t*>(
+            object_bytes + kGameObjectRuntimeIdOffset);
+        if (output->runtime_id == 0) {
+            return false;
+        }
+
+        *stage_out = NadineBodyVisualCaptureStage::kDrawControl;
+        auto* const draw = *reinterpret_cast<const std::byte* const*>(
+            object_bytes + 0x198);
+        auto* const fg = *reinterpret_cast<const std::byte* const*>(
+            object_bytes + 0x1A8);
+        if (draw == nullptr || readable_bytes(draw) < 0x20 ||
+            *reinterpret_cast<const std::byte* const*>(draw) != fg) {
+            return false;
+        }
+        output->draw_control = reinterpret_cast<std::uintptr_t>(draw);
+
+        *stage_out = NadineBodyVisualCaptureStage::kFgAnimData;
+        if (fg == nullptr || readable_bytes(fg) < 0x220) {
+            return false;
+        }
+        output->fg_anim_data = reinterpret_cast<std::uintptr_t>(fg);
+        output->fg_world_hash = hash_nadine_render_words(
+            reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRenderWorldMatrixOffset),
+            16);
+
+        *stage_out = NadineBodyVisualCaptureStage::kFgOwner;
+        void* const owner_handle = *reinterpret_cast<void* const*>(
+            fg + kFgAnimDataRetainedHandleOffset);
+        const std::uint32_t owner_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRetainedIdOffset);
+        if (owner_handle == nullptr || owner_id != output->runtime_id ||
+            readable_bytes(owner_handle) < 0x10 ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(owner_handle) + 0x8) != object ||
+            *reinterpret_cast<const std::uint32_t*>(
+                object_bytes + kGameObjectRuntimeIdOffset) != owner_id) {
+            return false;
+        }
+
+        *stage_out = NadineBodyVisualCaptureStage::kDrivenInstances;
+        const std::uint32_t driven_max =
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataMaxDrivenInstancesOffset);
+        const std::uint32_t driven_count =
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataDrivenInstanceCountOffset);
+        const auto* const driven_indices =
+            *reinterpret_cast<const std::uint32_t* const*>(
+                fg + kFgAnimDataDrivenInstanceIndicesOffset);
+        auto* const instance_pool = *reinterpret_cast<const std::byte* const*>(
+            g_module + kFgInstancePoolBasePointerRva);
+        const std::uint32_t instance_capacity =
+            *reinterpret_cast<const std::uint32_t*>(
+                g_module + kFgInstancePoolCapacityRva);
+        if (driven_count == 0 || driven_count > driven_max ||
+            driven_count > kNadineBodyVisualMaxInstances ||
+            driven_indices == nullptr ||
+            readable_bytes(driven_indices) <
+                sizeof(std::uint32_t) * driven_count ||
+            instance_pool == nullptr || instance_capacity == 0 ||
+            instance_capacity > 0x10000u) {
+            return false;
+        }
+        output->driven_instance_count = driven_count;
+
+        *stage_out = NadineBodyVisualCaptureStage::kMeshes;
+        const auto* const meshes =
+            *reinterpret_cast<const std::byte* const*>(draw + 0x8);
+        const std::uint32_t mesh_count =
+            *reinterpret_cast<const std::uint32_t*>(draw + 0x14);
+        constexpr std::size_t kMeshStride = 0x250;
+        if (meshes == nullptr || mesh_count == 0 ||
+            mesh_count > kNadineBodyVisualMaxMeshes ||
+            readable_bytes(meshes) < kMeshStride * mesh_count) {
+            return false;
+        }
+        output->mesh_count = mesh_count;
+
+        *stage_out = NadineBodyVisualCaptureStage::kInstances;
+        for (std::uint32_t mesh_index = 0;
+             mesh_index < mesh_count; ++mesh_index) {
+            const auto* const mesh = meshes + kMeshStride * mesh_index;
+            output->mesh_ids[mesh_index] =
+                *reinterpret_cast<const std::uint32_t*>(mesh + 0x18);
+            output->primary_gate_meshes +=
+                *reinterpret_cast<const std::uint8_t*>(mesh + 0x243) != 0;
+            output->secondary_gate_meshes +=
+                *reinterpret_cast<const std::uint8_t*>(mesh + 0x245) != 0;
+            const std::uint32_t entry_count =
+                *reinterpret_cast<const std::uint8_t*>(mesh + 0x242);
+            if (entry_count == 0 || entry_count > 16) {
+                return false;
+            }
+            for (std::uint32_t entry_index = 0;
+                 entry_index < entry_count; ++entry_index) {
+                const auto* const entry = mesh + 0x20 * entry_index;
+                void* const instance =
+                    *reinterpret_cast<void* const*>(entry);
+                void* const retained =
+                    *reinterpret_cast<void* const*>(entry + 0x10);
+                if (instance == nullptr || retained == nullptr ||
+                    readable_bytes(instance) < 0x258) {
+                    continue;
+                }
+                const std::uintptr_t instance_value =
+                    reinterpret_cast<std::uintptr_t>(instance);
+                bool duplicate = false;
+                for (std::uint32_t previous = 0;
+                     previous < output->instance_count; ++previous) {
+                    if (output->instances[previous] == instance_value) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (duplicate) {
+                    continue;
+                }
+                if (output->instance_count >= output->instances.size()) {
+                    return false;
+                }
+                const auto* const instance_bytes =
+                    static_cast<const std::byte*>(instance);
+                if (*reinterpret_cast<const std::uint32_t*>(
+                        instance_bytes + 0x250) != output->runtime_id ||
+                    instance_value <
+                        reinterpret_cast<std::uintptr_t>(instance_pool)) {
+                    return false;
+                }
+                const std::uintptr_t delta = instance_value -
+                    reinterpret_cast<std::uintptr_t>(instance_pool);
+                if (delta % kFgInstancePoolStride != 0) {
+                    return false;
+                }
+                const std::uintptr_t pool_index =
+                    delta / kFgInstancePoolStride;
+                if (pool_index >= instance_capacity) {
+                    return false;
+                }
+                bool driven = false;
+                for (std::uint32_t driven_index = 0;
+                     driven_index < driven_count; ++driven_index) {
+                    if (driven_indices[driven_index] == pool_index) {
+                        driven = true;
+                        break;
+                    }
+                }
+                if (!driven) {
+                    return false;
+                }
+                const std::uint32_t destination = output->instance_count++;
+                output->instances[destination] = instance_value;
+                output->resource_ids[destination] =
+                    *reinterpret_cast<const std::uint32_t*>(entry + 0x18);
+                output->active_instance_count +=
+                    *reinterpret_cast<const std::uint8_t*>(
+                        instance_bytes + 0x1A0) != 0;
+            }
+        }
+        if (output->instance_count == 0 ||
+            output->instance_count != output->driven_instance_count) {
+            return false;
+        }
+        *stage_out = NadineBodyVisualCaptureStage::kComplete;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+void publish_nadine_body_visual_target_game_thread(void* updated_object) {
+    if constexpr (!kEnableNadineBodyVisualOwnerCensus) {
+        (void)updated_object;
+        return;
+    }
+    if (g_net_role_b || !g_state_net.enabled) {
+        return;
+    }
+    void* const native_nadine = g_last_nadine_object;
+    void* const player_one = retained_player_object(1);
+    if (updated_object != native_nadine && updated_object != player_one) {
+        return;
+    }
+
+    NadineBodyVisualTarget candidate{};
+    NadineBodyVisualCaptureStage native_stage =
+        NadineBodyVisualCaptureStage::kObject;
+    NadineBodyVisualCaptureStage player_stage =
+        NadineBodyVisualCaptureStage::kObject;
+    const bool native_ok = seh_capture_nadine_body_visual_owner(
+        native_nadine, true, &candidate.owners[0], &native_stage);
+    const bool player_ok = seh_capture_nadine_body_visual_owner(
+        player_one, false, &candidate.owners[1], &player_stage);
+    if (!native_ok || !player_ok) {
+        std::uint64_t reject_signature = 1469598103934665603ULL;
+        const auto mix = [&reject_signature](std::uint64_t value) {
+            reject_signature ^= value;
+            reject_signature *= 1099511628211ULL;
+        };
+        mix(reinterpret_cast<std::uintptr_t>(native_nadine));
+        mix(reinterpret_cast<std::uintptr_t>(player_one));
+        mix(static_cast<std::uint8_t>(native_stage));
+        mix(static_cast<std::uint8_t>(player_stage));
+        if (reject_signature == 0) {
+            reject_signature = 1;
+        }
+        static std::array<std::atomic<std::uint64_t>, 16> seen{};
+        bool claimed = false;
+        for (auto& slot : seen) {
+            std::uint64_t current = slot.load(std::memory_order_relaxed);
+            if (current == reject_signature) {
+                return;
+            }
+            if (current == 0 && slot.compare_exchange_strong(
+                                    current, reject_signature,
+                                    std::memory_order_relaxed)) {
+                claimed = true;
+                break;
+            }
+        }
+        if (claimed) {
+            std::ostringstream line;
+            line << "NADINE-BODY-TARGET-REJECT native=0x" << std::hex
+                 << reinterpret_cast<std::uintptr_t>(native_nadine)
+                 << " player1=0x"
+                 << reinterpret_cast<std::uintptr_t>(player_one)
+                 << std::dec << " nativeStage="
+                 << static_cast<unsigned>(native_stage)
+                 << " playerStage="
+                 << static_cast<unsigned>(player_stage);
+            write_log_line(line.str().c_str());
+        }
+        return;
+    }
+
+    std::uint64_t signature = 1469598103934665603ULL;
+    const auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    for (const NadineBodyVisualOwnerTarget& owner : candidate.owners) {
+        mix(owner.object);
+        mix(owner.draw_control);
+        mix(owner.fg_anim_data);
+        mix(owner.runtime_id);
+        mix(owner.look_id);
+        mix(owner.mesh_count);
+        mix(owner.instance_count);
+        for (std::uint32_t index = 0; index < owner.mesh_count; ++index) {
+            mix(owner.mesh_ids[index]);
+        }
+        for (std::uint32_t index = 0; index < owner.instance_count; ++index) {
+            mix(owner.instances[index]);
+            mix(owner.resource_ids[index]);
+        }
+    }
+    if (signature == 0) {
+        signature = 1;
+    }
+
+    AcquireSRWLockExclusive(&g_nadine_body_visual_target_lock);
+    if (g_nadine_body_visual_target_signature == signature) {
+        ReleaseSRWLockExclusive(&g_nadine_body_visual_target_lock);
+        return;
+    }
+    candidate.generation = g_nadine_body_visual_target.generation + 1;
+    candidate.published_ms = GetTickCount64();
+    g_nadine_body_visual_target = candidate;
+    g_nadine_body_visual_target_signature = signature;
+    ReleaseSRWLockExclusive(&g_nadine_body_visual_target_lock);
+
+    std::ostringstream header;
+    header << "NADINE-BODY-TARGET generation=" << candidate.generation
+           << " native=0x" << std::hex << candidate.owners[0].object
+           << "/0x" << candidate.owners[0].runtime_id
+           << " player1=0x" << candidate.owners[1].object
+           << "/0x" << candidate.owners[1].runtime_id << std::dec;
+    write_log_line(header.str().c_str());
+    for (std::size_t owner_index = 0;
+         owner_index < candidate.owners.size(); ++owner_index) {
+        const NadineBodyVisualOwnerTarget& owner =
+            candidate.owners[owner_index];
+        std::ostringstream line;
+        line << "NADINE-BODY-TARGET-OWNER generation="
+             << candidate.generation << " owner="
+             << (owner_index == 0 ? "native" : "player1")
+             << " object=0x" << std::hex << owner.object
+             << " runtime=0x" << owner.runtime_id
+             << " vtable=0x" << owner.vtable_rva
+             << " look=0x" << owner.look_id
+             << " draw=0x" << owner.draw_control
+             << " fg=0x" << owner.fg_anim_data
+             << " world=0x" << owner.fg_world_hash << std::dec
+             << " meshes=" << owner.mesh_count
+             << " gates=" << owner.primary_gate_meshes
+             << "/" << owner.secondary_gate_meshes
+             << " instances=" << owner.active_instance_count
+             << "/" << owner.instance_count
+             << " driven=" << owner.driven_instance_count
+             << " meshIds=";
+        for (std::uint32_t mesh_index = 0;
+             mesh_index < owner.mesh_count; ++mesh_index) {
+            line << "0x" << std::hex << owner.mesh_ids[mesh_index] << ",";
+        }
+        write_log_line(line.str().c_str());
+    }
 }
 
 struct NadineLodRenderState {
@@ -39678,6 +40083,7 @@ void __fastcall hooked_update(void* object) {
             if (object == retained_player_object(1)) {
                 apply_puppet_transform_post(object);
             }
+            publish_nadine_body_visual_target_game_thread(object);
             return;
         }
 
@@ -39739,6 +40145,7 @@ void __fastcall hooked_update(void* object) {
     if (object == retained_player_object(1)) {
         apply_puppet_transform_post(object);
     }
+    publish_nadine_body_visual_target_game_thread(object);
 }
 
 char __fastcall hooked_player_input_state_update(void* player) {
@@ -53161,6 +53568,453 @@ bool seh_capture_nadine_rifle_per_view_draw_lists(
     }
 }
 
+struct NadineBodyVisualViewMatch {
+    std::uintptr_t instance = 0;
+    std::uint32_t scene_index = 0xFFFFFFFFu;
+    std::uint32_t owner_id = 0;
+    std::uint32_t target_index = 0xFFFFFFFFu;
+    std::uint32_t state_flags = 0;
+    std::uint64_t world_hash = 0;
+    std::uint64_t draw_list_mask = 0;
+    std::uint32_t selected_submesh_count = 0;
+    std::uint8_t owner_index = 0xFF;
+    std::uint8_t direct_instance = 0;
+    std::uint8_t active = 0;
+    std::uint8_t world_matrix_match = 0;
+};
+
+struct NadineBodyVisualViewSnapshot {
+    std::uintptr_t scene_window = 0;
+    std::uintptr_t scene_window_config = 0;
+    std::uint32_t queue_count = 0;
+    std::uint32_t draw_list_count = 0;
+    std::uint32_t drawable_total = 0;
+    std::uint32_t drawable_scanned = 0;
+    std::uint32_t submesh_total = 0;
+    std::uint32_t submesh_scanned = 0;
+    std::uint8_t draw_scan_truncated = 0;
+    std::uint8_t same_world_transform = 0;
+    std::array<std::uint32_t, kNadineBodyVisualOwnerCount> direct_hits{};
+    std::array<std::uint32_t, kNadineBodyVisualOwnerCount> owner_hits{};
+    std::array<std::uint32_t, kNadineBodyVisualOwnerCount>
+        selected_instances{};
+    std::array<std::uint32_t, kNadineBodyVisualOwnerCount>
+        selected_submeshes{};
+    std::array<std::uint64_t, kNadineBodyVisualOwnerCount> fg_world_hashes{};
+    std::uint32_t match_count = 0;
+    std::array<NadineBodyVisualViewMatch, 128> matches{};
+};
+
+bool read_nadine_body_visual_target(NadineBodyVisualTarget* target) {
+    if (target == nullptr) {
+        return false;
+    }
+    AcquireSRWLockShared(&g_nadine_body_visual_target_lock);
+    const NadineBodyVisualTarget candidate = g_nadine_body_visual_target;
+    ReleaseSRWLockShared(&g_nadine_body_visual_target_lock);
+    if (candidate.generation == 0 || candidate.published_ms == 0) {
+        return false;
+    }
+    for (const NadineBodyVisualOwnerTarget& owner : candidate.owners) {
+        if (owner.object == 0 || owner.draw_control == 0 ||
+            owner.fg_anim_data == 0 || owner.runtime_id == 0 ||
+            owner.instance_count == 0 ||
+            owner.instance_count > owner.instances.size()) {
+            return false;
+        }
+    }
+    *target = candidate;
+    return true;
+}
+
+bool seh_capture_nadine_body_visual_view(
+    void* cull_job, const NadineBodyVisualTarget& target,
+    NadineBodyVisualViewSnapshot* snapshot) {
+    if (snapshot == nullptr) {
+        return false;
+    }
+    *snapshot = {};
+    __try {
+        if (g_net_role_b || cull_job == nullptr ||
+            readable_bytes(cull_job) < 592) {
+            return false;
+        }
+        std::array<const std::byte*, kNadineBodyVisualOwnerCount> live_fgs{};
+        for (std::size_t owner_index = 0;
+             owner_index < target.owners.size(); ++owner_index) {
+            const NadineBodyVisualOwnerTarget& owner =
+                target.owners[owner_index];
+            const auto* const object = reinterpret_cast<const std::byte*>(
+                owner.object);
+            const auto* const draw = reinterpret_cast<const std::byte*>(
+                owner.draw_control);
+            const auto* const fg = reinterpret_cast<const std::byte*>(
+                owner.fg_anim_data);
+            if (object == nullptr || readable_bytes(object) < 0x1B0 ||
+                draw == nullptr || readable_bytes(draw) < 0x20 ||
+                fg == nullptr || readable_bytes(fg) < 0x220 ||
+                *reinterpret_cast<const std::uintptr_t*>(object) !=
+                    g_module + owner.vtable_rva ||
+                *reinterpret_cast<const std::uint32_t*>(
+                    object + kGameObjectRuntimeIdOffset) != owner.runtime_id ||
+                *reinterpret_cast<const std::byte* const*>(
+                    object + 0x198) != draw ||
+                *reinterpret_cast<const std::byte* const*>(
+                    object + 0x1A8) != fg ||
+                *reinterpret_cast<const std::byte* const*>(draw) != fg) {
+                return false;
+            }
+            void* const owner_handle = *reinterpret_cast<void* const*>(
+                fg + kFgAnimDataRetainedHandleOffset);
+            if (owner_handle == nullptr || readable_bytes(owner_handle) < 0x10 ||
+                *reinterpret_cast<void* const*>(
+                    static_cast<const std::byte*>(owner_handle) + 0x8) !=
+                    reinterpret_cast<void*>(owner.object) ||
+                *reinterpret_cast<const std::uint32_t*>(
+                    fg + kFgAnimDataRetainedIdOffset) != owner.runtime_id) {
+                return false;
+            }
+            live_fgs[owner_index] = fg;
+            snapshot->fg_world_hashes[owner_index] =
+                hash_nadine_render_words(
+                    reinterpret_cast<const std::uint32_t*>(
+                        fg + kFgAnimDataRenderWorldMatrixOffset),
+                    16);
+        }
+        snapshot->same_world_transform =
+            std::memcmp(
+                live_fgs[0] + kFgAnimDataRenderWorldMatrixOffset,
+                live_fgs[1] + kFgAnimDataRenderWorldMatrixOffset,
+                0x40) == 0
+                ? 1
+                : 0;
+
+        const auto* const job = static_cast<const std::byte*>(cull_job);
+        snapshot->scene_window = reinterpret_cast<std::uintptr_t>(
+            *reinterpret_cast<void* const*>(job + 32));
+        if (snapshot->scene_window != 0 &&
+            readable_bytes(reinterpret_cast<const void*>(
+                snapshot->scene_window)) >= 32) {
+            snapshot->scene_window_config =
+                *reinterpret_cast<const std::uintptr_t*>(
+                    snapshot->scene_window + 24);
+        }
+        const auto* const fg_scene =
+            *reinterpret_cast<const std::byte* const*>(job + 8);
+        if (fg_scene == nullptr || readable_bytes(fg_scene) < 16) {
+            return false;
+        }
+        const std::uint32_t scene_count =
+            *reinterpret_cast<const std::uint32_t*>(fg_scene);
+        void* const* const scene_instances =
+            *reinterpret_cast<void* const* const*>(fg_scene + 8);
+        if (scene_count == 0 || scene_count > 0x10000u ||
+            scene_instances == nullptr ||
+            readable_bytes(scene_instances) <
+                sizeof(void*) * static_cast<std::size_t>(scene_count)) {
+            return false;
+        }
+        snapshot->queue_count = scene_count;
+
+        for (std::uint32_t scene_index = 0;
+             scene_index < scene_count; ++scene_index) {
+            void* const instance = scene_instances[scene_index];
+            if (instance == nullptr || readable_bytes(instance) < 0x258) {
+                continue;
+            }
+            const auto* const instance_bytes =
+                static_cast<const std::byte*>(instance);
+            const std::uintptr_t instance_value =
+                reinterpret_cast<std::uintptr_t>(instance);
+            const std::uint32_t owner_id =
+                *reinterpret_cast<const std::uint32_t*>(
+                    instance_bytes + 0x250);
+            std::uint8_t matched_owner = 0xFF;
+            std::uint32_t target_index = 0xFFFFFFFFu;
+            bool direct = false;
+            for (std::size_t owner_index = 0;
+                 owner_index < target.owners.size(); ++owner_index) {
+                const NadineBodyVisualOwnerTarget& owner =
+                    target.owners[owner_index];
+                for (std::uint32_t index = 0;
+                     index < owner.instance_count; ++index) {
+                    if (owner.instances[index] == instance_value) {
+                        if (owner_id != owner.runtime_id) {
+                            return false;
+                        }
+                        matched_owner = static_cast<std::uint8_t>(owner_index);
+                        target_index = index;
+                        direct = true;
+                        break;
+                    }
+                }
+                if (direct) {
+                    break;
+                }
+                if (owner_id == owner.runtime_id) {
+                    matched_owner = static_cast<std::uint8_t>(owner_index);
+                }
+            }
+            if (matched_owner == 0xFF) {
+                continue;
+            }
+            ++snapshot->owner_hits[matched_owner];
+            if (direct) {
+                ++snapshot->direct_hits[matched_owner];
+            }
+            if (snapshot->match_count >= snapshot->matches.size()) {
+                snapshot->draw_scan_truncated = 1;
+                return false;
+            }
+            NadineBodyVisualViewMatch& match =
+                snapshot->matches[snapshot->match_count++];
+            match.instance = instance_value;
+            match.scene_index = scene_index;
+            match.owner_id = owner_id;
+            match.target_index = target_index;
+            match.owner_index = matched_owner;
+            match.direct_instance = direct ? 1 : 0;
+            match.active = *reinterpret_cast<const std::uint8_t*>(
+                instance_bytes + 0x1A0);
+            match.state_flags = *reinterpret_cast<const std::uint32_t*>(
+                instance_bytes + kFgInstanceStateFlagsOffset);
+            match.world_hash = hash_nadine_render_words(
+                reinterpret_cast<const std::uint32_t*>(
+                    instance_bytes + 0x140),
+                16);
+            match.world_matrix_match =
+                std::memcmp(
+                    instance_bytes + 0x140,
+                    live_fgs[matched_owner] +
+                        kFgAnimDataRenderWorldMatrixOffset,
+                    0x40) == 0
+                    ? 1
+                    : 0;
+        }
+
+        constexpr std::uint32_t kDrawListCount = 61;
+        constexpr std::uint64_t kMaxDrawablesPerList = 0x4000;
+        constexpr std::uint32_t kMaxDrawablesTotal = 0x20000;
+        constexpr std::uint32_t kMaxSubmeshesTotal = 0x80000;
+        const auto* const job_words =
+            reinterpret_cast<const std::uintptr_t*>(job);
+        for (std::uint32_t list_index = 0;
+             list_index < kDrawListCount; ++list_index) {
+            const auto* const list = reinterpret_cast<const std::byte*>(
+                job_words[13 + list_index]);
+            if (list == nullptr || readable_bytes(list) < 784) {
+                continue;
+            }
+            ++snapshot->draw_list_count;
+            const std::uint64_t raw_count =
+                *reinterpret_cast<const std::uint64_t*>(list + 8);
+            snapshot->drawable_total += static_cast<std::uint32_t>(
+                std::min<std::uint64_t>(raw_count, 0xFFFFFFFFULL));
+            std::uint64_t drawable_count = raw_count;
+            if (drawable_count > kMaxDrawablesPerList) {
+                drawable_count = kMaxDrawablesPerList;
+                snapshot->draw_scan_truncated = 1;
+            }
+            for (std::uint64_t drawable_index = 0;
+                 drawable_index < drawable_count; ++drawable_index) {
+                if (snapshot->drawable_scanned >= kMaxDrawablesTotal ||
+                    snapshot->submesh_scanned >= kMaxSubmeshesTotal) {
+                    snapshot->draw_scan_truncated = 1;
+                    break;
+                }
+                const std::uint32_t page_index =
+                    static_cast<std::uint32_t>(drawable_index >> 8);
+                if (page_index >= 64) {
+                    snapshot->draw_scan_truncated = 1;
+                    break;
+                }
+                const auto* const page =
+                    *reinterpret_cast<const std::byte* const*>(
+                        list + 272 + 8 * page_index);
+                if (page == nullptr || readable_bytes(page) < 8192) {
+                    snapshot->draw_scan_truncated = 1;
+                    break;
+                }
+                const auto* const drawable =
+                    page + 32 * (drawable_index & 0xFF);
+                void* const* const drawable_scene_instances =
+                    *reinterpret_cast<void* const* const*>(drawable + 8);
+                const auto* const submesh_rows =
+                    *reinterpret_cast<const std::byte* const*>(drawable + 16);
+                const std::uint32_t submesh_count =
+                    *reinterpret_cast<const std::uint32_t*>(drawable + 28) &
+                    0xFFFu;
+                ++snapshot->drawable_scanned;
+                snapshot->submesh_total += submesh_count;
+                if (submesh_count == 0) {
+                    continue;
+                }
+                if (drawable_scene_instances == nullptr ||
+                    readable_bytes(drawable_scene_instances) <
+                        sizeof(void*) * static_cast<std::size_t>(scene_count) ||
+                    submesh_rows == nullptr ||
+                    readable_bytes(submesh_rows) <
+                        9u * static_cast<std::size_t>(submesh_count)) {
+                    snapshot->draw_scan_truncated = 1;
+                    break;
+                }
+                for (std::uint32_t submesh_index = 0;
+                     submesh_index < submesh_count; ++submesh_index) {
+                    if (snapshot->submesh_scanned >= kMaxSubmeshesTotal) {
+                        snapshot->draw_scan_truncated = 1;
+                        break;
+                    }
+                    const auto* const submesh =
+                        submesh_rows + 9u * submesh_index;
+                    std::uint16_t scene_index = 0;
+                    std::memcpy(
+                        &scene_index, submesh + 7, sizeof(scene_index));
+                    ++snapshot->submesh_scanned;
+                    if (scene_index >= scene_count) {
+                        snapshot->draw_scan_truncated = 1;
+                        break;
+                    }
+                    const std::uintptr_t selected_instance =
+                        reinterpret_cast<std::uintptr_t>(
+                            drawable_scene_instances[scene_index]);
+                    for (std::uint32_t match_index = 0;
+                         match_index < snapshot->match_count; ++match_index) {
+                        NadineBodyVisualViewMatch& match =
+                            snapshot->matches[match_index];
+                        if (match.instance != selected_instance) {
+                            continue;
+                        }
+                        match.draw_list_mask |=
+                            std::uint64_t{1} << list_index;
+                        ++match.selected_submesh_count;
+                    }
+                }
+                if (snapshot->draw_scan_truncated != 0) {
+                    break;
+                }
+            }
+            if (snapshot->draw_scan_truncated != 0) {
+                break;
+            }
+        }
+
+        for (std::uint32_t match_index = 0;
+             match_index < snapshot->match_count; ++match_index) {
+            const NadineBodyVisualViewMatch& match =
+                snapshot->matches[match_index];
+            if (match.selected_submesh_count == 0 ||
+                match.owner_index >= snapshot->selected_instances.size()) {
+                continue;
+            }
+            ++snapshot->selected_instances[match.owner_index];
+            snapshot->selected_submeshes[match.owner_index] +=
+                match.selected_submesh_count;
+        }
+        return snapshot->draw_scan_truncated == 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *snapshot = {};
+        return false;
+    }
+}
+
+void census_nadine_body_visual_owners(void* cull_job) {
+    if constexpr (!kEnableNadineBodyVisualOwnerCensus) {
+        (void)cull_job;
+        return;
+    }
+    if (g_net_role_b) {
+        return;
+    }
+    NadineBodyVisualTarget target{};
+    if (!read_nadine_body_visual_target(&target)) {
+        return;
+    }
+    const ULONGLONG now = GetTickCount64();
+    std::uint32_t sample_index = 0;
+    AcquireSRWLockExclusive(&g_nadine_body_visual_census_lock);
+    if (g_nadine_body_visual_sampled_generation != target.generation) {
+        g_nadine_body_visual_sampled_generation = target.generation;
+        g_nadine_body_visual_generation_samples = 0;
+        g_nadine_body_visual_last_sample_ms = 0;
+    }
+    const bool admit =
+        g_nadine_body_visual_generation_samples < 2 &&
+        now >= target.published_ms + 2000 &&
+        (g_nadine_body_visual_last_sample_ms == 0 ||
+         now >= g_nadine_body_visual_last_sample_ms + 500);
+    if (admit) {
+        sample_index = ++g_nadine_body_visual_generation_samples;
+        g_nadine_body_visual_last_sample_ms = now;
+    }
+    ReleaseSRWLockExclusive(&g_nadine_body_visual_census_lock);
+    if (!admit) {
+        return;
+    }
+
+    NadineBodyVisualViewSnapshot snapshot{};
+    if (!seh_capture_nadine_body_visual_view(cull_job, target, &snapshot)) {
+        AcquireSRWLockExclusive(&g_nadine_body_visual_census_lock);
+        if (g_nadine_body_visual_sampled_generation == target.generation &&
+            g_nadine_body_visual_generation_samples == sample_index &&
+            g_nadine_body_visual_last_sample_ms == now) {
+            --g_nadine_body_visual_generation_samples;
+            g_nadine_body_visual_last_sample_ms = 0;
+        }
+        ReleaseSRWLockExclusive(&g_nadine_body_visual_census_lock);
+        return;
+    }
+
+    std::ostringstream header;
+    header << "NADINE-BODY-VIEW generation=" << target.generation
+           << " sample=" << sample_index
+           << " window=0x" << std::hex << snapshot.scene_window
+           << " config=0x" << snapshot.scene_window_config << std::dec
+           << " scene=" << snapshot.queue_count
+           << " lists=" << snapshot.draw_list_count
+           << " drawables=" << snapshot.drawable_scanned
+           << "/" << snapshot.drawable_total
+           << " submeshes=" << snapshot.submesh_scanned
+           << "/" << snapshot.submesh_total
+           << " truncated="
+           << static_cast<unsigned>(snapshot.draw_scan_truncated)
+           << " sameWorld="
+           << static_cast<unsigned>(snapshot.same_world_transform)
+           << " native=" << snapshot.direct_hits[0]
+           << "/" << snapshot.owner_hits[0]
+           << "/" << snapshot.selected_instances[0]
+           << "/" << snapshot.selected_submeshes[0]
+           << " player1=" << snapshot.direct_hits[1]
+           << "/" << snapshot.owner_hits[1]
+           << "/" << snapshot.selected_instances[1]
+           << "/" << snapshot.selected_submeshes[1]
+           << " worlds=0x" << std::hex << snapshot.fg_world_hashes[0]
+           << "/0x" << snapshot.fg_world_hashes[1];
+    write_log_line(header.str().c_str());
+    for (std::uint32_t index = 0;
+         index < snapshot.match_count; ++index) {
+        const NadineBodyVisualViewMatch& match = snapshot.matches[index];
+        std::ostringstream line;
+        line << "NADINE-BODY-VIEW-ENTRY generation=" << target.generation
+             << " sample=" << sample_index
+             << " owner="
+             << (match.owner_index == 0 ? "native" : "player1")
+             << " sceneIndex=" << match.scene_index
+             << " instance=0x" << std::hex << match.instance
+             << " runtime=0x" << match.owner_id
+             << " state=0x" << match.state_flags
+             << " world=0x" << match.world_hash
+             << " drawLists=0x" << match.draw_list_mask << std::dec
+             << " targetIndex=" << match.target_index
+             << " direct=" << static_cast<unsigned>(match.direct_instance)
+             << " active=" << static_cast<unsigned>(match.active)
+             << " worldMatch="
+             << static_cast<unsigned>(match.world_matrix_match)
+             << " selectedSubmeshes="
+             << match.selected_submesh_count;
+        write_log_line(line.str().c_str());
+    }
+}
+
 using MeshCullWaitForCullFgSceneFunction =
     void*(__fastcall*)(void*, void*);
 MeshCullWaitForCullFgSceneFunction
@@ -53171,6 +54025,12 @@ void* __fastcall hooked_mesh_cull_wait_for_fg_scene(
     void* const result = g_original_mesh_cull_wait_for_fg_scene != nullptr
         ? g_original_mesh_cull_wait_for_fg_scene(cull_job, shared_state)
         : nullptr;
+    if constexpr (kEnableNadineBodyVisualOwnerCensus) {
+        census_nadine_body_visual_owners(cull_job);
+    }
+    if constexpr (!kEnableNadinePerViewRifleCensus) {
+        return result;
+    }
     if (!g_net_role_b) {
         return result;
     }
@@ -53275,61 +54135,99 @@ void* __fastcall hooked_mesh_cull_wait_for_fg_scene(
 }
 
 bool install_render_main_wait_for_fg_scene_relay() {
-    auto* const call_site = reinterpret_cast<std::uint8_t*>(
-        g_module + kRenderMgrMainDrawWaitForCullFgSceneCallsiteRva);
-    if (call_site[0] != 0xE8) {
-        boot_log_line("per-view Fg cull relay SKIPPED (not E8)");
+    std::uint8_t* call_site = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t new_displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kRenderMgrMainDrawWaitForCullFgSceneCallsiteRva,
+            kMeshCullWaitForCullFgSceneRva,
+            reinterpret_cast<const void*>(
+                &hooked_mesh_cull_wait_for_fg_scene),
+            call_site, relay, new_displacement)) {
+        boot_log_line(
+            "per-view Fg cull relay SKIPPED (callsite preflight)");
         return false;
     }
     std::int32_t old_displacement = 0;
     std::memcpy(&old_displacement, call_site + 1, sizeof(old_displacement));
-    const std::uintptr_t target =
-        reinterpret_cast<std::uintptr_t>(call_site + 5) +
-        static_cast<std::intptr_t>(old_displacement);
-    const std::uintptr_t expected =
-        g_module + kMeshCullWaitForCullFgSceneRva;
-    if (target != expected) {
-        boot_log_line("per-view Fg cull relay SKIPPED (target)");
-        return false;
-    }
     g_original_mesh_cull_wait_for_fg_scene =
-        reinterpret_cast<MeshCullWaitForCullFgSceneFunction>(expected);
-
-    constexpr std::size_t kRelaySize = 14;
-    auto* const relay = static_cast<std::uint8_t*>(
-        allocate_executable_near(call_site, kRelaySize));
-    if (relay == nullptr) {
-        boot_log_line("per-view Fg cull relay SKIPPED (relay)");
-        return false;
-    }
-    relay[0] = 0xFF;
-    relay[1] = 0x25;
-    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
-    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
-        reinterpret_cast<std::uintptr_t>(
-            &hooked_mesh_cull_wait_for_fg_scene);
-    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
-    const std::int64_t new_displacement =
-        reinterpret_cast<std::intptr_t>(relay) -
-        reinterpret_cast<std::intptr_t>(call_site + 5);
-    if (new_displacement < INT32_MIN || new_displacement > INT32_MAX) {
+        reinterpret_cast<MeshCullWaitForCullFgSceneFunction>(
+            g_module + kMeshCullWaitForCullFgSceneRva);
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
         VirtualFree(relay, 0, MEM_RELEASE);
-        boot_log_line("per-view Fg cull relay SKIPPED (range)");
+        g_original_mesh_cull_wait_for_fg_scene = nullptr;
+        boot_log_line(
+            "per-view Fg cull relay SKIPPED (thread suspend)");
         return false;
     }
     DWORD old_protection = 0;
-    if (!VirtualProtect(
-            call_site, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+    if (VirtualProtect(
+            call_site, 5, PAGE_EXECUTE_READWRITE,
+            &old_protection) == 0) {
+        resume_suspended_process_threads(suspended_threads);
         VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_mesh_cull_wait_for_fg_scene = nullptr;
         boot_log_line("per-view Fg cull relay SKIPPED (protect)");
         return false;
     }
-    *reinterpret_cast<std::int32_t*>(call_site + 1) =
-        static_cast<std::int32_t>(new_displacement);
+    std::memcpy(
+        call_site + 1, &new_displacement, sizeof(new_displacement));
     FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+    std::int32_t readback = 0;
+    std::memcpy(&readback, call_site + 1, sizeof(readback));
+    bool installed = call_site[0] == 0xE8 &&
+        readback == new_displacement;
+    bool rollback_verified = false;
+    if (!installed) {
+        std::memcpy(
+            call_site + 1, &old_displacement, sizeof(old_displacement));
+        FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+        std::int32_t rollback_readback = 0;
+        std::memcpy(
+            &rollback_readback, call_site + 1,
+            sizeof(rollback_readback));
+        rollback_verified = call_site[0] == 0xE8 &&
+            rollback_readback == old_displacement;
+    }
     DWORD ignored = 0;
-    VirtualProtect(call_site, 5, old_protection, &ignored);
-    boot_log_line("per-view Fg cull callsite relay installed");
+    bool protection_restored =
+        VirtualProtect(call_site, 5, old_protection, &ignored) != 0;
+    if (installed && !protection_restored) {
+        std::memcpy(
+            call_site + 1, &old_displacement, sizeof(old_displacement));
+        FlushInstructionCache(GetCurrentProcess(), call_site, 5);
+        std::int32_t rollback_readback = 0;
+        std::memcpy(
+            &rollback_readback, call_site + 1,
+            sizeof(rollback_readback));
+        rollback_verified = call_site[0] == 0xE8 &&
+            rollback_readback == old_displacement;
+        installed = !rollback_verified;
+        protection_restored =
+            VirtualProtect(call_site, 5, old_protection, &ignored) != 0;
+    }
+    resume_suspended_process_threads(suspended_threads);
+    if (!installed) {
+        if (rollback_verified) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+            g_original_mesh_cull_wait_for_fg_scene = nullptr;
+            boot_log_line(
+                protection_restored
+                    ? "per-view Fg cull relay SKIPPED (verified rollback)"
+                    : "per-view Fg cull relay SKIPPED (verified rollback, protection WARNING)");
+        } else {
+            boot_log_line(
+                protection_restored
+                    ? "per-view Fg cull relay SKIPPED (rollback WARNING; relay retained)"
+                    : "per-view Fg cull relay SKIPPED (rollback/protection WARNING; relay retained)");
+        }
+        return false;
+    }
+    boot_log_line(
+        protection_restored
+            ? "per-view Fg cull callsite relay installed"
+            : "per-view Fg cull callsite relay installed PARTIAL (protection WARNING)");
     return true;
 }
 
@@ -56188,8 +57086,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-11abx "
-        "(rejected Nadine local-row relay disabled; floating sling disabled)");
+        "TLL co-op runtime init 2026-08-13aca "
+        "(read-only native-vs-Player1 body main-view census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -56237,7 +57135,8 @@ DWORD WINAPI install_hook(void*) {
         boot_log_line(
             "CullFgLods callsite relay disabled after rejected gw runtime");
     }
-    if constexpr (kEnableNadinePerViewRifleCensus) {
+    if constexpr (kEnableNadinePerViewRifleCensus ||
+                  kEnableNadineBodyVisualOwnerCensus) {
         install_render_main_wait_for_fg_scene_relay();
     }
     install_nd_attachable_parent_visibility_relay();

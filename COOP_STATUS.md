@@ -22990,3 +22990,72 @@ the obsolete `ida_kernwin.qexit` with `ida_pro.qexit`. The canonical IDB label
 pass saved `1720 functions, 60 data names` with
 `save_database returned True`, and the restarted MCP resolves the three named
 frame-record/publication functions with the updated same-frame comments.
+
+### 2026-08-13 STATIC / IMPLEMENTED: distinguish native NadineBuddy and retained Player1 in the primary colour view (`aca`)
+
+The next boundary corrects the visual-donor premise before another pose
+experiment. Current co-op architecture keeps two separate Nadine-shaped actors
+alive in role A: the campaign `NadineBuddy` whose update supplies
+`g_last_nadine_object`, and the separately spawned retained screen-one
+`Player1`. Auto-spawn mode does not enable `g_net_drive_nadine`, does not clear
+or hide the native object, and still calls the stock update for both. The
+externally correct grip can therefore belong to either actor or to two
+overlapping submissions; the old five-mesh F11 probe did not distinguish them.
+
+Three independent static evidence types close a safe identity census. First,
+the concrete vtables have different slot `+0x6F0` implementations:
+`NadineBuddy::vftable 0x142949638 -> Npc_AllocateAnimDataForDrawable
+0x1403D1CD0`, while `Player::vftable 0x142A4BFE8 ->
+Player_AllocateAnimData 0x1410DE740`. Both then enter
+`NdDrawableObject_AllocateAndInitFgAnimData 0x141BBA060`, but they allocate
+independent objects. Second, generic `NdGameObject_Init 0x141BB4280` calls that
+concrete slot, stores its return at object `+0x1A8`, constructs the object's
+`IDrawControl` at `+0x198`, and binds the DrawControl back to the same
+FgAnimData. `AnimMgr_AllocateAnimData 0x14177F7F0` independently records the
+exact owner weak pair at Fg `+0x1A8/+0x1B0` and initializes its driven
+FgInstance list at `+0x208/+0x20C/+0x210`. Third, the already CONFIRMED `aaf`
+renderer boundary maps a concrete FgInstance through the primary
+`RenderMgr_MainDrawCore 0x141661960` SceneWindow, the completed
+`MeshCull_WaitForCullFgScene 0x141A35BE0` job, outer 32-byte drawable rows and
+their inner 9-byte submesh rows to the final selected draw-list bits. No new
+render format or guessed ownership field is introduced.
+
+Build `aca` is read-only and role-A-only. After either actor's stock update,
+the game thread accepts the pair only when exact vtables, native inline name,
+screen-one legacy-Nadine Player identity, object runtime ids, `object+0x198 ->
+DrawControl -> Fg == object+0x1A8`, Fg retained owner pair, every mesh entry's
+`instance+0x250` owner id and every driven-pool index all agree. The stable pair
+is copied under an SRW lock. At the already proven E8 callsite `0x141661BE4`, a
+robust suspended-thread relay calls stock first and then reads at most two
+completed primary-view frames, 500 ms apart, after two seconds of stable
+identity. It scans the same bounded 61 lists / `0x20000` drawables / `0x80000`
+submeshes as `aaf`, compares only the published concrete body FgInstance
+pointers and runtime ids, and reports each owner's final list mask, selected
+submesh count, active/state bytes, live Fg/instance world-matrix agreement and
+native-vs-Player world equality. It does not write an actor, pose, matrix,
+DrawControl, FgInstance, cull flag or draw row. The installer now also verifies
+displacement readback, protection restoration and rollback before resuming
+other threads. A clean Release build succeeds.
+
+The competing hypotheses and prediction are explicit before launch.
+**Hplayer** predicts `player1 selectedSubmeshes>0` and native zero: the measured
+retained Player really is the external visual producer, so `aby` failed because
+its transported semantic delta/timing was insufficient. **Hnative** predicts
+native selected rows and Player1 zero: the apparent correct grip came from the
+stock campaign actor, invalidating Player1 as donor. **Hboth** predicts selected
+rows for both; `sameWorld=1` means the user saw overlapping presentations,
+while `sameWorld=0` means the two actors were spatially distinct and the tested
+screen target must be chosen by position. **Hneither** is a packaging or
+unidentified-presentation result and authorizes no mutation. A valid exam must
+emit one target, two owner rows and exactly samples 1/2 with one stable nonzero
+window/config pair, nonzero untruncated drawable/submesh totals and no third
+sample. Any crash, stall, missing target with a reject stage, truncation,
+pointer/runtime drift or world mismatch on selected direct instances rejects
+only `aca`. No game was launched during this static pass.
+
+The canonical IDB now names `Npc_AllocateAnimDataForDrawable 0x1403D1CD0`,
+`Player_AllocateAnimData 0x1410DE740` and
+`NdGameObject_Construct 0x141BB3330`. The headless pass reports `1722
+functions, 60 data names` and `save_database returned True` in
+`reports/apply_status_body_visual_owner.txt`; restarted MCP readback resolves
+all three names from the sole `ida/tll.i64`.

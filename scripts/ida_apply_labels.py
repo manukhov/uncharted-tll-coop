@@ -735,7 +735,15 @@ FUNCTIONS = {
         "owned AttachSystem at npc+0x1E0 from npc-common, then extends it from "
         "the active look/rig payload reached through npc+0x170. This is distinct "
         "from Player_SetupAttachSystemFromLookData and its player/player-net "
-        "namespaces.",
+            "namespaces.",
+    ),
+    0x1403D1CD0: (
+        "Npc_AllocateAnimDataForDrawable",
+        "Concrete Npc/NadineBuddy vtable +0x6F0 wrapper. Calls the generic "
+        "NdDrawableObject_AllocateAndInitFgAnimData allocator and, in the "
+        "network mode selected by g_NetModeFlags high byte, sets FgAnimData "
+        "+0x2D1. NadineBuddy vtable 0x142949638 resolves this exact slot, "
+        "independently of Player::AllocateAnimData.",
     ),
     0x1404A0F40: (
         "NadineBuddy_Create",
@@ -8235,14 +8243,13 @@ FUNCTIONS = {
         "top-level Player descriptor/id pair later consumed by 0x140CC1450.",
     ),
     0x1410DE740: (
-        "FinalizeTopLevelPlayerOwnerWithExternalSpawnState",
-        "Thin Player-side finalize/apply wrapper adjacent to the +0x3BD0 "
-        "initializer cluster. Logs through outer_player+0x3C20 using the "
-        "player.cpp / Player::Player(void) / Player::AllocateAnimData(...) "
-        "literal block, then does little beyond calling "
-        "0x140CC1450(outer_player, external_state) and running the paired "
-        "cleanup/finalize at 0x1415A1B80. This is therefore a stable Player-"
-        "side wrapper around the stronger promotion seam below it.",
+        "Player_AllocateAnimData",
+        "Exact Player vtable +0x6F0 implementation. Its source assertion is "
+        "Player::AllocateAnimData(const ArtItemSkeleton*); it delegates the "
+        "Player-specific allocation/setup to 0x140CC1450 and returns the "
+        "FgAnimData consumed by NdGameObject_Init at Player+0x1A8. The "
+        "separate concrete slot from Npc_AllocateAnimDataForDrawable proves "
+        "the retained Player1 and native NadineBuddy own independent Fg data.",
     ),
     0x1413C04A0: (
         "RunSecondaryRetainedPlayerSpawnAndNotifyOuterOwner240",
@@ -9515,6 +9522,14 @@ FUNCTIONS = {
         "is currently the strongest concrete upper lifecycle anchor above the "
         "mounted Player graph that includes both the direct apply seam and the "
         "new +0x700 state-owner band.",
+    ),
+    0x141BB3330: (
+        "NdGameObject_Construct",
+        "Exact NdGameObject base constructor. Installs the NdGameObject "
+        "vtable and initializes DrawControl pointer object+0x198 and "
+        "FgAnimData pointer object+0x1A8 to null before the derived class "
+        "constructor and NdGameObject_Init establish their independent "
+        "render ownership chains.",
     ),
     0x141BB4280: (
         "NdGameObject_Init",

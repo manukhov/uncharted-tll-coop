@@ -4500,6 +4500,17 @@ not patch `+0x16C`, reuse a hip/back transform for the hand, or request another
 runtime probe. Continue statically through the two scalar inputs and lifecycle
 of terminal `WeaponIKFeather_Apply`.
 
+**STATIC IMPLEMENTED (`aca`):** before any further Nadine grip mutation,
+distinguish the actual role-A visual producer. Native `NadineBuddy` and retained
+screen-one `Player1` have separate vtable `+0x6F0` Fg allocators, separate
+`object+0x1A8` FgAnimData, separate `object+0x198` DrawControls and exact
+owner/driven-instance identities. The bounded read-only main SceneWindow census
+publishes both chains on the game thread and, after stock post-cull, reports
+which concrete body instances reach the final 61 draw lists. Written outcomes:
+Player1-only, native-only, both (with same/different world transform), or
+neither/packaging. Run only this automatic two-sample exam; do not add pose,
+visibility, weapon or cull mutation until the producer is identified.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
