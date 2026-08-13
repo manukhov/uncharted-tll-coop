@@ -144,14 +144,14 @@
       Therefore retained Player1 is a real rendered donor candidate, not an
       unrendered body; native-only and overlapping-owner explanations are
       rejected.
-- [ ] Close the symmetric local pixel-owner premise with read-only build `acc`.
-      The rejected `abw/aby` writes targeted role-B retained Player0, but only
-      role-A Player1 has been joined to final selected body submeshes. Reuse the
-      proven `0x141661BE4` post-cull census on role B, comparing native
-      NadineBuddy with retained screen-zero Player0. `player0>0/native=0`
-      confirms the old destination; `native>0/player0=0` selects the native
-      body; both selected require the world-position discriminator; neither is
-      packaging failure. No pose or visibility mutation is part of this test.
+- [x] Close the symmetric local pixel-owner premise with read-only build `acc`.
+      The first two complete role-B samples selected local Player0 at `6/62`
+      instances/submeshes while all 16 native instances had `0/0`; every
+      selected Player0 instance was direct, active and world-matched. A later
+      recreated generation selected both at different worlds (`native 6/53`,
+      `Player0 4/59`, `sameWorld=0`). This confirms that `abw/aby` wrote the real
+      local body producer and rejects native substitution or an overlapping
+      duplicate as the reason their pixels did not change.
 - [x] REJECT `abz` before runtime. The engine seam at `0x14181AB33` is an
       ordinary imported three-argument `memcpy`; staging the same 88 rows in
       `Fg+0x230` only makes that copy produce the same `Fg+0x240` bytes that the
@@ -182,9 +182,9 @@
       there is no weapon-art spatial goal inside the latter. Do not mutate this
       composition until a local-only first writer is isolated with three
       independent evidence types and a prediction distinct from both rejected
-      palette relays. `aca` has now identified retained Player1 as a real
-      selected main-view producer; compare its same-frame semantic inputs to
-      local Player0 rather than testing another body buffer.
+      palette relays. `aca/acc` have now identified retained Player1 and local
+      Player0 as real selected main-view producers; compare their same-frame
+      semantic inputs rather than testing another body buffer.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that

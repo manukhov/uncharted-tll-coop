@@ -2341,11 +2341,11 @@ constexpr bool kEnableStaleRifleCullProbe = false;
 // current rifle LOD0/LOD2 instances are selected in the local main view while
 // controller current=-1. The bounded census has answered its question.
 constexpr bool kEnableNadinePerViewRifleCensus = false;
-// Build aca is a bounded, read-only identity census.  It is enabled only long
-// enough to distinguish which exact Nadine body reaches the primary colour
-// view: native NadineBuddy, retained Player1, both, or neither.  It never edits
-// an actor, DrawControl, FgInstance, cull row or matrix.
-constexpr bool kEnableNadineBodyVisualOwnerCensus = true;
+// Builds aca/acc completed the bounded, read-only identity census in both
+// processes. Retained Player1 and local Player0 are real selected primary-view
+// body producers; native NadineBuddy may also be selected at another world
+// position. The census has answered its question and stays out of production.
+constexpr bool kEnableNadineBodyVisualOwnerCensus = false;
 // Build aah: the completed aaf census plus the exact descriptor/cull audit
 // proves that current LOD0/list0 is view type 3 and is admitted only while
 // FgInstance+0x18 bit 0x40 is clear. Apply that one exclusion to the exact
@@ -57085,8 +57085,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-13acc "
-        "(read-only local Player0-vs-native body main-view census)");
+        "TLL co-op runtime init 2026-08-13acd "
+        "(production after confirmed local Player0 body ownership)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

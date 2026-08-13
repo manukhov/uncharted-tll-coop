@@ -23157,3 +23157,43 @@ totals, crash or stall rejects only `acc`. Before a valid result, no pose,
 WeaponIK, ProcessWeapon or renderer mutation is authorized. Release build and
 `git diff --check` pass; no new IDB label is required because every engine
 boundary is the same already-labelled `aca` boundary.
+
+### 2026-08-13 RUNTIME CONFIRMED (`acc`): retained Player0 is the local main-view Nadine body producer
+
+The symmetric role-B exam passed and rejects the last wrong-body explanation
+for the negative `abw/aby` pose transfers. Fresh processes entered chapter 4;
+role B admitted native NadineBuddy `0x10e0daef00/0x4F2` and retained screen-zero
+Player0 `0x10e0a92c80/0x4B7`. Both objects had look `D27C074F`, exact owner/Fg
+backlinks, the same five `nadine-rural` mesh ids, all five mesh gates enabled
+and `16/20` active driven instances.
+
+The first stable generation produced two complete, untruncated post-cull
+samples:
+
+- sample 1: `890` scene entries, `200/200` drawables and `200/200` submeshes;
+- sample 2: `899` scene entries, `205/205` drawables and `205/205` submeshes;
+- both samples: native `16/16/0/0`, Player0 `16/16/6/62`, `sameWorld=0`.
+
+All six selected Player0 body instances had `active=255`, exact direct driven
+membership and `worldMatch=1`; every native instance was present in the scene
+but had zero selected submeshes. This is the exact local camera interval in
+which the bad grip was under examination, so **Lplayer is CONFIRMED** and
+**Lnative is REJECTED** as its pixel owner. Later object recreation at
+generation 12 selected both spatially distinct actors (`native 6/53`,
+`Player0 4/59`, `sameWorld=0`) in two further complete samples. That later
+coexistence confirms a native body can re-enter the process view elsewhere; it
+does not form an overlapping replacement for Player0.
+
+Together, `aca` and `acc` prove both endpoints of the rejected transfers are
+real selected bodies: role-A retained Player1 is the externally correct donor
+and role-B retained Player0 is the locally broken destination. Consequently,
+the lack of a pixel change in `abw/aby` cannot be attributed to an unrendered
+destination, native-body substitution or overlapping duplicate. It remains a
+semantic/timing/publication problem around the concrete hand-prop,
+ProcessWeapon and paired WeaponIK composition. The census was read-only; no
+actor, draw row, matrix, visibility or weapon state was changed.
+
+Build `acd` disables the completed body census. No new runtime launch is
+authorized by this result. Continue statically at the exact same-frame
+semantic hand-prop/weapon/IK boundary rather than trying another body-buffer
+copy.
