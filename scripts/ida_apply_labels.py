@@ -1138,6 +1138,27 @@ FUNCTIONS = {
         "animation through the Chloe-base weapon overlay map and searches that "
         "mapped id; if no record exists, retries the original animation id.",
     ),
+    0x1410ACB70: (
+        "PlayerWeaponController_GetWeaponHandSideSelector",
+        "PlayerWeaponController vtable +0x240. Returns controller+0x444, "
+        "initialized to 1 by the controller constructor and changed only by "
+        "the concrete SwitchWeaponHand entry points/actions. "
+        "PlayerWeaponIKAction passes it to WeaponIKFeather as the generic "
+        "left/right interpolation selector; it is not a weapon-art locator.",
+    ),
+    0x141BB68E0: (
+        "NdGameObject_SetAnimScale",
+        "Generic NdGameObject virtual setter paired with GetAnimScale in many "
+        "game-object vtables. Writes the scalar to FgAnimData+0x140 when the "
+        "object owns Fg animation data.",
+    ),
+    0x141BB6900: (
+        "NdGameObject_GetAnimScale",
+        "Generic NdGameObject virtual getter paired with SetAnimScale in many "
+        "game-object vtables. Reads FgAnimData+0x140 or returns 1.0 when no Fg "
+        "data exists. PlayerWeaponIKAction passes this scalar into "
+        "WeaponIKFeather as a multiplicative scale, not a spatial weapon goal.",
+    ),
     0x1410EB3E0: (
         "PlayerAnimOwner_UsesChloeBaseSkeleton",
         "Queries the animation owner's vtable +0x300 identity and returns true "

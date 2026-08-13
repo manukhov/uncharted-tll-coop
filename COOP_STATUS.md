@@ -23197,3 +23197,64 @@ Build `acd` disables the completed body census. No new runtime launch is
 authorized by this result. Continue statically at the exact same-frame
 semantic hand-prop/weapon/IK boundary rather than trying another body-buffer
 copy.
+
+### 2026-08-13 STATIC / REJECTED: the last WeaponIK inputs are generic hand-side and animation-scale controls
+
+The remaining arguments entering `WeaponIKFeather_Apply 0x1418F2700` are now
+closed, and neither can contain the missing P99/Mazur grip placement. This
+rejects another tempting scalar/selector repair before runtime.
+
+The controller dataflow is the first independent evidence. Exact
+PlayerWeaponController vtable slot `+0x240` resolves to
+`PlayerWeaponController_GetWeaponHandSideSelector 0x1410ACB70`, a seven-byte
+getter for controller `+0x444`. `PlayerWeaponController_Construct 0x14109D0E0`
+initializes that field to `1` at `0x14109D2ED`. Its concrete writes at
+`0x1410ABFF9`, `0x1410AC2B8` and `0x1410AC951` belong to the
+`PlayerSwitchWeaponHandAction` creation/finalization paths; no weapon art,
+Player look or animation clip participates. At `0x1418F317C` the Feather
+solver consumes this value only as a boolean side selector and replaces the
+paired-hand interpolation weight with `1.0 - weight` when it is nonzero.
+
+The generic virtual pair supplies the second evidence. ProcessWeapon vtable
+slot `+0x1E0` resolves to `NdGameObject_GetAnimScale 0x141BB6900`; the adjacent
+slot `+0x1D8` is `NdGameObject_SetAnimScale 0x141BB68E0`. These same two
+functions occur in a large cross-class set of NdGameObject vtables rather than
+only ProcessWeapon. The setter writes `FgAnimData+0x140`; the getter reads that
+same scalar or returns the exact `1.0` constant `0x3F800000` when the object has
+no Fg data. `FgAnimData_Init 0x1418C4840` independently initializes
+`FgAnimData+0x140` to `1.0` at `0x1418C4897` and broadcasts it into the initial
+transform calculation at `0x1418C492B`, confirming a generic animation scale,
+not an attachment locator.
+
+The terminal solver arithmetic supplies the third evidence. At
+`0x1418F27B0`, `WeaponIKFeather_Apply` blends the object scalar only as
+`smoothWeight * animScale + (1 - smoothWeight)`. In
+`WeaponIKFeather_SolveWeaponFeatherIk 0x1418F2E50`, the only spatial values are
+the already-composed left and right `*_hand_prop_attachment` world Locators;
+the target is their weighted interpolation and the same result is sent to both
+arm maps. No ProcessWeapon attachment record, P99/Mazur art row, weapon mesh
+origin or socket transform is read anywhere in this solve.
+
+Competing hypotheses are therefore separated. **Hhand-side** is REJECTED as an
+art-specific cause: it is a controller-wide switch-hand state and only reverses
+the same interpolation. **Hanim-scale** is REJECTED as a spatial cause: it is a
+generic Fg scalar, defaults to one and only scales IK strength. **Hinside-feather
+weapon target** remains REJECTED by the complete callee/argument dataflow.
+The surviving split is now strictly upstream: the authored/retargeted command
+composition that produced the two hand-prop world Locators, or a local/remote
+lifecycle difference deciding whether the generic Feather action runs.
+
+No runtime follows from this closure. The next admissible discriminator must
+compare the exact pre-solve left/right hand-prop Locators, selector and scalar
+for the already-proven selected Player1 and Player0 owners at the sole Apply
+callsite. It must also log bounded entry reach, because correct remote Player1
+may legitimately consume a networked pose without running the local
+PlayerWeaponIKAction. Only a measured first difference can authorize a repair;
+changing selector, scale, individual arm, ProcessWeapon attachment or another
+body buffer is not justified.
+
+The canonical IDB label pass accompanying this entry names the controller
+getter and generic animation-scale setter/getter. Headless application reports
+`1725 functions, 60 data names` and `save_database returned True`; restarted
+MCP readback resolves all three names from the single `ida/tll.i64`. Runtime
+remains closed.

@@ -174,13 +174,23 @@
       0x14181D750`. C39 has the exact interleaved shoulder/elbow/wrist/palm/
       hand-prop hierarchy, so neither a missing palm nor retained Chloe ordinal
       explains the local-only pose.
+- [x] Close the remaining two `WeaponIKFeather` scalar/control inputs. Exact
+      PlayerWeaponController vtable `+0x240 = 0x1410ACB70` returns the generic
+      hand-side selector at controller `+0x444`, initialized to 1 and changed
+      only by SwitchWeaponHand lifecycle. ProcessWeapon vtable `+0x1E0 =
+      NdGameObject_GetAnimScale 0x141BB6900` reads the generic FgAnimData
+      animation scale at `+0x140` (default/initial value 1.0). The solver only
+      flips its left/right interpolation for the former and multiplies its
+      scalar weight by the latter; neither contains a P99/Mazur spatial target.
 - [ ] Continue statically from the semantic composition boundary: join the
       proximal arms, palms, `*_hand_prop_attachment`, ProcessWeapon endpoint and
       two-hand IK writers for exact local P99/Mazur idle. The next unresolved
       split is upstream authored/retargeted hand-prop placement versus the
-      generic paired-hand convergence inside `WeaponIKFeather_SolveWeaponFeatherIk`;
-      there is no weapon-art spatial goal inside the latter. Do not mutate this
-      composition until a local-only first writer is isolated with three
+      generic paired-hand convergence inside `WeaponIKFeather_SolveWeaponFeatherIk`.
+      All Feather inputs are now closed and there is no weapon-art spatial goal
+      inside it. Resolve and compare the exact pre-solve left/right hand-prop
+      world locators for selected Player1 versus Player0 before any mutation.
+      Do not mutate this composition until a local-only first writer is isolated with three
       independent evidence types and a prediction distinct from both rejected
       palette relays. `aca/acc` have now identified retained Player1 and local
       Player0 as real selected main-view producers; compare their same-frame
