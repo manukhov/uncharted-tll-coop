@@ -1448,7 +1448,18 @@ FUNCTIONS = {
         "rows as snapshot blend nodes keyed by the state id at snapshot+0x8. "
         "At 0x1418B2940 it resolves the requested animation through the track-local "
         "AnimOverlayState supplied as a4, calls AnimSetRemap at 0x1418B2954, then "
-        "stores the resolved id/key tuple at snapshot+0x88/+0x90/+0x94.",
+        "stores the outer id/key tuple at snapshot+0x88/+0x90/+0x94. That "
+        "tuple is consumed by AnimStateInstance_ResolveSnapshotClipTiming; pose "
+        "commands are generated from independently remapped node-local Animation "
+        "fields +0x44/+0x48/+0x4C/+0x50.",
+    ),
+    0x1418B32E0: (
+        "AnimStateInstance_ResolveSnapshotClipTiming",
+        "Resolves the snapshot root and calls virtual slot 10, then resolves the "
+        "outer AnimStateSnapshot tuple +0x88/+0x90/+0x94 only to derive instance "
+        "timing fields +0x98/+0x9C. It is not the leaf pose-command clip owner; "
+        "AnimSnapshotNodeAnimation performs its own node-local remap and clip "
+        "resolution before emitting command 0x60006.",
     ),
     0x1418B2A40: (
         "AnimStateSnapshot_TransformState",

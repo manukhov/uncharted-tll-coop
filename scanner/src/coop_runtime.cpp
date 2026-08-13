@@ -2433,12 +2433,10 @@ constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
 // bounded exams produced live owner0 copy markers and zero skip markers.  The
 // custom-pair Player fields are transition-time request storage, not a proven
 // steady pose owner.  Remove the rejected mutation instead of widening it.
-// The live Mazur WeaponOut census instead closes on the complete run-state
-// player-anim-settings-chloe bundle.  That bundle replaces the ordinary Player
-// base/hands/breathing rows with seven-group Chloe clips while leaving Mazur's
-// proximal Player arms intact.  Restore the exact shipped generic run-table
-// result only for a physically drawn Mazur owned by the legacy-Nadine Player.
-constexpr bool kEnableLegacyNadineMazurSteadyPlayerSettingsRepair = true;
+// Build acm proved that the resolver can replace the exact idle-base leaf in
+// both copies, but the visible pose did not change and the cached idle-hands
+// leaf was never re-resolved.  Remove that non-atomic repair rather than leave
+// dormant mutation code in the hot resolver.
 // REJECTED in build abr: this callsite belongs to module-import/DC-update work,
 // not the steady per-frame weapon-pose path. It can run before the co-op role is
 // assigned and then remain silent while P99/Mazur are drawn. Keep the bounded
@@ -42698,38 +42696,6 @@ constexpr std::uint32_t kMazurGenericRightHandClipId = 0xEBEFDD92u;
 constexpr std::uint32_t kMazurRightHandPlayerClipId = 0x0A2F8976u;
 constexpr std::uintptr_t kAnimStateLayerResolveOverlayCallerRva = 0x18B2945u;
 
-struct NadineMazurSteadyPlayerSettingsReplacement {
-    const char* name;
-    std::uint32_t source;
-    std::uint32_t chloe_target;
-    std::uint32_t player_target;
-};
-
-// Exact selector 25A767CF (run) rows from player-anim-settings-chloe.bin and
-// their shipped counterparts in player-anim-settings.bin.  Absence from the
-// generic table means the source survives unchanged.
-constexpr std::array<NadineMazurSteadyPlayerSettingsReplacement, 7>
-    kNadineMazurSteadyPlayerSettingsReplacements{{
-        {"run-randomness", 0x20FFCB4Fu, 0xC7FB376Fu, 0x20FFCB4Fu},
-        {"breathing-heavy", 0x8F9F1C38u, 0xC7FB376Fu, 0x8F9F1C38u},
-        {"run-tense-hands", 0x77A8107Cu, 0x7D11D4FDu, 0x77A8107Cu},
-        {"idle-hands", 0x7FB80CC8u, 0x7D11D4FDu, 0x7FB80CC8u},
-        {"idle-base", 0x41C84248u, 0x5F913F74u, 0x2AD31AACu},
-        {"run-idle-base", 0xBE7CB4A2u, 0x1CEC7F3Au, 0x19CFD6FFu},
-        {"run-base", 0xEB712BFCu, 0x01321972u, 0xEB712BFCu},
-    }};
-
-const NadineMazurSteadyPlayerSettingsReplacement*
-find_nadine_mazur_steady_player_settings_replacement(
-    std::uint32_t source, std::uint32_t authored_output) {
-    for (const auto& row : kNadineMazurSteadyPlayerSettingsReplacements) {
-        if (row.source == source && row.chloe_target == authored_output) {
-            return &row;
-        }
-    }
-    return nullptr;
-}
-
 bool update_legacy_nadine_active_grip_overlay_state(
     void* state, bool legacy_nadine) {
     const std::uintptr_t value = reinterpret_cast<std::uintptr_t>(state);
@@ -42938,148 +42904,6 @@ bool seh_count_active_overlay_matches_any_selector(
         *matching_rows_out += matching_rows;
     }
     return true;
-}
-
-struct NadineMazurSteadyPlayerSettingsCapture {
-    int owner_index = -1;
-    void* player = nullptr;
-    void* controller = nullptr;
-    void* weapon = nullptr;
-    int slot = -1;
-    int current_slot = -99;
-    std::uint32_t draw_state = 0;
-    std::uint32_t selector_sets = 0;
-    std::uint32_t matching_rows = 0;
-    std::uint32_t selected_attach_id = 0;
-};
-
-bool seh_select_legacy_nadine_mazur_steady_player_settings(
-    void* state, std::uint32_t source, std::uint32_t authored_output,
-    std::uintptr_t caller_rva,
-    NadineMazurSteadyPlayerSettingsCapture* capture) {
-    if (capture == nullptr) {
-        return false;
-    }
-    *capture = {};
-    const auto* const replacement =
-        find_nadine_mazur_steady_player_settings_replacement(
-            source, authored_output);
-    if (replacement == nullptr) {
-        return false;
-    }
-    __try {
-        if (g_module == 0 || !g_state_net.enabled ||
-            caller_rva != kAnimStateLayerResolveOverlayCallerRva ||
-            !g_legacy_nadine_active_grip_hooks_ready.load(
-                std::memory_order_acquire)) {
-            return false;
-        }
-        if (!seh_classify_legacy_nadine_master_overlay_state(
-                state, &capture->owner_index, &capture->player) ||
-            capture->player == nullptr ||
-            capture->owner_index != (g_net_role_b ? 0 : 1) ||
-            capture->player != retained_player_object(capture->owner_index) ||
-            !player_object_stable(capture->player) ||
-            !player_screen_index_is(
-                capture->player,
-                static_cast<std::uint32_t>(capture->owner_index))) {
-            return false;
-        }
-        if (!g_net_role_b) {
-            coop::StatePacket peer{};
-            const ULONGLONG peer_received =
-                g_state_net.peer_state_received_ms.load(
-                    std::memory_order_acquire);
-            if (!copy_peer_state_snapshot(peer) ||
-                peer_received == 0 ||
-                GetTickCount64() - peer_received > 100 ||
-                (peer.flags & 0x80u) == 0 || peer.gun_state != 1 ||
-                peer.held_weapon_art_id != kCoopRifleArtId ||
-                peer_packet_aim_active(peer)) {
-                return false;
-            }
-        }
-        std::uint32_t look = 0;
-        if (!seh_read_player_look(capture->player, &look) ||
-            look != kLegacyNadineAttachTargetLookId) {
-            return false;
-        }
-        capture->controller = *reinterpret_cast<void**>(
-            static_cast<std::byte*>(capture->player) + 0x1D88);
-        if (capture->controller == nullptr ||
-            readable_bytes(capture->controller) < 0x138 ||
-            *reinterpret_cast<const std::uintptr_t*>(capture->controller) !=
-                g_module + kPlayerWeaponControllerVtableRva ||
-            *reinterpret_cast<void* const*>(
-                static_cast<const std::byte*>(capture->controller) + 0x108) !=
-                capture->player ||
-            !read_weapon_draw_state(
-                capture->player, capture->current_slot,
-                capture->draw_state)) {
-            return false;
-        }
-        capture->slot = find_weapon_slot_by_art_id(
-            capture->player, kCoopRifleArtId);
-        capture->weapon = capture->slot >= 0
-            ? get_weapon_from_slot(capture->player, capture->slot)
-            : nullptr;
-        if (capture->slot < 0 || capture->weapon == nullptr ||
-            readable_bytes(capture->weapon) < 0x864 ||
-            *reinterpret_cast<const std::uintptr_t*>(capture->weapon) !=
-                g_module + kProcessWeaponVtableRva ||
-            weapon_art_id_from_object(capture->weapon) != kCoopRifleArtId ||
-            !seh_weapon_parent_resolves_to_owner(
-                capture->weapon, capture->player)) {
-            return false;
-        }
-        auto* const table = *reinterpret_cast<std::byte* const*>(
-            static_cast<const std::byte*>(capture->player) + 0x1E0);
-        if (table == nullptr || readable_bytes(table) < 0x18) {
-            return false;
-        }
-        const std::uint32_t count =
-            *reinterpret_cast<const std::uint32_t*>(table + 0x4);
-        auto* const records = *reinterpret_cast<std::byte* const*>(table + 0x8);
-        const std::uint8_t selected =
-            *reinterpret_cast<const std::uint8_t*>(
-                static_cast<const std::byte*>(capture->weapon) + 0x688);
-        if (records == nullptr || count == 0 || count > 256 ||
-            selected >= count || readable_bytes(records) < 48ULL * count) {
-            return false;
-        }
-        capture->selected_attach_id =
-            *reinterpret_cast<const std::uint32_t*>(
-                records + static_cast<std::size_t>(selected) * 48 + 0x20);
-        if (capture->selected_attach_id != 0x61A48E01u) {
-            return false;
-        }
-        // Local Nadine must be in the exact stock WeaponOut state.  The
-        // retained remote Player is driven by the peer packet and can display
-        // the physically hand-attached weapon before its private controller
-        // publishes state 2/current slot; require the authoritative packet
-        // above plus this exact same-owner rightHand endpoint instead.
-        if (g_net_role_b &&
-            (capture->draw_state != 2 ||
-             capture->current_slot != capture->slot ||
-             get_weapon_from_slot(
-                 capture->player, capture->current_slot) != capture->weapon)) {
-            return false;
-        }
-        if (!g_net_role_b && capture->draw_state != 0 &&
-            capture->draw_state != 2) {
-            return false;
-        }
-        if (!seh_count_active_overlay_matches(
-                state, 0x25A767CFu, source, authored_output,
-                &capture->selector_sets, &capture->matching_rows) ||
-            capture->selector_sets != 1 || capture->matching_rows != 1) {
-            return false;
-        }
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        *capture = {};
-        return false;
-    }
 }
 
 std::uintptr_t __fastcall hooked_anim_overlay_state_copy(
@@ -43389,43 +43213,6 @@ std::uint32_t* __fastcall hooked_anim_overlay_state_resolve_animation_id(
         return result;
     }
     const std::uint32_t authored_output = *output;
-    const auto* const steady_replacement =
-        find_nadine_mazur_steady_player_settings_replacement(
-            input, authored_output);
-    NadineMazurSteadyPlayerSettingsCapture steady_capture{};
-    if (kEnableLegacyNadineMazurSteadyPlayerSettingsRepair &&
-        steady_replacement != nullptr &&
-        seh_select_legacy_nadine_mazur_steady_player_settings(
-            state, input, authored_output, caller_rva,
-            &steady_capture)) {
-        *output = steady_replacement->player_target;
-        static std::atomic<std::uint32_t> steady_logged{0};
-        if (steady_logged.fetch_add(1, std::memory_order_relaxed) < 96) {
-            std::ostringstream line;
-            line << "NADINE-MAZUR-PLAYER-SETTINGS player=0x" << std::hex
-                 << reinterpret_cast<std::uintptr_t>(steady_capture.player)
-                 << " weapon=0x"
-                 << reinterpret_cast<std::uintptr_t>(steady_capture.weapon)
-                 << " state=0x" << reinterpret_cast<std::uintptr_t>(state)
-                 << " source=0x" << input
-                 << " chloe=0x" << authored_output
-                 << " effective=0x" << *output
-                 << " attach=0x" << steady_capture.selected_attach_id
-                 << " callerRva=0x" << caller_rva << std::dec
-                 << " kind=" << steady_replacement->name
-                 << " owner=" << steady_capture.owner_index
-                 << " role=" << (g_net_role_b ? 'B' : 'A')
-                 << " slot=" << steady_capture.slot
-                 << " current=" << steady_capture.current_slot
-                 << " drawState=" << steady_capture.draw_state
-                 << " sets=" << steady_capture.selector_sets
-                 << " rows=" << steady_capture.matching_rows
-                 << " variant="
-                 << static_cast<unsigned>(select_variant);
-            write_log_line(line.str().c_str());
-        }
-        return result;
-    }
     NadineActiveGripOverlayCapture grip_capture{};
     if (kEnableLegacyNadineActiveWeaponGripOverlayRepair) {
         log_nadine_active_grip_overlay_candidate(
@@ -57853,8 +57640,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-13acm "
-        "(Mazur steady Player animation-settings repair)");
+        "TLL co-op runtime init 2026-08-14acn "
+        "(rejected Mazur Player-settings repair removed)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -57943,8 +57730,7 @@ DWORD WINAPI install_hook(void*) {
     if constexpr (kEnableWeaponPartialNormalRequestProbe) {
         install_weapon_partial_normal_request_probe();
     }
-    if constexpr ((kEnableLegacyNadineActiveWeaponGripOverlayRepair ||
-                   kEnableLegacyNadineMazurSteadyPlayerSettingsRepair) &&
+    if constexpr (kEnableLegacyNadineActiveWeaponGripOverlayRepair &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_legacy_nadine_active_weapon_grip_overlay_repair();
     }

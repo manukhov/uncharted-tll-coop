@@ -23795,3 +23795,80 @@ release DLL builds successfully. No new IDB label is warranted because this
 implementation reuses the already named `AnimOverlayState_ResolveAnimationId`
 boundary and resolves no new executable function. No game launch has been
 performed for `acm`.
+
+### 2026-08-14 RUNTIME REJECTED (`acm`): the per-leaf resolver repair was not atomic
+
+The earned `acm` exam used fresh PIDs `18100` (role A) and `7176` (role B).
+Both processes installed the exact resolver detour and reached the intended
+Mazur/rightHand/unique-row admission. Role B emitted at log line `76353`:
+
+`source=41C84248 chloe=5F913F74 effective=2AD31AAC kind=idle-base owner=0 role=B current=1 drawState=2 sets=1 rows=1`.
+
+Role A independently emitted the same idle-base replacement at line `76362`
+with `owner=1 role=A`; its later recreated retained Player also emitted the
+expected run-base and breathing replacements at lines `76499..76500`. The user
+observed **no change at all** in the broken Mazur hold.
+
+This result **RUNTIME REJECTS `acm` as a visible repair**, but it does not prove
+that the complete corrected Player bundle was later overwritten. The decisive
+negative evidence is more specific: the entire fresh segment contains zero
+`kind=idle-hands` or `kind=run-tense-hands` rows. The resolver hook at return
+`0x1418B2945` changes a leaf only while that individual `AnimStateSnapshot` is
+being resolved. The already-live Hands state was cached before Mazur-specific
+admission and never rebuilt, while idle-base and later run/breathing leaves did
+rebuild. The exam therefore changed the broad base row but left the distal
+Chloe hands lane intact; it never performed the atomic bundle swap stated by
+the hypothesis.
+
+Competing hypotheses are narrowed without overclaiming. **Hresolver package**
+is rejected because independent layer caches make it temporally non-atomic.
+**Hcomplete Player bundle is visually sufficient** remains unmeasured, not
+confirmed or rejected. **Hlater common merge/pose writer** also remains open,
+but unchanged pixels alone cannot select it until the complete same-frame
+command ownership of joints `21..32` is closed. The `acm` mutation, admission
+and telemetry have been deleted rather than left disabled in the hot resolver.
+No further runtime test is permitted until a stock command boundary can replace
+or preserve the whole proven arm/hands contribution atomically and three
+independent static evidence types distinguish it from later IK/merge.
+
+The first post-test static pass also corrects the assumed dataflow at this
+boundary. After `0x1418B2945`, `SnapshotAnimState` calls AnimSet remap at
+`0x1418B2954` and stores the tuple at snapshot `+0x88/+0x90/+0x94`, but newly
+named `AnimStateInstance_ResolveSnapshotClipTiming 0x1418B32E0` consumes that
+outer tuple only to calculate instance timing `+0x98/+0x9C`. The actual pose
+leaf is independent: `AnimSnapshotNodeAnimation_InitializeFromDescriptor
+0x141917D00` performs its own node-local AnimSet remap into
+`+0x44/+0x48/+0x4C`, `AnimSnapshotNodeAnimation_ResolveClip 0x141918070`
+stores the clip at `+0x50`, and
+`AnimSnapshotNodeAnimation_GenerateAnimCommands 0x1419182E0` emits command 6
+from that clip. Thus the `acm` marker did not even prove that its replacement
+became a case-6 pose input; it positively proved only outer resolution/timing.
+
+The first atomic pose boundary is now STATIC but not mutation-ready.
+`AnimSnapshotNodeBlend_GenerateAnimCommands 0x14191E5F0` generates both child
+streams and appends command 7 using node `+0x60`; after root generation,
+`AnimStateLayer_CreateAnimCommands 0x14189EA60` appends the terminal layer
+command 7 at `0x14189EC8C..0x14189ECD6` with
+`left=0,right=1,out=0,mode=1,weight=1`. The case-7 consumer
+`AnimCmdEvaluator_ApplyBlend 0x14217CF90` unions the right ValidBits and selects
+the right transform at that endpoint. Historical steady inventories identify
+Hands `2EAA36BC` and empty-pose WeaponPartial `E2B990B9/3889CC0E`; the transient
+Mazur `custom-weapon-part F5D4FF02` disappears on the next stable sample, so it
+cannot simply be declared the steady overwrite owner.
+
+The remaining proof gap is exact rather than broad: static assets establish
+Mazur proximal arms `283966ED[21..28]` and distal Player hands
+`56C57AD2/77A8107C/7FB80CC8[29..32]`, while Chloe terminal hands own their own
+`[38..41]` lane. But the current run did not join the live Hands node-local clip,
+raw registry order, same-frame command indices/weights and terminal ValidBits.
+HandFix command 23 can later touch shoulder/elbow chains, whereas LegFix and
+ankle commands cannot own this symptom; `PlayerWeaponIKAction` remains
+disfavoured as the sole cause because both views are visibly broken. Until the
+node-local case-6 lanes and command-7 ownership are closed, no candidate has the
+required three independent evidence classes and no runtime mutation is earned.
+
+Build `acn` removes the rejected resolver mutation completely and compiles and
+links successfully. The single `ida/tll.i64` now names
+`AnimStateInstance_ResolveSnapshotClipTiming 0x1418B32E0`; the headless label
+pass reports `1738 functions, 60 data names` and
+`save_database returned True`, and the restarted MCP resolves the saved name.

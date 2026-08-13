@@ -291,23 +291,19 @@
       Mazur on the actual legacy-Nadine owner in each process; P99, holster,
       ADS/transitions, real Chloe and shared DC rows remain stock. Full evidence
       and prediction are in `COOP_STATUS.md`; release build succeeds.
-- [ ] Run only the earned `acm` exam: draw Mazur, do not aim, and stand still.
-      Both processes must log `NADINE-MAZUR-PLAYER-SETTINGS` with owner0/B or
-      owner1/A, `attach=61A48E01`, `sets=1`, `rows=1`. Role B must report
-      `drawState=2`; role A is admitted by the fresh authoritative peer packet
-      received within 100 ms in non-ADS `GunOut`, private controller state
-      `0/2`, plus the physical same-owner rightHand endpoint because its private
-      controller can lag that presentation state. Confirm
-      whether both own and Chloe's view now show a coherent two-hand hold. Zero
-      markers reject packaging; markers plus unchanged pose select the later
-      common merge/IK writer. Do not test P99 or sling in this exam.
-- [ ] Resume statically at the last semantic producer of the left-hand grip
-      target before `WeaponIKFeather::Apply 0x1418F2700` only if the bounded
-      `acm` exam emits the exact Player-settings markers on both processes but
-      leaves Mazur's grip unchanged. In that outcome, close the later
-      command-6/7 merge and same-frame weights for `custom-weapon-part`,
-      `custom-weapon-part-with-feather` and the
-      adjacent Hands lane. Do not retry the
+- [x] Run the earned `acm` exam. Fresh PIDs `18100/7176` emitted the exact
+      idle-base replacement on both owners (`41C84248 -> 2AD31AAC`, unique
+      row/rightHand/state2), but the grip was visually unchanged. The same
+      segment emitted zero idle-hands/run-tense-hands replacements. **RUNTIME
+      REJECT `acm`:** a per-leaf resolver mutation is non-atomic because the
+      already-live Hands snapshot can remain cached while base/run/breathing
+      leaves rebuild. Delete the repair and do not interpret this as a measured
+      complete Player-bundle replacement.
+- [ ] Resume statically at the first atomic command owner of Player joints
+      `21..32` after `AnimStateSnapshot_SnapshotAnimState 0x1418B24F0`.
+      Close the command-6/7 merge and same-frame weights for
+      `custom-weapon-part`, `custom-weapon-part-with-feather`, the adjacent
+      Hands lane and the terminal layer merge. Do not retry the
       rejected post-`+0x408` local-row transfer, final-palette transfer,
       Feather suppression or ProcessWeapon local correction. Any next runtime
       proposal must first distinguish an authored target/input error from a
