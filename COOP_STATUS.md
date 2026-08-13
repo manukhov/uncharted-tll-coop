@@ -22603,18 +22603,18 @@ source assertions, pointer-producing dataflow, and the live 20-instance join.
 There is no remaining supported hidden per-instance-palette explanation for
 the unchanged result.
 
-The remaining split is earlier or later than the proven retained-body palette,
-not another nearby matrix field: **C1**, the retained remote/local Player body
-Fg objects are not the exact drawable/presentation owners of the pixels being
-compared; **C2**, the post-copy CPU mutation misses the effective GPU upload or
-synchronization lifetime even though the bound pointer value is correct; or
-**C3**, the 88 directly weighted rows are insufficient to reproduce the full
-weapon grip because the unweighted palm/weapon-attachment locator chain and
-weapon transform remain receiver-local. Complete visual non-response weakens
-C3 because weighted arms/fingers should still move, but it does not statically
-eliminate it. No new mutation or runtime test is authorized until exact visible
-drawable ownership and CPU-to-GPU ordering distinguish C1 from C2; the `aby`
-relay stays disabled.
+The remaining split is earlier or later than the measured retained-body
+palette, not another nearby matrix field: **C1**, the retained remote/local
+Player Fg objects are not the exact presentation owners whose grip was being
+visually compared; **C2**, the post-copy CPU mutation misses the effective GPU
+upload or synchronization lifetime even though the bound pointer value is
+correct; or **C3**, the 88 directly weighted rows are insufficient to reproduce
+the full weapon grip because the unweighted palm/weapon-attachment locator
+chain and weapon transform remain receiver-local. Complete visual non-response
+weakens C3 because weighted arms/fingers should still move, but it does not
+statically eliminate it. The former assertion that build `et` already rejected
+C1 is corrected in the later 2026-08-13 entry. No new mutation or runtime test
+is authorized; the `aby` relay stays disabled.
 
 Durable state is complete. `scripts/ida_scan_fg_skinning_fields.py` reproduces
 the cross-function field-access audit into a gitignored report. The canonical
@@ -22632,13 +22632,17 @@ Build `abz` was removed before runtime. Its proposed source-staging seam does
 not satisfy the static evidence quota and would ask for another user check
 without a proved engine-level distinction from the already rejected `aby`.
 
-The visible-owner result remains valid. The retained Nadine DrawControl resolves
-the five `nadine-rural` leaves
+The five-leaf membership result remains valid, but the former exclusive-owner
+interpretation does not. The measured retained Nadine DrawControl resolves the
+five `nadine-rural` leaves
 `6E18DCD5, 4A7DF04F, A674E571, 5EAAF523, C450A073`; four LOD instances per
 leaf exactly explain the 20 driven instances measured after `aby`. Historical
-per-leaf hides independently removed the visible head, torso, arms and legs.
-Therefore the measured retained Fg is the body pixel owner; wrong drawable/Fg
-is rejected.
+per-leaf hides independently removed a Nadine head, torso, arms and legs, so
+these are genuine body meshes. That old probe did not bind the matched
+DrawControl to a role, retained Player, screen or Fg pointer, however. It cannot
+prove that the externally observed correct Nadine grip was produced by the
+exact retained Player1 palette later transported by `aby`; that donor identity
+remains open.
 
 The allocator graph is real but insufficient. `Fg+0x230` is allocated from
 context 82 `CPU_ACCESS_ONLY`, while `Fg+0x240` comes from context 72
@@ -22679,7 +22683,8 @@ descriptor. Thus the true companion pointer is record `+0x68 -> jointData+0x28
 not consumed by this SkinningDeformer call.
 
 Three independent evidence classes reject another `abz` exam: (1) runtime
-leaf/LOD ownership closes the visible body to the measured Fg; (2) the exact
+leaf/LOD ownership closes a complete retained Player body to the measured Fg,
+without proving that it is the externally compared correct-grip donor; (2) the exact
 callsite/import ABI plus the concrete VCRUNTIME size path show cached stores and
 no publication primitive; (3) the per-frame-record -> InstanceJointData -> late
 latch -> SubMeshSkinning dataflow proves the selected `Fg+0x240` pointer remains
@@ -22879,7 +22884,8 @@ delta is bit-identical after scale and retarget composition.
 
 The third, behaviorally independent evidence is the already completed negative
 boundary pair. Build `abw` copied all twelve Nadine local arm rows `19..30`
-from the visually correct remote pose into local Nadine every admitted frame;
+from the retained Player1 pose, then assumed to be the visually correct donor,
+into local Nadine every admitted frame;
 build `aby` then copied the 88 final weighted body-palette rows after animation
 evaluation. Both recorded nonzero source/target differences and completed their
 written admissions, yet neither changed the visible grip. A smaller
@@ -22895,18 +22901,92 @@ palms and both hand-prop attachments, matching Player
 `7FB80CC8/77A8107C[29..32]`. **Hsource-content/composition** and
 **Hgeneric-convergence** remain structurally possible upstream, but the
 successful `aby` final-palette write means another local-row, command-weight,
-profile or CPU body-palette substitution is not a distinct visual boundary.
+profile or CPU body-palette substitution into that same measured retained-
+Player Fg is not a distinct visual boundary.
 
 No runtime or mutation is authorized. Do not patch profiles `E51542CA` or
 `FC34096C`, retarget scale, the common map, hands clip ids or final body rows.
-The next static frontier must identify a separate local presentation/pose
-consumer whose pixels are not sourced from the already replaced `Fg+0x240`
-body palette, or prove an explicit later overwrite/publication mechanism. A new
-launch is earned only after that owner has three independent evidence types and
-a prediction distinct from `abw/aby`.
+The next static frontier must identify the exact presentation owner that
+produces the externally observed correct grip and prove that its same-frame arm
+rows differ semantically from local Player0. Another substitution into the same
+measured retained-Player local/final palette is not a distinct experiment. A
+new launch is earned only after the producer/donor join has three independent
+evidence types and a prediction distinct from `abw/aby`.
 
 `scripts/psarc_asset_audit.py --animation-constant-pose` now reproduces the
 group-zero constant scale/rotation/translation rows, and
 `--skeleton-retarget` reports the authored flags plus arm/leg-IK enable bytes.
 The canonical IDB names the retarget-entry builders, joint-retarget consumer and
 ANIM opcode 22/24/25 decoders used for this result.
+
+### 2026-08-13 STATIC CORRECTION: the normal skinning pointer is exact, but the visually correct Player1 donor was never proven
+
+The renderer continuation closes the downstream pointer question while
+correcting a stronger historical claim that the evidence did not support.
+There is no second normal body-pose palette after `Fg+0x240`, but the old mesh
+hide did not identify which Nadine presentation supplied the grip that looked
+correct from Chloe's process. Consequently `aby` rejects the transported
+Player1 palette as a sufficient validated visual donor; it does not prove that
+the apparent correct remote grip was encoded by those 88 matrices.
+
+The first independent evidence is the exact historical scope. In commit
+`a6d51b1`, `apply_legacy_nadine_parent_mesh_probe` admitted any `parent_draw`
+whose five ordered mesh ids were
+`6E18DCD5,4A7DF04F,A674E571,5EAAF523,C450A073`. It was called from the global
+`NdAttachableObject` visibility callsite and contained no `g_net_role_b`,
+retained-player, screen, Player/Fg owner or pointer-equality guard. The observed
+F11 hides therefore prove that these five leaves are body meshes. They do not
+bind the hidden body to retained Player1, nor prove that its pose caused the
+simultaneously observed correct external grip.
+
+The second evidence preserves the narrower runtime fact. Each measured retained
+Player Fg owned exactly 20 driven instances: five leaves times four LODs, with
+`20/20 instance+0x78 == Fg+0x240`, `+0x80 == Fg+0x230`, no alternate
+`Fg+0x250/+0x258`, and no mesh-local `instance+0x260` remap. Thus both retained
+Players had complete renderable Nadine bodies whose normal current palette was
+the measured `+0x240` pointer. This is body ownership for those exact objects,
+not an exclusivity or visual-donor proof.
+
+The third evidence closes the normal same-frame consumer. At `0x141930BC0`,
+`FgInstance_BuildPerFrameRenderRecord 0x141930990` stores the frame id in the
+record and at `0x141930E3A` publishes that record to
+`instance[frame % 3]`. `FgInstance_PublishPerFrameStateToMeshInstance
+0x141931810` selects `instance[requestedFrame % 3]` at `0x14193186C` and writes
+record `+0x58/+0x68/+0x60` to InstanceJointData `+0x18/+0x28/+0x90`.
+`FgInstance_PublishAndBuildDeformerCommands 0x141967A70` passes the same frame
+at `0x141967ABA`, reselects the same modulo-three record at
+`0x141967BA3..BC0`, and asserts `record+0x00 == frame` at `0x141967BC4` before
+latching `+0x18/+0x28` to current/companion `+0x00/+0x08` at
+`0x141967C38..C43`. `SkinningDeformer_SkinSubMesh 0x1418778F0` then passes
+those exact pointers to `SkinningDeformer_EncodeBoneBufferDescriptors
+0x141744100`. The encoder preserves the buffer address/resource bits; it does
+not sample a hidden matrix array. Normals and wind follow skinning, but no later
+body-pose deformer exists in `MeshInstance_BuildDeformerCommandChain
+0x141883580`.
+
+The competing hypotheses are now separated correctly. **Hhidden-later-palette**
+and **Hmesh-local-remap** remain REJECTED for the measured retained bodies.
+**Hexclusive-Player1-donor**, formerly stated as proved by build `et`, is
+withdrawn: the probe scope cannot support it. **Hsemantic-delta** remains open
+because the `88/88` comparison was an asynchronous whole-palette aggregate and
+no transported packet/per-joint same-state dump survives to show that its delta
+was the P99/Mazur grip rather than actor state, root/body posture or helper
+differences. **HCPU/GPU-lifetime** is weakened by the exact same-frame pointer
+chain, but `abz` is still rejected because source staging produces identical
+`Fg+0x240` bytes before that chain and supplies no distinct engine publication
+primitive.
+
+No runtime or mutation is authorized. Do not repeat local-row, final-palette,
+profile or source-staging copies. The next admissible static boundary is an
+exact same-frame visual-producer join: retained Player1 versus any surviving
+native NadineBuddy/body presentation, main-view submission identity, and the
+semantic P99/Mazur arm/hand-prop matrices that actually distinguish the grip.
+Only that producer can be considered a donor for a future repair.
+
+`scripts/ida_scan_fg_skinning_fields.py` now emits an exact instruction spine
+for the frame-record publication, same-frame assertion, final latch and GPU
+descriptor encoding; its headless run completed with exit code 0 after replacing
+the obsolete `ida_kernwin.qexit` with `ida_pro.qexit`. The canonical IDB label
+pass saved `1720 functions, 60 data names` with
+`save_database returned True`, and the restarted MCP resolves the three named
+frame-record/publication functions with the updated same-frame comments.

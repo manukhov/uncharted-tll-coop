@@ -2796,25 +2796,28 @@ FUNCTIONS = {
         "FgInstance_BuildPerFrameRenderRecord",
         "Copies the current FgInstance state into the frame-modulo-three render "
         "record, including instance+0x78 at record+0x58, instance+0x80 at "
-        "record+0x60 and instance+0x88 at record+0x68. The later deformer latch "
-        "uses record+0x58 as current and record+0x68 as companion.",
+        "record+0x60 and instance+0x88 at record+0x68. It stores the frame id at "
+        "record+0x00 and publishes the record pointer to instance[frame % 3] at "
+        "0x141930E3A. The later deformer latch uses record+0x58 as current and "
+        "record+0x68 as companion.",
     ),
     0x141931810: (
         "FgInstance_PublishPerFrameStateToMeshInstance",
-        "Consumes the same frame-modulo-three record and publishes record+0x58 "
-        "to MeshInstance InstanceJointData+0x18, record+0x68 to +0x28 and "
-        "record+0x60 to +0x90. The later 0x141967C3C latch copies +0x18/+0x28 "
-        "to the active deformer pointers +0x00/+0x08; +0x90 becomes separate "
-        "+0x10 state and is not the companion-buffer pointer.",
+        "Selects instance[requestedFrame % 3] at 0x14193186C and publishes "
+        "record+0x58 to MeshInstance InstanceJointData+0x18, record+0x68 to "
+        "+0x28 and record+0x60 to +0x90. The later 0x141967C3C latch copies "
+        "+0x18/+0x28 to the active deformer pointers +0x00/+0x08; +0x90 becomes "
+        "separate +0x10 state and is not the companion-buffer pointer.",
     ),
     0x141967A70: (
         "FgInstance_PublishAndBuildDeformerCommands",
-        "Publishes the frame record to MeshInstance InstanceJointData, builds "
-        "the deformer command chain, then latches jointData +0x18->+0x00, "
-        "+0x28->+0x08 and +0x90->+0x10 at 0x141967C3C..0x141967C4E. The "
-        "SubMeshSkinning consumer therefore sees the selected current buffer at "
-        "+0x00 and the independently retained companion buffer at +0x08; its "
-        "joint count comes from the submesh descriptor, not jointData+0x10.",
+        "Publishes the requested frame record to MeshInstance InstanceJointData, "
+        "builds the deformer command chain, then reselects instance[frame % 3] "
+        "and asserts record+0x00 equals that same frame at 0x141967BC0..BC7. It "
+        "then latches jointData +0x18->+0x00, +0x28->+0x08 and +0x90->+0x10 at "
+        "0x141967C3C..0x141967C4E. SubMeshSkinning therefore sees the selected "
+        "current buffer at +0x00 and the independently retained companion at "
+        "+0x08; its joint count comes from the submesh descriptor, not +0x10.",
     ),
     0x141883580: (
         "MeshInstance_BuildDeformerCommandChain",

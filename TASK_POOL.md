@@ -113,11 +113,14 @@
       InstanceJointData and `0x141744100` encodes that pair into GPU descriptors.
       Alternate-pair, mesh-local-remap and zero-delta explanations are therefore
       rejected for this exam.
-- [x] Distinguish exact visible drawable ownership from CPU-to-GPU publication.
-      The five resolved `nadine-rural` leaves each allocate four LOD instances
-      into the one DrawControl Fg list, giving the exact 20-instance runtime
-      census; historical leaf hides independently prove those leaves own the
-      visible body arms. The measured retained Fg is therefore the pixel owner.
+- [x] Correct the former exclusive-pixel-owner claim. The five resolved
+      `nadine-rural` leaves each allocate four LOD instances into the measured
+      retained DrawControl Fg list, giving the exact 20-instance runtime census.
+      Historical build `et`, however, matched only the ordered five-mesh
+      DrawControl signature from a global visibility hook; it had no role,
+      retained-Player, screen or Fg equality gate. Its hides prove body-mesh
+      membership, not that the externally observed correct Nadine grip was
+      produced by the exact Player1 palette later used as the `aby` donor.
       `Fg+0x230` is allocated from registered context 82
       `CPU_ACCESS_ONLY`, while `Fg+0x240` comes from context 72 `GPU_UPLOAD`.
       The rejected `aby` wrote the latter with plain CPU stores only after the
@@ -129,6 +132,12 @@
       `SubMeshSkinning` and `SkinningDeformer_SkinSubMesh 0x1418778F0` into
       `SkinningDeformer_EncodeBoneBufferDescriptors 0x141744100`. No supported
       later body-bone pointer overwrite remains.
+- [ ] Establish the exact visual producer of the externally correct Nadine grip
+      before choosing another donor. Join the role-A retained Player1 body, any
+      surviving native NadineBuddy/body DrawControl and the actual main-view
+      submission in one frame, then compare the semantic P99/Mazur arm rows in
+      that exact producer against local Player0. The asynchronous `88/88` delta
+      does not prove that the transported rows encoded the grip difference.
 - [x] REJECT `abz` before runtime. The engine seam at `0x14181AB33` is an
       ordinary imported three-argument `memcpy`; staging the same 88 rows in
       `Fg+0x230` only makes that copy produce the same `Fg+0x240` bytes that the
@@ -156,9 +165,10 @@
       two-hand IK writers for exact local P99/Mazur idle. The next unresolved
       split is upstream authored/retargeted hand-prop placement versus the
       generic paired-hand convergence inside `WeaponIKFeather_SolveWeaponFeatherIk`;
-      there is no weapon-art spatial goal inside the latter. Do not launch until
-      a local-only first writer is closed by three independent evidence types
-      and has a prediction distinct from both rejected palette relays.
+      there is no weapon-art spatial goal inside the latter. Do not mutate this
+      composition until the exact visually correct producer/donor above is
+      identified; then require a local-only first writer with three independent
+      evidence types and a prediction distinct from both rejected palette relays.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that
