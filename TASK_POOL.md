@@ -113,12 +113,52 @@
       InstanceJointData and `0x141744100` encodes that pair into GPU descriptors.
       Alternate-pair, mesh-local-remap and zero-delta explanations are therefore
       rejected for this exam.
-- [ ] Before any further arm-pose launch, distinguish exact visible drawable /
-      presentation ownership from CPU-to-GPU publication ordering. Prove that
-      the retained Player Fg and its 20 driven instances are the actual pixels
-      being judged in each process, then close when the post-copy CPU write is
-      visible to the skinning upload/descriptor lifetime. Do not guess another
-      adjacent palette field and do not revive the disabled ARMP relay.
+- [x] Distinguish exact visible drawable ownership from CPU-to-GPU publication.
+      The five resolved `nadine-rural` leaves each allocate four LOD instances
+      into the one DrawControl Fg list, giving the exact 20-instance runtime
+      census; historical leaf hides independently prove those leaves own the
+      visible body arms. The measured retained Fg is therefore the pixel owner.
+      `Fg+0x230` is allocated from registered context 82
+      `CPU_ACCESS_ONLY`, while `Fg+0x240` comes from context 72 `GPU_UPLOAD`.
+      The rejected `aby` wrote the latter with plain CPU stores only after the
+      native upload, so its readback did not prove effective GPU visibility.
+- [x] Close the full normal render chain after the native upload. The locked
+      `0x14181AB33` copy publishes through
+      `FgInstance_BuildPerFrameRenderRecord 0x141930990`,
+      `FgInstance_PublishPerFrameStateToMeshInstance 0x141931810`,
+      `SubMeshSkinning` and `SkinningDeformer_SkinSubMesh 0x1418778F0` into
+      `SkinningDeformer_EncodeBoneBufferDescriptors 0x141744100`. No supported
+      later body-bone pointer overwrite remains.
+- [x] REJECT `abz` before runtime. The engine seam at `0x14181AB33` is an
+      ordinary imported three-argument `memcpy`; staging the same 88 rows in
+      `Fg+0x230` only makes that copy produce the same `Fg+0x240` bytes that the
+      rejected `aby` wrote immediately after it. Allocator names alone do not
+      prove a distinct cache/publication transaction. The current resolved
+      `VCRUNTIME140` path for the exact 0x6CC0-byte copy uses cached AVX stores,
+      not its large-copy `vmovntdq/sfence` path, so another visual exam is not
+      earned. The experimental source-swap code was removed.
+- [x] Close the exact late deformer latch. After per-frame publication,
+      `0x141967C3C..0x141967C4E` copies InstanceJointData `+0x18 -> +0x00`,
+      `+0x28 -> +0x08`, and `+0x90 -> +0x10`; SubMeshSkinning consumes the
+      latched `+0x00/+0x08` buffers. The true companion path is frame record
+      `+0x68 -> jointData+0x28`; correct the former claim that `+0x90` was the
+      companion bone-buffer pointer.
+- [x] Reject a stale-Chloe/numeric-joint WeaponIK chain as the semantic cause.
+      `WeaponIKFeather_InitializeForPlayer 0x1418F1610` builds fresh left/right
+      shoulder-to-hand-prop paths on the concrete current Player Fg skeleton
+      through `JointChain_BuildFromNamedAncestorToDescendant 0x1418203D0` and
+      caches semantic offsets through `JointChain_FindNamedJointOffset
+      0x14181D750`. C39 has the exact interleaved shoulder/elbow/wrist/palm/
+      hand-prop hierarchy, so neither a missing palm nor retained Chloe ordinal
+      explains the local-only pose.
+- [ ] Continue statically from the semantic composition boundary: join the
+      proximal arms, palms, `*_hand_prop_attachment`, ProcessWeapon endpoint and
+      two-hand IK writers for exact local P99/Mazur idle. The next unresolved
+      split is upstream authored/retargeted hand-prop placement versus the
+      generic paired-hand convergence inside `WeaponIKFeather_SolveWeaponFeatherIk`;
+      there is no weapon-art spatial goal inside the latter. Do not launch until
+      a local-only first writer is closed by three independent evidence types
+      and has a prediction distinct from both rejected palette relays.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that

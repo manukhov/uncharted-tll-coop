@@ -22625,3 +22625,152 @@ the corrected `FgDrawManager_PrepareInstanceForRendering 0x14181A9B0`; headless
 application reported `1696 functions, 59 data names` and
 `save_database returned True`, and restarted MCP lookups resolved all five
 names. The release DLL/client build passes with the rejected relay disabled.
+
+### 2026-08-13 STATIC / REJECTED (`abz`): source staging has no proved publication advantage
+
+Build `abz` was removed before runtime. Its proposed source-staging seam does
+not satisfy the static evidence quota and would ask for another user check
+without a proved engine-level distinction from the already rejected `aby`.
+
+The visible-owner result remains valid. The retained Nadine DrawControl resolves
+the five `nadine-rural` leaves
+`6E18DCD5, 4A7DF04F, A674E571, 5EAAF523, C450A073`; four LOD instances per
+leaf exactly explain the 20 driven instances measured after `aby`. Historical
+per-leaf hides independently removed the visible head, torso, arms and legs.
+Therefore the measured retained Fg is the body pixel owner; wrong drawable/Fg
+is rejected.
+
+The allocator graph is real but insufficient. `Fg+0x230` is allocated from
+context 82 `CPU_ACCESS_ONLY`, while `Fg+0x240` comes from context 72
+`GPU_UPLOAD`. However, the only engine operation between them at
+`FgDrawManager_PrepareInstanceForRendering 0x14181AB33` is an ordinary imported
+`memcpy(Fg+0x240, Fg+0x230, 48*580)`. The callsite passes only destination,
+source and byte count: there is no engine allocator context, upload token,
+submission call or explicit cache/publication primitive. `aby` wrote the
+packet rows to `Fg+0x240` immediately after that copy; `abz` would write the
+same rows to `Fg+0x230`, let the same `memcpy` place them in `Fg+0x240`,
+and restore the source. At the next engine instruction the selected destination
+bytes are identical. The imported symbol is specifically
+`VCRUNTIME140!memcpy`. This machine has no app-local `vcruntime140.dll`, so the
+next game launch resolves the current System32 build `14.51.36247.0`
+(SHA-256 `D1F4225DF2CD877DBF130D5668A021DCE3F94118455FF5EC952061C30AFC9CE7`).
+Its exact size path for `48*580 = 0x6CC0` uses ordinary cached AVX loads/stores
+and returns with `vzeroupper`; the non-temporal `vmovntdq + sfence` path starts
+only above the implementation's `0x180000` threshold. Thus even the concrete
+CRT implementation supplies no cache flush or special publication distinction
+for this copy. A future runtime-DLL change could invalidate that environmental
+fact, but it does not justify testing the current build.
+
+The later deformer chain is now closed more precisely.
+`FgInstance_BuildPerFrameRenderRecord 0x141930990` copies instance
+`+0x78/+0x80/+0x88` to frame-record `+0x58/+0x60/+0x68`.
+`FgInstance_PublishPerFrameStateToMeshInstance 0x141931810` copies those to
+`InstanceJointData+0x18/+0x90/+0x28`, respectively. Then
+`FgInstance_PublishAndBuildDeformerCommands 0x141967A70`, after publishing and
+building the deformer chain, performs the exact latch
+`jointData+0x00 = +0x18`, `+0x08 = +0x28`, and `+0x10 = +0x90` at
+`0x141967C3C..0x141967C4E`.
+`MeshInstance_BuildDeformerCommandChain 0x141883580` passes that
+`InstanceJointData` through `SubMeshSkinning` to
+`SkinningDeformer_SkinSubMesh 0x1418778F0`, whose descriptor encoder consumes
+the latched `+0x00/+0x08` pointers plus a joint count from the submesh
+descriptor. Thus the true companion pointer is record `+0x68 -> jointData+0x28
+-> +0x08`; record `+0x60 -> +0x90 -> +0x10` is separate bone-data state and is
+not consumed by this SkinningDeformer call.
+
+Three independent evidence classes reject another `abz` exam: (1) runtime
+leaf/LOD ownership closes the visible body to the measured Fg; (2) the exact
+callsite/import ABI plus the concrete VCRUNTIME size path show cached stores and
+no publication primitive; (3) the per-frame-record -> InstanceJointData -> late
+latch -> SubMeshSkinning dataflow proves the selected `Fg+0x240` pointer remains
+the current deformer input. The allocator-name hypothesis is rejected for the
+current packaged environment rather than promoted to runtime.
+
+The active DLL therefore remains the safe `abx` package with both rejected
+palette relays disabled. The next static frontier is semantic composition, not
+another buffer: close the receiver's proximal arm, palm,
+`*_hand_prop_attachment`, ProcessWeapon attachment and two-hand IK ownership as
+one ordered system, then identify the first local-only writer that differs from
+the already-correct remote presentation. No runtime is authorized until that
+boundary has three independent evidence types and a prediction that separates
+it from the rejected palette paths.
+
+The canonical `ida/tll.i64` already contains the render/deformer names applied
+headlessly; `reports/apply_status_abz.txt` records
+`save_database returned True`. The new late-latch function and corrected field
+semantics are added in the label pass accompanying this rejection.
+
+### 2026-08-13 STATIC / REJECTED: WeaponIK does not retain Chloe arm ordinals or omit the Nadine palm
+
+The semantic continuation rejects another plausible but incorrect repair before
+runtime: rebuilding or numerically remapping the local Nadine
+`WeaponIKFeather` arm chains. The live local/remote split does not come from an
+embedded action that retained Chloe joint numbers when the Player look changed.
+
+The action lifecycle supplies the first independent proof.
+`PlayerWeaponController_StartWeaponIKForSlot 0x14109DA80` constructs a fresh
+`PlayerWeaponIKAction`, stores its exact weapon weak pair, embeds
+`WeaponIKFeather` at action `+0x50`, and calls
+`WeaponIKFeather_InitializeForPlayer 0x1418F1610` with the owning Player. The
+same initializer is also called by the concrete action constructor
+`0x141094E30`. No serialized clip ordinal, Chloe AnimSet pointer or remote/local
+screen value is an initializer argument.
+
+The exact joint-path dataflow supplies the second proof. The initializer calls
+`JointChain_BuildFromNamedAncestorToDescendant 0x1418203D0` twice, with
+`l_shoulder -> l_hand_prop_attachment` and
+`r_shoulder -> r_hand_prop_attachment`. That helper resolves both StringIds in
+the supplied Player's current Fg skeleton, follows the skeleton parent table
+from the descendant back to the ancestor, reverses the result into one concrete
+path and stores no external skeleton ordinal. It then uses
+`JointChain_FindNamedJointOffset 0x14181D750` to cache five semantic positions
+per side from runtime-initialized `g_ArmIkJointNameIds 0x146905C58`:
+`root, shoulder, elbow, wrist, hand_prop_attachment`. `root` is deliberately
+absent from the shoulder path and caches `-1`; the remaining lookups are
+chain-local offsets, not Player/Chloe joint ids.
+
+The C39 asset hierarchy supplies the third independent proof. Legacy Nadine's
+paired rows are `l/r_shoulder 21/22`, `l/r_elbow 23/24`, `l/r_wrist 25/26`,
+`l/r_palm 27/28` and `l/r_hand_prop_attachment 29/30`, with parents strictly
+advancing shoulder -> elbow -> wrist -> palm -> hand-prop on each side. The
+builder therefore retains the otherwise unnamed palm as an intervening path
+joint. Separately, `WeaponIKFeatherInfo_ConstructForPlayerLook 0x1418F1E60`
+is rebuilt by look change and creates both `spined -> hand_prop_attachment`
+JointSets on the same current Player skeleton. Missing palm, wrong interleaving
+and stale Chloe ordinal are all rejected.
+
+The downstream solve also narrows what remains. In
+`WeaponIKFeather_Apply 0x1418F2700`, arm zero resolves the left hand-prop and arm
+one the right hand-prop from those concrete JointSets. After the current locals
+are seeded, `WeaponIKFeather_SolveWeaponFeatherIk 0x1418F2E50` reads both
+hand-prop world locators, interpolates a common paired-hand goal according to
+the shared arm-side selector/weight, solves both maps, commits both JointSets,
+and finishes in `WeaponIK_Apply 0x1418F1780`. The only ProcessWeapon-derived
+input to this call is a scalar; there is no P99/Mazur attachment transform,
+weapon-art locator or weapon-specific spatial goal inside the feather solver.
+
+The competing hypotheses are now explicit. **Hstale-chain** and
+**Hmissing-palm** are REJECTED by the current-skeleton name resolution and C39
+parent table. **Hweapon-target-inside-feather** is REJECTED by the complete
+argument/callee dataflow: the solver converges the two already-authored
+hand-prop positions and has no weapon spatial target. **Hbase-retarget** remains
+open: the Player/Chloe animation bundle may place the two hand props
+incorrectly before the generic convergence. **Hgeneric-convergence** also
+remains open: the generic paired-hand correction is a confirmed P99
+contributor, but the `abm` zero-write branch exposed an independently wrong
+base pose and did not exercise Mazur after its diagnostic budget filled.
+
+No mutation follows from this result. Numeric chain substitution, palm aliasing,
+one-arm suppression, another palette relay and a guessed ProcessWeapon offset
+remain forbidden. The next static boundary is the exact pre-solve pair of
+hand-prop world locators and their owning authored/retargeted command bundle,
+compared against the shipped NPC-Nadine firearm bundle already known to retarget
+to C39. A runtime test is not authorized until that comparison yields a complete
+local-only replacement or target correction with three independent evidence
+types and a prediction distinct from the rejected `abm/abw/aby` paths.
+
+The canonical IDB now names the two exact JointChain helpers, the arm-name-id
+array and the corrected late deformer latch. Headless application reports
+`1707 functions, 60 data names` and `save_database returned True` in
+`reports/apply_status_armik_static.txt`; restarted MCP readback resolves all
+three new function names from the single `ida/tll.i64`.

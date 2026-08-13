@@ -1214,6 +1214,21 @@ FUNCTIONS = {
         "against a Player and resolves its paired arm-chain joint indices. "
         "The action constructor passes action+0x50 and the owning Player.",
     ),
+    0x1418203D0: (
+        "JointChain_BuildFromNamedAncestorToDescendant",
+        "Builds a concrete joint-index path in the supplied FgAnimData skeleton "
+        "from a named ancestor to a named descendant by following the skeleton "
+        "parent table. WeaponIKFeather uses it for shoulder-to-hand-prop paths; "
+        "the intervening palm joint is retained even though it is not one of the "
+        "five cached semantic lookup names.",
+    ),
+    0x14181D750: (
+        "JointChain_FindNamedJointOffset",
+        "Finds a named skeleton joint inside a previously built JointChain and "
+        "returns its chain-local offset, or -1. WeaponIKFeather caches root, "
+        "shoulder, elbow, wrist and hand-prop offsets for each side through this "
+        "helper rather than retaining Chloe/Nadine numeric joint ordinals.",
+    ),
     0x1418F1780: (
         "WeaponIK_Apply",
         "Terminal WeaponIK apply called by WeaponIKFeather_Apply after both "
@@ -2752,18 +2767,80 @@ FUNCTIONS = {
     0x1418C4FB0: (
         "FgAnimData_AllocateAndSwapSkinningBuffers",
         "Allocates two 48-byte-per-joint buffers and swaps current/previous CPU "
-        "buffers at +0x230/+0x238 and upload buffers at +0x240/+0x248.",
+        "buffers at +0x230/+0x238 and upload buffers at +0x240/+0x248. The first "
+        "allocation uses registered context 82, whose startup allocator is named "
+        "ALLOCATION_DOUBLE_FRAME_CPU_ACCESS_ONLY; the second uses context 72, "
+        "registered as ALLOCATION_DOUBLE_FRAME_GPU_UPLOAD.",
     ),
     0x1418C50C0: (
         "FgAnimData_PrepareSkinningMtxUploadBuffer",
         "Exact FgAnimData::PrepareSkinningMtxUploadBuffer assertion in anim-data.cpp. "
         "Copies the CPU skinning matrices at +0x230 to upload matrices at +0x240.",
     ),
+    0x14160B3B0: (
+        "RenderMemory_InitializeDoubleFrameAllocators",
+        "Initializes and registers the paired double-frame CPU_ACCESS_ONLY and "
+        "GPU_UPLOAD TaggedHeapAllocators. Registration writes context id 72 for "
+        "GPU_UPLOAD and id 82 for CPU_ACCESS_ONLY, exactly matching the two "
+        "FgAnimData skinning-buffer allocations at 0x1418C4FB0.",
+    ),
+    0x1415A9040: (
+        "TaggedHeapAllocator_Init",
+        "Exact TaggedHeapAllocator::Init source assertion. Stores the allocator "
+        "name and memory type used by the double-frame CPU_ACCESS_ONLY and "
+        "GPU_UPLOAD registrations.",
+    ),
+    0x141930990: (
+        "FgInstance_BuildPerFrameRenderRecord",
+        "Copies the current FgInstance state into the frame-modulo-three render "
+        "record, including instance+0x78 at record+0x58, instance+0x80 at "
+        "record+0x60 and instance+0x88 at record+0x68. The later deformer latch "
+        "uses record+0x58 as current and record+0x68 as companion.",
+    ),
+    0x141931810: (
+        "FgInstance_PublishPerFrameStateToMeshInstance",
+        "Consumes the same frame-modulo-three record and publishes record+0x58 "
+        "to MeshInstance InstanceJointData+0x18, record+0x68 to +0x28 and "
+        "record+0x60 to +0x90. The later 0x141967C3C latch copies +0x18/+0x28 "
+        "to the active deformer pointers +0x00/+0x08; +0x90 becomes separate "
+        "+0x10 state and is not the companion-buffer pointer.",
+    ),
+    0x141967A70: (
+        "FgInstance_PublishAndBuildDeformerCommands",
+        "Publishes the frame record to MeshInstance InstanceJointData, builds "
+        "the deformer command chain, then latches jointData +0x18->+0x00, "
+        "+0x28->+0x08 and +0x90->+0x10 at 0x141967C3C..0x141967C4E. The "
+        "SubMeshSkinning consumer therefore sees the selected current buffer at "
+        "+0x00 and the independently retained companion buffer at +0x08; its "
+        "joint count comes from the submesh descriptor, not jointData+0x10.",
+    ),
+    0x141883580: (
+        "MeshInstance_BuildDeformerCommandChain",
+        "Walks the MeshInstance submeshes and constructs their deformer command "
+        "chain using the InstanceJointData pointer at MeshInstance+0x118.",
+    ),
+    0x141882FB0: (
+        "SubMeshSkinning_Construct",
+        "Exact SubMeshSkinning source type. Installs vtable 0x142B08B10 and "
+        "retains the supplied InstanceJointData pointer at +0x10.",
+    ),
+    0x141875F50: (
+        "SubMeshSkinning_Execute",
+        "SubMeshSkinning execution slot. Passes its retained InstanceJointData "
+        "to SkinningDeformer_SkinSubMesh.",
+    ),
+    0x1418778F0: (
+        "SkinningDeformer_SkinSubMesh",
+        "Exact SkinningDeformer::Skin assertions for one submesh. Validates "
+        "InstanceJointData and its latched +0x00 current bone buffer, then calls "
+        "SkinningDeformer_EncodeBoneBufferDescriptors with the +0x00/+0x08 "
+        "buffer pointers plus the submesh descriptor's joint count.",
+    ),
     0x141744100: (
         "SkinningDeformer_EncodeBoneBufferDescriptors",
-        "Converts the current and companion bone-buffer pointers from "
-        "InstanceJointData plus the joint count into the GPU resource/descriptor "
-        "inputs consumed by SkinningDeformer_Skin.",
+        "Converts the latched InstanceJointData +0x00/+0x08 bone-buffer pointers "
+        "plus the separately supplied submesh joint count into GPU resource/"
+        "descriptor inputs consumed by SkinningDeformer_Skin.",
     ),
     0x141744210: (
         "SkinningDeformer_Skin",
@@ -2801,9 +2878,10 @@ FUNCTIONS = {
     ),
     0x141931B30: (
         "FgInstance_SetBones",
-        "Exact FgInstance::SetBones source assertion. Publishes the current and "
-        "companion bone-buffer pointers and joint count into the instance's "
-        "persistent joint-data block.",
+        "Exact FgInstance::SetBones source assertion. Writes its two supplied "
+        "bone-data values to the current frame/persistent FgInstance record at "
+        "+0x60/+0x58 and writes the joint count at +0x10. It does not itself "
+        "populate final InstanceJointData +0x00/+0x08.",
     ),
     0x141661960: (
         "RenderMgr_MainDrawCore",
@@ -11643,6 +11721,13 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x146905C58: (
+        "g_ArmIkJointNameIds",
+        "Ten runtime-initialized StringIds ordered as left "
+        "{root,shoulder,elbow,wrist,hand_prop_attachment} then the matching "
+        "right-side five. WeaponIKFeather resolves them inside the current "
+        "Player skeleton and never treats the array as fixed skeleton ordinals.",
+    ),
     0x142A35B38: (
         "PlayerRunNGunController_vftable",
         "Exact PlayerRunNGunController vtable for the special run-and-gun/"
