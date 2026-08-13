@@ -217,15 +217,25 @@
       pre/post boundaries with identical stock scalars/result. Both changed only
       joints 19..26; cross-owner rotation differed by at most 2.04 degrees before
       and 3.15 degrees after, translations were identical through joint 29 and
-      hand-prop joint 30 differed by only 0.834 mm. This rejects lifecycle,
-      upstream arm pose and Feather as the visible grip owner. Build `ach`
-      disables the completed census.
-- [ ] Continue statically at the separate ProcessWeapon transform. The only
-      admissible next discriminator is exact stationary P99/rightHand at the
+      hand-prop joint 30 differed by only 0.834 mm. Correct the earlier
+      row-independent interpretation: composing the parent chain leaves about
+      6.8 mm / 2.13 degrees at both final hand endpoints and different two-hand
+      separation. This rejects lifecycle/different controls, not the upstream
+      arm pose; stock Feather materially closes the hands. Build `ach` disables
+      the completed census.
+- [x] Implement the separate ProcessWeapon discriminator as build `aci`. The
+      exact stationary P99/rightHand census runs at the
       already-installed direct callsite `0x141ED19BB`, comparing role-A Player1
       and role-B Player0 resolved hand input, weapon-local correction and stock
-      output. Do not re-enable broad rejected transform probes and do not mutate
-      any arm row, clip, selector or scalar.
+      output. It admits only exact P99/rightHand joint30/WeaponOut/current-slot
+      ownership and takes four read-only samples per owner. Do not re-enable
+      broad rejected transform probes and do not mutate any arm row, clip,
+      selector or scalar.
+- [ ] Run the written `aci` stationary drawn-P99 exam. Unequal stable
+      `weapon+0x4F0..+0x52F` or relative input/output selects a distinct
+      ProcessWeapon offset; identical local correction selects upstream
+      arm/phase. Missing role1/role2 rows or another endpoint/state rejects only
+      packaging. No visual mutation follows from this census alone.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that

@@ -23391,7 +23391,7 @@ identity/readability race, and a one-sided boundary would select a lifecycle
 split. Mazur must not be repeated and no pose mutation is authorized by this
 correction.
 
-### 2026-08-13 RUNTIME CONFIRMED diagnostic / RUNTIME REJECTED pose owner (`acg`): P99 grip divergence is not in PlayerWeaponIKAction or WeaponIKFeather
+### 2026-08-13 RUNTIME CONFIRMED diagnostic / STATIC CORRECTION (`acg`): P99 shares the WeaponIK controls but retains a composed hand-endpoint delta
 
 The corrected written prediction passed in fresh PIDs `12940(A)/13716(B)`.
 Both loaded marker `acg`, installed the exact callsite relay and emitted one
@@ -23400,7 +23400,7 @@ Neither process emitted another `CAPTURE-FAILED`. Both used exact art
 `8075397D`, slot zero, `WeaponOut` state 2, stock result one, weight one,
 hand-side selector one, strength one and animation scale one.
 
-The two independent owners also agree on what stock Feather writes. Both
+The two independent owners agree on the control contract and on which rows stock Feather writes. Both
 changed exactly joints `19..26` (`changedMask=0xFF`), while palms and hand-prop
 attachments `27..30` remained unchanged. Role-A versus role-B translation was
 identical through joints `19..29`; joint 30 differed by only `0.834 mm`.
@@ -23409,15 +23409,35 @@ rows; after stock it remained `0..3.15 degrees`. In particular, the supposedly
 broken local path does not receive a different selector, strength, scale or
 gross paired-arm target.
 
-This **rejects Hlifecycle, Hupstream and Hfeather as causes of the visible P99
-grip error** at this boundary. The measured small deltas are ordinary
-asynchronous idle phase variation and are far below the reported separation of
-the weapon from the hands. It also explains the earlier negative `abw/aby`
-transfers: role A was not carrying a materially different arm pose to donate.
-No joint-row, clip, scalar, selector or body-palette repair is authorized.
+That row-by-row interpretation was too strong. C39's two interleaved arm chains
+are `19/20 <- 18`, `21 <- 19`, `22 <- 20`, through palms `27/28` and hand-prop
+attachments `29/30`; local rotation deltas accumulate down each chain. Composing
+the logged local Locators relative to a common identity `spined 18` gives a
+measurable post-Feather Player1/Player0 split at joint 29 of `2.134 degrees /
+6.781 mm` and at joint 30 of `2.134 degrees / 6.761 mm`. The two processes'
+post-Feather hand-point separation is `11.787 mm` versus `8.735 mm`. Before
+Feather, the same endpoints were about `24.836 mm` and `6.761 mm` apart across
+owners, while each owner's two hands were about `370 mm` apart. Stock Feather
+therefore materially closes the hands; it is not a rejected pose owner.
 
-The surviving leading hypothesis is now the separately rendered ProcessWeapon
-placement after the already-near-identical `rightHand` chain. The exact stock
+The saved Mazur control makes the correction independent of P99. Composing its
+same exact rows yields post-Feather owner separation of `8.031 degrees / 42.003
+mm` at joint 29 and `9.739 degrees / 24.248 mm` at joint 30; the two-hand
+separation is `108.214 mm` on role A versus `69.828 mm` on role B. One
+asynchronous sample cannot distinguish stable authored composition from idle
+phase, but it definitively rejects the claim that only a negligible independent
+row delta reaches the weapon endpoints.
+
+The corrected verdict is narrower. **Hlifecycle and different scalar/control
+inputs are REJECTED for P99; Hupstream remains open, and Feather is a shared
+corrective writer rather than the first divergent producer.** The negative
+`abw/aby` transfers still reject those exact late write packages as sufficient
+visual fixes, but no longer prove semantic equality of the source and target
+hand endpoints. No joint-row, clip, scalar, selector or body-palette repair is
+authorized from this result.
+
+The independent competing hypothesis is the separately rendered ProcessWeapon
+placement after the residual `rightHand` chain. The exact stock
 path is `AttachSystem_ResolveRecordTransform 0x1418B7060 ->
 NdAttachableObject_ApplyLocalAttachmentCorrection 0x141ED0A70` at direct callsite
 `0x141ED19BB`; it combines the character hand frame with weapon-local/art state
@@ -23430,3 +23450,47 @@ the broad rejected transform-probe package.
 
 Build `ach` disables the completed WeaponIK census. The two game processes
 remained responsive and no game state was changed by `acg`.
+
+### 2026-08-13 STATIC / IMPLEMENTED (`aci`): exact drawn-P99 ProcessWeapon correction census at `0x141ED19BB`
+
+The corrected `acg` result leaves two concrete explanations. **Harm-phase** says
+the separately rendered P99 merely follows the measured joint-30 input and its
+own local correction is identical on Player1 and Player0; the remaining numeric
+split is upstream pose/phase. **Hweapon-local** says remote and local P99 carry
+different stable `weapon+0x4F0..+0x52F` art/local state, so
+`NdAttachableObject_ApplyLocalAttachmentCorrection` adds a different rigid
+weapon offset after the hand. **Hpackaging/downstream** says one exact owner
+never reaches this call, the attachment is not `rightHand`, or a later publisher
+is required.
+
+Three independent evidence classes close a read-only discriminator. First,
+ProcessWeapon vtable `0x142A9BF48` slot `+0x7B8` reaches
+`NdAttachableObject_UpdateSelectedAttachmentTransform 0x141ED1380`, whose sole
+direct local-correction call is `0x141ED19BB -> 0x141ED0A70`; RCX is the exact
+weapon, R8 the resolved AttachSystem input and RDX the returned output. Second,
+both retained legacy-Nadine tables have the same `rightHand 0x61A48E01`
+identity record on target joint 30, independently runtime-confirmed, so the
+selected record does not hide an owner-specific authored offset. Third, `fz`
+proved that `weapon+0x4F0` is precisely the state consumed at this boundary and
+can add large deterministic art-specific corrections, while corrected `acg`
+proves the input hand chain itself still differs. Comparing both values at the
+same stock call separates the candidates without another pose transfer.
+
+Build `aci` reuses the already-installed production wrapper and enables only a
+bounded census. Admission requires exact P99 art `8075397D`, retained legacy
+Nadine owner 0 or 1 with matching screen/runtime/parent, exact
+PlayerWeaponController vtable and owner, current slot equal to the same weapon,
+`WeaponOut` state 2, and the selected identity `rightHand` record on joint 30.
+It calls stock exactly once and records at most four samples per owner, 500 ms
+apart: resolved input, output, all 16 DWORDs at `weapon+0x4F0..+0x52F` and the
+two correction-state DWORDs. It writes none of them; all accepted P99 hip and
+Mazur-back behavior remains enabled and unchanged.
+
+**Falsifiable prediction before launch:** stationary drawn P99 must produce
+four `NADINE-P99-DRAWN-XFORM` rows for role `1`/Player0 and four for role
+`2`/Player1, each `attachId=61A48E01`, joint 30, state 2. Stable unequal
+`localBefore` values or unequal relative input-to-output transforms select
+**Hweapon-local**. Bit-identical stable local correction with only the input
+world frame changing rejects it and selects **Harm-phase/upstream**. A missing
+owner, another endpoint/state, changing correction blend, crash or stall rejects
+only `aci`; it authorizes no transform or arm mutation.

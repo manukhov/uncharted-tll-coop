@@ -2439,6 +2439,13 @@ constexpr bool kEnableLegacyNadineGripSnapshotCensus = false;
 // lifecycle/scalars and near-identical arm rows, so this hot census has answered
 // its question and stays out of production.
 constexpr bool kEnableLegacyNadineWeaponIkFeatherInputCensus = false;
+// Build acg proved that the two P99 WeaponIK paths share the same lifecycle and
+// scalar controls, but composing the interleaved arm hierarchy reveals a
+// residual 6.7 mm hand-endpoint split. Distinguish that upstream pose delta
+// from the separately rendered ProcessWeapon correction at the already-live
+// 0x141ED19BB boundary. This is a bounded read-only census: exact P99,
+// rightHand/joint30, WeaponOut and retained legacy Nadine only.
+constexpr bool kEnableLegacyNadineDrawnP99LocalTransformCensus = true;
 // The common resolver already selects the compatible P99/Mazur Player clips.
 // Local PlayerWeaponIKAction then runs WeaponIKFeather::Apply and commits both
 // arm targets; the retained remote Nadine does not show the defect. Suppress
@@ -50639,6 +50646,9 @@ struct NadineLocalTransformProbeCapture {
     std::uint32_t attach_id = 0;
     std::uint32_t attach_count = 0;
     std::int32_t local_joint_selector = -1;
+    int current_slot = -1;
+    std::uint32_t draw_state = 0xFFFFFFFFu;
+    std::uint32_t screen_index = 0xFFFFFFFFu;
     std::uint8_t attach_index = 0xFF;
     std::int16_t attach_joint = -1;
     int role = -1;
@@ -50652,6 +50662,69 @@ struct NadineLocalTransformProbeCapture {
     bool record_readable = false;
     bool readable = false;
 };
+
+bool seh_admit_drawn_p99_local_transform_census(
+    NadineLocalTransformProbeCapture* capture) {
+    if (capture == nullptr) {
+        return false;
+    }
+    capture->current_slot = -1;
+    capture->draw_state = 0xFFFFFFFFu;
+    capture->screen_index = 0xFFFFFFFFu;
+    __try {
+        if (!capture->readable || !capture->record_readable ||
+            capture->weapon == nullptr || capture->owner == nullptr ||
+            capture->art != kCoopPistolArtId ||
+            capture->attach_id != 0x61A48E01u ||
+            capture->attach_joint != 30 ||
+            capture->role < 1 || capture->role > 2 ||
+            std::memcmp(
+                capture->record_bits.data(),
+                kCanonicalAttachIdentityBits.data(),
+                sizeof(kCanonicalAttachIdentityBits)) != 0) {
+            return false;
+        }
+
+        const int owner_index = capture->role - 1;
+        capture->screen_index = static_cast<std::uint32_t>(owner_index);
+        if (capture->owner != retained_player_object(owner_index) ||
+            !player_object_stable(capture->owner) ||
+            !player_screen_index_is(
+                capture->owner, capture->screen_index) ||
+            !seh_weapon_parent_resolves_to_owner(
+                capture->weapon, capture->owner)) {
+            return false;
+        }
+
+        const auto* const owner_bytes =
+            static_cast<const std::byte*>(capture->owner);
+        if (readable_bytes(owner_bytes + 0x1D88) < sizeof(void*)) {
+            return false;
+        }
+        void* const controller = *reinterpret_cast<void* const*>(
+            owner_bytes + 0x1D88);
+        if (controller == nullptr || readable_bytes(controller) < 0x138 ||
+            *reinterpret_cast<const std::uintptr_t*>(controller) !=
+                g_module + kPlayerWeaponControllerVtableRva ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(controller) + 0x108) !=
+                capture->owner ||
+            !read_weapon_draw_state(
+                capture->owner, capture->current_slot,
+                capture->draw_state) ||
+            capture->draw_state != 2 || capture->current_slot < 0 ||
+            get_weapon_from_slot(
+                capture->owner, capture->current_slot) != capture->weapon) {
+            return false;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        capture->current_slot = -1;
+        capture->draw_state = 0xFFFFFFFFu;
+        capture->screen_index = 0xFFFFFFFFu;
+        return false;
+    }
+}
 
 bool seh_capture_nadine_local_transform_pre(
     void* weapon, const void* input,
@@ -50839,7 +50912,8 @@ bool claim_nadine_local_transform_sample(
 }
 
 void log_nadine_local_transform_sample(
-    unsigned sample, const NadineLocalTransformProbeCapture& capture) {
+    unsigned sample, const NadineLocalTransformProbeCapture& capture,
+    bool drawn_p99_census) {
     std::uint32_t input_output_changed = 0;
     for (std::size_t index = 0; index < capture.input_bits.size(); ++index) {
         if (capture.input_bits[index] != capture.output_bits[index]) {
@@ -50862,7 +50936,10 @@ void log_nadine_local_transform_sample(
         capture.local_after_bits.data(), capture.local_after_bits.size());
 
     std::ostringstream line;
-    line << "NADINE-LOCAL-XFORM role=" << capture.role
+    line << (drawn_p99_census
+                 ? "NADINE-P99-DRAWN-XFORM role="
+                 : "NADINE-LOCAL-XFORM role=")
+         << capture.role
          << " sample=" << sample
          << " owner=0x" << std::hex
          << reinterpret_cast<std::uintptr_t>(capture.owner)
@@ -50881,6 +50958,9 @@ void log_nadine_local_transform_sample(
          << "/0x" << std::hex << capture.attach_id
          << " joint=" << std::dec << capture.attach_joint
          << " localJoint=" << capture.local_joint_selector
+         << " screen=" << capture.screen_index
+         << " slot=" << capture.current_slot
+         << " drawState=" << capture.draw_state
          << " valid=" << (capture.readable ? 1 : 0)
          << "/" << (capture.record_readable ? 1 : 0)
          << " changed=0x" << std::hex << input_output_changed
@@ -51414,8 +51494,15 @@ void log_nadine_mazur_back_frame_once(
 std::int64_t __fastcall hooked_nd_attachable_apply_local_transform(
     void* weapon, void* output, const void* input) {
     NadineLocalTransformProbeCapture capture{};
-    const bool relevant = kEnableRejectedNadineWeaponRuntimeProbes &&
+    const bool captured =
+        (kEnableRejectedNadineWeaponRuntimeProbes ||
+         kEnableLegacyNadineDrawnP99LocalTransformCensus) &&
         seh_capture_nadine_local_transform_pre(weapon, input, &capture);
+    const bool drawn_p99_census = captured &&
+        kEnableLegacyNadineDrawnP99LocalTransformCensus &&
+        seh_admit_drawn_p99_local_transform_census(&capture);
+    const bool relevant = captured &&
+        (kEnableRejectedNadineWeaponRuntimeProbes || drawn_p99_census);
     unsigned sample = 0;
     const bool log_sample =
         relevant && claim_nadine_local_transform_sample(capture, &sample);
@@ -51451,7 +51538,8 @@ std::int64_t __fastcall hooked_nd_attachable_apply_local_transform(
     }
     if (log_sample &&
         seh_capture_nadine_local_transform_post(weapon, output, &capture)) {
-        log_nadine_local_transform_sample(sample, capture);
+        log_nadine_local_transform_sample(
+            sample, capture, drawn_p99_census);
     }
     return result;
 }
@@ -51490,6 +51578,10 @@ bool install_nadine_local_transform_probe() {
         : (kEnableLegacyNadineP99HipAxisLift
             ? "legacy-Nadine P99 hip-axis lift installed at 0x141ED19BB"
             : "Nadine local-transform read-only probe installed at 0x141ED19BB")));
+    if constexpr (kEnableLegacyNadineDrawnP99LocalTransformCensus) {
+        boot_log_line(
+            "bounded drawn-P99 local-transform census active at 0x141ED19BB");
+    }
     return true;
 }
 
@@ -57455,8 +57547,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-13ach "
-        "(production after rejected WeaponIK grip boundary)");
+        "TLL co-op runtime init 2026-08-13aci "
+        "(bounded drawn-P99 local-transform census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -57527,7 +57619,8 @@ DWORD WINAPI install_hook(void*) {
     }
     if constexpr ((kEnableLegacyNadineMazurNativeBackFrame ||
                    kEnableLegacyNadineMazurAuthoredBackFrame ||
-                   kEnableLegacyNadineP99HipAxisLift) &&
+                   kEnableLegacyNadineP99HipAxisLift ||
+                   kEnableLegacyNadineDrawnP99LocalTransformCensus) &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_nadine_local_transform_probe();
     }
