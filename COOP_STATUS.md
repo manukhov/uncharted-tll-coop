@@ -23059,3 +23059,55 @@ The canonical IDB now names `Npc_AllocateAnimDataForDrawable 0x1403D1CD0`,
 functions, 60 data names` and `save_database returned True` in
 `reports/apply_status_body_visual_owner.txt`; restarted MCP readback resolves
 all three names from the sole `ida/tll.i64`.
+
+### 2026-08-13 RUNTIME CONFIRMED (`aca`): retained Player1 is a real selected main-view Nadine body producer
+
+The written `aca` identity prediction passed and closes the donor premise that
+had remained open after the negative local-pose and palette transfers. Both
+copies were launched from the packaged release and continued into chapter 4.
+Role A first rejected only while retained Player1 did not yet exist:
+campaign Nadine completed every capture gate (`nativeStage=8`), while
+`player1=0` failed at the object gate (`playerStage=1`). After normal peer
+synchronization spawned retained Player1, the exact target admitted.
+
+The first stable generation joined two independent body owners. Native
+NadineBuddy was object/runtime `0x10e0d14800/0x6dd`, Player1 was
+`0x10e0e1c000/0x931`; both used look `D27C074F`, each DrawControl resolved back
+to its own Fg owner, and both exposed the same five `nadine-rural` mesh ids.
+Each owner had all five mesh gates enabled and exactly `16/20` active driven
+instances. The two bounded post-cull samples were complete and untruncated:
+
+- sample 1: `329/329` drawables and `506/506` submeshes;
+- sample 2: `331/331` drawables and `525/525` submeshes;
+- both samples: native `16/16/6/53`, Player1 `16/16/4/59`, `sameWorld=0`.
+
+The per-entry rows close the important semantic distinction. Native selected
+six concrete body instances and 53 submeshes; Player1 independently selected
+four instances and 59 submeshes. Every selected instance had `active=255`,
+matched the published owner world matrix, and belonged directly to that
+owner's exact driven list. The actors were not overlapping (`sameWorld=0`), so
+the correct networked Nadine seen from Chloe is a spatially distinct retained
+Player1 presentation rather than a hidden native-body donor. Later object
+recreation produced generations 2/3 and two more complete generation-3 samples
+with the same result (`native 6/53`, `player1 4/59`, `sameWorld=0`), rejecting a
+one-frame or stale-pointer explanation.
+
+This **CONFIRMS Hplayer as a real selected producer** and simultaneously
+confirms **Hboth** at the process level: both native NadineBuddy and Player1 are
+rendered in the same primary colour view, but at different world positions.
+It rejects **Hnative-only**, **Hoverlap** and the premise that the previously
+transported Player1 rows came from an unrendered body. It does not resurrect
+the rejected `abw/aby` writes: those already proved that copying Player1 local
+rows or weighted final matrices into the measured local Player0 buffers was not
+sufficient to change the pixels. The remaining split is therefore semantic
+composition/lifetime around the concrete Player1 producer, especially the
+paired hand-prop/ProcessWeapon/WeaponIK system, not body-owner identity or a
+nearby alternative palette.
+
+Build `acb` disables the read-only body census again. No actor, draw row,
+matrix, visibility flag or pose was mutated during the exam, and the two game
+processes launched for it were stopped afterward. The next runtime launch is
+not authorized: continue statically by joining the same-frame Player1 and
+Player0 hand-prop targets, ProcessWeapon endpoint and generic two-hand IK
+inputs, and identify the first semantic value that differs before the already
+rejected body-palette boundary.

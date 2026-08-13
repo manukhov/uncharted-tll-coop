@@ -132,12 +132,18 @@
       `SubMeshSkinning` and `SkinningDeformer_SkinSubMesh 0x1418778F0` into
       `SkinningDeformer_EncodeBoneBufferDescriptors 0x141744100`. No supported
       later body-bone pointer overwrite remains.
-- [ ] Establish the exact visual producer of the externally correct Nadine grip
+- [x] Establish the exact visual producer of the externally correct Nadine grip
       before choosing another donor. Join the role-A retained Player1 body, any
       surviving native NadineBuddy/body DrawControl and the actual main-view
       submission in one frame, then compare the semantic P99/Mazur arm rows in
       that exact producer against local Player0. The asynchronous `88/88` delta
       does not prove that the transported rows encoded the grip difference.
+      Runtime `aca` confirms both owners are independently selected in the same
+      primary colour view at different world positions: native `6/53` selected
+      instances/submeshes and Player1 `4/59`, repeated after object recreation.
+      Therefore retained Player1 is a real rendered donor candidate, not an
+      unrendered body; native-only and overlapping-owner explanations are
+      rejected.
 - [x] REJECT `abz` before runtime. The engine seam at `0x14181AB33` is an
       ordinary imported three-argument `memcpy`; staging the same 88 rows in
       `Fg+0x230` only makes that copy produce the same `Fg+0x240` bytes that the
@@ -166,9 +172,11 @@
       split is upstream authored/retargeted hand-prop placement versus the
       generic paired-hand convergence inside `WeaponIKFeather_SolveWeaponFeatherIk`;
       there is no weapon-art spatial goal inside the latter. Do not mutate this
-      composition until the exact visually correct producer/donor above is
-      identified; then require a local-only first writer with three independent
-      evidence types and a prediction distinct from both rejected palette relays.
+      composition until a local-only first writer is isolated with three
+      independent evidence types and a prediction distinct from both rejected
+      palette relays. `aca` has now identified retained Player1 as a real
+      selected main-view producer; compare its same-frame semantic inputs to
+      local Player0 rather than testing another body buffer.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that

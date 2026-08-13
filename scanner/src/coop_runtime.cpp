@@ -2346,7 +2346,7 @@ constexpr bool kEnableNadinePerViewRifleCensus = false;
 // enough to distinguish which exact Nadine body reaches the primary colour
 // view: native NadineBuddy, retained Player1, both, or neither.  It never edits
 // an actor, DrawControl, FgInstance, cull row or matrix.
-constexpr bool kEnableNadineBodyVisualOwnerCensus = true;
+constexpr bool kEnableNadineBodyVisualOwnerCensus = false;
 // Build aah: the completed aaf census plus the exact descriptor/cull audit
 // proves that current LOD0/list0 is view type 3 and is admitted only while
 // FgInstance+0x18 bit 0x40 is clear. Apply that one exclusion to the exact
@@ -57086,8 +57086,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-13aca "
-        "(read-only native-vs-Player1 body main-view census)");
+        "TLL co-op runtime init 2026-08-13acb "
+        "(confirmed Player1 Nadine body producer; census disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
