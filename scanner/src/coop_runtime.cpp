@@ -45498,11 +45498,14 @@ constexpr std::uintptr_t kAnimManagerCreateAnimCmdsNormalReturnRva =
 
 using AnimManagerCreateAnimCmdsForObjectFunction =
     std::uint64_t(__fastcall*)(void*, void*, std::uint32_t);
+using AnimManagerPerformAnimBlendFunction = void(__fastcall*)(void*);
 using AnimManagerAsyncObjectUpdateJointBlendJobFunction =
     void(__fastcall*)(void*);
 
 AnimManagerCreateAnimCmdsForObjectFunction
     g_original_create_anim_cmds_for_object_for_nadine_mazur = nullptr;
+AnimManagerPerformAnimBlendFunction
+    g_original_perform_anim_blend_for_nadine_mazur = nullptr;
 AnimManagerAsyncObjectUpdateJointBlendJobFunction
     g_original_async_joint_blend_for_nadine_mazur = nullptr;
 std::atomic<bool> g_legacy_nadine_mazur_steady_hands_hooks_ready{false};
@@ -45522,6 +45525,16 @@ struct LegacyNadineMazurSteadyHandsEpoch {
 
 thread_local LegacyNadineMazurSteadyHandsEpoch
     g_legacy_nadine_mazur_steady_hands_epoch{};
+
+enum class LegacyNadineMazurSteadyHandsCommandStage : std::uint8_t {
+    kNone = 0,
+    kPerform = 1,
+    kAsync = 2,
+};
+
+thread_local LegacyNadineMazurSteadyHandsCommandStage
+    g_legacy_nadine_mazur_steady_hands_command_stage =
+        LegacyNadineMazurSteadyHandsCommandStage::kNone;
 
 enum class LegacyNadineMazurSteadyHandsAdmission : std::uint8_t {
     kPrerequisite = 0,
@@ -45827,6 +45840,8 @@ struct LegacyNadineMazurSteadyHandsCommandSnapshot {
     bool truncated = false;
     std::uint8_t build_mode = 0;
     std::uint8_t build_flags = 0;
+    LegacyNadineMazurSteadyHandsCommandStage stage =
+        LegacyNadineMazurSteadyHandsCommandStage::kNone;
     std::uint32_t word_count = 0;
     std::uint32_t command_count = 0;
     std::uint32_t source_count = 0;
@@ -45843,13 +45858,16 @@ struct LegacyNadineMazurSteadyHandsCommandSnapshot {
 bool seh_capture_legacy_nadine_mazur_steady_hands_commands(
     void* create_context, void* command_record, std::uint32_t group,
     const LegacyNadineMazurSteadyHandsEpoch& epoch,
+    LegacyNadineMazurSteadyHandsCommandStage stage,
     LegacyNadineMazurSteadyHandsCommandSnapshot* output) {
     if (output == nullptr) {
         return false;
     }
     *output = {};
     __try {
-        if (!epoch.valid || create_context == nullptr ||
+        if (!epoch.valid || stage ==
+                LegacyNadineMazurSteadyHandsCommandStage::kNone ||
+            create_context == nullptr ||
             command_record == nullptr || group != 0 ||
             readable_bytes(create_context) < 0x18 ||
             *reinterpret_cast<void* const*>(create_context) !=
@@ -45864,6 +45882,7 @@ bool seh_capture_legacy_nadine_mazur_steady_hands_commands(
             static_cast<const std::byte*>(create_context) + 0x10);
         output->build_flags = *reinterpret_cast<const std::uint8_t*>(
             static_cast<const std::byte*>(create_context) + 0x11);
+        output->stage = stage;
         const auto* const record = static_cast<const std::byte*>(command_record);
         const auto* const words =
             *reinterpret_cast<std::uint32_t* const*>(record);
@@ -45931,6 +45950,8 @@ bool seh_capture_legacy_nadine_mazur_steady_hands_commands(
             (static_cast<std::uint64_t>(output->build_mode) << 8) |
             output->build_flags;
         output->signature *= 1099511628211ull;
+        output->signature ^= static_cast<std::uint8_t>(output->stage);
+        output->signature *= 1099511628211ull;
         return output->valid;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *output = {};
@@ -45946,7 +45967,8 @@ void census_legacy_nadine_mazur_steady_hands_commands(
     }
     LegacyNadineMazurSteadyHandsCommandSnapshot snapshot{};
     if (!seh_capture_legacy_nadine_mazur_steady_hands_commands(
-            create_context, command_record, group, epoch, &snapshot)) {
+            create_context, command_record, group, epoch,
+            g_legacy_nadine_mazur_steady_hands_command_stage, &snapshot)) {
         return;
     }
 
@@ -45969,7 +45991,12 @@ void census_legacy_nadine_mazur_steady_hands_commands(
     }
 
     std::ostringstream line;
-    line << "NADINE-MAZUR-STEADY-HANDS-CMDS mode="
+    line << "NADINE-MAZUR-STEADY-HANDS-CMDS stage="
+         << (snapshot.stage ==
+                     LegacyNadineMazurSteadyHandsCommandStage::kPerform
+                 ? "perform"
+                 : "async")
+         << " mode="
          << static_cast<unsigned>(snapshot.build_mode)
          << " flags=0x" << std::hex
          << static_cast<unsigned>(snapshot.build_flags) << std::dec
@@ -46271,14 +46298,18 @@ void log_legacy_nadine_mazur_steady_hands_admission(
     boot_log_line(line.str().c_str());
 }
 
-void __fastcall hooked_async_joint_blend_for_nadine_mazur(void* job) {
-    const auto original = g_original_async_joint_blend_for_nadine_mazur;
+void run_legacy_nadine_mazur_steady_hands_command_epoch(
+    void* job, AnimManagerPerformAnimBlendFunction original,
+    LegacyNadineMazurSteadyHandsCommandStage stage) {
     if (original == nullptr) {
         return;
     }
     const LegacyNadineMazurSteadyHandsEpoch previous =
         g_legacy_nadine_mazur_steady_hands_epoch;
+    const LegacyNadineMazurSteadyHandsCommandStage previous_stage =
+        g_legacy_nadine_mazur_steady_hands_command_stage;
     g_legacy_nadine_mazur_steady_hands_epoch = {};
+    g_legacy_nadine_mazur_steady_hands_command_stage = stage;
 
     bool exact_local_fg = false;
     void* fg = nullptr;
@@ -46315,6 +46346,19 @@ void __fastcall hooked_async_joint_blend_for_nadine_mazur(void* job) {
 
     original(job);
     g_legacy_nadine_mazur_steady_hands_epoch = previous;
+    g_legacy_nadine_mazur_steady_hands_command_stage = previous_stage;
+}
+
+void __fastcall hooked_perform_anim_blend_for_nadine_mazur(void* job) {
+    run_legacy_nadine_mazur_steady_hands_command_epoch(
+        job, g_original_perform_anim_blend_for_nadine_mazur,
+        LegacyNadineMazurSteadyHandsCommandStage::kPerform);
+}
+
+void __fastcall hooked_async_joint_blend_for_nadine_mazur(void* job) {
+    run_legacy_nadine_mazur_steady_hands_command_epoch(
+        job, g_original_async_joint_blend_for_nadine_mazur,
+        LegacyNadineMazurSteadyHandsCommandStage::kAsync);
 }
 
 bool install_legacy_nadine_mazur_steady_hands_npc_repair() {
@@ -46328,6 +46372,14 @@ bool install_legacy_nadine_mazur_steady_hands_npc_repair() {
         0x48, 0x8B, 0xC4, 0x57, 0x41, 0x54, 0x41, 0x55,
         0x41, 0x56, 0x41, 0x57, 0x48, 0x81, 0xEC, 0xD0,
         0x05, 0x00, 0x00, 0x48, 0xC7, 0x80, 0x48, 0xFB,
+        0xFF, 0xFF, 0xFE, 0xFF, 0xFF, 0xFF, 0x48, 0x89,
+        0x58, 0x10, 0x48, 0x89, 0x70, 0x18, 0xC5, 0xF8,
+        0x29, 0x70, 0xC8,
+    };
+    constexpr std::array<std::uint8_t, 43> kPerformPrologue{
+        0x48, 0x8B, 0xC4, 0x57, 0x41, 0x54, 0x41, 0x55,
+        0x41, 0x56, 0x41, 0x57, 0x48, 0x81, 0xEC, 0x90,
+        0x01, 0x00, 0x00, 0x48, 0xC7, 0x80, 0x68, 0xFF,
         0xFF, 0xFF, 0xFE, 0xFF, 0xFF, 0xFF, 0x48, 0x89,
         0x58, 0x10, 0x48, 0x89, 0x70, 0x18, 0xC5, 0xF8,
         0x29, 0x70, 0xC8,
@@ -46352,7 +46404,20 @@ bool install_legacy_nadine_mazur_steady_hands_npc_repair() {
             reinterpret_cast<AnimManagerCreateAnimCmdsForObjectFunction>(
                 create_commands_trampoline);
     }
-    void* const async_trampoline = create_commands_trampoline != nullptr
+    void* const perform_trampoline = create_commands_trampoline != nullptr
+        ? install_fire_gate_detour(
+              kAnimManagerPerformAnimBlendRva,
+              kPerformPrologue.data(), kPerformPrologue.size(),
+              reinterpret_cast<void*>(
+                  &hooked_perform_anim_blend_for_nadine_mazur),
+              "legacy-Nadine Mazur normal Perform animation blend")
+        : nullptr;
+    if (perform_trampoline != nullptr) {
+        g_original_perform_anim_blend_for_nadine_mazur =
+            reinterpret_cast<AnimManagerPerformAnimBlendFunction>(
+                perform_trampoline);
+    }
+    void* const async_trampoline = perform_trampoline != nullptr
         ? install_fire_gate_detour(
               kAnimManagerAsyncObjectUpdateJointBlendJobRva,
               kAsyncPrologue.data(), kAsyncPrologue.size(),
@@ -46367,6 +46432,7 @@ bool install_legacy_nadine_mazur_steady_hands_npc_repair() {
                     async_trampoline);
     }
     const bool installed = create_commands_trampoline != nullptr &&
+        perform_trampoline != nullptr &&
         async_trampoline != nullptr;
     g_legacy_nadine_mazur_steady_hands_hooks_ready.store(
         installed, std::memory_order_release);
@@ -58570,8 +58636,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-14act "
-        "(read-only local Mazur steady Hands command-grammar census)");
+        "TLL co-op runtime init 2026-08-14acu "
+        "(read-only Perform/Async Mazur steady Hands command census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

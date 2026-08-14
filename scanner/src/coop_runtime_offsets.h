@@ -767,6 +767,10 @@ constexpr std::uintptr_t kAnimSnapshotNodeAnimationResolveClipRva = 0x1918070;
 // has appended the full per-group command suffix, so the repair can validate
 // capacity and every late command before inserting a partial pose at cmd3.
 constexpr std::uintptr_t kAnimManagerCreateAnimCmdsForObjectRva = 0x1A8FCF0;
+// Source-identified PerformAnimBlend(AsyncUpdateJobData*). This is the normal
+// command-DAG producer that writes the persistent FgAnimData+0x100 local pose
+// before Player post-blend and the later Async joint-palette rebuild.
+constexpr std::uintptr_t kAnimManagerPerformAnimBlendRva = 0x1A92260;
 constexpr std::uintptr_t kAnimManagerAsyncObjectUpdateJointBlendJobRva =
     0x1A92A00;
 // Read-only final holster discriminator. The anim-control event hook exposes

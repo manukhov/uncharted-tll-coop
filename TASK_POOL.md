@@ -4711,7 +4711,19 @@ local no-joint-conversion; mode-2 `...14...24,24,26,5` identifies the auxiliary
 form; another structural sequence selects the third variant. Require at least
 one `NADINE-MAZUR-STEADY-HANDS-CMDS ... structural=1 source=1` and zero
 `injected`; the pose is expected to remain stock-broken. Do not authorize or
-widen mutation until this local grammar is captured.
+widen mutation until this local grammar is captured. Result: `act` captured the
+exact local auxiliary list, not a variant main list: `mode=2 flags=0x9`, 58
+words/14 commands, `source=0`, sequence
+`0,1,2,9,3,4,14,15,16,17,24(248B1AAE),24(514C0761),26,5`. This confirms the
+short command-14 external-pose import and rejects the final Async Create seam as
+an authored clip owner. Static dataflow closes its source as `Fg+0x100`; the
+normal authored DAG is built earlier by `AnimManager_PerformAnimBlend
+0x141A92260 -> Build 0x141A92637 -> Process 0x141A92759`, before Player
+post-blend/IK and the later Async import. Next `acu` exam remains read-only and
+labels the same bounded rows `stage=perform|async`. Require the Async control
+row above plus a structural Perform `source=1`; Perform source zero rejects the
+steady Hands producer, while silence rejects the wrapper. Do not enable B725 or
+any other pose write from this census alone.
 
 ## Rule
 

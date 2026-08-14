@@ -24205,3 +24205,58 @@ The single `ida/tll.i64` was updated headlessly with the corrected builder/job
 comments (`1744 functions, 60 data names`, `save_database returned True`); the
 restarted MCP resolves both saved function names. The Release DLL was rebuilt
 successfully with the pose-write flag false.
+
+### 2026-08-14 RUNTIME CONFIRMED (`act`) / STATIC read-only main-producer census (`acu`)
+
+Fresh `act` PIDs were role A 16088 and role B 6784. Both census hooks installed
+and both processes remained responsive. Role B passed `owner` and `dwell`, then
+emitted one complete row:
+
+`mode=2 flags=0x9 words=58 commands=14 structural=1 source=0`
+
+with exact sequence
+`0:2,1:2,2:4,9:2,3:2,4:2,14:6,15:4,16:2,17:4,`
+`24:6/248B1AAE,24:10/514C0761,26:10,5:2` (log line 78202).
+There were zero injection rows, as required by the compile-time repair-off
+flag. The user observed the stock broken hold. The later `hands-root` admission
+marker reflects a subsequent fail-closed state transition and did not mutate
+pose data.
+
+This confirms **Hauxiliary-build** and rejects all interpretations of this list
+as an authored Hands command DAG. It is the exact short list previously seen by
+`kc`, now independently joined to local role-B Player0/Mazur/WeaponOut. The
+`source=0` result is semantically required: command 14 is its only pose import,
+and no command 6 exists in the list.
+
+The producer/consumer path is now statically exact. In the first Async builder
+call at `0x141A92D47`, a9/a8 are `FgAnimData+0x100/+0x120`;
+`BuildCommandSegmentsForObjectMask 0x141A91490` stores those at CreateContext
+qwords 7/6; `CreateAnimCmdsForObject 0x141A8FCF0` copies them into command 14;
+and case 14 calls `AnimCmdEvaluator_CopyGroupPoseToWorkBuffer 0x14217B310`.
+Therefore final Async consumes an already-built local pose. The authored pose
+DAG is instead built by source-identified `AnimManager_PerformAnimBlend
+0x141A92260`: its normal call at `0x141A92637` supplies `Fg+0x100`, evaluates the
+result at `0x141A92759`, and command 27 publishes group JointParams back to that
+persistent array. Scheduler order independently places Player post-blend/IK
+after Perform and before Async. This also explains why `act` could never see the
+Hands clip at the final auxiliary seam.
+
+Competing hypotheses for the exact main producer remain distinct.
+**Hperform-hands-live** predicts the stable Perform group-zero list contains the
+exact admitted `7FB80CC8` or `7D11D4FD` clip once in a structural main DAG.
+**Hperform-hands-absent** predicts source zero there too and rejects the assumed
+steady Hands ownership. **Hpost-Perform IK corruption** remains separate: it
+predicts a correct Perform source followed by later changes, consistent with
+the known stock WeaponIK phase, whereas a broken authored Perform result selects
+the broad Base/layer composition itself.
+
+`acu` adds no pose write. It wraps the already source-identified Perform entry
+with its exact 43-byte reloc-free prologue, freezes the same strict role-B
+Player0/Mazur/WeaponOut/idle/Hands-root admission, and labels every bounded list
+row `stage=perform` or `stage=async`. The existing Async sample remains the
+control. Falsifiable prediction: the same stationary Mazur must reproduce the
+structural Async mode-2/source-zero row and emit at least one structural Perform
+row with `source=1`. A Perform source-one main DAG selects the only boundary
+where the B725 experiment could be staged before stock WeaponIK and the proven
+Async import. Perform source zero rejects that candidate. Silence rejects the
+Perform wrapper/epoch. No repair is authorized by this census alone.
