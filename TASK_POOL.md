@@ -4667,6 +4667,23 @@ Player1-only, native-only, both (with same/different world transform), or
 neither/packaging. Run only this automatic two-sample exam; do not add pose,
 visibility, weapon or cull mutation until the producer is identified.
 
+**STATIC / IMPLEMENTED next exam (`acp`, Mazur grip only):** the previous
+outer-resolver and resolved-cmd6 substitutions remain REJECTED. The new exact
+hypothesis appends shipped NPC Mazur high-part `B725EA01` as a stock cmd6 and
+mode-1/weight-1 cmd7 into a fresh group-zero lane immediately before cmd3 in
+the complete final Async command list. Evidence quota is met by the exact
+Mazur overlay selector, the independent NPC-normal -> Nadine authored retarget
+map and the closed final Async command/publish chain. Admission is role-B
+Player0, legacy ED25/C39, exact Mazur WeaponOut, grenade-idle, motionless 350
+ms, exact one-instance `Hands/7FB80CC8` root; P99, role A, ADS, transitions and
+holster are excluded. The complete-list hook accepts only normal caller return
+`0x141A91604`, group0, one source cmd6 and exact suffix
+`3,4,15,16,17,24(248B1AAE),27,5`; the other cmd24 ids and the prepass caller
+fail closed. Prediction: one injected marker and a coherent two-arm high-rifle
+hold, with no P99/back/ADS changes. Marker plus unchanged pose rejects the
+candidate; no marker must have a bounded admission/parser reason. Do not widen
+the guard after a failed exam.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

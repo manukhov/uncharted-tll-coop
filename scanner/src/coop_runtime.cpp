@@ -1639,6 +1639,7 @@ IdleArmPaletteAdmission g_idle_arm_palette_target_admission{};
 SRWLOCK g_idle_arm_pose_dwell_lock = SRWLOCK_INIT;
 IdleArmPoseDwellState g_idle_arm_pose_source_dwell{};
 IdleArmPoseDwellState g_idle_arm_pose_target_dwell{};
+IdleArmPoseDwellState g_legacy_nadine_mazur_steady_hands_dwell{};
 std::atomic<std::uint32_t> g_idle_arm_pose_capture_sequence{0};
 std::atomic<std::uint64_t> g_idle_arm_pose_last_applied_session{0};
 std::atomic<std::uint32_t> g_idle_arm_pose_last_applied_sequence{0};
@@ -2460,6 +2461,18 @@ constexpr bool kEnableLegacyNadineDrawnP99LocalTransformCensus = false;
 // only this exact local legacy-Nadine action through Apply's native zero-weight
 // no-op boundary while preserving action/NewIkWeapon/overlay lifecycle.
 constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
+// STATIC candidate acp: the steady Player Hands leaf itself is compatible but
+// runs before Base, so replacing that leaf cannot own the final shoulders and
+// elbows. Instead, the final Async command build appends the shipped native-NPC
+// Mazur high-part (B725EA01, npc-normal joints 20..31 -> Nadine joints 19..30)
+// immediately before the sole group-zero command-3. The existing lane zero is
+// the left input and remains authoritative for every body-only joint; a stock
+// mode-1/weight-1 command-7 lets the partial own only its authored arm rows.
+// Admission is role-B local legacy Nadine, exact Mazur WeaponOut, grenade-idle,
+// motionless for 350 ms, and an exact one-track/one-instance idle-hands root.
+// P99 is deliberately excluded: its correct native donor/source provenance is
+// still not statically closed.
+constexpr bool kEnableLegacyNadineMazurSteadyHandsNpcRepair = true;
 // The Mazur strap child owns a complete authored state-zero pose, but its
 // dynamic endpoint lookup fails because legacy Nadine has no strap2..strap14
 // joints and hides the otherwise valid mesh. Reveal that exact published child
@@ -45450,6 +45463,680 @@ bool local_player_is_steady_drawn_idle(
     return action_bits == 0 || action_bits == 0x9ull;
 }
 
+void reset_idle_arm_pose_dwell(IdleArmPoseDwellState& state);
+bool idle_arm_pose_dwell_ready(
+    IdleArmPoseDwellState& state, void* player,
+    std::uint64_t session_id, std::uint32_t weapon_art_id,
+    const float position[3], const float orientation[4], ULONGLONG now,
+    IdleArmPoseAdmissionDiagnostic* diagnostic = nullptr);
+
+// The stable Player Hands layer is generated before Base, so changing its
+// direct clip would still let Base win the proximal arm rows.  Scope the exact
+// final Async rebuild instead and append a normal partial-pose blend immediately
+// before that block's command-3.  This keeps the stock body in lane zero and
+// gives the native-NPC Mazur partial the last authored say only on joints that
+// its ValidBits contain.
+constexpr std::uint32_t kLegacyNadineHandsLayerId = 0x2EAA36BCu;
+constexpr std::uint32_t kLegacyNadineIdleHandsStateId = 0x7FB80CC8u;
+constexpr std::uint32_t kPlayerAnimationDatabaseId = 0x27E57F43u;
+constexpr std::uint32_t kPlayerAnimationSkeletonId = 0xFD6DBE03u;
+constexpr std::uint32_t kNpcNormalAnimationDatabaseId = 0x2628A5DCu;
+constexpr std::uint32_t kNpcNormalAnimationSkeletonId = 0xBD7EEE2Fu;
+constexpr std::uint32_t kNpcMazurHighPartClipId = 0xB725EA01u;
+constexpr std::uint32_t kAnimCommandBeginObject = 0u;
+constexpr std::uint32_t kAnimCommandBeginControl = 1u;
+constexpr std::uint32_t kAnimCommandAllocateBlock = 2u;
+constexpr std::uint32_t kAnimCommandFinalizeBlock = 3u;
+constexpr std::uint32_t kAnimCommandAnimation = 6u;
+constexpr std::uint32_t kAnimCommandBlend = 7u;
+constexpr std::uint32_t kAnimCommandWordCountAnimation = 6u;
+constexpr std::uint32_t kAnimCommandWordCountBlend = 6u;
+constexpr std::uint32_t kAnimCommandWordCountFinalizeBlock = 2u;
+constexpr std::uint32_t kAnimWorkBufferLaneCapacity = 64u;
+constexpr std::uint32_t kAnimPostPoseJointConversionId = 0x248B1AAEu;
+constexpr std::uintptr_t kAnimManagerCreateAnimCmdsNormalReturnRva =
+    0x1A91604;
+
+using AnimManagerCreateAnimCmdsForObjectFunction =
+    std::uint64_t(__fastcall*)(void*, void*, std::uint32_t);
+using AnimManagerAsyncObjectUpdateJointBlendJobFunction =
+    void(__fastcall*)(void*);
+
+AnimManagerCreateAnimCmdsForObjectFunction
+    g_original_create_anim_cmds_for_object_for_nadine_mazur = nullptr;
+AnimManagerAsyncObjectUpdateJointBlendJobFunction
+    g_original_async_joint_blend_for_nadine_mazur = nullptr;
+std::atomic<bool> g_legacy_nadine_mazur_steady_hands_hooks_ready{false};
+
+struct LegacyNadineMazurSteadyHandsEpoch {
+    bool valid = false;
+    void* player = nullptr;
+    void* fg_anim_data = nullptr;
+    void* target_skeleton = nullptr;
+    void* anim_control = nullptr;
+    void* source_clip = nullptr;
+    void* donor_clip = nullptr;
+    std::uint16_t source_frame_count = 0;
+    std::uint16_t donor_frame_count = 0;
+};
+
+thread_local LegacyNadineMazurSteadyHandsEpoch
+    g_legacy_nadine_mazur_steady_hands_epoch{};
+
+enum class LegacyNadineMazurSteadyHandsAdmission : std::uint8_t {
+    kPrerequisite = 0,
+    kOwner = 1,
+    kContent = 2,
+    kWaitingForDwell = 3,
+    kAdmitted = 4,
+};
+
+enum class LegacyNadineMazurSteadyHandsInjection : std::uint8_t {
+    kIgnored = 0,
+    kInjected = 1,
+    kRecord = 2,
+    kGrammar = 3,
+    kSource = 4,
+    kCapacity = 5,
+};
+
+void* seh_resolve_exact_animation_clip(
+    std::uint32_t database_id, std::uint32_t skeleton_id,
+    std::uint32_t clip_id) {
+    __try {
+        if (g_module == 0 || database_id == 0 || skeleton_id == 0 ||
+            clip_id == 0) {
+            return nullptr;
+        }
+        const auto resolve_clip =
+            reinterpret_cast<AnimationDatabaseResolveClipFunction>(
+                g_module + kAnimationDatabaseResolveClipRva);
+        auto* const clip = static_cast<std::byte*>(resolve_clip(
+            database_id, skeleton_id, clip_id, 1));
+        if (clip == nullptr || readable_bytes(clip) < 0x44 ||
+            *reinterpret_cast<const std::uint32_t*>(clip + 0x40) !=
+                database_id) {
+            return nullptr;
+        }
+        auto* const clip_data = *reinterpret_cast<std::byte* const*>(
+            clip + 0x28);
+        if (clip_data == nullptr || readable_bytes(clip_data) < 0x24 ||
+            *reinterpret_cast<const std::uint32_t*>(clip_data + 0x04) !=
+                skeleton_id ||
+            *reinterpret_cast<const std::uint16_t*>(clip_data + 0x22) < 2) {
+            return nullptr;
+        }
+        return clip;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return nullptr;
+    }
+}
+
+bool seh_resolve_exact_steady_idle_hands_root(
+    void* player, void* expected_source_clip, void** anim_control_out) {
+    if (anim_control_out == nullptr) {
+        return false;
+    }
+    *anim_control_out = nullptr;
+    __try {
+        if (player == nullptr || expected_source_clip == nullptr ||
+            readable_bytes(static_cast<std::byte*>(player) +
+                           kPlayerUpperStateOwnerOffset) < sizeof(void*)) {
+            return false;
+        }
+        auto* const anim_control = *reinterpret_cast<std::byte**>(
+            static_cast<std::byte*>(player) +
+            kPlayerUpperStateOwnerOffset);
+        if (anim_control == nullptr || readable_bytes(anim_control) < 0x38) {
+            return false;
+        }
+        const std::uint32_t registry_count =
+            *reinterpret_cast<const std::uint32_t*>(anim_control + 0x28);
+        auto* const records = *reinterpret_cast<std::byte* const*>(
+            anim_control + 0x30);
+        if (registry_count == 0 || registry_count > 128 || records == nullptr ||
+            readable_bytes(records) <
+                static_cast<std::size_t>(registry_count) * 0x20) {
+            return false;
+        }
+
+        std::byte* hands_layer = nullptr;
+        std::uint32_t hands_matches = 0;
+        for (std::uint32_t index = 0; index < registry_count; ++index) {
+            auto* const record =
+                records + static_cast<std::size_t>(index) * 0x20;
+            if (*reinterpret_cast<const std::uint32_t*>(record) !=
+                    kLegacyNadineHandsLayerId ||
+                *reinterpret_cast<const std::uint8_t*>(record + 0x14) == 0 ||
+                *reinterpret_cast<const std::uint32_t*>(record + 0x18) != 2) {
+                continue;
+            }
+            hands_layer = *reinterpret_cast<std::byte* const*>(record + 0x08);
+            ++hands_matches;
+        }
+        if (hands_matches != 1 || hands_layer == nullptr ||
+            readable_bytes(hands_layer) < 0x508 ||
+            *reinterpret_cast<const std::uintptr_t*>(hands_layer) !=
+                g_module + kAnimStateLayerVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(hands_layer + 0x08) != 2 ||
+            *reinterpret_cast<const std::uint32_t*>(hands_layer + 0x500) != 1) {
+            return false;
+        }
+
+        auto* const tracks = *reinterpret_cast<void* const* const*>(
+            hands_layer + 0x4F8);
+        if (tracks == nullptr || readable_bytes(tracks) < sizeof(void*)) {
+            return false;
+        }
+        auto* const track = static_cast<std::byte*>(tracks[0]);
+        if (track == nullptr || readable_bytes(track) < 0x18 ||
+            *reinterpret_cast<const std::uint16_t*>(track + 0x10) < 1 ||
+            *reinterpret_cast<const std::uint16_t*>(track + 0x10) > 64 ||
+            *reinterpret_cast<const std::uint16_t*>(track + 0x12) != 1) {
+            return false;
+        }
+        auto* const instances = *reinterpret_cast<void* const* const*>(track);
+        if (instances == nullptr || readable_bytes(instances) < sizeof(void*)) {
+            return false;
+        }
+        auto* const instance = static_cast<std::byte*>(instances[0]);
+        if (instance == nullptr || readable_bytes(instance) < 0x198 ||
+            *reinterpret_cast<const std::uintptr_t*>(instance) !=
+                g_module + kAnimStateInstanceVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(instance + 0x98) !=
+                kLegacyNadineIdleHandsStateId) {
+            return false;
+        }
+
+        void* const heap = *reinterpret_cast<void* const*>(instance + 0x130);
+        const std::uint32_t root_index =
+            *reinterpret_cast<const std::uint32_t*>(instance + 0x138);
+        void* root_node = nullptr;
+        if (!probe_snapshot_heap_node(heap, root_index, root_node) ||
+            root_node == nullptr || readable_bytes(root_node) < 0x6A) {
+            return false;
+        }
+        const auto* const node = static_cast<const std::byte*>(root_node);
+        if (*reinterpret_cast<const std::uintptr_t*>(node) !=
+                g_module + kAnimSnapshotNodeAnimationVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(node + 0x40) !=
+                kLegacyNadineIdleHandsStateId ||
+            *reinterpret_cast<const std::uint32_t*>(node + 0x44) !=
+                kLegacyNadineIdleHandsStateId ||
+            *reinterpret_cast<const std::uint32_t*>(node + 0x48) != 0 ||
+            *reinterpret_cast<const std::uint32_t*>(node + 0x4C) != 0 ||
+            *reinterpret_cast<void* const*>(node + 0x50) !=
+                expected_source_clip ||
+            *reinterpret_cast<const std::uint8_t*>(node + 0x69) != 0) {
+            return false;
+        }
+
+        // Reject a torn registry/track/root sample before publishing it to TLS.
+        void* verify_node = nullptr;
+        if (*reinterpret_cast<const std::uint32_t*>(anim_control + 0x28) !=
+                registry_count ||
+            *reinterpret_cast<std::byte* const*>(anim_control + 0x30) !=
+                records ||
+            *reinterpret_cast<const std::uint32_t*>(hands_layer + 0x500) != 1 ||
+            *reinterpret_cast<void* const*>(tracks) != track ||
+            *reinterpret_cast<void* const*>(instances) != instance ||
+            !probe_snapshot_heap_node(heap, root_index, verify_node) ||
+            verify_node != root_node) {
+            return false;
+        }
+        *anim_control_out = anim_control;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *anim_control_out = nullptr;
+        return false;
+    }
+}
+
+LegacyNadineMazurSteadyHandsAdmission
+seh_select_legacy_nadine_mazur_steady_hands_epoch(
+    void* expected_fg, LegacyNadineMazurSteadyHandsEpoch* output) {
+    if (output == nullptr) {
+        return LegacyNadineMazurSteadyHandsAdmission::kPrerequisite;
+    }
+    *output = {};
+    __try {
+        if (!kEnableLegacyNadineMazurSteadyHandsNpcRepair ||
+            !g_state_net.enabled || !g_net_role_b || expected_fg == nullptr) {
+            return LegacyNadineMazurSteadyHandsAdmission::kPrerequisite;
+        }
+        if (g_state_net.idle_arm_pose_session_id == 0) {
+            return LegacyNadineMazurSteadyHandsAdmission::kPrerequisite;
+        }
+        void* const player = retained_player_object(0);
+        IdleArmPoseOwnerScope owner{};
+        if (!seh_resolve_idle_arm_pose_owner_scope(player, 0, &owner) ||
+            owner.fg_anim_data != expected_fg ||
+            owner.weapon_art_id != kCoopRifleArtId ||
+            !local_player_is_steady_drawn_idle(owner)) {
+            return LegacyNadineMazurSteadyHandsAdmission::kOwner;
+        }
+
+        void* const source_clip = seh_resolve_exact_animation_clip(
+            kPlayerAnimationDatabaseId, kPlayerAnimationSkeletonId,
+            kLegacyNadineIdleHandsStateId);
+        void* const donor_clip = seh_resolve_exact_animation_clip(
+            kNpcNormalAnimationDatabaseId, kNpcNormalAnimationSkeletonId,
+            kNpcMazurHighPartClipId);
+        void* anim_control = nullptr;
+        if (source_clip == nullptr || donor_clip == nullptr ||
+            source_clip == donor_clip ||
+            !seh_resolve_exact_steady_idle_hands_root(
+                player, source_clip, &anim_control)) {
+            return LegacyNadineMazurSteadyHandsAdmission::kContent;
+        }
+        auto* const source_clip_data = *reinterpret_cast<std::byte* const*>(
+            static_cast<std::byte*>(source_clip) + 0x28);
+        auto* const donor_clip_data = *reinterpret_cast<std::byte* const*>(
+            static_cast<std::byte*>(donor_clip) + 0x28);
+        const std::uint16_t source_frame_count =
+            *reinterpret_cast<const std::uint16_t*>(
+                source_clip_data + 0x22);
+        const std::uint16_t donor_frame_count =
+            *reinterpret_cast<const std::uint16_t*>(
+                donor_clip_data + 0x22);
+
+        const ULONGLONG now = GetTickCount64();
+        if (!idle_arm_pose_dwell_ready(
+                g_legacy_nadine_mazur_steady_hands_dwell, player,
+                g_state_net.idle_arm_pose_session_id, owner.weapon_art_id,
+                owner.position, owner.orientation, now)) {
+            return LegacyNadineMazurSteadyHandsAdmission::kWaitingForDwell;
+        }
+
+        output->valid = true;
+        output->player = player;
+        output->fg_anim_data = expected_fg;
+        output->target_skeleton = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(expected_fg) +
+            kFgAnimDataSkeletonOffset);
+        output->anim_control = anim_control;
+        output->source_clip = source_clip;
+        output->donor_clip = donor_clip;
+        output->source_frame_count = source_frame_count;
+        output->donor_frame_count = donor_frame_count;
+        return LegacyNadineMazurSteadyHandsAdmission::kAdmitted;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return LegacyNadineMazurSteadyHandsAdmission::kContent;
+    }
+}
+
+LegacyNadineMazurSteadyHandsInjection
+seh_inject_legacy_nadine_mazur_steady_hands_commands(
+    void* create_context, void* command_record, std::uint32_t group,
+    const LegacyNadineMazurSteadyHandsEpoch& epoch,
+    std::uint32_t* donor_lane_out) {
+    if (donor_lane_out != nullptr) {
+        *donor_lane_out = 0;
+    }
+    __try {
+        if (!epoch.valid || create_context == nullptr ||
+            command_record == nullptr ||
+            group != 0 || readable_bytes(create_context) < 0x18 ||
+            *reinterpret_cast<void* const*>(create_context) !=
+                epoch.fg_anim_data ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(create_context) + 0x08) !=
+                epoch.target_skeleton ||
+            readable_bytes(command_record) < 0x20) {
+            return LegacyNadineMazurSteadyHandsInjection::kIgnored;
+        }
+        auto* const record = static_cast<std::byte*>(command_record);
+        auto* const words = *reinterpret_cast<std::uint32_t**>(record);
+        const std::uint32_t capacity_words =
+            *reinterpret_cast<const std::uint32_t*>(record + 0x08);
+        const std::uint32_t word_count =
+            *reinterpret_cast<const std::uint32_t*>(record + 0x0C);
+        const std::uint32_t pending_count =
+            *reinterpret_cast<const std::uint32_t*>(record + 0x10);
+        void* const pending_header =
+            *reinterpret_cast<void* const*>(record + 0x18);
+        constexpr std::uint32_t kInsertedWords =
+            kAnimCommandWordCountAnimation + kAnimCommandWordCountBlend;
+        if (words == nullptr || word_count == 0 || capacity_words > 4096 ||
+            word_count > capacity_words || pending_count != 0 ||
+            pending_header != nullptr ||
+            capacity_words - word_count < kInsertedWords ||
+            readable_bytes(words) <
+                static_cast<std::size_t>(word_count + kInsertedWords) *
+                    sizeof(std::uint32_t)) {
+            return LegacyNadineMazurSteadyHandsInjection::kRecord;
+        }
+
+        std::uint32_t cursor = 0;
+        std::uint32_t object_begin_count = 0;
+        std::uint32_t control_begin_count = 0;
+        std::uint32_t opener_count = 0;
+        std::uint32_t opener_word = UINT32_MAX;
+        std::uint32_t finalizer_count = 0;
+        std::uint32_t finalizer_word = UINT32_MAX;
+        std::uint32_t source_count = 0;
+        std::uint32_t source_phase_bits = 0;
+        while (cursor < word_count) {
+            const std::uint32_t header = words[cursor];
+            const std::uint32_t opcode = header & 0xFFFFu;
+            const std::uint32_t command_words = header >> 16;
+            if (command_words == 0 || command_words > word_count - cursor) {
+                return LegacyNadineMazurSteadyHandsInjection::kGrammar;
+            }
+            if (opcode == kAnimCommandBeginObject) {
+                if (command_words != 2 || cursor != 0) {
+                    return LegacyNadineMazurSteadyHandsInjection::kGrammar;
+                }
+                ++object_begin_count;
+            } else if (opcode == kAnimCommandBeginControl) {
+                if (command_words != 2 || cursor != 2) {
+                    return LegacyNadineMazurSteadyHandsInjection::kGrammar;
+                }
+                ++control_begin_count;
+            } else if (opcode == kAnimCommandAllocateBlock) {
+                if (command_words != 4 || cursor != 4) {
+                    return LegacyNadineMazurSteadyHandsInjection::kGrammar;
+                }
+                ++opener_count;
+                opener_word = cursor;
+            } else if (opcode == kAnimCommandFinalizeBlock) {
+                if (command_words != kAnimCommandWordCountFinalizeBlock) {
+                    return LegacyNadineMazurSteadyHandsInjection::kGrammar;
+                }
+                ++finalizer_count;
+                finalizer_word = cursor;
+            } else if (opcode == kAnimCommandAnimation &&
+                       command_words == kAnimCommandWordCountAnimation) {
+                void* emitted_clip = nullptr;
+                std::memcpy(
+                    &emitted_clip, words + cursor + 2,
+                    sizeof(emitted_clip));
+                if (emitted_clip == epoch.source_clip) {
+                    ++source_count;
+                    source_phase_bits = words[cursor + 5];
+                }
+            }
+            cursor += command_words;
+        }
+        if (cursor != word_count || object_begin_count != 1 ||
+            control_begin_count != 1 || opener_count != 1 ||
+            opener_word == UINT32_MAX || finalizer_count != 1 ||
+            finalizer_word == UINT32_MAX) {
+            return LegacyNadineMazurSteadyHandsInjection::kGrammar;
+        }
+        // Exact full-list suffix emitted after AnimControl's cmd3 in the
+        // current Async final-palette group zero: close object, prepare
+        // parameters, publish joint-program metadata, run the named
+        // joint-conversion post-pose plugin, export local JointParams, end.
+        // The plugin consumes the finalized matrix workspace and does not
+        // rewrite WorkBuffer lane zero; rejecting any different suffix keeps
+        // that late-writer statement falsifiable.
+        std::uint32_t suffix =
+            finalizer_word + kAnimCommandWordCountFinalizeBlock;
+        const auto consume_suffix = [&](std::uint32_t opcode,
+                                        std::uint32_t command_words) {
+            if (suffix >= word_count ||
+                words[suffix] != ((command_words << 16) | opcode) ||
+                command_words > word_count - suffix) {
+                return false;
+            }
+            suffix += command_words;
+            return true;
+        };
+        if (!consume_suffix(4u, 2u) || !consume_suffix(15u, 4u) ||
+            !consume_suffix(16u, 2u) || !consume_suffix(17u, 4u)) {
+            return LegacyNadineMazurSteadyHandsInjection::kGrammar;
+        }
+        const std::uint32_t post_pose_word = suffix;
+        if (!consume_suffix(24u, 6u) ||
+            words[post_pose_word + 1] != kAnimPostPoseJointConversionId ||
+            !consume_suffix(27u, 6u) || !consume_suffix(5u, 2u) ||
+            suffix != word_count) {
+            return LegacyNadineMazurSteadyHandsInjection::kGrammar;
+        }
+        if (source_count != 1) {
+            return LegacyNadineMazurSteadyHandsInjection::kSource;
+        }
+        float source_phase = 0.0F;
+        std::memcpy(&source_phase, &source_phase_bits, sizeof(source_phase));
+        if (epoch.source_frame_count < 2 || epoch.donor_frame_count < 2 ||
+            !std::isfinite(source_phase) || source_phase < 0.0F ||
+            source_phase >
+                static_cast<float>(epoch.source_frame_count - 1) + 0.01F) {
+            return LegacyNadineMazurSteadyHandsInjection::kSource;
+        }
+        const float normalized_phase = source_phase /
+            static_cast<float>(epoch.source_frame_count - 1);
+        const float donor_phase = normalized_phase *
+            static_cast<float>(epoch.donor_frame_count - 1);
+        std::uint32_t donor_phase_bits = 0;
+        std::memcpy(
+            &donor_phase_bits, &donor_phase, sizeof(donor_phase_bits));
+
+        // AnimControl_CreateAnimCommands initially emits cmd2 with one lane,
+        // tracks the largest emitted lane in CommandRecord+0x10, and patches
+        // cmd2.word2 through the pending pointer in CommandRecord+0x18 at
+        // 0x14172C794. ProcessAnimCmdListSegment case 2 consumes cmd2.word2;
+        // cmd3 carries no lane count and its payload word is ignored.
+        const std::uint32_t old_lane_count = words[opener_word + 2];
+        if (old_lane_count == 0 ||
+            old_lane_count >= kAnimWorkBufferLaneCapacity) {
+            return LegacyNadineMazurSteadyHandsInjection::kCapacity;
+        }
+        const std::uint32_t donor_lane = old_lane_count;
+        const std::uint32_t suffix_words = word_count - finalizer_word;
+        std::memmove(
+            words + finalizer_word + kInsertedWords,
+            words + finalizer_word,
+            static_cast<std::size_t>(suffix_words) * sizeof(std::uint32_t));
+
+        auto* const animation = words + finalizer_word;
+        animation[0] =
+            (kAnimCommandWordCountAnimation << 16) | kAnimCommandAnimation;
+        animation[1] = 0;
+        std::memcpy(animation + 2, &epoch.donor_clip, sizeof(epoch.donor_clip));
+        animation[4] = donor_lane;
+        animation[5] = donor_phase_bits;
+
+        auto* const blend = animation + kAnimCommandWordCountAnimation;
+        blend[0] = (kAnimCommandWordCountBlend << 16) | kAnimCommandBlend;
+        blend[1] = 0;
+        blend[2] = donor_lane;
+        blend[3] = 0;
+        blend[4] = 1;
+        blend[5] = 0x3F800000u;
+
+        words[opener_word + 2] = donor_lane + 1;
+        *reinterpret_cast<std::uint32_t*>(record + 0x0C) =
+            word_count + kInsertedWords;
+        if (donor_lane_out != nullptr) {
+            *donor_lane_out = donor_lane;
+        }
+        return LegacyNadineMazurSteadyHandsInjection::kInjected;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return LegacyNadineMazurSteadyHandsInjection::kRecord;
+    }
+}
+
+std::uint64_t __fastcall hooked_create_anim_cmds_for_object_for_nadine_mazur(
+    void* command_record, void* create_context, std::uint32_t group) {
+    const auto original =
+        g_original_create_anim_cmds_for_object_for_nadine_mazur;
+    const std::uint64_t result = original != nullptr
+        ? original(command_record, create_context, group)
+        : 0;
+    if (!g_legacy_nadine_mazur_steady_hands_hooks_ready.load(
+            std::memory_order_acquire)) {
+        return result;
+    }
+    const std::uintptr_t return_address =
+        reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    const std::uintptr_t return_rva = return_address >= g_module
+        ? return_address - g_module
+        : return_address;
+    if (return_rva != kAnimManagerCreateAnimCmdsNormalReturnRva) {
+        return result;
+    }
+    const LegacyNadineMazurSteadyHandsEpoch epoch =
+        g_legacy_nadine_mazur_steady_hands_epoch;
+    if (!epoch.valid) {
+        return result;
+    }
+
+    std::uint32_t donor_lane = 0;
+    const LegacyNadineMazurSteadyHandsInjection injection =
+        seh_inject_legacy_nadine_mazur_steady_hands_commands(
+            create_context, command_record, group, epoch, &donor_lane);
+    static std::atomic<bool> injected_logged{false};
+    if (injection == LegacyNadineMazurSteadyHandsInjection::kInjected &&
+        !injected_logged.exchange(true, std::memory_order_relaxed)) {
+        std::ostringstream line;
+        line << "NADINE-MAZUR-STEADY-HANDS injected source=0x" << std::hex
+             << kLegacyNadineIdleHandsStateId << " donor=0x"
+             << kNpcMazurHighPartClipId << std::dec
+             << " group=0 lane=" << donor_lane;
+        boot_log_line(line.str().c_str());
+    } else if (injection != LegacyNadineMazurSteadyHandsInjection::kIgnored &&
+               injection != LegacyNadineMazurSteadyHandsInjection::kInjected) {
+        static std::array<std::atomic<bool>, 6> reject_logged{};
+        const std::size_t reason = static_cast<std::size_t>(injection);
+        if (reason < reject_logged.size() &&
+            !reject_logged[reason].exchange(true, std::memory_order_relaxed)) {
+            std::ostringstream line;
+            line << "NADINE-MAZUR-STEADY-HANDS rejected reason=" << reason;
+            boot_log_line(line.str().c_str());
+        }
+    }
+    return result;
+}
+
+void log_legacy_nadine_mazur_steady_hands_admission(
+    LegacyNadineMazurSteadyHandsAdmission admission) {
+    if (admission == LegacyNadineMazurSteadyHandsAdmission::kAdmitted) {
+        return;
+    }
+    static std::array<std::atomic<bool>, 4> admission_logged{};
+    const std::size_t reason = static_cast<std::size_t>(admission);
+    if (reason >= admission_logged.size() ||
+        admission_logged[reason].exchange(true, std::memory_order_relaxed)) {
+        return;
+    }
+    static constexpr const char* kReasonNames[]{
+        "prerequisite", "owner", "content", "dwell"};
+    std::ostringstream line;
+    line << "NADINE-MAZUR-STEADY-HANDS admission="
+         << kReasonNames[reason];
+    boot_log_line(line.str().c_str());
+}
+
+void __fastcall hooked_async_joint_blend_for_nadine_mazur(void* job) {
+    const auto original = g_original_async_joint_blend_for_nadine_mazur;
+    if (original == nullptr) {
+        return;
+    }
+    const LegacyNadineMazurSteadyHandsEpoch previous =
+        g_legacy_nadine_mazur_steady_hands_epoch;
+    g_legacy_nadine_mazur_steady_hands_epoch = {};
+
+    bool exact_local_fg = false;
+    void* fg = nullptr;
+    __try {
+        void* const player = retained_player_object(0);
+        if (g_legacy_nadine_mazur_steady_hands_hooks_ready.load(
+                std::memory_order_acquire) &&
+            g_net_role_b && job != nullptr && player != nullptr) {
+            fg = *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(job) + 0x08);
+            exact_local_fg = fg != nullptr &&
+                *reinterpret_cast<void* const*>(
+                    static_cast<const std::byte*>(player) +
+                    kPlayerFgAnimDataOffset) == fg;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        exact_local_fg = false;
+        fg = nullptr;
+    }
+    if (exact_local_fg) {
+        LegacyNadineMazurSteadyHandsEpoch selected{};
+        const auto admission =
+            seh_select_legacy_nadine_mazur_steady_hands_epoch(fg, &selected);
+        if (admission ==
+            LegacyNadineMazurSteadyHandsAdmission::kAdmitted) {
+            g_legacy_nadine_mazur_steady_hands_epoch = selected;
+        } else if (admission !=
+                   LegacyNadineMazurSteadyHandsAdmission::kWaitingForDwell) {
+            reset_idle_arm_pose_dwell(
+                g_legacy_nadine_mazur_steady_hands_dwell);
+        }
+        log_legacy_nadine_mazur_steady_hands_admission(admission);
+    }
+
+    original(job);
+    g_legacy_nadine_mazur_steady_hands_epoch = previous;
+}
+
+bool install_legacy_nadine_mazur_steady_hands_npc_repair() {
+    // Complete reloc-free prologues. The trampoline's absolute jump-back uses
+    // RAX; both continuations overwrite RAX before reading it.
+    constexpr std::array<std::uint8_t, 16> kCreateCommandsPrologue{
+        0x4C, 0x8B, 0xDC, 0x53, 0x56, 0x41, 0x55, 0x41,
+        0x56, 0x48, 0x81, 0xEC, 0xE8, 0x08, 0x00, 0x00,
+    };
+    constexpr std::array<std::uint8_t, 43> kAsyncPrologue{
+        0x48, 0x8B, 0xC4, 0x57, 0x41, 0x54, 0x41, 0x55,
+        0x41, 0x56, 0x41, 0x57, 0x48, 0x81, 0xEC, 0xD0,
+        0x05, 0x00, 0x00, 0x48, 0xC7, 0x80, 0x48, 0xFB,
+        0xFF, 0xFF, 0xFE, 0xFF, 0xFF, 0xFF, 0x48, 0x89,
+        0x58, 0x10, 0x48, 0x89, 0x70, 0x18, 0xC5, 0xF8,
+        0x29, 0x70, 0xC8,
+    };
+    g_legacy_nadine_mazur_steady_hands_hooks_ready.store(
+        false, std::memory_order_release);
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        boot_log_line(
+            "legacy-Nadine Mazur steady-hands repair SKIPPED (thread suspend)");
+        return false;
+    }
+
+    void* const create_commands_trampoline = install_fire_gate_detour(
+        kAnimManagerCreateAnimCmdsForObjectRva,
+        kCreateCommandsPrologue.data(), kCreateCommandsPrologue.size(),
+        reinterpret_cast<void*>(
+            &hooked_create_anim_cmds_for_object_for_nadine_mazur),
+        "legacy-Nadine Mazur complete group commands");
+    if (create_commands_trampoline != nullptr) {
+        g_original_create_anim_cmds_for_object_for_nadine_mazur =
+            reinterpret_cast<AnimManagerCreateAnimCmdsForObjectFunction>(
+                create_commands_trampoline);
+    }
+    void* const async_trampoline = create_commands_trampoline != nullptr
+        ? install_fire_gate_detour(
+              kAnimManagerAsyncObjectUpdateJointBlendJobRva,
+              kAsyncPrologue.data(), kAsyncPrologue.size(),
+              reinterpret_cast<void*>(
+                  &hooked_async_joint_blend_for_nadine_mazur),
+              "legacy-Nadine Mazur final Async joint blend")
+        : nullptr;
+    if (async_trampoline != nullptr) {
+        g_original_async_joint_blend_for_nadine_mazur =
+            reinterpret_cast<
+                AnimManagerAsyncObjectUpdateJointBlendJobFunction>(
+                    async_trampoline);
+    }
+    const bool installed = create_commands_trampoline != nullptr &&
+        async_trampoline != nullptr;
+    g_legacy_nadine_mazur_steady_hands_hooks_ready.store(
+        installed, std::memory_order_release);
+    resume_suspended_process_threads(suspended_threads);
+    boot_log_line(
+        installed
+            ? "legacy-Nadine Mazur steady-hands NPC partial repair installed"
+            : "legacy-Nadine Mazur steady-hands NPC partial repair PARTIAL (pass-through)");
+    return installed;
+}
+
 void log_idle_arm_pose_source_admission(
     void* player, const IdleArmPoseAdmissionDiagnostic& diagnostic) {
     if constexpr (!kEnableLegacyNadineIdleArmPoseAdmissionCensus) {
@@ -45587,7 +46274,7 @@ bool idle_arm_pose_dwell_ready(
     std::uint64_t session_id, std::uint32_t weapon_art_id,
     const float position[3],
     const float orientation[4], ULONGLONG now,
-    IdleArmPoseAdmissionDiagnostic* diagnostic = nullptr) {
+    IdleArmPoseAdmissionDiagnostic* diagnostic) {
     bool ready = false;
     AcquireSRWLockExclusive(&g_idle_arm_pose_dwell_lock);
     std::uint32_t reset_reason = 0;
@@ -57733,6 +58420,10 @@ DWORD WINAPI install_hook(void*) {
     if constexpr (kEnableLegacyNadineActiveWeaponGripOverlayRepair &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_legacy_nadine_active_weapon_grip_overlay_repair();
+    }
+    if constexpr (kEnableLegacyNadineMazurSteadyHandsNpcRepair &&
+                  !kEnableRejectedNadineWeaponRuntimeProbes) {
+        install_legacy_nadine_mazur_steady_hands_npc_repair();
     }
     if constexpr ((kEnableLegacyNadineWeaponIkFeatherInputCensus ||
                    kEnableLegacyNadineWeaponIkFeatherSuppression) &&

@@ -761,6 +761,14 @@ constexpr std::uintptr_t kAnimControlPhaseUpdateType2LayerCallsiteRva =
 constexpr std::uintptr_t kAnimStateLayerPhaseUpdateInstancesRva = 0x189D720;
 constexpr std::uintptr_t kAnimControlFindActiveType2LayerByIdRva = 0x172B3E0;
 constexpr std::uintptr_t kAnimSnapshotNodeAnimationResolveClipRva = 0x1918070;
+// Final visible-pose generation boundary used by the scoped legacy-Nadine
+// Mazur repair. AsyncObjectUpdateJointBlendJob rebuilds and publishes the
+// palette consumed by rendering. CreateAnimCmdsForObject returns only after it
+// has appended the full per-group command suffix, so the repair can validate
+// capacity and every late command before inserting a partial pose at cmd3.
+constexpr std::uintptr_t kAnimManagerCreateAnimCmdsForObjectRva = 0x1A8FCF0;
+constexpr std::uintptr_t kAnimManagerAsyncObjectUpdateJointBlendJobRva =
+    0x1A92A00;
 // Read-only final holster discriminator. The anim-control event hook exposes
 // authored named events, the binding builder exposes the selected gun_holster*
 // id and offsets, and the final mutation hook proves whether the state-script

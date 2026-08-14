@@ -23950,3 +23950,84 @@ Headless application reports `1742 functions, 60 data names` and
 `save_database returned True`; restarted MCP readback resolves all four names
 and the command generator's vtable/data xrefs. The mutation-free Release DLL
 also compiles and links successfully.
+
+### 2026-08-14 STATIC / IMPLEMENTED (`acp`): append the authored NPC Mazur arm partial in the final Async group
+
+The persistent Mazur defect now has a new, narrower candidate which does not
+reuse either rejected resolved-clip substitution. The exact hypothesis is:
+for retained local legacy Nadine in stable `WeaponOut`, the Player Hands layer
+is valid but Base and later layers retain the wrong broad arm ownership; if the
+shipped NPC Mazur high-part is evaluated as the final partial pose in group
+zero, its authored ValidBits replace only Nadine's two arm/palm/hand-prop
+branches and leave the stock body, spine, head and legs in lane zero.
+
+Three independent static evidence classes support this specific operation.
+
+1. **Weapon-authored content.** `anim-overlays-thug.bin` object 264, selector
+   `33E29A1B`, contains the exact Mazur row `9F44592B -> B725EA01` at table
+   `0x18B50`. `actor77.psarc/anim-npc-normal-dlc.pak` independently identifies
+   `B725EA01` as `thug-04-lg-aggr-idle-high--part`, animation pair
+   `2628A5DC/BD7EEE2F`, six processing groups, with ValidBits exactly on NPC
+   joints `20..31`. It is therefore a complete left+right high-rifle arm
+   partial, not the previously rejected distal-hands-only donor.
+2. **Receiver-compatible retarget.** `dc1.psarc/skel-retargets.bin` row 133 is
+   the authored `npc-normal-base B91C4EA3 -> nadine-dlc-base C67A06F1` route,
+   map `+0x2720`, count 74, profile `E51542CA`. The independent PAK skeleton
+   identities are `BD7EEE2F -> C39CA709`; source joints `20..31` map by the
+   same semantic hashes to Nadine clavicles/shoulders/elbows/wrists/palms and
+   `l/r_hand_prop_attachment` joints `19..30`. No synthetic skeleton row,
+   profile, scale or joint index is introduced.
+3. **Final command ownership.** `AnimManager_AsyncObjectUpdateJointBlendJob
+   0x141A92A00` rebuilds the command DAG after Player post-blend/WeaponIK and
+   publishes the current palette consumed by rendering. Its normal builder
+   reaches `AnimManager_CreateAnimCmdsForObject 0x141A8FCF0` at return
+   `0x141A91604`; the separate prepass return is `0x141A920A7` and is rejected.
+   After the full group-zero list is built, `acp` requires the exact prefix
+   commands `0,1,2`, exactly one emitted `7FB80CC8 idle-hands` command 6, exactly
+   one command 3, and the exact suffix `4,15,16,17,24,27,5`. Command 24 must be
+   six words with id `248B1AAE = joint-conversion`. Its resolved fallback at
+   `0x141937D20` reads finalized 64-byte matrices from evaluator workspace and
+   writes the converted matrix destination; it does not write WorkBuffer pose
+   lanes. This distinguishes it from the other opaque command-24 ids that
+   invalidated the earlier final-list proposal.
+
+The implementation freezes admission once per final Async invocation and is
+fail-closed. It requires role B, retained Player0/screen0, exact legacy Nadine
+ED25/C39 owner, exact Mazur art, controller state 2, grenade state 0, no cover,
+no movement/action input, an unchanged body transform for 350 ms, and one
+active Hands layer with one track/instance whose direct root is exactly
+`7FB80CC8` and whose resolved Player clip pointer is exact. Only group zero of
+the normal complete-list caller is eligible. The code allocates one free lane
+from command-2's real lane count, emits stock command 6 for `B725EA01`, then
+stock command 7 `{left=0,right=new,out=0,mode=1,weight=1}`, increments the lane
+count and preserves the entire verified suffix. Capacity is checked only after
+the stock generator has finished. P99 and role A are structurally excluded.
+
+Implementation verification is complete before runtime: the Release DLL
+compiles and links, `git diff --check` is clean, and the installed executable
+bytes match both complete reloc-free detour prologues (16 bytes at
+`0x141A8FCF0`, 43 bytes at `0x141A92A00`). The shared IDB was saved after
+applying 1744 function labels and 60 data labels (`save_database returned
+True`); reopening it resolves `0x1406CD220` as
+`Game_ProcessAnimPostPosePluginFunc`, `0x141937D20` as
+`Nd_ProcessAnimPostPosePluginFunc`, and retains the exact Create/Async names.
+
+Competing hypotheses are explicitly separated. **Hreplace steady Hands** is
+rejected because Hands runs before the broad Base layer and cannot own the
+shoulders/elbows. **H56C/283 custom pair** is rejected for persistent idle
+because its sole root is transition state `11EE475B`, absent after the stable
+stock clear. **Hfinal P99 B8 pointer** remains rejected because command 6 has
+lost its eighteen-way predecessor provenance. **HWeaponIK as the sole Mazur
+cause** is disfavoured by the same broken pose on both retained presentations
+and, in any case, executes before this final Async rebuild.
+
+Falsifiable prediction for the first `acp` exam: after role B draws Mazur and
+stands still without ADS for at least one second, the log must progress through
+bounded `admission=dwell` to exactly one
+`NADINE-MAZUR-STEADY-HANDS injected source=0x7fb80cc8 donor=0xb725ea01`
+marker. Nadine must change from the crossed/one-hand hold to an authored
+two-arm high-rifle hold. P99, ADS, movement, reload, holster/back attachment and
+role-A presentation must remain stock and emit no injection. An injection
+marker with unchanged pixels rejects the donor/final-owner hypothesis; a
+bounded `rejected reason=` marker selects list grammar, source or capacity
+instead of authorizing a wider mutation. No game has been launched for `acp`.

@@ -1719,6 +1719,21 @@ FUNCTIONS = {
         "game plugin StringIds, including GestureJointReader and several IK writers, "
         "then falls back to Nd_ProcessAnimPhasePluginFunc.",
     ),
+    0x1406CD220: (
+        "Game_ProcessAnimPostPosePluginFunc",
+        "Game-side callback used by top-level animation command 24 after the "
+        "current processing block is finalized. Dispatches several leg modes "
+        "and falls back to Nd_ProcessAnimPostPosePluginFunc; command ids must "
+        "be resolved individually before treating this callback as a pose writer.",
+    ),
+    0x141937D20: (
+        "Nd_ProcessAnimPostPosePluginFunc",
+        "Nd fallback for top-level animation command 24. The exact "
+        "joint-conversion id 0x248B1AAE reads finalized 64-byte matrices from "
+        "the evaluator workspace and writes converted matrices to the command "
+        "destination; it does not write WorkBuffer pose lanes. Other ids include "
+        "bounding-sphere and joint-retarget operations and are not interchangeable.",
+    ),
     0x1406FB070: (
         "PointSwordAnim_RunIk",
         "Source-identified PointSwordAnim::RunIk callback selected by game animation "
@@ -1748,7 +1763,9 @@ FUNCTIONS = {
         "qwords 7/6, after the preceding command-3/4 close and before command 15. "
         "For every finalized skeleton group it also emits opcode 27 (0x6001B) "
         "with destination FgAnimData+0x100+48*groupStart, the persistent local "
-        "JointParams array consumed by post-blend IK. "
+        "JointParams array consumed by post-blend IK. Normal builder return "
+        "0x141A91604 receives the complete command list; the separate prepass "
+        "return 0x141A920A7 must not be confused with that final group build. "
         "Its decimal-command-17 "
         "producer copies build-context qword 6 into the command payload and emits "
         "header 0x40011 at 0x141A90119. The command-16 header 0x00020010 is "
