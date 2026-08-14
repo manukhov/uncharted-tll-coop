@@ -1784,6 +1784,8 @@ FUNCTIONS = {
         "Current WeaponOut/controller, owner generation and list grammar are "
         "evaluated in the same invocation; no cross-frame dwell is required to "
         "establish command ownership. "
+        "A read-only owner-stage census must close Player/FG/controller/art/idle "
+        "admission before the B725 write is enabled again. "
         "Its decimal-command-17 "
         "producer copies build-context qword 6 into the command payload and emits "
         "header 0x40011 at 0x141A90119. The command-16 header 0x00020010 is "

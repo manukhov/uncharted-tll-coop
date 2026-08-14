@@ -24418,3 +24418,47 @@ marker. Marker plus unchanged/broken arms rejects B725 sufficiency and the final
 command owner. A bounded `rejected reason=` chooses grammar/source/capacity. No
 marker now specifically rejects final-list source placement or exact owner
 packaging; there is no remaining timer/root gate to widen.
+
+### 2026-08-14 RUNTIME REJECTED packaging (`acx`) / STATIC read-only discriminator (`acy`): compound owner gate remains unresolved
+
+The `acx` exam used fresh role-A PID 17164 and role-B PID 16088. Both hooks
+installed. Role B emitted only the one-time `admission=owner` row and zero donor,
+hands-root, command-list reject or injection rows. The marker appeared beside
+the startup cold-rebind snapshot where the controller explicitly reported
+`current=-1 draw=0`; it does not identify the later user action. The user saw no
+visual correction. No command word was changed, so neither B725 nor final-list
+ownership was exercised.
+
+Static code order bounds the unresolved fork but cannot choose it from the
+one-bit marker. `run_legacy_nadine_mazur_steady_hands_command_epoch` already
+proved an exact current retained Player0/FG invocation before calling
+`seh_select_legacy_nadine_mazur_steady_hands_epoch`. The latter then collapses
+four distinct predicates into `owner`: complete Player/screen/look/FG/skeleton/
+controller/grenade/weapon scope, exact `expected_fg`, Mazur art, and the
+movement/cover/input idle predicate. A failure at any one of them prevents both
+the source-list check and a bounded rejection marker. Startup evidence only
+proves controller inactive then; it cannot prove whether the later observed
+hold reaches state 2, loses retained stability, or fails idle admission.
+
+Competing hypotheses are therefore explicit. **Hcontroller-not-WeaponOut**
+predicts exact controller vtable/owner but slot `-1` or state other than 2.
+**Hpresentation-owner-turnover** predicts failure at Player/FG generation despite
+the outer FG equality. **Hidle-gate** predicts a complete exact Mazur scope with
+non-neutral action/movement/cover. **Hlist-placement** is considered only if all
+owner fields pass and the bounded command census then reports source zero or a
+different list.
+
+`acy` is read-only. B725 mutation is compiled out. At the existing selector it
+logs only fields already read by the scope: first failing stage, Player/vtable/
+screen/look/FG/skeleton identity, exact weapon-controller slot/state, grenade,
+weapon vtable/parent/art, expected-FG/art/idle booleans and raw neutral
+action/movement/cover values. Signatures exclude the churning pointer, are
+250-ms throttled and capped at 24 rows. If the full scope passes, the already
+proven bounded Perform/Async command census records the next source/list stage.
+No new virtual call or pose write is introduced.
+
+Falsifiable `acy` prediction: one stationary role-B Mazur action must emit a
+`NADINE-MAZUR-STEADY-HANDS-OWNER` row that names the exact first failed stage and
+raw controller/art/idle fields, or progress to the final Async source-one list.
+That single discriminator selects one hypothesis above; silence rejects the
+selector/owner reach itself. Visual appearance is not an outcome of this exam.

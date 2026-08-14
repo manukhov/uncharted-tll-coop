@@ -4749,6 +4749,14 @@ one canonical Hands source and exact full-list grammar remain mandatory. Run
 only the written stationary/no-ADS/no-melee/no-damage/no-interact exam. Marker
 plus unchanged/bad arms rejects B725/final owner; no marker is now list/owner
 packaging, not a timer.
+Result: `acx` still emitted only compound `admission=owner`; its startup row was
+adjacent to cold `current=-1/draw=0`, and no later donor/list/injection marker
+identified the user action. Next `acy` is read-only: repair off, existing
+Perform/Async census on, and a 24-row/250-ms owner-stage census over the already
+read Player/FG/skeleton, controller slot/state, grenade, weapon art/parent,
+expected-FG and idle/action/movement/cover fields. Use it once to choose
+controller vs presentation owner vs idle gate vs list placement. Do not infer
+anything from pixels and do not re-enable B725 before the exact row.
 
 ## Rule
 

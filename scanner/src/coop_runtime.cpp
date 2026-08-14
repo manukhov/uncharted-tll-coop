@@ -2460,13 +2460,11 @@ constexpr bool kEnableLegacyNadineDrawnP99LocalTransformCensus = false;
 // only this exact local legacy-Nadine action through Apply's native zero-weight
 // no-op boundary while preserving action/NewIkWeapon/overlay lifecycle.
 constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
-// acv/acw proved that neither retained presentation identity nor a continuous
-// 350-ms owner cadence exists at this late job.  The exact current WeaponOut,
-// zero-action scope and final command list are synchronous; require one of the
-// two exhaustive stock Hands materializations there before appending B725.
-// Perform, mode-2, P99 and every non-WeaponOut transition remain stock.
-constexpr bool kEnableLegacyNadineMazurSteadyHandsNpcRepair = true;
-constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
+// acx still stopped at the compound owner gate before any list mutation. Keep
+// B725 disabled and census the already-read Player/FG/controller/art/idle fields
+// plus the bounded Perform/Async list until that exact prerequisite is closed.
+constexpr bool kEnableLegacyNadineMazurSteadyHandsNpcRepair = false;
+constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = true;
 // The Mazur strap child owns a complete authored state-zero pose, but its
 // dynamic endpoint lookup fails because legacy Nadine has no strap2..strap14
 // joints and hides the otherwise valid mesh. Reveal that exact published child
@@ -45757,6 +45755,100 @@ bool seh_resolve_exact_steady_idle_hands_root(
     }
 }
 
+void log_legacy_nadine_mazur_steady_hands_owner_scope(
+    const IdleArmPoseAdmissionDiagnostic& diagnostic, bool scope_ok,
+    bool fg_match, bool art_match, bool idle_ok,
+    std::uint64_t action_bits, bool cover,
+    const IdleArmPoseOwnerScope& owner) {
+    if constexpr (!kEnableLegacyNadineMazurSteadyHandsCommandCensus) {
+        return;
+    }
+    std::uint64_t signature = 1469598103934665603ull;
+    const auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ull;
+    };
+    mix(static_cast<std::uint32_t>(diagnostic.stage));
+    mix(diagnostic.player_stable ? 1u : 0u);
+    mix(diagnostic.player_vtable_match ? 1u : 0u);
+    mix(diagnostic.screen);
+    mix(diagnostic.look);
+    mix(diagnostic.fg_owner_match ? 1u : 0u);
+    mix(diagnostic.target_skeleton_id);
+    mix(diagnostic.underlying_skeleton_id);
+    mix(diagnostic.weapon_controller_vtable_rva);
+    mix(diagnostic.weapon_controller_owner_match ? 1u : 0u);
+    mix(static_cast<std::uint32_t>(diagnostic.weapon_slot));
+    mix(diagnostic.weapon_state);
+    mix(diagnostic.grenade_controller_vtable_rva);
+    mix(diagnostic.grenade_controller_owner_match ? 1u : 0u);
+    mix(diagnostic.grenade_state);
+    mix(diagnostic.weapon_vtable_rva);
+    mix(diagnostic.weapon_parent_match ? 1u : 0u);
+    mix(diagnostic.weapon_art_id);
+    mix(scope_ok ? 1u : 0u);
+    mix(fg_match ? 1u : 0u);
+    mix(art_match ? 1u : 0u);
+    mix(idle_ok ? 1u : 0u);
+    mix(action_bits);
+    mix(cover ? 1u : 0u);
+
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static std::uint64_t last_signature = 0;
+    static ULONGLONG last_log_ms = 0;
+    static unsigned log_count = 0;
+    const ULONGLONG now = GetTickCount64();
+    bool should_log = false;
+    AcquireSRWLockExclusive(&lock);
+    if (log_count < 24 && signature != last_signature &&
+        (last_log_ms == 0 || now < last_log_ms || now - last_log_ms >= 250)) {
+        last_signature = signature;
+        last_log_ms = now;
+        ++log_count;
+        should_log = true;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    if (!should_log) {
+        return;
+    }
+
+    std::ostringstream line;
+    line << "NADINE-MAZUR-STEADY-HANDS-OWNER stage="
+         << static_cast<std::uint32_t>(diagnostic.stage) << ":"
+         << idle_arm_pose_admission_stage_name(diagnostic.stage)
+         << " stable=" << (diagnostic.player_stable ? 1 : 0)
+         << " playerVt=" << (diagnostic.player_vtable_match ? 1 : 0)
+         << " screen=" << diagnostic.screen << "/"
+         << diagnostic.expected_screen
+         << " look=0x" << std::hex << diagnostic.look
+         << " fgOwner=" << std::dec
+         << (diagnostic.fg_owner_match ? 1 : 0)
+         << " skel=0x" << std::hex << diagnostic.target_skeleton_id
+         << "/0x" << diagnostic.underlying_skeleton_id
+         << " wcVt=0x" << diagnostic.weapon_controller_vtable_rva
+         << " wcOwner=" << std::dec
+         << (diagnostic.weapon_controller_owner_match ? 1 : 0)
+         << " slot=" << diagnostic.weapon_slot
+         << " state=" << diagnostic.weapon_state
+         << " grVt=0x" << std::hex
+         << diagnostic.grenade_controller_vtable_rva
+         << " grOwner=" << std::dec
+         << (diagnostic.grenade_controller_owner_match ? 1 : 0)
+         << " grState=" << diagnostic.grenade_state
+         << " weaponVt=0x" << std::hex << diagnostic.weapon_vtable_rva
+         << " parent=" << std::dec
+         << (diagnostic.weapon_parent_match ? 1 : 0)
+         << " art=0x" << std::hex << diagnostic.weapon_art_id
+         << " scope/fg/art/idle=" << std::dec
+         << (scope_ok ? 1 : 0) << "/" << (fg_match ? 1 : 0) << "/"
+         << (art_match ? 1 : 0) << "/" << (idle_ok ? 1 : 0)
+         << " action=0x" << std::hex << action_bits
+         << " cover=" << std::dec << (cover ? 1 : 0)
+         << " move=" << owner.move_magnitude << "/"
+         << owner.move_stick[0] << "/" << owner.move_stick[1];
+    boot_log_line(line.str().c_str());
+}
+
 LegacyNadineMazurSteadyHandsAdmission
 seh_select_legacy_nadine_mazur_steady_hands_epoch(
     void* expected_fg, LegacyNadineMazurSteadyHandsEpoch* output) {
@@ -45775,10 +45867,22 @@ seh_select_legacy_nadine_mazur_steady_hands_epoch(
         }
         void* const player = retained_player_object(0);
         IdleArmPoseOwnerScope owner{};
-        if (!seh_resolve_idle_arm_pose_owner_scope(player, 0, &owner) ||
-            owner.fg_anim_data != expected_fg ||
-            owner.weapon_art_id != kCoopRifleArtId ||
-            !local_player_is_steady_drawn_idle(owner)) {
+        IdleArmPoseAdmissionDiagnostic diagnostic{};
+        const bool scope_ok = seh_resolve_idle_arm_pose_owner_scope(
+            player, 0, &owner, &diagnostic);
+        const bool fg_match = scope_ok && owner.fg_anim_data == expected_fg;
+        const bool art_match = scope_ok &&
+            owner.weapon_art_id == kCoopRifleArtId;
+        const bool idle_ok = scope_ok &&
+            local_player_is_steady_drawn_idle(owner);
+        if (!scope_ok || !fg_match || !art_match || !idle_ok) {
+            const std::uint64_t action_bits =
+                g_cached_local_input_buttons.load(std::memory_order_acquire) &
+                ~kInputBlockButtonBaseMask;
+            const bool cover = scope_ok && player_cover_state_field(player);
+            log_legacy_nadine_mazur_steady_hands_owner_scope(
+                diagnostic, scope_ok, fg_match, art_match, idle_ok,
+                action_bits, cover, owner);
             return LegacyNadineMazurSteadyHandsAdmission::kOwner;
         }
 
@@ -58705,8 +58809,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-14acx "
-        "(synchronous final-list Mazur authored arm-partial exam)");
+        "TLL co-op runtime init 2026-08-14acy "
+        "(read-only Mazur owner and final-list admission census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
