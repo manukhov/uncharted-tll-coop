@@ -24569,3 +24569,61 @@ state-2-only later writer consumes the new cached targets. The B725 result
 rejects a missing generic two-arm partial as a sufficient explanation. No new
 runtime is authorized until the exact Draw-time and persistent action payloads,
 requested states and first differing final command owner are closed statically.
+
+### 2026-08-14 STATIC / IMPLEMENTED read-only (`adc`): first-Draw fade versus loop-current reuse
+
+The user's refined observation is repeatable and stateful: the first Mazur Draw
+can hold correctly for roughly two seconds before breaking, while later Draws
+are already broken on their first visible frame. A permanent skeleton-map or
+static clip-mask error does not naturally explain that asymmetry. It instead
+predicts that the first action contains a transition from a good source into a
+bad persistent destination, while later actions reuse the already-current bad
+destination without recreating the source fade.
+
+Three independent evidence classes now earn one read-only runtime exam. First,
+`ada` already joined the visual timing to the authored controller sequence
+Draw=1 -> WeaponOut=2 and proved the late B725 write really executed without
+fixing the pixels. Second, `PlayerWeaponController_ApplyState 0x1410AAFB0`
+removes the completed Get action, creates a fresh
+`PlayerPlayWeaponOverlayAction`, then enters state 2; the Holster path removes
+all channel-one actions, so persistence cannot be the old action object's
+lifetime. Third, the exact animation-layer dataflow has two explicit outcomes:
+`AnimStateLayer_TakeTransitions 0x1418A1350` drains the four-entry queue created
+by `0x14189DCD0`; normal requests enter `0x1418A1EA0`, whose branch
+`0x1418A242C..0x1418A2491` compares the requested state with current
+`AnimStateInstance+0x98` and calls `0x1418A5BF0` to return that same instance.
+The direct-fade path `0x1418A27C0` has the equivalent
+`0x1418A3B70 -> 0x1418A5BF0` "Looping current to state" fast path; otherwise it
+allocates/inserts a new instance and logs "Setting state".
+
+Competing hypotheses remain explicit. **Hnew-then-loop** predicts a first Draw
+request whose selected/output instance differs from the prior current instance,
+followed by a later request with target equal to current and output equal to that
+same instance. **Hrequest/cache-missing** predicts the first Draw request but no
+equivalent second request or no queue-sequence advance. **Hnew-every-time/later
+writer** predicts a new instance on both Draws even though the second visual
+failure is immediate; that rejects reuse as the cause and leaves a later
+state-dependent writer/destination as leader.
+
+Build `adc` is mutation-free. It disables the answered final-Async command
+census and detours only `AnimStateLayer_TakeTransitions`. The complete 12-byte
+reloc-free prologue is copied to a trampoline while all other process threads
+are suspended; the original target is published before the entry patch and
+install failures use readback plus verified rollback. The hook calls stock once,
+then logs at most 96 exact retained role-B Player0 WeaponPartial events. Each row
+contains queue sequence/count, request type/state/flags, current and returned
+instance pointers/states before/after, blend/phase words, track counts, selected
+WeaponPartial state and controller current/requested slots/state. It never
+writes a request, track, instance, weight, clip or pose.
+
+The seven queue/reuse functions are now named in the single `ida/tll.i64`;
+headless persistence reported `1751 functions, 60 data names` and
+`save_database returned True`, and restarted MCP lookups resolve every saved
+name.
+
+Falsifiable `adc` exam: from a fresh spawn, draw Mazur and wait until the arms
+break; holster it; draw Mazur again and wait one second. If Hnew-then-loop is
+correct, the first and second Draw rows must differ exactly as above. If the
+second request is absent, the request/cache hypothesis wins. If both create a
+new instance, reuse is rejected. No visual change is expected or counted as
+progress in this build.

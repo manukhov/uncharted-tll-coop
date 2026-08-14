@@ -8,6 +8,44 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-08-14: AnimStateLayer transition queue / instance reuse ---
+    0x14189DCD0: (
+        "AnimStateLayer_EnqueueTransitionRequest",
+        "Appends one bounded AnimStateLayer change request, writing its request "
+        "type/state fields and incrementing the four-entry pending queue.",
+    ),
+    0x1418A0F90: (
+        "AnimStateLayer_RemoveTransitionRequestByIndex",
+        "Removes one pending AnimStateLayer transition request and compacts the "
+        "bounded request array after Taken/Failed/Invalid handling.",
+    ),
+    0x1418A1350: (
+        "AnimStateLayer_TakeTransitions",
+        "Source-identified AnimStateLayer::TakeTransitions. Drains the pending "
+        "request queue and publishes the state instance selected by direct-fade "
+        "or normal-transition processing through its output pointer.",
+    ),
+    0x1418A1EA0: (
+        "AnimStateLayer_ApplyTransition",
+        "Applies a normal authored transition. Its same-state/phase fast path "
+        "loops and returns the current instance; otherwise it creates/fades a "
+        "new destination instance.",
+    ),
+    0x1418A27C0: (
+        "AnimStateLayer_CreateOrFadeStateInstance",
+        "Direct state-fade path. Either logs and loops the current matching "
+        "instance or allocates/inserts a new state instance and logs Setting state.",
+    ),
+    0x1418A3B70: (
+        "AnimStateLayer_CanLoopCurrentToState",
+        "Checks current-instance state identity plus request flags and phase "
+        "conditions for the direct-fade loop-current fast path.",
+    ),
+    0x1418A5BF0: (
+        "AnimStateInstance_LoopCurrentState",
+        "Refreshes phase/blend state on an existing AnimStateInstance without "
+        "allocating or inserting a replacement instance.",
+    ),
     # --- 2026-08-02: active post-blend foot-step owner ---
     0x141F9D610: (
         "CharacterLegIkController_Construct",

@@ -4787,6 +4787,20 @@ RefreshWeaponPartialAndIK. Compare its payload/requested custom-part states and
 final command owner against the initially correct state1 interval before any
 new mutation or runtime launch.
 
+Next `adc` closes the exact new-instance versus cached-instance fork without a
+pose mutation. Static evidence is sufficient: controller/action lifetime,
+queue producer/consumer dataflow, and the explicit
+`AnimStateLayer_ApplyTransition 0x1418A1EA0` plus direct-fade
+`0x1418A27C0` loop-current branches all agree with the user's first-Draw-good /
+later-Draw-immediate asymmetry. The bounded role-B Player0 WeaponPartial hook at
+`AnimStateLayer_TakeTransitions 0x1418A1350` records request state and queue
+sequence plus current/output instance identity before/after stock. Exact exam:
+fresh spawn -> Draw Mazur until it breaks -> Holster -> second Draw -> wait one
+second. New first instance plus reused second instance confirms cached-state
+reuse; a missing second request confirms request/cache loss; a new instance on
+both rejects reuse and sends the next static pass to the later state-dependent
+writer. `adc` must make no visible change.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

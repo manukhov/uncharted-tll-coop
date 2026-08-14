@@ -761,6 +761,11 @@ constexpr std::uintptr_t kAnimControlPhaseUpdateType2LayerCallsiteRva =
 constexpr std::uintptr_t kAnimStateLayerPhaseUpdateInstancesRva = 0x189D720;
 constexpr std::uintptr_t kAnimControlFindActiveType2LayerByIdRva = 0x172B3E0;
 constexpr std::uintptr_t kAnimSnapshotNodeAnimationResolveClipRva = 0x1918070;
+// AnimStateLayer::TakeTransitions consumes the four-entry request queue at
+// +0x4D4. Its normal transition path either creates/fades a new state instance
+// or loops the existing current instance when the requested state already
+// matches. The read-only pre/post census distinguishes those exact outcomes.
+constexpr std::uintptr_t kAnimStateLayerTakeTransitionsRva = 0x18A1350;
 // Final visible-pose generation boundary used by the scoped legacy-Nadine
 // Mazur repair. AsyncObjectUpdateJointBlendJob rebuilds and publishes the
 // palette consumed by rendering. CreateAnimCmdsForObject returns only after it

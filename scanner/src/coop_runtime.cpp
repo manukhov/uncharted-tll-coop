@@ -2464,7 +2464,13 @@ constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
 // B725 disabled and census the already-read Player/FG/controller/art/idle fields
 // plus the bounded Perform/Async list until that exact prerequisite is closed.
 constexpr bool kEnableLegacyNadineMazurSteadyHandsNpcRepair = false;
-constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = true;
+constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
+// Build ada proved a repeatable first-Draw-good -> steady-broken transition,
+// followed by immediately broken later Draws. The animation layer has exact
+// create-new and loop-current paths while consuming its bounded transition
+// queue. Observe that lifecycle for the retained local WeaponPartial layer;
+// never alter a request, instance, weight, or pose row in this census.
+constexpr bool kEnableWeaponPartialTransitionLifecycleCensus = true;
 // The Mazur strap child owns a complete authored state-zero pose, but its
 // dynamic endpoint lookup fails because legacy Nadine has no strap2..strap14
 // joints and hides the otherwise valid mesh. Reveal that exact published child
@@ -41687,6 +41693,440 @@ bool install_legacy_nadine_type2_phase_hook() {
     return true;
 }
 
+// Read-only discriminator for the exact first-Draw-good -> steady-broken
+// lifecycle. AnimStateLayer::TakeTransitions drains a bounded four-entry queue
+// and returns the instance selected by the request. Capturing its current
+// instance before and after stock distinguishes a newly-created fade from the
+// engine's explicit loop-current reuse path without changing animation state.
+struct WeaponPartialTransitionLifecycleSnapshot {
+    bool valid = false;
+    std::uint32_t queue_sequence = 0;
+    std::uint32_t pending_count = 0;
+    std::uint32_t request_transition_id = 0;
+    std::uint32_t request_timestamp = 0;
+    std::uint32_t request_flags = 0;
+    std::uint8_t request_type = 0;
+    std::uint8_t request_flag_0 = 0;
+    std::uint8_t request_flag_1 = 0;
+    std::uint32_t request_state = 0;
+    std::uint32_t track_count = 0;
+    std::uint16_t first_track_capacity = 0;
+    std::uint16_t first_track_instance_count = 0;
+    void* current_instance = nullptr;
+    std::uint32_t current_state = 0;
+    std::uint32_t current_weight_bits = 0;
+    std::uint32_t current_phase_bits = 0;
+    std::uint32_t previous_phase_bits = 0;
+};
+
+bool seh_capture_weapon_partial_transition_lifecycle(
+    void* layer, WeaponPartialTransitionLifecycleSnapshot* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (layer == nullptr || g_module == 0) {
+            return false;
+        }
+        const auto* const bytes = static_cast<const std::byte*>(layer);
+        if (*reinterpret_cast<const std::uintptr_t*>(bytes) !=
+                g_module + kAnimStateLayerVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x8) !=
+                kAnimStateLayerType) {
+            return false;
+        }
+
+        output->queue_sequence =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x4D0);
+        output->pending_count =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x4D4);
+        if (output->pending_count > 4) {
+            *output = {};
+            return false;
+        }
+        if (output->pending_count != 0) {
+            output->request_transition_id =
+                *reinterpret_cast<const std::uint32_t*>(bytes + 0x140);
+            output->request_timestamp =
+                *reinterpret_cast<const std::uint32_t*>(bytes + 0x144);
+            output->request_flags =
+                *reinterpret_cast<const std::uint32_t*>(bytes + 0x148);
+            output->request_type =
+                *reinterpret_cast<const std::uint8_t*>(bytes + 0x14C);
+            output->request_flag_0 =
+                *reinterpret_cast<const std::uint8_t*>(bytes + 0x14D);
+            output->request_flag_1 =
+                *reinterpret_cast<const std::uint8_t*>(bytes + 0x14E);
+            output->request_state =
+                *reinterpret_cast<const std::uint32_t*>(bytes + 0x150);
+        }
+
+        output->track_count =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x500);
+        if (output->track_count == 0 || output->track_count > 64) {
+            output->valid = true;
+            return true;
+        }
+        auto* const tracks = *reinterpret_cast<void* const* const*>(
+            bytes + 0x4F8);
+        if (tracks == nullptr || tracks[0] == nullptr) {
+            output->valid = true;
+            return true;
+        }
+        const auto* const track = static_cast<const std::byte*>(tracks[0]);
+        output->first_track_capacity =
+            *reinterpret_cast<const std::uint16_t*>(track + 0x10);
+        output->first_track_instance_count =
+            *reinterpret_cast<const std::uint16_t*>(track + 0x12);
+        if (output->first_track_instance_count == 0 ||
+            output->first_track_instance_count >
+                output->first_track_capacity ||
+            output->first_track_instance_count > 64) {
+            output->valid = true;
+            return true;
+        }
+        auto* const instances =
+            *reinterpret_cast<void* const* const*>(track);
+        if (instances == nullptr || instances[0] == nullptr) {
+            output->valid = true;
+            return true;
+        }
+        const auto* const instance =
+            static_cast<const std::byte*>(instances[0]);
+        if (*reinterpret_cast<const std::uintptr_t*>(instance) !=
+            g_module + kAnimStateInstanceVtableRva) {
+            output->valid = true;
+            return true;
+        }
+        output->current_instance = instances[0];
+        output->current_state =
+            *reinterpret_cast<const std::uint32_t*>(instance + 0x98);
+        std::memcpy(
+            &output->current_weight_bits, instance + 0x158,
+            sizeof(output->current_weight_bits));
+        std::memcpy(
+            &output->current_phase_bits, instance + 0x168,
+            sizeof(output->current_phase_bits));
+        std::memcpy(
+            &output->previous_phase_bits, instance + 0x16C,
+            sizeof(output->previous_phase_bits));
+        output->valid = true;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+struct WeaponPartialTransitionPlayerSnapshot {
+    std::uint32_t selected_state = 0;
+    std::int32_t current_slot = -99;
+    std::int32_t requested_slot = -99;
+    std::uint32_t draw_state = 0xFFFFFFFFu;
+};
+
+WeaponPartialTransitionPlayerSnapshot
+seh_capture_weapon_partial_transition_player(void* player) {
+    WeaponPartialTransitionPlayerSnapshot output{};
+    __try {
+        if (player == nullptr) {
+            return output;
+        }
+        const auto* const player_bytes =
+            static_cast<const std::byte*>(player);
+        void* const anim_control = *reinterpret_cast<void* const*>(
+            player_bytes + 0x1DF0);
+        if (anim_control != nullptr &&
+            *reinterpret_cast<const std::uintptr_t*>(anim_control) ==
+                g_module + kPlayerWeaponAnimControlVtableRva &&
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(anim_control) + 0x10) ==
+                player) {
+            output.selected_state =
+                *reinterpret_cast<const std::uint32_t*>(
+                    static_cast<const std::byte*>(anim_control) + 0x18);
+        }
+        void* const controller = *reinterpret_cast<void* const*>(
+            player_bytes + 0x1D88);
+        if (controller == nullptr ||
+            *reinterpret_cast<const std::uintptr_t*>(controller) !=
+                g_module + kPlayerWeaponControllerVtableRva ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(controller) + 0x108) !=
+                player) {
+            return output;
+        }
+        const auto* const controller_bytes =
+            static_cast<const std::byte*>(controller);
+        output.current_slot =
+            *reinterpret_cast<const std::int32_t*>(
+                controller_bytes + kWeaponCtrlCurrentSlotOffset);
+        output.requested_slot =
+            *reinterpret_cast<const std::int32_t*>(controller_bytes + 0x130);
+        output.draw_state =
+            *reinterpret_cast<const std::uint32_t*>(
+                controller_bytes + kWeaponCtrlDrawStateOffset);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        output = {};
+        output.current_slot = -99;
+        output.requested_slot = -99;
+        output.draw_state = 0xFFFFFFFFu;
+    }
+    return output;
+}
+
+using AnimStateLayerTakeTransitionsFunction = std::uint8_t(__fastcall*)(
+    void*, void**);
+AnimStateLayerTakeTransitionsFunction
+    g_original_anim_state_layer_take_transitions = nullptr;
+
+void* seh_read_anim_state_layer_selected_instance(void** selected_instance_out) {
+    if (selected_instance_out == nullptr) {
+        return nullptr;
+    }
+    __try {
+        return *selected_instance_out;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return nullptr;
+    }
+}
+
+std::uint8_t __fastcall hooked_anim_state_layer_take_transitions(
+    void* layer, void** selected_instance_out) {
+    WeaponPartialTransitionLifecycleSnapshot before{};
+    const bool before_valid =
+        seh_capture_weapon_partial_transition_lifecycle(layer, &before);
+    int owner_index = -1;
+    void* player = nullptr;
+    const bool scoped = before_valid && before.pending_count != 0 &&
+        g_net_role_b &&
+        seh_classify_retained_legacy_nadine_weapon_partial_layer(
+            layer, &owner_index, &player) &&
+        owner_index == 0 && player_screen_index_is(player, 0);
+
+    void* const output_before = scoped
+        ? seh_read_anim_state_layer_selected_instance(selected_instance_out)
+        : nullptr;
+
+    const std::uint8_t result =
+        g_original_anim_state_layer_take_transitions != nullptr
+        ? g_original_anim_state_layer_take_transitions(
+              layer, selected_instance_out)
+        : 0;
+    if (!scoped) {
+        return result;
+    }
+
+    WeaponPartialTransitionLifecycleSnapshot after{};
+    seh_capture_weapon_partial_transition_lifecycle(layer, &after);
+    void* const output_after =
+        seh_read_anim_state_layer_selected_instance(selected_instance_out);
+    const WeaponPartialTransitionPlayerSnapshot player_state =
+        seh_capture_weapon_partial_transition_player(player);
+
+    constexpr std::uint32_t kMaxRows = 96;
+    static std::atomic<std::uint32_t> row_counter{0};
+    static std::atomic<bool> budget_logged{false};
+    const std::uint32_t row =
+        row_counter.fetch_add(1, std::memory_order_relaxed);
+    if (row >= kMaxRows) {
+        if (!budget_logged.exchange(true, std::memory_order_relaxed)) {
+            boot_log_line(
+                "WEAPON-PARTIAL-TRANSITION-LIFECYCLE-BUDGET-EXHAUSTED rows=96");
+        }
+        return result;
+    }
+
+    std::ostringstream line;
+    line << "WEAPON-PARTIAL-TRANSITION-LIFECYCLE row=" << row
+         << " result=" << static_cast<unsigned>(result)
+         << " queue=" << before.queue_sequence << "/"
+         << before.pending_count << "->" << after.queue_sequence << "/"
+         << after.pending_count
+         << " requestType=" << static_cast<unsigned>(before.request_type)
+         << " requestFlags=0x" << std::hex << before.request_flags
+         << "/" << static_cast<unsigned>(before.request_flag_0)
+         << "/" << static_cast<unsigned>(before.request_flag_1)
+         << " transition=0x" << before.request_transition_id
+         << " requestTime=0x" << before.request_timestamp
+         << " requestState=0x" << before.request_state
+         << " selected=0x" << player_state.selected_state
+         << " currentState=0x" << before.current_state << "->0x"
+         << after.current_state
+         << " current=0x"
+         << reinterpret_cast<std::uintptr_t>(before.current_instance)
+         << "->0x"
+         << reinterpret_cast<std::uintptr_t>(after.current_instance)
+         << " out=0x" << reinterpret_cast<std::uintptr_t>(output_before)
+         << "->0x" << reinterpret_cast<std::uintptr_t>(output_after)
+         << " weight=0x" << before.current_weight_bits << "->0x"
+         << after.current_weight_bits
+         << " phase=0x" << before.current_phase_bits << "/0x"
+         << before.previous_phase_bits << "->0x"
+         << after.current_phase_bits << "/0x"
+         << after.previous_phase_bits << std::dec
+         << " tracks=" << before.track_count << "/"
+         << before.first_track_instance_count << "->"
+         << after.track_count << "/"
+         << after.first_track_instance_count
+         << " ctrlSlot=" << player_state.current_slot
+         << " requestedSlot=" << player_state.requested_slot
+         << " draw=" << player_state.draw_state
+         << " targetEqBefore="
+         << (before.current_instance != nullptr &&
+                 before.current_state == before.request_state
+             ? 1 : 0)
+         << " sameCurrent="
+         << (before.current_instance != nullptr &&
+                 before.current_instance == after.current_instance
+             ? 1 : 0)
+         << " outSameBefore="
+         << (before.current_instance != nullptr &&
+                 output_after == before.current_instance
+             ? 1 : 0)
+         << " outSameAfter="
+         << (after.current_instance != nullptr &&
+                 output_after == after.current_instance
+             ? 1 : 0)
+         << " afterValid=" << (after.valid ? 1 : 0);
+    boot_log_line(line.str().c_str());
+    return result;
+}
+
+bool install_weapon_partial_transition_lifecycle_census() {
+    constexpr std::array<std::uint8_t, 12> kExpectedPrologue{
+        0x57, 0x41, 0x54, 0x41, 0x55, 0x48,
+        0x81, 0xEC, 0xE0, 0x00, 0x00, 0x00,
+    };
+    constexpr std::size_t kJumpSize = 12;
+    auto* const target = reinterpret_cast<std::uint8_t*>(
+        g_module + kAnimStateLayerTakeTransitionsRva);
+    if (std::memcmp(
+            target, kExpectedPrologue.data(), kExpectedPrologue.size()) != 0) {
+        boot_log_line(
+            "WeaponPartial transition lifecycle census SKIPPED (prologue)");
+        return false;
+    }
+
+    auto* const trampoline = static_cast<std::uint8_t*>(VirtualAlloc(
+        nullptr, kExpectedPrologue.size() + kJumpSize,
+        MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    if (trampoline == nullptr) {
+        boot_log_line(
+            "WeaponPartial transition lifecycle census SKIPPED (trampoline)");
+        return false;
+    }
+    std::memcpy(
+        trampoline, kExpectedPrologue.data(), kExpectedPrologue.size());
+    auto* const jump_back = trampoline + kExpectedPrologue.size();
+    jump_back[0] = 0x48;
+    jump_back[1] = 0xB8;
+    *reinterpret_cast<std::uintptr_t*>(jump_back + 2) =
+        reinterpret_cast<std::uintptr_t>(
+            target + kExpectedPrologue.size());
+    jump_back[10] = 0xFF;
+    jump_back[11] = 0xE0;
+    FlushInstructionCache(
+        GetCurrentProcess(), trampoline,
+        kExpectedPrologue.size() + kJumpSize);
+
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        boot_log_line(
+            "WeaponPartial transition lifecycle census SKIPPED (thread suspend)");
+        return false;
+    }
+    if (std::memcmp(
+            target, kExpectedPrologue.data(), kExpectedPrologue.size()) != 0) {
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        boot_log_line(
+            "WeaponPartial transition lifecycle census SKIPPED (raced prologue)");
+        return false;
+    }
+
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            target, kExpectedPrologue.size(), PAGE_EXECUTE_READWRITE,
+            &old_protection)) {
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        boot_log_line(
+            "WeaponPartial transition lifecycle census SKIPPED (protect)");
+        return false;
+    }
+
+    std::array<std::uint8_t, 12> patch{};
+    patch[0] = 0x48;
+    patch[1] = 0xB8;
+    const std::uintptr_t hook_address = reinterpret_cast<std::uintptr_t>(
+        &hooked_anim_state_layer_take_transitions);
+    std::memcpy(
+        patch.data() + 2, &hook_address, sizeof(hook_address));
+    patch[10] = 0xFF;
+    patch[11] = 0xE0;
+    g_anim_control_find_active_type2_layer_by_id =
+        reinterpret_cast<AnimControlFindActiveType2LayerByIdFunction>(
+            g_module + kAnimControlFindActiveType2LayerByIdRva);
+    g_original_anim_state_layer_take_transitions =
+        reinterpret_cast<AnimStateLayerTakeTransitionsFunction>(trampoline);
+    std::memcpy(target, patch.data(), patch.size());
+    FlushInstructionCache(GetCurrentProcess(), target, patch.size());
+
+    bool installed =
+        std::memcmp(target, patch.data(), patch.size()) == 0;
+    DWORD ignored = 0;
+    bool protection_restored = VirtualProtect(
+        target, patch.size(), old_protection, &ignored) != 0;
+    bool rollback_verified = false;
+    if (!installed || !protection_restored) {
+        DWORD rollback_page_protection = 0;
+        const bool rollback_writable = VirtualProtect(
+            target, patch.size(), PAGE_EXECUTE_READWRITE,
+            &rollback_page_protection) != 0;
+        if (rollback_writable) {
+            std::memcpy(
+                target, kExpectedPrologue.data(), kExpectedPrologue.size());
+            FlushInstructionCache(
+                GetCurrentProcess(), target, kExpectedPrologue.size());
+            rollback_verified = std::memcmp(
+                target, kExpectedPrologue.data(),
+                kExpectedPrologue.size()) == 0;
+        }
+        protection_restored = VirtualProtect(
+            target, patch.size(), old_protection, &ignored) != 0;
+        installed = !rollback_verified &&
+            std::memcmp(target, patch.data(), patch.size()) == 0;
+    }
+
+    resume_suspended_process_threads(suspended_threads);
+    if (rollback_verified) {
+        g_original_anim_state_layer_take_transitions = nullptr;
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        boot_log_line(
+            protection_restored
+                ? "WeaponPartial transition lifecycle census SKIPPED (verified rollback)"
+                : "WeaponPartial transition lifecycle census SKIPPED (verified rollback; protection WARNING)");
+        return false;
+    }
+    if (!installed) {
+        // The wrapper may still be reachable after an ambiguous publication;
+        // retain both trampoline and original target for fail-safe pass-through.
+        boot_log_line(
+            protection_restored
+                ? "WeaponPartial transition lifecycle census PARTIAL (ambiguous patch; trampoline retained)"
+                : "WeaponPartial transition lifecycle census PARTIAL (patch/protection WARNING; trampoline retained)");
+        return false;
+    }
+    boot_log_line(
+        protection_restored
+            ? "WeaponPartial transition lifecycle census installed (read-only new-vs-loop pre/post)"
+            : "WeaponPartial transition lifecycle census installed (read-only; protection WARNING)");
+    return true;
+}
+
 // Read-only lifecycle snapshot for the exact channel-one weapon actions. The
 // common sequencer stores its owner Player at +0x18, its channel count at
 // +0x110, and the intrusive-list table at +0x120. Channel one is where
@@ -58809,8 +59249,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-14adb "
-        "(B725 rejected; read-only Mazur transition analysis)");
+        "TLL co-op runtime init 2026-08-14adc "
+        "(read-only WeaponPartial new-vs-loop lifecycle census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -58898,6 +59338,10 @@ DWORD WINAPI install_hook(void*) {
     }
     if constexpr (kEnableWeaponPartialNormalRequestProbe) {
         install_weapon_partial_normal_request_probe();
+    }
+    if constexpr (kEnableWeaponPartialTransitionLifecycleCensus &&
+                  !kEnableRejectedNadineWeaponRuntimeProbes) {
+        install_weapon_partial_transition_lifecycle_census();
     }
     if constexpr (kEnableLegacyNadineActiveWeaponGripOverlayRepair &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
