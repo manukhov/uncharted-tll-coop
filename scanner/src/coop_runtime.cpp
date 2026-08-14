@@ -2471,6 +2471,12 @@ constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 // queue. Observe that lifecycle for the retained local WeaponPartial layer;
 // never alter a request, instance, weight, or pose row in this census.
 constexpr bool kEnableWeaponPartialTransitionLifecycleCensus = true;
+// Build add rejected both loop-current reuse and a missing second request.
+// The first custom Draw transition nevertheless starts from one track while
+// the repeated Draw starts from two. Sample the exact WeaponPartial track and
+// instance fade fields after stock UpdateBlendWeights so the visual break can
+// be joined to a concrete source/destination weight endpoint. Read-only.
+constexpr bool kEnableWeaponPartialFadeTraceCensus = true;
 // The Mazur strap child owns a complete authored state-zero pose, but its
 // dynamic endpoint lookup fails because legacy Nadine has no strap2..strap14
 // joints and hides the otherwise valid mesh. Reveal that exact published child
@@ -41881,6 +41887,13 @@ using AnimStateLayerTakeTransitionsFunction = std::uint8_t(__fastcall*)(
 AnimStateLayerTakeTransitionsFunction
     g_original_anim_state_layer_take_transitions = nullptr;
 
+std::atomic<std::uintptr_t> g_weapon_partial_fade_trace_layer{0};
+std::atomic<std::uintptr_t> g_weapon_partial_fade_trace_player{0};
+std::atomic<std::uint32_t> g_weapon_partial_fade_trace_sequence{0};
+std::atomic<std::uint64_t> g_weapon_partial_fade_trace_start_tick{0};
+std::atomic<std::uint64_t> g_weapon_partial_fade_trace_deadline_tick{0};
+std::atomic<std::uint64_t> g_weapon_partial_fade_trace_last_tick{0};
+
 void* seh_read_anim_state_layer_selected_instance(void** selected_instance_out) {
     if (selected_instance_out == nullptr) {
         return nullptr;
@@ -41924,6 +41937,23 @@ std::uint8_t __fastcall hooked_anim_state_layer_take_transitions(
         seh_read_anim_state_layer_selected_instance(selected_instance_out);
     const WeaponPartialTransitionPlayerSnapshot player_state =
         seh_capture_weapon_partial_transition_player(player);
+    if constexpr (kEnableWeaponPartialFadeTraceCensus) {
+        const std::uint64_t now = GetTickCount64();
+        g_weapon_partial_fade_trace_player.store(
+            reinterpret_cast<std::uintptr_t>(player),
+            std::memory_order_release);
+        g_weapon_partial_fade_trace_sequence.store(
+            before.queue_sequence, std::memory_order_release);
+        g_weapon_partial_fade_trace_start_tick.store(
+            now, std::memory_order_release);
+        g_weapon_partial_fade_trace_deadline_tick.store(
+            now + 6500, std::memory_order_release);
+        g_weapon_partial_fade_trace_last_tick.store(
+            0, std::memory_order_release);
+        g_weapon_partial_fade_trace_layer.store(
+            reinterpret_cast<std::uintptr_t>(layer),
+            std::memory_order_release);
+    }
 
     constexpr std::uint32_t kMaxRows = 96;
     static std::atomic<std::uint32_t> row_counter{0};
@@ -42129,6 +42159,383 @@ bool install_weapon_partial_transition_lifecycle_census() {
         protection_restored
             ? "WeaponPartial transition lifecycle census installed (read-only new-vs-loop pre/post)"
             : "WeaponPartial transition lifecycle census installed (read-only; protection WARNING)");
+    return true;
+}
+
+struct WeaponPartialFadeTraceInstance {
+    void* instance = nullptr;
+    std::uint32_t state_id = 0;
+    std::uint32_t fade_in_remaining_bits = 0;
+    std::uint32_t fade_in_duration_bits = 0;
+    std::uint32_t fade_in_weight_bits = 0;
+    std::uint32_t fade_out_remaining_bits = 0;
+    std::uint32_t fade_out_duration_bits = 0;
+    std::uint32_t fade_out_weight_bits = 0;
+    std::uint32_t phase_bits = 0;
+    std::uint8_t flags = 0;
+};
+
+struct WeaponPartialFadeTraceTrack {
+    void* track = nullptr;
+    std::uint16_t instance_count = 0;
+    std::uint16_t captured_instance_count = 0;
+    std::array<WeaponPartialFadeTraceInstance, 4> instances{};
+};
+
+struct WeaponPartialFadeTraceSnapshot {
+    bool valid = false;
+    std::uint32_t track_count = 0;
+    std::uint32_t captured_track_count = 0;
+    std::array<WeaponPartialFadeTraceTrack, 4> tracks{};
+};
+
+bool seh_capture_weapon_partial_fade_trace(
+    void* layer, WeaponPartialFadeTraceSnapshot* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (layer == nullptr || g_module == 0) {
+            return false;
+        }
+        const auto* const layer_bytes = static_cast<const std::byte*>(layer);
+        if (*reinterpret_cast<const std::uintptr_t*>(layer_bytes) !=
+                g_module + kAnimStateLayerVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(layer_bytes + 0x8) !=
+                kAnimStateLayerType) {
+            return false;
+        }
+        output->track_count = *reinterpret_cast<const std::uint32_t*>(
+            layer_bytes + 0x500);
+        if (output->track_count > 64) {
+            return false;
+        }
+        if (output->track_count == 0) {
+            output->valid = true;
+            return true;
+        }
+        auto* const tracks = *reinterpret_cast<void* const* const*>(
+            layer_bytes + 0x4F8);
+        if (tracks == nullptr) {
+            return false;
+        }
+        output->captured_track_count = static_cast<std::uint32_t>(std::min<
+            std::size_t>(output->track_count, output->tracks.size()));
+        for (std::uint32_t track_index = 0;
+             track_index < output->captured_track_count; ++track_index) {
+            void* const track_pointer = tracks[track_index];
+            if (track_pointer == nullptr) {
+                return false;
+            }
+            const auto* const track =
+                static_cast<const std::byte*>(track_pointer);
+            auto& track_output = output->tracks[track_index];
+            track_output.track = track_pointer;
+            const std::uint16_t capacity =
+                *reinterpret_cast<const std::uint16_t*>(track + 0x10);
+            track_output.instance_count =
+                *reinterpret_cast<const std::uint16_t*>(track + 0x12);
+            if (track_output.instance_count > capacity ||
+                track_output.instance_count > 64) {
+                return false;
+            }
+            if (track_output.instance_count == 0) {
+                continue;
+            }
+            auto* const instances =
+                *reinterpret_cast<void* const* const*>(track);
+            if (instances == nullptr) {
+                return false;
+            }
+            track_output.captured_instance_count =
+                static_cast<std::uint16_t>(std::min<std::size_t>(
+                    track_output.instance_count,
+                    track_output.instances.size()));
+            for (std::uint16_t instance_index = 0;
+                 instance_index < track_output.captured_instance_count;
+                 ++instance_index) {
+                void* const instance_pointer = instances[instance_index];
+                if (instance_pointer == nullptr ||
+                    *reinterpret_cast<const std::uintptr_t*>(
+                        instance_pointer) !=
+                        g_module + kAnimStateInstanceVtableRva) {
+                    return false;
+                }
+                const auto* const instance =
+                    static_cast<const std::byte*>(instance_pointer);
+                auto& instance_output =
+                    track_output.instances[instance_index];
+                instance_output.instance = instance_pointer;
+                instance_output.state_id =
+                    *reinterpret_cast<const std::uint32_t*>(
+                        instance + 0x98);
+                std::memcpy(
+                    &instance_output.fade_in_remaining_bits,
+                    instance + 0x150, sizeof(std::uint32_t));
+                std::memcpy(
+                    &instance_output.fade_in_duration_bits,
+                    instance + 0x154, sizeof(std::uint32_t));
+                std::memcpy(
+                    &instance_output.fade_in_weight_bits,
+                    instance + 0x158, sizeof(std::uint32_t));
+                std::memcpy(
+                    &instance_output.fade_out_remaining_bits,
+                    instance + 0x15C, sizeof(std::uint32_t));
+                std::memcpy(
+                    &instance_output.fade_out_duration_bits,
+                    instance + 0x160, sizeof(std::uint32_t));
+                std::memcpy(
+                    &instance_output.fade_out_weight_bits,
+                    instance + 0x164, sizeof(std::uint32_t));
+                std::memcpy(
+                    &instance_output.phase_bits,
+                    instance + 0x168, sizeof(std::uint32_t));
+                instance_output.flags =
+                    *reinterpret_cast<const std::uint8_t*>(
+                        instance + 0x190);
+            }
+        }
+        output->valid = true;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+using AnimStateLayerUpdateBlendWeightsFunction =
+    std::uintptr_t(__fastcall*)(void*, float);
+AnimStateLayerUpdateBlendWeightsFunction
+    g_original_anim_state_layer_update_blend_weights = nullptr;
+
+std::uintptr_t __fastcall hooked_anim_state_layer_update_blend_weights(
+    void* layer, float delta_time) {
+    const std::uintptr_t result =
+        g_original_anim_state_layer_update_blend_weights != nullptr
+        ? g_original_anim_state_layer_update_blend_weights(
+              layer, delta_time)
+        : 0;
+
+    if (reinterpret_cast<std::uintptr_t>(layer) !=
+            g_weapon_partial_fade_trace_layer.load(
+                std::memory_order_acquire) ||
+        !g_net_role_b) {
+        return result;
+    }
+    const std::uint64_t now = GetTickCount64();
+    const std::uint64_t deadline =
+        g_weapon_partial_fade_trace_deadline_tick.load(
+            std::memory_order_acquire);
+    if (deadline == 0 || now > deadline) {
+        return result;
+    }
+    std::uint64_t last = g_weapon_partial_fade_trace_last_tick.load(
+        std::memory_order_relaxed);
+    if (last != 0 && now - last < 100) {
+        return result;
+    }
+    if (!g_weapon_partial_fade_trace_last_tick.compare_exchange_strong(
+            last, now, std::memory_order_acq_rel,
+            std::memory_order_relaxed)) {
+        return result;
+    }
+
+    WeaponPartialFadeTraceSnapshot snapshot{};
+    if (!seh_capture_weapon_partial_fade_trace(layer, &snapshot)) {
+        return result;
+    }
+    constexpr std::uint32_t kMaxRows = 180;
+    static std::atomic<std::uint32_t> row_counter{0};
+    static std::atomic<bool> budget_logged{false};
+    const std::uint32_t row =
+        row_counter.fetch_add(1, std::memory_order_relaxed);
+    if (row >= kMaxRows) {
+        if (!budget_logged.exchange(true, std::memory_order_relaxed)) {
+            boot_log_line(
+                "WEAPON-PARTIAL-FADE-TRACE-BUDGET-EXHAUSTED rows=180");
+        }
+        return result;
+    }
+
+    const std::uint64_t start =
+        g_weapon_partial_fade_trace_start_tick.load(
+            std::memory_order_acquire);
+    const WeaponPartialTransitionPlayerSnapshot player_state =
+        seh_capture_weapon_partial_transition_player(
+            reinterpret_cast<void*>(
+                g_weapon_partial_fade_trace_player.load(
+                    std::memory_order_acquire)));
+    std::uint32_t delta_bits = 0;
+    std::memcpy(&delta_bits, &delta_time, sizeof(delta_bits));
+    std::ostringstream line;
+    line << "WEAPON-PARTIAL-FADE-TRACE row=" << row
+         << " seq="
+         << g_weapon_partial_fade_trace_sequence.load(
+                std::memory_order_acquire)
+         << " ageMs=" << (now >= start ? now - start : 0)
+         << " dt=0x" << std::hex << delta_bits << std::dec
+         << " tracks=" << snapshot.track_count << "/"
+         << snapshot.captured_track_count
+         << " ctrlSlot=" << player_state.current_slot
+         << " requestedSlot=" << player_state.requested_slot
+         << " draw=" << player_state.draw_state;
+    for (std::uint32_t track_index = 0;
+         track_index < snapshot.captured_track_count; ++track_index) {
+        const auto& track = snapshot.tracks[track_index];
+        line << " t" << track_index << "={ptr=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(track.track) << std::dec
+             << ",count=" << track.instance_count << "/"
+             << track.captured_instance_count;
+        for (std::uint16_t instance_index = 0;
+             instance_index < track.captured_instance_count;
+             ++instance_index) {
+            const auto& instance = track.instances[instance_index];
+            line << ",i" << instance_index << "=0x" << std::hex
+                 << reinterpret_cast<std::uintptr_t>(instance.instance)
+                 << ":" << instance.state_id
+                 << ":" << instance.fade_in_remaining_bits
+                 << "/" << instance.fade_in_duration_bits
+                 << "/" << instance.fade_in_weight_bits
+                 << ":" << instance.fade_out_remaining_bits
+                 << "/" << instance.fade_out_duration_bits
+                 << "/" << instance.fade_out_weight_bits
+                 << ":" << instance.phase_bits
+                 << ":" << static_cast<unsigned>(instance.flags)
+                 << std::dec;
+        }
+        line << "}";
+    }
+    boot_log_line(line.str().c_str());
+    return result;
+}
+
+bool install_weapon_partial_fade_trace_census() {
+    // Complete reloc-free prologue: mov r11,rsp; push rdi; push r13;
+    // sub rsp,88h. The continuation immediately overwrites EAX from
+    // layer+0x500, so the absolute trampoline return may clobber RAX.
+    constexpr std::array<std::uint8_t, 13> kExpectedPrologue{
+        0x4C, 0x8B, 0xDC, 0x57, 0x41, 0x55, 0x48,
+        0x81, 0xEC, 0x88, 0x00, 0x00, 0x00,
+    };
+    constexpr std::size_t kJumpSize = 12;
+    auto* const target = reinterpret_cast<std::uint8_t*>(
+        g_module + kAnimStateLayerUpdateBlendWeightsRva);
+    if (std::memcmp(
+            target, kExpectedPrologue.data(), kExpectedPrologue.size()) != 0) {
+        boot_log_line(
+            "WeaponPartial fade trace census SKIPPED (prologue)");
+        return false;
+    }
+    auto* const trampoline = static_cast<std::uint8_t*>(VirtualAlloc(
+        nullptr, kExpectedPrologue.size() + kJumpSize,
+        MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    if (trampoline == nullptr) {
+        boot_log_line(
+            "WeaponPartial fade trace census SKIPPED (trampoline)");
+        return false;
+    }
+    std::memcpy(
+        trampoline, kExpectedPrologue.data(), kExpectedPrologue.size());
+    auto* const jump_back = trampoline + kExpectedPrologue.size();
+    jump_back[0] = 0x48;
+    jump_back[1] = 0xB8;
+    *reinterpret_cast<std::uintptr_t*>(jump_back + 2) =
+        reinterpret_cast<std::uintptr_t>(
+            target + kExpectedPrologue.size());
+    jump_back[10] = 0xFF;
+    jump_back[11] = 0xE0;
+    FlushInstructionCache(
+        GetCurrentProcess(), trampoline,
+        kExpectedPrologue.size() + kJumpSize);
+
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        boot_log_line(
+            "WeaponPartial fade trace census SKIPPED (thread suspend)");
+        return false;
+    }
+    if (std::memcmp(
+            target, kExpectedPrologue.data(), kExpectedPrologue.size()) != 0) {
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        boot_log_line(
+            "WeaponPartial fade trace census SKIPPED (raced prologue)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            target, kExpectedPrologue.size(), PAGE_EXECUTE_READWRITE,
+            &old_protection)) {
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        boot_log_line(
+            "WeaponPartial fade trace census SKIPPED (protect)");
+        return false;
+    }
+
+    std::array<std::uint8_t, 13> patch{};
+    patch[0] = 0x48;
+    patch[1] = 0xB8;
+    const std::uintptr_t hook_address = reinterpret_cast<std::uintptr_t>(
+        &hooked_anim_state_layer_update_blend_weights);
+    std::memcpy(
+        patch.data() + 2, &hook_address, sizeof(hook_address));
+    patch[10] = 0xFF;
+    patch[11] = 0xE0;
+    patch[12] = 0x90;
+    g_original_anim_state_layer_update_blend_weights =
+        reinterpret_cast<AnimStateLayerUpdateBlendWeightsFunction>(
+            trampoline);
+    std::memcpy(target, patch.data(), patch.size());
+    FlushInstructionCache(GetCurrentProcess(), target, patch.size());
+
+    bool installed = std::memcmp(target, patch.data(), patch.size()) == 0;
+    DWORD ignored = 0;
+    bool protection_restored = VirtualProtect(
+        target, patch.size(), old_protection, &ignored) != 0;
+    bool rollback_verified = false;
+    if (!installed || !protection_restored) {
+        DWORD rollback_page_protection = 0;
+        const bool rollback_writable = VirtualProtect(
+            target, patch.size(), PAGE_EXECUTE_READWRITE,
+            &rollback_page_protection) != 0;
+        if (rollback_writable) {
+            std::memcpy(
+                target, kExpectedPrologue.data(), kExpectedPrologue.size());
+            FlushInstructionCache(
+                GetCurrentProcess(), target, kExpectedPrologue.size());
+            rollback_verified = std::memcmp(
+                target, kExpectedPrologue.data(),
+                kExpectedPrologue.size()) == 0;
+        }
+        protection_restored = VirtualProtect(
+            target, patch.size(), old_protection, &ignored) != 0;
+        installed = !rollback_verified &&
+            std::memcmp(target, patch.data(), patch.size()) == 0;
+    }
+    resume_suspended_process_threads(suspended_threads);
+    if (rollback_verified) {
+        g_original_anim_state_layer_update_blend_weights = nullptr;
+        VirtualFree(trampoline, 0, MEM_RELEASE);
+        boot_log_line(
+            protection_restored
+                ? "WeaponPartial fade trace census SKIPPED (verified rollback)"
+                : "WeaponPartial fade trace census SKIPPED (verified rollback; protection WARNING)");
+        return false;
+    }
+    if (!installed) {
+        boot_log_line(
+            protection_restored
+                ? "WeaponPartial fade trace census PARTIAL (ambiguous patch; trampoline retained)"
+                : "WeaponPartial fade trace census PARTIAL (patch/protection WARNING; trampoline retained)");
+        return false;
+    }
+    boot_log_line(
+        protection_restored
+            ? "WeaponPartial fade trace census installed (read-only post-weight-update)"
+            : "WeaponPartial fade trace census installed (read-only; protection WARNING)");
     return true;
 }
 
@@ -59254,7 +59661,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-14add "
+        "TLL co-op runtime init 2026-08-14ade "
         "(read-only WeaponPartial new-vs-loop lifecycle census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
@@ -59347,6 +59754,10 @@ DWORD WINAPI install_hook(void*) {
     if constexpr (kEnableWeaponPartialTransitionLifecycleCensus &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_weapon_partial_transition_lifecycle_census();
+    }
+    if constexpr (kEnableWeaponPartialFadeTraceCensus &&
+                  !kEnableRejectedNadineWeaponRuntimeProbes) {
+        install_weapon_partial_fade_trace_census();
     }
     if constexpr (kEnableLegacyNadineActiveWeaponGripOverlayRepair &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {

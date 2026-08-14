@@ -766,6 +766,11 @@ constexpr std::uintptr_t kAnimSnapshotNodeAnimationResolveClipRva = 0x1918070;
 // or loops the existing current instance when the requested state already
 // matches. The read-only pre/post census distinguishes those exact outcomes.
 constexpr std::uintptr_t kAnimStateLayerTakeTransitionsRva = 0x18A1350;
+// AnimStateLayer::UpdateBlendWeights is the sole per-step consumer of the two
+// fade timer/duration pairs at AnimStateInstance +0x150/+0x154 and
+// +0x15C/+0x160. It publishes the corresponding weights at +0x158/+0x164
+// before PhaseUpdate and the second completed-instance pruning pass.
+constexpr std::uintptr_t kAnimStateLayerUpdateBlendWeightsRva = 0x18A3820;
 // Final visible-pose generation boundary used by the scoped legacy-Nadine
 // Mazur repair. AsyncObjectUpdateJointBlendJob rebuilds and publishes the
 // palette consumed by rendering. CreateAnimCmdsForObject returns only after it

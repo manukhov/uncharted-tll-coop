@@ -19,6 +19,17 @@ FUNCTIONS = {
         "Removes one pending AnimStateLayer transition request and compacts the "
         "bounded request array after Taken/Failed/Invalid handling.",
     ),
+    0x1418A07A0: (
+        "AnimStateLayer_PruneCompletedInstances",
+        "Called twice by AnimStateLayer_Step. Compacts each track after an "
+        "instance reaches min(+0x158,+0x164)==0, releases removed instances, "
+        "then tail-calls the empty/faded-track pruning pass.",
+    ),
+    0x1418A0990: (
+        "AnimStateLayer_PruneEmptyOrFadedTracks",
+        "Releases empty tracks and older tracks whose terminal instance has "
+        "min(+0x158,+0x164)==0, compacting the layer track array at +0x4F8.",
+    ),
     0x1418A1350: (
         "AnimStateLayer_TakeTransitions",
         "Source-identified AnimStateLayer::TakeTransitions. Drains the pending "
@@ -35,6 +46,12 @@ FUNCTIONS = {
         "AnimStateLayer_CreateOrFadeStateInstance",
         "Direct state-fade path. Either logs and loops the current matching "
         "instance or allocates/inserts a new state instance and logs Setting state.",
+    ),
+    0x1418A3820: (
+        "AnimStateLayer_UpdateBlendWeights",
+        "Sole AnimStateLayer_Step callee that decrements instance fade timers "
+        "+0x150/+0x15C and publishes blend weights +0x158/+0x164 from the "
+        "durations at +0x154/+0x160.",
     ),
     0x1418A3B70: (
         "AnimStateLayer_CanLoopCurrentToState",

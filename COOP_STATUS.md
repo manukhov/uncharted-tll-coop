@@ -24637,3 +24637,60 @@ complete reloc-free prologue is 13 bytes, not 12. Build `add` includes that REX
 byte, pads the 12-byte absolute entry jump with one NOP, and resumes at the same
 `0x1418A135D`. No game behavior or hypothesis was tested by `adc`; the written
 prediction is unchanged for `add`.
+
+### 2026-08-14 RUNTIME REJECTED (`add`) / STATIC IMPLEMENTED (`ade`): no loop-current reuse; trace the actual fade endpoints
+
+The exact fresh-spawn exam completed on PIDs 3012/18736. Both hooks installed,
+both processes remained responsive, and role-B emitted eight bounded
+`WEAPON-PARTIAL-TRANSITION-LIFECYCLE` rows covering first Draw, Holster, second
+Draw and second Holster. The visible observation remained the same: the first
+Mazur Draw was initially correct and then broke; the second Draw was broken
+immediately.
+
+**Hnew-then-loop is RUNTIME REJECTED.** Every admitted request on both Draws had
+`targetEqBefore=0`, `sameCurrent=0`, `outSameBefore=0` and `outSameAfter=1`.
+The first Draw created `3889CC0E -> 28B0F93B`, then
+`1313FB4E -> 7405AACB`, then `7405AACB -> 3889CC0E`; the second Draw created
+the same three destinations again with different instance pointers. The exact
+loop-current branches at `0x1418A242C..0x1418A2491` and
+`0x1418A3B70 -> 0x1418A5BF0` were not selected. **Hrequest/cache-missing is also
+RUNTIME REJECTED:** queue sequence advanced 1/2/3 on the first Draw and 5/6/7
+on the second, with the same request types and state ids.
+
+The surviving difference is the fade topology, not request identity. The first
+custom request started with `tracks=1/1` and ended at `2/1`; the repeated custom
+request started `2/1` and ended `3/1`. This is not yet evidence of a leaked
+track. `AnimStateLayer_CreateOrFadeStateInstance 0x1418A27C0` inserts a new
+track at index zero for the direct-fade mode, while
+`AnimStateLayer_PruneCompletedInstances 0x1418A07A0` removes older instances
+only when `min(instance+0x158, instance+0x164)` reaches zero and its tail call
+`AnimStateLayer_PruneEmptyOrFadedTracks 0x1418A0990` then releases empty or
+fully faded tracks. Between those passes,
+`AnimStateLayer_UpdateBlendWeights 0x1418A3820` is the sole Step callee that
+decrements the two remaining-time fields `+0x150/+0x15C` and publishes the
+corresponding weights `+0x158/+0x164` from durations `+0x154/+0x160`.
+
+These three independent evidence classes earn only a read-only endpoint trace:
+the `add` runtime identities/counts, the create/insert dataflow, and the exact
+weight/prune writers. Build `ade` keeps the transition hook and adds a second
+13-byte suspended-thread detour around `0x1418A3820`. The transition hook
+publishes only the already-proven role-B Player0 WeaponPartial layer; the global
+weight wrapper performs only a pointer comparison for every other layer. For
+6.5 seconds after each exact request it samples at most every 100 ms and logs
+at most 180 rows containing every bounded track/instance state plus raw
+`+0x150/+0x154/+0x158` and `+0x15C/+0x160/+0x164` values. It calls stock once
+and writes no layer, track, instance, timer, weight or pose field. Release
+compile and link succeeded. The three newly closed functions were applied to
+the single IDB (`1754 functions, 60 data names`, `save_database returned True`);
+restarted MCP readback resolves all three saved names.
+
+Competing predictions are now precise. **Hsource-fade** predicts that the first
+visually correct interval exists only while one older source instance has a
+nonzero weight, and the break coincides with that exact weight reaching zero;
+the repeated Draw must lack the same source state/weight history.
+**Hdestination-fade** predicts the same source topology but a new destination
+becoming weight one at the break. **Hlater-writer** predicts no topology or
+weight endpoint at the visual break. The `ade` exam is: fresh spawn, first Draw
+and wait through the break, Holster and wait at least three seconds, second Draw
+and wait through one second. No visible change is expected or counted as
+progress.

@@ -4807,6 +4807,26 @@ processes because the expected prologue omitted the leading `40` REX prefix on
 12-byte entry jump with one NOP and keeps the same read-only prediction. The
 skipped `adc` run produced no lifecycle data and did not test a hypothesis.
 
+`add` runtime result: both Draws issued the complete request sequence and every
+request created a new destination instance. Loop-current reuse and a missing
+second request are RUNTIME REJECTED. The only measured structural difference
+was the first custom Draw changing track count 1->2 versus the repeated Draw
+2->3. Do not mutate or delete that extra track: static Step dataflow proves it
+is a normal fade track until its two computed weights reach zero and the stock
+prune pass removes it.
+
+Next `ade` is one bounded read-only endpoint exam. It hooks the sole stock
+weight updater `AnimStateLayer_UpdateBlendWeights 0x1418A3820` after the exact
+role-B Player0 WeaponPartial transition hook has published the layer pointer.
+For 6.5 seconds after each request, at 100 ms cadence, record all bounded track
+state ids and both timer/duration/weight triples. Fresh spawn -> Draw Mazur and
+wait through the break -> Holster and wait >=3 s -> second Draw and wait 1 s.
+Hsource-fade requires the first visual break to coincide with a formerly good
+source weight reaching zero and that source to be absent on the second Draw;
+Hdestination-fade requires a destination reaching weight one; no exact weight
+endpoint selects the later-writer alternative. The build is read-only and must
+not visibly change the pose.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
