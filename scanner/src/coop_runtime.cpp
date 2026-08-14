@@ -45477,6 +45477,7 @@ bool idle_arm_pose_dwell_ready(
 // gives the native-NPC Mazur partial the last authored say only on joints that
 // its ValidBits contain.
 constexpr std::uint32_t kLegacyNadineHandsLayerId = 0x2EAA36BCu;
+constexpr std::uint32_t kLegacyNadineDefaultHandsStateId = 0xFEC2DB76u;
 constexpr std::uint32_t kLegacyNadineIdleHandsStateId = 0x7FB80CC8u;
 constexpr std::uint32_t kPlayerAnimationDatabaseId = 0x27E57F43u;
 constexpr std::uint32_t kPlayerAnimationSkeletonId = 0xFD6DBE03u;
@@ -45643,8 +45644,10 @@ bool seh_resolve_exact_steady_idle_hands_root(
         if (instance == nullptr || readable_bytes(instance) < 0x198 ||
             *reinterpret_cast<const std::uintptr_t*>(instance) !=
                 g_module + kAnimStateInstanceVtableRva ||
-            *reinterpret_cast<const std::uint32_t*>(instance + 0x98) !=
-                kLegacyNadineIdleHandsStateId) {
+            (*reinterpret_cast<const std::uint32_t*>(instance + 0x98) !=
+                 kLegacyNadineDefaultHandsStateId &&
+             *reinterpret_cast<const std::uint32_t*>(instance + 0x98) !=
+                 kLegacyNadineIdleHandsStateId)) {
             return false;
         }
 
@@ -58327,8 +58330,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-14acn "
-        "(rejected Mazur Player-settings repair removed)");
+        "TLL co-op runtime init 2026-08-14acq "
+        "(Mazur default-hands alias admitted at final Async repair)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

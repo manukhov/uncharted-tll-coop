@@ -24031,3 +24031,32 @@ role-A presentation must remain stock and emit no injection. An injection
 marker with unchanged pixels rejects the donor/final-owner hypothesis; a
 bounded `rejected reason=` marker selects list grammar, source or capacity
 instead of authorizing a wider mutation. No game has been launched for `acp`.
+
+### 2026-08-14 RUNTIME REJECTED (`acp`) / STATIC correction (`acq`): admit the exact default-hands state alias
+
+The first `acp` exam used fresh role-A PID 1652 and role-B PID 9460. Both
+installed the two hooks and remained responsive. Role B progressed from the
+expected startup `admission=owner` to one stable `admission=content`, but
+emitted **zero** `dwell`, `injected` or command-list rejection markers. The
+user observed exactly the stock broken Mazur hold. This rejects `acp`'s
+content-admission packaging; it does **not** test or reject the NPC donor or
+the final Async owner because no command word was changed.
+
+The first failing predicate is statically identifiable without another probe.
+`acp` required instance state `7FB80CC8 idle-hands`, while the durable live
+inventory repeatedly records the stable local screen-zero Hands layer as
+`2EAA36BC/00 -> FEC2DB76 default-hands`, one track, capacity 3, one live
+instance and the same direct Animation RTTI. The shipped `default-hands`
+record and `idle-hands` record share the exact direct Animation root/source
+`7FB80CC8`; the already-strict node checks still require node `+0x40/+0x44 ==
+7FB80CC8`, zero lookup keys and the exact resolved Player clip pointer.
+Therefore `acq` admits only the two authored state aliases
+`FEC2DB76/7FB80CC8`; it does not weaken layer, root, clip, owner, weapon,
+motion, suffix or retarget identity.
+
+Revised falsifiable prediction: the same stationary role-B Mazur action must
+now advance from `admission=content` to `admission=dwell`, then to exactly one
+`injected source=0x7fb80cc8 donor=0xb725ea01`. If `content` remains the last
+marker, the failure lies in exact clip/root materialization and no mutation
+occurred. Only an `injected` marker with unchanged pixels can reject the donor
+or final-palette hypothesis.

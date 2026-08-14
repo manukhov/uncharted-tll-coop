@@ -4667,7 +4667,7 @@ Player1-only, native-only, both (with same/different world transform), or
 neither/packaging. Run only this automatic two-sample exam; do not add pose,
 visibility, weapon or cull mutation until the producer is identified.
 
-**STATIC / IMPLEMENTED next exam (`acp`, Mazur grip only):** the previous
+**RUNTIME REJECTED packaging (`acp`) / STATIC corrected next exam (`acq`, Mazur grip only):** the previous
 outer-resolver and resolved-cmd6 substitutions remain REJECTED. The new exact
 hypothesis appends shipped NPC Mazur high-part `B725EA01` as a stock cmd6 and
 mode-1/weight-1 cmd7 into a fresh group-zero lane immediately before cmd3 in
@@ -4682,7 +4682,12 @@ holster are excluded. The complete-list hook accepts only normal caller return
 fail closed. Prediction: one injected marker and a coherent two-arm high-rifle
 hold, with no P99/back/ADS changes. Marker plus unchanged pose rejects the
 candidate; no marker must have a bounded admission/parser reason. Do not widen
-the guard after a failed exam.
+the guard after a failed exam. Fresh PID 9460 stopped at `admission=content`
+with zero injection, so the unchanged pose did not test the donor. The exact
+false reject was the state-name gate: stable Hands is commonly
+`FEC2DB76 default-hands`, while `FEC2DB76` and `7FB80CC8 idle-hands` share the
+same direct root/source `7FB80CC8`. `acq` admits only those two state aliases
+while retaining the exact node IDs, clip pointer and every outer guard.
 
 ## Rule
 
