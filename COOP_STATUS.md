@@ -24510,3 +24510,24 @@ Nadine with Mazur must emit exactly one
 a stable two-arm high-rifle hold. Marker plus unchanged/broken pixels rejects
 B725 sufficiency and this final owner. No marker must select a bounded
 admission/parser rejection; it does not authorize widening the guard.
+
+### 2026-08-14 RUNTIME REJECTED packaging (`acz`) / IMPLEMENTED discriminator (`ada`)
+
+The `acz` exam used fresh role-A PID 19616 and role-B PID 22468. Both exact
+repair hooks installed and remained responsive. Role B emitted only the
+one-time compound `admission=owner` marker and zero `injected` or bounded
+`rejected` rows, including during a second 40-second stationary retry. The user
+observed the unchanged stock-broken Mazur hold. Therefore no command word was
+changed and B725/final-owner sufficiency is still untested; this run rejects
+only the assumption that the previous `acy` full admission would reproduce
+without retaining its detailed discriminator.
+
+Build `ada` keeps the exact `acz` mutation and every gameplay/list guard, while
+also enabling the already bounded `acy` owner/list census. This is not a scope
+widening: the repair still requires the complete exact epoch before it can
+write. It guarantees that the next stationary action either emits the sole
+`injected` marker or records the current first-failed Player/controller/
+grenade/weapon/art/idle gate and any reached final command list. Falsifiable
+prediction: a full pass produces `injected` plus the two-arm pose; otherwise
+the latest `NADINE-MAZUR-STEADY-HANDS-OWNER` row selects the packaging gate and
+there must be no visual change.

@@ -4769,6 +4769,13 @@ turns the census off. Require one injected marker and a stable two-arm Mazur
 hold; marker plus unchanged pixels rejects donor/final-owner sufficiency, while
 no marker must have a bounded rejection reason. P99, role A, ADS, transitions,
 holster and auxiliary lists remain stock.
+Result: `acz` PIDs 19616/22468 installed but emitted only `admission=owner` and
+zero injection/rejection rows through the first user action and a second
+40-second stationary retry. The unchanged broken pose again did not test B725.
+Next `ada` keeps the same exact mutation and turns the bounded `acy` owner/list
+census on simultaneously. Do not widen any gate: require either one injected
+marker plus a corrected two-arm hold, or a detailed owner/list row that selects
+the current packaging failure with zero writes.
 
 ## Rule
 
