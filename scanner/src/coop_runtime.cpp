@@ -41995,8 +41995,12 @@ std::uint8_t __fastcall hooked_anim_state_layer_take_transitions(
 }
 
 bool install_weapon_partial_transition_lifecycle_census() {
-    constexpr std::array<std::uint8_t, 12> kExpectedPrologue{
-        0x57, 0x41, 0x54, 0x41, 0x55, 0x48,
+    // The first push is encoded as `40 57`; copy the complete 13-byte
+    // reloc-free prologue through `sub rsp,0E0h`. The absolute trampoline
+    // return may clobber RAX because continuation 0x1418A135D has not produced
+    // or consumed an RAX value yet.
+    constexpr std::array<std::uint8_t, 13> kExpectedPrologue{
+        0x40, 0x57, 0x41, 0x54, 0x41, 0x55, 0x48,
         0x81, 0xEC, 0xE0, 0x00, 0x00, 0x00,
     };
     constexpr std::size_t kJumpSize = 12;
@@ -42058,7 +42062,7 @@ bool install_weapon_partial_transition_lifecycle_census() {
         return false;
     }
 
-    std::array<std::uint8_t, 12> patch{};
+    std::array<std::uint8_t, 13> patch{};
     patch[0] = 0x48;
     patch[1] = 0xB8;
     const std::uintptr_t hook_address = reinterpret_cast<std::uintptr_t>(
@@ -42067,6 +42071,7 @@ bool install_weapon_partial_transition_lifecycle_census() {
         patch.data() + 2, &hook_address, sizeof(hook_address));
     patch[10] = 0xFF;
     patch[11] = 0xE0;
+    patch[12] = 0x90;
     g_anim_control_find_active_type2_layer_by_id =
         reinterpret_cast<AnimControlFindActiveType2LayerByIdFunction>(
             g_module + kAnimControlFindActiveType2LayerByIdRva);
@@ -59249,7 +59254,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-14adc "
+        "TLL co-op runtime init 2026-08-14add "
         "(read-only WeaponPartial new-vs-loop lifecycle census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

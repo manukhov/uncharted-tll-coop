@@ -4801,6 +4801,12 @@ reuse; a missing second request confirms request/cache loss; a new instance on
 both rejects reuse and sends the next static pass to the later state-dependent
 writer. `adc` must make no visible change.
 
+Packaging correction: the first `adc` load safely skipped the hook in both
+processes because the expected prologue omitted the leading `40` REX prefix on
+`push rdi`. `add` copies the exact 13 bytes through `sub rsp,0E0h`, pads its
+12-byte entry jump with one NOP and keeps the same read-only prediction. The
+skipped `adc` run produced no lifecycle data and did not test a hypothesis.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

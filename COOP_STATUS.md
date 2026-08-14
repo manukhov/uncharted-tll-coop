@@ -24606,8 +24606,9 @@ failure is immediate; that rejects reuse as the cause and leaves a later
 state-dependent writer/destination as leader.
 
 Build `adc` is mutation-free. It disables the answered final-Async command
-census and detours only `AnimStateLayer_TakeTransitions`. The complete 12-byte
-reloc-free prologue is copied to a trampoline while all other process threads
+census and detours only `AnimStateLayer_TakeTransitions`. The complete 13-byte
+reloc-free prologue (including the leading `40` REX on `push rdi`) is copied to
+a trampoline while all other process threads
 are suspended; the original target is published before the entry patch and
 install failures use readback plus verified rollback. The hook calls stock once,
 then logs at most 96 exact retained role-B Player0 WeaponPartial events. Each row
@@ -24627,3 +24628,12 @@ correct, the first and second Draw rows must differ exactly as above. If the
 second request is absent, the request/cache hypothesis wins. If both create a
 new instance, reuse is rejected. No visual change is expected or counted as
 progress in this build.
+
+The first `adc` cold load (PIDs 20988/18440) was not a runtime exam: both
+installers failed closed with `SKIPPED (prologue)` and emitted zero lifecycle
+rows. IDA instruction addresses resolve the packaging error exactly:
+`push rdi` spans `0x1418A1350..0x1418A1352` and is encoded `40 57`, so the
+complete reloc-free prologue is 13 bytes, not 12. Build `add` includes that REX
+byte, pads the 12-byte absolute entry jump with one NOP, and resumes at the same
+`0x1418A135D`. No game behavior or hypothesis was tested by `adc`; the written
+prediction is unchanged for `add`.
