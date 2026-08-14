@@ -24375,3 +24375,46 @@ retained-Player address turnover, then emits exactly one
 be replaced by a stable two-arm high-rifle hold. Marker plus unchanged/bad arms
 rejects the donor and final-owner hypothesis; no marker remains packaging and
 does not authorize a broader mutation.
+
+### 2026-08-14 RUNTIME REJECTED packaging (`acw`) / STATIC bounded mutation exam (`acx`): asynchronous owner cadence is not an idle invariant
+
+The `acw` exam used fresh role-A PID 7380 and role-B PID 6900. Both hooks
+installed and remained responsive. Role B emitted `admission=owner` and then
+`admission=dwell`, but zero `hands-root`, `rejected` or `injected` markers. The
+user again observed the stock broken hold. Thus the two canonical source clips
+were no longer the blocker, but the 350-ms accumulator still never became ready;
+no command word was changed and B725 remains untested.
+
+The remaining timer premise is statically unnecessary at this synchronous
+boundary and contradicted by the runtime cadence. `seh_resolve_idle_arm_pose_owner_scope`
+already requires the exact current retained Player/FG generation, legacy
+ED25/C39/580 skeleton, exact same-owner Mazur in the current slot, concrete
+PlayerWeaponController `WeaponOut=2`, FastGrenade state 0 and valid transforms.
+`local_player_is_steady_drawn_idle` independently requires zero movement, no
+cover and only the exact neutral input forms. The controller's authored state
+table makes Draw=1, Reload=3, Aim=4, Holster=5, hand/switch=6/7,
+Rechamber=8, WeaponIK transition=9/10 and Drop=13/14 mutually exclusive with
+state 2. Finally, the same synchronous Async invocation must build group zero as
+mode1/flags3, contain exactly one canonical Hands command 6 and match the exact
+single-block/finalizer suffix before any write.
+
+These are four independent current-frame gates: controller/action state,
+movement/input controllers, retained owner/content identity, and command-DAG
+liveness/grammar. A wall-clock dwell adds no semantic predicate; because
+intermediate presentation-owner samples are not continuous, it only prevents the
+already exact list from ever being examined. `acx` removes that timer from this
+one repair while changing none of the four synchronous gates or the mutation.
+
+The scope remains deliberately an exam, not an always-on general-action proof.
+Player melee, damage/flinch and interaction are owned outside the weapon/grenade
+state machines and are not exhaustively closed. The authorized runtime action is
+therefore exactly stationary, undamaged, non-interacting Mazur WeaponOut with no
+ADS or input. General activation remains blocked even if the visual result is
+positive.
+
+Falsifiable `acx` prediction: on the first exact steady final Async list, role B
+must emit one `injected ... resolved=7fb80cc8|7d11d4fd donor=b725ea01`
+marker. Marker plus unchanged/broken arms rejects B725 sufficiency and the final
+command owner. A bounded `rejected reason=` chooses grammar/source/capacity. No
+marker now specifically rejects final-list source placement or exact owner
+packaging; there is no remaining timer/root gate to widen.

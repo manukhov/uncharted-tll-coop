@@ -1639,7 +1639,6 @@ IdleArmPaletteAdmission g_idle_arm_palette_target_admission{};
 SRWLOCK g_idle_arm_pose_dwell_lock = SRWLOCK_INIT;
 IdleArmPoseDwellState g_idle_arm_pose_source_dwell{};
 IdleArmPoseDwellState g_idle_arm_pose_target_dwell{};
-IdleArmPoseDwellState g_legacy_nadine_mazur_steady_hands_dwell{};
 std::atomic<std::uint32_t> g_idle_arm_pose_capture_sequence{0};
 std::atomic<std::uint64_t> g_idle_arm_pose_last_applied_session{0};
 std::atomic<std::uint32_t> g_idle_arm_pose_last_applied_sequence{0};
@@ -2461,11 +2460,11 @@ constexpr bool kEnableLegacyNadineDrawnP99LocalTransformCensus = false;
 // only this exact local legacy-Nadine action through Apply's native zero-weight
 // no-op boundary while preserving action/NewIkWeapon/overlay lifecycle.
 constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
-// acv proved that the retained presentation Player pointer can turn over while
-// the same stationary WeaponOut remains live.  Anchor dwell to session/art/body
-// pose instead, and let the final command list select exactly one of the two
-// exhaustive stock Hands materializations before appending the shipped B725
-// Mazur arm partial. Perform, mode-2, P99 and transitions remain stock.
+// acv/acw proved that neither retained presentation identity nor a continuous
+// 350-ms owner cadence exists at this late job.  The exact current WeaponOut,
+// zero-action scope and final command list are synchronous; require one of the
+// two exhaustive stock Hands materializations there before appending B725.
+// Perform, mode-2, P99 and every non-WeaponOut transition remain stock.
 constexpr bool kEnableLegacyNadineMazurSteadyHandsNpcRepair = true;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 // The Mazur strap child owns a complete authored state-zero pose, but its
@@ -45544,8 +45543,7 @@ enum class LegacyNadineMazurSteadyHandsAdmission : std::uint8_t {
     kOwner = 1,
     kDonor = 2,
     kHandsRoot = 3,
-    kWaitingForDwell = 4,
-    kAdmitted = 5,
+    kAdmitted = 4,
 };
 
 enum class LegacyNadineMazurSteadyHandsInjection : std::uint8_t {
@@ -45838,17 +45836,6 @@ seh_select_legacy_nadine_mazur_steady_hands_epoch(
         const std::uint16_t donor_frame_count =
             *reinterpret_cast<const std::uint16_t*>(
                 donor_clip_data + 0x22);
-
-        const ULONGLONG now = GetTickCount64();
-        // The retained presentation object is generation-validated above and
-        // consumed only inside this synchronous Async invocation.  Its address
-        // is not a stable-idle invariant; session/art/anchored body pose are.
-        if (!idle_arm_pose_dwell_ready(
-                g_legacy_nadine_mazur_steady_hands_dwell, nullptr,
-                g_state_net.idle_arm_pose_session_id, owner.weapon_art_id,
-                owner.position, owner.orientation, now)) {
-            return LegacyNadineMazurSteadyHandsAdmission::kWaitingForDwell;
-        }
 
         output->valid = true;
         output->player = player;
@@ -46364,14 +46351,14 @@ void log_legacy_nadine_mazur_steady_hands_admission(
     if (admission == LegacyNadineMazurSteadyHandsAdmission::kAdmitted) {
         return;
     }
-    static std::array<std::atomic<bool>, 5> admission_logged{};
+    static std::array<std::atomic<bool>, 4> admission_logged{};
     const std::size_t reason = static_cast<std::size_t>(admission);
     if (reason >= admission_logged.size() ||
         admission_logged[reason].exchange(true, std::memory_order_relaxed)) {
         return;
     }
     static constexpr const char* kReasonNames[]{
-        "prerequisite", "owner", "donor", "hands-root", "dwell"};
+        "prerequisite", "owner", "donor", "hands-root"};
     std::ostringstream line;
     line << "NADINE-MAZUR-STEADY-HANDS admission="
          << kReasonNames[reason];
@@ -46416,10 +46403,6 @@ void run_legacy_nadine_mazur_steady_hands_command_epoch(
         if (admission ==
             LegacyNadineMazurSteadyHandsAdmission::kAdmitted) {
             g_legacy_nadine_mazur_steady_hands_epoch = selected;
-        } else if (admission !=
-                   LegacyNadineMazurSteadyHandsAdmission::kWaitingForDwell) {
-            reset_idle_arm_pose_dwell(
-                g_legacy_nadine_mazur_steady_hands_dwell);
         }
         log_legacy_nadine_mazur_steady_hands_admission(admission);
     }
@@ -58722,8 +58705,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-14acw "
-        "(list-owned final Async Mazur authored arm-partial repair)");
+        "TLL co-op runtime init 2026-08-14acx "
+        "(synchronous final-list Mazur authored arm-partial exam)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

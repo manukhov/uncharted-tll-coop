@@ -4741,6 +4741,14 @@ the same 350 ms session/art/body-pose anchor, validates the current generation
 synchronously, and selects exactly one canonical `7FB80CC8` or `7D11D4FD` clip
 directly from the exact final Async list. Require one observed-source injection
 marker and a stable two-arm hold; marker plus bad/unchanged pixels rejects B725.
+Result: `acw` passed owner and reached dwell but emitted no injection; the
+presentation callback cadence still reset the 350-ms timer. `acx` removes only
+that wall-clock condition. Exact current Player/FG generation, Mazur
+WeaponOut=2, grenade0, zero movement/input/cover, final Async mode1/flags3,
+one canonical Hands source and exact full-list grammar remain mandatory. Run
+only the written stationary/no-ADS/no-melee/no-damage/no-interact exam. Marker
+plus unchanged/bad arms rejects B725/final owner; no marker is now list/owner
+packaging, not a timer.
 
 ## Rule
 
