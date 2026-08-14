@@ -45527,9 +45527,10 @@ thread_local LegacyNadineMazurSteadyHandsEpoch
 enum class LegacyNadineMazurSteadyHandsAdmission : std::uint8_t {
     kPrerequisite = 0,
     kOwner = 1,
-    kContent = 2,
-    kWaitingForDwell = 3,
-    kAdmitted = 4,
+    kDonor = 2,
+    kHandsRoot = 3,
+    kWaitingForDwell = 4,
+    kAdmitted = 5,
 };
 
 enum class LegacyNadineMazurSteadyHandsInjection : std::uint8_t {
@@ -45564,7 +45565,7 @@ void* seh_resolve_exact_animation_clip(
         if (clip_data == nullptr || readable_bytes(clip_data) < 0x24 ||
             *reinterpret_cast<const std::uint32_t*>(clip_data + 0x04) !=
                 skeleton_id ||
-            *reinterpret_cast<const std::uint16_t*>(clip_data + 0x22) < 2) {
+            *reinterpret_cast<const std::uint16_t*>(clip_data + 0x22) == 0) {
             return nullptr;
         }
         return clip;
@@ -45574,13 +45575,14 @@ void* seh_resolve_exact_animation_clip(
 }
 
 bool seh_resolve_exact_steady_idle_hands_root(
-    void* player, void* expected_source_clip, void** anim_control_out) {
-    if (anim_control_out == nullptr) {
+    void* player, void** source_clip_out, void** anim_control_out) {
+    if (source_clip_out == nullptr || anim_control_out == nullptr) {
         return false;
     }
+    *source_clip_out = nullptr;
     *anim_control_out = nullptr;
     __try {
-        if (player == nullptr || expected_source_clip == nullptr ||
+        if (player == nullptr ||
             readable_bytes(static_cast<std::byte*>(player) +
                            kPlayerUpperStateOwnerOffset) < sizeof(void*)) {
             return false;
@@ -45660,6 +45662,13 @@ bool seh_resolve_exact_steady_idle_hands_root(
             return false;
         }
         const auto* const node = static_cast<const std::byte*>(root_node);
+        auto* const source_clip = *reinterpret_cast<std::byte* const*>(
+            node + 0x50);
+        const bool source_clip_readable = source_clip != nullptr &&
+            readable_bytes(source_clip) >= 0x44;
+        auto* const source_clip_data = source_clip_readable
+            ? *reinterpret_cast<std::byte* const*>(source_clip + 0x28)
+            : nullptr;
         if (*reinterpret_cast<const std::uintptr_t*>(node) !=
                 g_module + kAnimSnapshotNodeAnimationVtableRva ||
             *reinterpret_cast<const std::uint32_t*>(node + 0x40) !=
@@ -45668,8 +45677,15 @@ bool seh_resolve_exact_steady_idle_hands_root(
                 kLegacyNadineIdleHandsStateId ||
             *reinterpret_cast<const std::uint32_t*>(node + 0x48) != 0 ||
             *reinterpret_cast<const std::uint32_t*>(node + 0x4C) != 0 ||
-            *reinterpret_cast<void* const*>(node + 0x50) !=
-                expected_source_clip ||
+            !source_clip_readable ||
+            *reinterpret_cast<const std::uint32_t*>(source_clip + 0x40) !=
+                kPlayerAnimationDatabaseId ||
+            source_clip_data == nullptr ||
+            readable_bytes(source_clip_data) < 0x24 ||
+            *reinterpret_cast<const std::uint32_t*>(source_clip_data + 0x04) !=
+                kPlayerAnimationSkeletonId ||
+            *reinterpret_cast<const std::uint16_t*>(source_clip_data + 0x22) ==
+                0 ||
             *reinterpret_cast<const std::uint8_t*>(node + 0x69) != 0) {
             return false;
         }
@@ -45687,9 +45703,11 @@ bool seh_resolve_exact_steady_idle_hands_root(
             verify_node != root_node) {
             return false;
         }
+        *source_clip_out = source_clip;
         *anim_control_out = anim_control;
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *source_clip_out = nullptr;
         *anim_control_out = nullptr;
         return false;
     }
@@ -45719,18 +45737,18 @@ seh_select_legacy_nadine_mazur_steady_hands_epoch(
             return LegacyNadineMazurSteadyHandsAdmission::kOwner;
         }
 
-        void* const source_clip = seh_resolve_exact_animation_clip(
-            kPlayerAnimationDatabaseId, kPlayerAnimationSkeletonId,
-            kLegacyNadineIdleHandsStateId);
         void* const donor_clip = seh_resolve_exact_animation_clip(
             kNpcNormalAnimationDatabaseId, kNpcNormalAnimationSkeletonId,
             kNpcMazurHighPartClipId);
+        if (donor_clip == nullptr) {
+            return LegacyNadineMazurSteadyHandsAdmission::kDonor;
+        }
+        void* source_clip = nullptr;
         void* anim_control = nullptr;
-        if (source_clip == nullptr || donor_clip == nullptr ||
-            source_clip == donor_clip ||
-            !seh_resolve_exact_steady_idle_hands_root(
-                player, source_clip, &anim_control)) {
-            return LegacyNadineMazurSteadyHandsAdmission::kContent;
+        if (!seh_resolve_exact_steady_idle_hands_root(
+                player, &source_clip, &anim_control) ||
+            source_clip == nullptr || source_clip == donor_clip) {
+            return LegacyNadineMazurSteadyHandsAdmission::kHandsRoot;
         }
         auto* const source_clip_data = *reinterpret_cast<std::byte* const*>(
             static_cast<std::byte*>(source_clip) + 0x28);
@@ -45765,7 +45783,7 @@ seh_select_legacy_nadine_mazur_steady_hands_epoch(
         return LegacyNadineMazurSteadyHandsAdmission::kAdmitted;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *output = {};
-        return LegacyNadineMazurSteadyHandsAdmission::kContent;
+        return LegacyNadineMazurSteadyHandsAdmission::kHandsRoot;
     }
 }
 
@@ -45903,16 +45921,17 @@ seh_inject_legacy_nadine_mazur_steady_hands_commands(
         }
         float source_phase = 0.0F;
         std::memcpy(&source_phase, &source_phase_bits, sizeof(source_phase));
-        if (epoch.source_frame_count < 2 || epoch.donor_frame_count < 2 ||
-            !std::isfinite(source_phase) || source_phase < 0.0F ||
-            source_phase >
-                static_cast<float>(epoch.source_frame_count - 1) + 0.01F) {
+        // The exact B725EA01 PAK header is a one-sample partial pose.
+        // ANIM+0x22 is the sample count: native timing code branches only when
+        // it is greater than one.  A one-sample donor is evaluated at phase
+        // zero; normalized multi-frame donor remapping is deliberately outside
+        // this exact repair.  The active source clip is used only as a liveness
+        // discriminator, so its native phase is not transferred.
+        if (epoch.source_frame_count == 0 || epoch.donor_frame_count != 1 ||
+            !std::isfinite(source_phase)) {
             return LegacyNadineMazurSteadyHandsInjection::kSource;
         }
-        const float normalized_phase = source_phase /
-            static_cast<float>(epoch.source_frame_count - 1);
-        const float donor_phase = normalized_phase *
-            static_cast<float>(epoch.donor_frame_count - 1);
+        const float donor_phase = 0.0F;
         std::uint32_t donor_phase_bits = 0;
         std::memcpy(
             &donor_phase_bits, &donor_phase, sizeof(donor_phase_bits));
@@ -45998,7 +46017,9 @@ std::uint64_t __fastcall hooked_create_anim_cmds_for_object_for_nadine_mazur(
         line << "NADINE-MAZUR-STEADY-HANDS injected source=0x" << std::hex
              << kLegacyNadineIdleHandsStateId << " donor=0x"
              << kNpcMazurHighPartClipId << std::dec
-             << " group=0 lane=" << donor_lane;
+             << " group=0 lane=" << donor_lane
+             << " samples=" << epoch.source_frame_count << "/"
+             << epoch.donor_frame_count;
         boot_log_line(line.str().c_str());
     } else if (injection != LegacyNadineMazurSteadyHandsInjection::kIgnored &&
                injection != LegacyNadineMazurSteadyHandsInjection::kInjected) {
@@ -46019,14 +46040,14 @@ void log_legacy_nadine_mazur_steady_hands_admission(
     if (admission == LegacyNadineMazurSteadyHandsAdmission::kAdmitted) {
         return;
     }
-    static std::array<std::atomic<bool>, 4> admission_logged{};
+    static std::array<std::atomic<bool>, 5> admission_logged{};
     const std::size_t reason = static_cast<std::size_t>(admission);
     if (reason >= admission_logged.size() ||
         admission_logged[reason].exchange(true, std::memory_order_relaxed)) {
         return;
     }
     static constexpr const char* kReasonNames[]{
-        "prerequisite", "owner", "content", "dwell"};
+        "prerequisite", "owner", "donor", "hands-root", "dwell"};
     std::ostringstream line;
     line << "NADINE-MAZUR-STEADY-HANDS admission="
          << kReasonNames[reason];
@@ -58330,8 +58351,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-14acq "
-        "(Mazur default-hands alias admitted at final Async repair)");
+        "TLL co-op runtime init 2026-08-14acr "
+        "(one-sample Mazur NPC partial admitted at final Async repair)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

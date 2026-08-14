@@ -24060,3 +24060,54 @@ now advance from `admission=content` to `admission=dwell`, then to exactly one
 marker, the failure lies in exact clip/root materialization and no mutation
 occurred. Only an `injected` marker with unchanged pixels can reject the donor
 or final-palette hypothesis.
+
+### 2026-08-14 RUNTIME REJECTED (`acq`) / STATIC corrected exam (`acr`): one-sample partials are valid
+
+The `acq` exam used role-A PID 18220 and role-B PID 13452. Both exact hooks
+installed and role B again progressed only through `admission=owner` and
+`admission=content` (log lines 77081/77164), with zero `dwell`, `injected` or
+list-rejection rows. The user supplied a stronger stock-only discriminator:
+Mazur is held correctly for roughly the first second after Draw, then the arms
+break when the controller settles into the persistent hold. Because no command
+was mutated, this observation belongs to the native Draw -> WeaponOut timeline
+and does not validate or reject the NPC donor.
+
+The remaining content failure is now exact and independent of the state-alias
+correction. The direct PAK header for the selected NPC donor `B725EA01` is a
+one-sample ANIM resource: header word `+0x22 == 1` (the independently decoded
+Player Mazur partials `56C57AD2/283966ED` use the same one-sample form). The
+implementation incorrectly required `+0x22 >= 2` and therefore mathematically
+rejected B725 before inspecting the Hands root.
+`AnimStateInstance_ResolveSnapshotClipTiming 0x1418B32E0`
+independently confirms the field semantics: only a count greater than one reads
+`ANIM+0x24` for multi-sample duration; a count of one is a valid static partial.
+
+The new `acr` correction does not widen gameplay scope or command grammar.
+`seh_resolve_exact_animation_clip` accepts a nonzero sample count; the active
+Hands clip is taken directly from the already exact `2EAA36BC` one-track root
+instead of a redundant global database lookup; and the exact B725 donor is
+required to have one sample and is emitted at phase zero. Admission now reports
+`donor` and `hands-root` separately. Role B, Player0, legacy ED25/C39, exact
+Mazur state 2, grenade-idle, stationary 350 ms, group zero, exact list suffix,
+P99/role-A/ADS/transition exclusions and the final Async boundary are unchanged.
+
+The user's timing rejects delayed WeaponIK as the switch that breaks the pose:
+`PlayerWeaponController_ApplyWeaponSwitch 0x1410A28A0` calls vtable `+0x308 =
+PlayerWeaponController_StartWeaponIKForSlot 0x14109DA80` before publishing Draw
+state 1, so the same IK is already active during the visibly correct first
+second. At Draw completion, `PlayerWeaponController_ApplyState 0x1410AAFB0`
+enqueues the persistent `PlayerPlayWeaponOverlayAction` and writes WeaponOut
+state 2; that boundary matches the visible break and is upstream of the final
+NPC partial insertion. The surviving alternatives are an incompatible
+persistent overlay/base merge or its later common pose writer; both predict the
+same repair outcome because `acr` writes the complete authored two-arm partial
+after them, in the final visible-palette rebuild.
+
+Falsifiable `acr` prediction: after role B draws Mazur and remains motionless
+without ADS for at least one second, admission must pass `donor`, `hands-root`
+and `dwell`, then emit exactly one marker with
+`donor=0xb725ea01` with donor sample count `/1`. The pose must become a stable
+two-arm high-rifle hold only on local Nadine. A marker with unchanged/bad arms
+rejects both B725 sufficiency and this final command owner; `admission=donor`,
+`admission=hands-root`, or a bounded list rejection selects packaging without
+authorizing any wider mutation.

@@ -1460,7 +1460,10 @@ FUNCTIONS = {
         "outer AnimStateSnapshot tuple +0x88/+0x90/+0x94 only to derive instance "
         "timing fields +0x98/+0x9C. It is not the leaf pose-command clip owner; "
         "AnimSnapshotNodeAnimation performs its own node-local remap and clip "
-        "resolution before emitting command 0x60006.",
+        "resolution before emitting command 0x60006. The resolved ANIM header "
+        "word at +0x22 is the sample count: only counts greater than one use "
+        "ANIM+0x24 to derive a multi-sample duration, while one-sample partial "
+        "poses are valid and evaluate at phase zero.",
     ),
     0x1418B2A40: (
         "AnimStateSnapshot_TransformState",
