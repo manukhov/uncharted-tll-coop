@@ -4697,12 +4697,21 @@ phase zero. Fresh PID 17400 then passed `owner` and donor but stopped at exact
 roughly two seconds and then break. Static closure shows that the shared
 `7FB80CC8` raw Hands descriptor has exactly two valid runtime materializations:
 direct Player `7FB/0/0 -> 27E57F43/FD6DBE03`, or Chloe-remapped
-`7D11D4FD/ED25C708/C39CA709 -> 6C2B2396/4B0F5DE3`. `acs` admits only those two
-complete tuples and logs the resolved id. Every gameplay, owner, donor, list and
-final-Async guard is unchanged. Run exactly one `acs` exam and require
-`injected ... resolved=0x7fb80cc8|0x7d11d4fd ... samples=nonzero/1`; marker plus
-unchanged pixels rejects the donor/final-owner hypothesis, while another
-`hands-root` stop rejects the exhaustive materialization model.
+`7D11D4FD/ED25C708/C39CA709 -> 6C2B2396/4B0F5DE3`. `acs` admitted only those two
+complete tuples and passed `owner`/`dwell`, but fresh role-B PID 18152 then
+emitted `rejected reason=3` and zero injection. The fixed full-list grammar is
+therefore REJECTED without testing the donor: it came from role-A remote Nadine
+on screen 1. Static dataflow proves BuildCommandSegments copies a6 to
+CreateContext+0x11 and final Async supplies a6 from `FgAnimData+0x08`; the
+group-zero command-24 suffix is conditional. Next exam `act` is read-only:
+repair is compile-time false and a bounded census records the exact local
+group-zero mode/flags/full opcode sequence after the same strict Hands-root and
+350 ms admission. Written discriminator: normal `3,4,15,16,17,27,5` confirms
+local no-joint-conversion; mode-2 `...14...24,24,26,5` identifies the auxiliary
+form; another structural sequence selects the third variant. Require at least
+one `NADINE-MAZUR-STEADY-HANDS-CMDS ... structural=1 source=1` and zero
+`injected`; the pose is expected to remain stock-broken. Do not authorize or
+widen mutation until this local grammar is captured.
 
 ## Rule
 

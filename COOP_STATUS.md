@@ -24156,3 +24156,52 @@ or `resolved=0x7d11d4fd`, donor `0xb725ea01`, samples `nonzero/1`. A marker plus
 unchanged/broken arms rejects the donor/final-owner hypothesis; another
 `hands-root` stop rejects this exhaustive materialization model and forbids
 further guard widening.
+
+### 2026-08-14 RUNTIME REJECTED packaging (`acs`) / STATIC read-only grammar census (`act`)
+
+The fresh `acs` exam used role-A PID 10492 and role-B PID 18152. Role B reached
+`admission=owner` (log line 77757), then `admission=dwell` (77848), and emitted
+exactly one `rejected reason=3` grammar marker (77852). There were zero
+`NADINE-MAZUR-STEADY-HANDS injected` rows. The user observed the stock broken
+hold immediately in the final repeat. Because the command list was rejected
+before copying, this does not test B725, the final Async owner, or any visible
+mutation; it rejects the fixed full-list grammar used by `acs`.
+
+The old grammar was scoped incorrectly. Historical full Nadine group-zero lists
+(`0,1,2,...,3,4,15,16,17,24,27,5`) came from role-A processes rendering remote
+Nadine on screen 1, not from role-B local Nadine on screen 0. Independent static
+dataflow now proves why that distinction can change the suffix:
+`AnimManager_BuildCommandSegmentsForObjectMask 0x141A91490` copies argument
+bytes a5/a6 into CreateContext `+0x10/+0x11`; both final
+`AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00` builder calls pass
+`FgAnimData+0x08` as a6. `AnimManager_CreateAnimCmdsForObject 0x141A8FCF0`
+always emits commands 15/16/17 but emits the group-zero joint-conversion command
+24 (`id=248B1AAE`) conditionally. Therefore a screen-1 suffix is not a valid
+equality guard for screen 0.
+
+Competing hypotheses are explicit. **Hlocal-no-joint-conversion** predicts the
+normal local list ends `3,4,15,16,17,27,5` without command 24.
+**Hauxiliary-build** predicts the short mode-2 form containing command 14, two
+command-24 callbacks and command 26. **Hother-post-pose variant** predicts an
+exact bounding/plugin suffix selected by the local flags. **Hmalformed prefix**
+is disfavoured by the shared generator but remains distinguishable by the full
+structural parse. Static analysis cannot choose the live local flag value.
+
+`act` is a bounded read-only census, not a repair. The pose-write flag is
+compile-time false. After the already-proven role-B Player0/Mazur/WeaponOut,
+grenade-idle, stationary 350 ms and exact Hands-root admission, it records up to
+eight unique group-zero lists as
+`NADINE-MAZUR-STEADY-HANDS-CMDS mode=... flags=... sequence=...`, including
+word/command counts, structural completeness, block counts, source-clip count
+and command-23/24 payload ids. Falsifiable prediction: a stationary local Mazur
+must emit at least one structural `source=1` row. Hlocal-no-joint-conversion is
+confirmed only if the normal row has no `24/248B1AAE`; the auxiliary and other
+variants have distinct sequences. No `injected` row can occur, and the visible
+pose must remain stock-broken. Silence after `dwell` rejects this capture seam;
+a malformed row rejects the parser. No gameplay mutation is authorized until
+the exact local sequence is captured and reconciled with the generator.
+
+The single `ida/tll.i64` was updated headlessly with the corrected builder/job
+comments (`1744 functions, 60 data names`, `save_database returned True`); the
+restarted MCP resolves both saved function names. The Release DLL was rebuilt
+successfully with the pose-write flag false.

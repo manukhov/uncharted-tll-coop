@@ -1786,6 +1786,9 @@ FUNCTIONS = {
         "AnimManager_CreateAnimCmdsForObject for every selected skeleton group. "
         "The normal PerformAnimBlend caller passes the persistent 48-byte local "
         "JointParams destination at FgAnimData+0x100. "
+        "The builder copies argument bytes a5/a6 to CreateContext+0x10/+0x11; "
+        "the AsyncJointBlend callers supply a6 from FgAnimData+0x08, so the "
+        "group-zero post-pose command suffix is instance/screen dependent. "
         "Context qwords 5 and 6 preserve the supplied scalar-bank pointers; the "
         "normal PerformAnimBlend caller supplies FgAnimData+0x118/+0x120.",
     ),
@@ -4256,6 +4259,8 @@ FUNCTIONS = {
         "Source-identified anim-mgr-jobs.cpp AsyncObjectUpdate_JointBlend_Job. "
         "Independently reads the persistent optional scalar-bank pointers at "
         "FgAnimData+0x118/+0x120 before the joint-blend work. "
+        "Both direct BuildCommandSegments calls forward FgAnimData+0x08 as the "
+        "builder flags byte stored in CreateContext+0x11. "
         "When job flags contain 0x20, resolves retained owner at +0x1A8/+0x1B0 "
         "and dispatches owner vtable+0x410 then +0x418.",
     ),

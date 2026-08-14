@@ -2461,18 +2461,13 @@ constexpr bool kEnableLegacyNadineDrawnP99LocalTransformCensus = false;
 // only this exact local legacy-Nadine action through Apply's native zero-weight
 // no-op boundary while preserving action/NewIkWeapon/overlay lifecycle.
 constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
-// STATIC candidate acp: the steady Player Hands leaf itself is compatible but
-// runs before Base, so replacing that leaf cannot own the final shoulders and
-// elbows. Instead, the final Async command build appends the shipped native-NPC
-// Mazur high-part (B725EA01, npc-normal joints 20..31 -> Nadine joints 19..30)
-// immediately before the sole group-zero command-3. The existing lane zero is
-// the left input and remains authoritative for every body-only joint; a stock
-// mode-1/weight-1 command-7 lets the partial own only its authored arm rows.
-// Admission is role-B local legacy Nadine, exact Mazur WeaponOut, grenade-idle,
-// motionless for 350 ms, and an exact one-track/one-instance idle-hands root.
-// P99 is deliberately excluded: its correct native donor/source provenance is
-// still not statically closed.
-constexpr bool kEnableLegacyNadineMazurSteadyHandsNpcRepair = true;
+// acs proved the exact direct/Chloe idle-hands roots but rejected the command
+// list before mutation. The old full-list grammar came from screen-one Nadine;
+// group-zero command flags are copied independently from FgAnimData+0x08, so
+// that grammar cannot be assumed for local screen zero. Keep the repair off and
+// capture only the exact local, steady Mazur list selected by the proven root.
+constexpr bool kEnableLegacyNadineMazurSteadyHandsNpcRepair = false;
+constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = true;
 // The Mazur strap child owns a complete authored state-zero pose, but its
 // dynamic endpoint lookup fails because legacy Nadine has no strap2..strap14
 // joints and hides the otherwise valid mesh. Reveal that exact published child
@@ -45756,7 +45751,8 @@ seh_select_legacy_nadine_mazur_steady_hands_epoch(
     }
     *output = {};
     __try {
-        if (!kEnableLegacyNadineMazurSteadyHandsNpcRepair ||
+        if ((!kEnableLegacyNadineMazurSteadyHandsNpcRepair &&
+             !kEnableLegacyNadineMazurSteadyHandsCommandCensus) ||
             !g_state_net.enabled || !g_net_role_b || expected_fg == nullptr) {
             return LegacyNadineMazurSteadyHandsAdmission::kPrerequisite;
         }
@@ -45823,6 +45819,182 @@ seh_select_legacy_nadine_mazur_steady_hands_epoch(
         *output = {};
         return LegacyNadineMazurSteadyHandsAdmission::kHandsRoot;
     }
+}
+
+struct LegacyNadineMazurSteadyHandsCommandSnapshot {
+    bool valid = false;
+    bool structural = false;
+    bool truncated = false;
+    std::uint8_t build_mode = 0;
+    std::uint8_t build_flags = 0;
+    std::uint32_t word_count = 0;
+    std::uint32_t command_count = 0;
+    std::uint32_t source_count = 0;
+    std::uint32_t begin_object_count = 0;
+    std::uint32_t begin_control_count = 0;
+    std::uint32_t opener_count = 0;
+    std::uint32_t finalizer_count = 0;
+    std::uint64_t signature = 1469598103934665603ull;
+    std::array<std::uint16_t, 96> opcodes{};
+    std::array<std::uint16_t, 96> sizes{};
+    std::array<std::uint32_t, 96> payload_ids{};
+};
+
+bool seh_capture_legacy_nadine_mazur_steady_hands_commands(
+    void* create_context, void* command_record, std::uint32_t group,
+    const LegacyNadineMazurSteadyHandsEpoch& epoch,
+    LegacyNadineMazurSteadyHandsCommandSnapshot* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (!epoch.valid || create_context == nullptr ||
+            command_record == nullptr || group != 0 ||
+            readable_bytes(create_context) < 0x18 ||
+            *reinterpret_cast<void* const*>(create_context) !=
+                epoch.fg_anim_data ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(create_context) + 0x08) !=
+                epoch.target_skeleton ||
+             readable_bytes(command_record) < 0x20) {
+            return false;
+        }
+        output->build_mode = *reinterpret_cast<const std::uint8_t*>(
+            static_cast<const std::byte*>(create_context) + 0x10);
+        output->build_flags = *reinterpret_cast<const std::uint8_t*>(
+            static_cast<const std::byte*>(create_context) + 0x11);
+        const auto* const record = static_cast<const std::byte*>(command_record);
+        const auto* const words =
+            *reinterpret_cast<std::uint32_t* const*>(record);
+        const std::uint32_t capacity =
+            *reinterpret_cast<const std::uint32_t*>(record + 0x08);
+        output->word_count =
+            *reinterpret_cast<const std::uint32_t*>(record + 0x0C);
+        if (words == nullptr || output->word_count == 0 ||
+            output->word_count > capacity || capacity > 4096 ||
+            readable_bytes(words) <
+                static_cast<std::size_t>(output->word_count) *
+                    sizeof(std::uint32_t)) {
+            return false;
+        }
+        output->valid = true;
+        std::uint32_t cursor = 0;
+        while (cursor < output->word_count) {
+            const std::uint32_t header = words[cursor];
+            const std::uint16_t opcode =
+                static_cast<std::uint16_t>(header & 0xFFFFu);
+            const std::uint16_t size =
+                static_cast<std::uint16_t>(header >> 16);
+            if (size == 0 || size > output->word_count - cursor) {
+                break;
+            }
+            output->signature ^= header;
+            output->signature *= 1099511628211ull;
+            std::uint32_t payload_id = 0;
+            if ((opcode == 23 || opcode == 24) && size >= 2) {
+                payload_id = words[cursor + 1];
+                output->signature ^= payload_id;
+                output->signature *= 1099511628211ull;
+            }
+            if (output->command_count < output->opcodes.size()) {
+                output->opcodes[output->command_count] = opcode;
+                output->sizes[output->command_count] = size;
+                output->payload_ids[output->command_count] = payload_id;
+            } else {
+                output->truncated = true;
+            }
+            if (opcode == kAnimCommandBeginObject) {
+                ++output->begin_object_count;
+            } else if (opcode == kAnimCommandBeginControl) {
+                ++output->begin_control_count;
+            } else if (opcode == kAnimCommandAllocateBlock) {
+                ++output->opener_count;
+            } else if (opcode == kAnimCommandFinalizeBlock) {
+                ++output->finalizer_count;
+            } else if (opcode == kAnimCommandAnimation &&
+                       size == kAnimCommandWordCountAnimation) {
+                void* emitted_clip = nullptr;
+                std::memcpy(&emitted_clip, words + cursor + 2,
+                            sizeof(emitted_clip));
+                if (emitted_clip == epoch.source_clip) {
+                    ++output->source_count;
+                }
+            }
+            ++output->command_count;
+            cursor += size;
+        }
+        output->structural = cursor == output->word_count;
+        output->signature ^= output->word_count;
+        output->signature *= 1099511628211ull;
+        output->signature ^=
+            (static_cast<std::uint64_t>(output->build_mode) << 8) |
+            output->build_flags;
+        output->signature *= 1099511628211ull;
+        return output->valid;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+void census_legacy_nadine_mazur_steady_hands_commands(
+    void* create_context, void* command_record, std::uint32_t group,
+    const LegacyNadineMazurSteadyHandsEpoch& epoch) {
+    if constexpr (!kEnableLegacyNadineMazurSteadyHandsCommandCensus) {
+        return;
+    }
+    LegacyNadineMazurSteadyHandsCommandSnapshot snapshot{};
+    if (!seh_capture_legacy_nadine_mazur_steady_hands_commands(
+            create_context, command_record, group, epoch, &snapshot)) {
+        return;
+    }
+
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static std::array<std::uint64_t, 8> signatures{};
+    static std::uint32_t signature_count = 0;
+    bool emit = false;
+    AcquireSRWLockExclusive(&lock);
+    bool duplicate = false;
+    for (std::uint32_t index = 0; index < signature_count; ++index) {
+        duplicate = duplicate || signatures[index] == snapshot.signature;
+    }
+    if (!duplicate && signature_count < signatures.size()) {
+        signatures[signature_count++] = snapshot.signature;
+        emit = true;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    if (!emit) {
+        return;
+    }
+
+    std::ostringstream line;
+    line << "NADINE-MAZUR-STEADY-HANDS-CMDS mode="
+         << static_cast<unsigned>(snapshot.build_mode)
+         << " flags=0x" << std::hex
+         << static_cast<unsigned>(snapshot.build_flags) << std::dec
+         << " words=" << snapshot.word_count
+         << " commands=" << snapshot.command_count
+         << " structural=" << (snapshot.structural ? 1 : 0)
+         << " truncated=" << (snapshot.truncated ? 1 : 0)
+         << " source=" << snapshot.source_count
+         << " blocks=" << snapshot.begin_object_count << "/"
+         << snapshot.begin_control_count << "/" << snapshot.opener_count
+         << "/" << snapshot.finalizer_count << " sequence=";
+    const std::uint32_t shown = (std::min)(
+        snapshot.command_count,
+        static_cast<std::uint32_t>(snapshot.opcodes.size()));
+    for (std::uint32_t index = 0; index < shown; ++index) {
+        if (index != 0) {
+            line << ",";
+        }
+        line << snapshot.opcodes[index] << ":" << snapshot.sizes[index];
+        if (snapshot.payload_ids[index] != 0) {
+            line << "/0x" << std::hex << snapshot.payload_ids[index]
+                 << std::dec;
+        }
+    }
+    boot_log_line(line.str().c_str());
 }
 
 LegacyNadineMazurSteadyHandsInjection
@@ -46044,6 +46216,12 @@ std::uint64_t __fastcall hooked_create_anim_cmds_for_object_for_nadine_mazur(
         return result;
     }
 
+    census_legacy_nadine_mazur_steady_hands_commands(
+        create_context, command_record, group, epoch);
+    if constexpr (!kEnableLegacyNadineMazurSteadyHandsNpcRepair) {
+        return result;
+    }
+
     std::uint32_t donor_lane = 0;
     const LegacyNadineMazurSteadyHandsInjection injection =
         seh_inject_legacy_nadine_mazur_steady_hands_commands(
@@ -46195,8 +46373,10 @@ bool install_legacy_nadine_mazur_steady_hands_npc_repair() {
     resume_suspended_process_threads(suspended_threads);
     boot_log_line(
         installed
-            ? "legacy-Nadine Mazur steady-hands NPC partial repair installed"
-            : "legacy-Nadine Mazur steady-hands NPC partial repair PARTIAL (pass-through)");
+            ? (kEnableLegacyNadineMazurSteadyHandsNpcRepair
+                   ? "legacy-Nadine Mazur steady-hands NPC partial repair installed"
+                   : "legacy-Nadine Mazur steady-hands command census installed (read-only)")
+            : "legacy-Nadine Mazur steady-hands command hook PARTIAL (pass-through)");
     return installed;
 }
 
@@ -58390,8 +58570,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-14acs "
-        "(exact direct/Chloe steady Hands roots admitted for Mazur NPC partial)");
+        "TLL co-op runtime init 2026-08-14act "
+        "(read-only local Mazur steady Hands command-grammar census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -58484,7 +58664,8 @@ DWORD WINAPI install_hook(void*) {
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_legacy_nadine_active_weapon_grip_overlay_repair();
     }
-    if constexpr (kEnableLegacyNadineMazurSteadyHandsNpcRepair &&
+    if constexpr ((kEnableLegacyNadineMazurSteadyHandsNpcRepair ||
+                   kEnableLegacyNadineMazurSteadyHandsCommandCensus) &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_legacy_nadine_mazur_steady_hands_npc_repair();
     }
