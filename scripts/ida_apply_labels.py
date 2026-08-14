@@ -1775,6 +1775,9 @@ FUNCTIONS = {
         "JointParams array consumed by post-blend IK. Normal builder return "
         "0x141A91604 receives the complete command list; the separate prepass "
         "return 0x141A920A7 must not be confused with that final group build. "
+        "Local role-B Mazur runtime confirms both Perform and final Async normal "
+        "mode-1/flags-3 lists carry one exact steady Hands clip and terminate in "
+        "cmd3/4/15/16/17/joint-conversion-24/27/5. "
         "Its decimal-command-17 "
         "producer copies build-context qword 6 into the command payload and emits "
         "header 0x40011 at 0x141A90119. The command-16 header 0x00020010 is "
@@ -4265,6 +4268,9 @@ FUNCTIONS = {
         "FgAnimData+0x118/+0x120 before the joint-blend work. "
         "Both direct BuildCommandSegments calls forward FgAnimData+0x08 as the "
         "builder flags byte stored in CreateContext+0x11. "
+        "Local role-B Mazur runtime distinguishes its 58-word mode-2/source-zero "
+        "command-14 import from a later complete mode-1/flags-3/source-one main "
+        "DAG in the same final Async job. "
         "When job flags contain 0x20, resolves retained owner at +0x1A8/+0x1B0 "
         "and dispatches owner vtable+0x410 then +0x418.",
     ),

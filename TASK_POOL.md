@@ -4723,7 +4723,16 @@ post-blend/IK and the later Async import. Next `acu` exam remains read-only and
 labels the same bounded rows `stage=perform|async`. Require the Async control
 row above plus a structural Perform `source=1`; Perform source zero rejects the
 steady Hands producer, while silence rejects the wrapper. Do not enable B725 or
-any other pose write from this census alone.
+any other pose write from this census alone. Result: `acu` captured three
+structural Perform main variants (61/54/49 commands, all mode1/flags3/source1),
+the mode2/source0 control, and an Async final main 49-command
+mode1/flags3/source1 list. This closes the exact post-WeaponIK authored Hands
+DAG. Build `acv` enables only final-Async mode1/flags3 mutation: after every
+stock cmd23 and immediately before the sole cmd3, append one exact one-sample
+`B725EA01` cmd6 and mode1/weight1 cmd7 into lane0, then preserve exact
+`3,4,15,16,17,24(248B1AAE),27,5`. Require one injected marker plus a stable
+two-hand Mazur hold. Marker with no visual correction rejects the donor/final
+owner; no marker is packaging. P99/Perform/mode2/roleA/actions remain stock.
 
 ## Rule
 

@@ -2461,13 +2461,12 @@ constexpr bool kEnableLegacyNadineDrawnP99LocalTransformCensus = false;
 // only this exact local legacy-Nadine action through Apply's native zero-weight
 // no-op boundary while preserving action/NewIkWeapon/overlay lifecycle.
 constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
-// acs proved the exact direct/Chloe idle-hands roots but rejected the command
-// list before mutation. The old full-list grammar came from screen-one Nadine;
-// group-zero command flags are copied independently from FgAnimData+0x08, so
-// that grammar cannot be assumed for local screen zero. Keep the repair off and
-// capture only the exact local, steady Mazur list selected by the proven root.
-constexpr bool kEnableLegacyNadineMazurSteadyHandsNpcRepair = false;
-constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = true;
+// acu joined the exact local source clip to the complete final Async mode-1 /
+// flags-3 group-zero DAG. Append the shipped retarget-compatible B725 Mazur arm
+// partial only after every stock pose/HandFix command and immediately before the
+// sole cmd3. Perform, the mode-2 import, P99 and transitions remain stock.
+constexpr bool kEnableLegacyNadineMazurSteadyHandsNpcRepair = true;
+constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 // The Mazur strap child owns a complete authored state-zero pose, but its
 // dynamic endpoint lookup fails because legacy Nadine has no strap2..strap14
 // joints and hides the otherwise valid mesh. Reveal that exact published child
@@ -46041,6 +46040,10 @@ seh_inject_legacy_nadine_mazur_steady_hands_commands(
             *reinterpret_cast<void* const*>(
                 static_cast<const std::byte*>(create_context) + 0x08) !=
                 epoch.target_skeleton ||
+            *reinterpret_cast<const std::uint8_t*>(
+                static_cast<const std::byte*>(create_context) + 0x10) != 1 ||
+            *reinterpret_cast<const std::uint8_t*>(
+                static_cast<const std::byte*>(create_context) + 0x11) != 3 ||
             readable_bytes(command_record) < 0x20) {
             return LegacyNadineMazurSteadyHandsInjection::kIgnored;
         }
@@ -46248,6 +46251,10 @@ std::uint64_t __fastcall hooked_create_anim_cmds_for_object_for_nadine_mazur(
     if constexpr (!kEnableLegacyNadineMazurSteadyHandsNpcRepair) {
         return result;
     }
+    if (g_legacy_nadine_mazur_steady_hands_command_stage !=
+        LegacyNadineMazurSteadyHandsCommandStage::kAsync) {
+        return result;
+    }
 
     std::uint32_t donor_lane = 0;
     const LegacyNadineMazurSteadyHandsInjection injection =
@@ -46404,20 +46411,26 @@ bool install_legacy_nadine_mazur_steady_hands_npc_repair() {
             reinterpret_cast<AnimManagerCreateAnimCmdsForObjectFunction>(
                 create_commands_trampoline);
     }
-    void* const perform_trampoline = create_commands_trampoline != nullptr
-        ? install_fire_gate_detour(
-              kAnimManagerPerformAnimBlendRva,
-              kPerformPrologue.data(), kPerformPrologue.size(),
-              reinterpret_cast<void*>(
-                  &hooked_perform_anim_blend_for_nadine_mazur),
-              "legacy-Nadine Mazur normal Perform animation blend")
-        : nullptr;
-    if (perform_trampoline != nullptr) {
-        g_original_perform_anim_blend_for_nadine_mazur =
-            reinterpret_cast<AnimManagerPerformAnimBlendFunction>(
-                perform_trampoline);
+    bool perform_ready = true;
+    if constexpr (kEnableLegacyNadineMazurSteadyHandsCommandCensus) {
+        void* const perform_trampoline =
+            create_commands_trampoline != nullptr
+            ? install_fire_gate_detour(
+                  kAnimManagerPerformAnimBlendRva,
+                  kPerformPrologue.data(), kPerformPrologue.size(),
+                  reinterpret_cast<void*>(
+                      &hooked_perform_anim_blend_for_nadine_mazur),
+                  "legacy-Nadine Mazur normal Perform animation blend")
+            : nullptr;
+        perform_ready = perform_trampoline != nullptr;
+        if (perform_ready) {
+            g_original_perform_anim_blend_for_nadine_mazur =
+                reinterpret_cast<AnimManagerPerformAnimBlendFunction>(
+                    perform_trampoline);
+        }
     }
-    void* const async_trampoline = perform_trampoline != nullptr
+    void* const async_trampoline =
+        create_commands_trampoline != nullptr && perform_ready
         ? install_fire_gate_detour(
               kAnimManagerAsyncObjectUpdateJointBlendJobRva,
               kAsyncPrologue.data(), kAsyncPrologue.size(),
@@ -46432,7 +46445,7 @@ bool install_legacy_nadine_mazur_steady_hands_npc_repair() {
                     async_trampoline);
     }
     const bool installed = create_commands_trampoline != nullptr &&
-        perform_trampoline != nullptr &&
+        perform_ready &&
         async_trampoline != nullptr;
     g_legacy_nadine_mazur_steady_hands_hooks_ready.store(
         installed, std::memory_order_release);
@@ -58636,8 +58649,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-14acu "
-        "(read-only Perform/Async Mazur steady Hands command census)");
+        "TLL co-op runtime init 2026-08-14acv "
+        "(final Async mode-1 Mazur authored arm-partial repair)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

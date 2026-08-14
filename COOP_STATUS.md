@@ -24260,3 +24260,60 @@ row with `source=1`. A Perform source-one main DAG selects the only boundary
 where the B725 experiment could be staged before stock WeaponIK and the proven
 Async import. Perform source zero rejects that candidate. Silence rejects the
 Perform wrapper/epoch. No repair is authorized by this census alone.
+
+### 2026-08-14 RUNTIME CONFIRMED (`acu`) / STATIC IMPLEMENTED (`acv`): final Async main DAG owns an exact live Hands leaf
+
+Fresh `acu` PIDs were role A 14188 and role B 200. Both three-hook census
+packages installed and both processes remained responsive. After the exact
+stationary Mazur admission, role B emitted all written discriminators:
+
+- Perform main group zero: `mode=1 flags=0x3`, structural lists of 338/298/268
+  words (61/54/49 commands), each with `source=1`;
+- Async control: the exact 58-word mode-2/source-zero command-14 import from
+  `act`;
+- Async final main group zero: `mode=1 flags=0x3`, 268 words/49 commands,
+  structural and `source=1` (log line 78634).
+
+All observed main lists have one block and one finalizer and share the exact
+terminal sequence `... 23(98FBC8FE), ..., 23(BCA80631), 3,4,15,16,17,`
+`24(248B1AAE),27,5`; their dynamic prefix differs only by ordinary animation,
+blend, copy and plugin branches. Thus **Hperform-hands-live** is confirmed,
+**Hperform-hands-absent** is rejected, and—critically—the same authored Hands
+leaf is rebuilt once more in final Async after Player post-blend/WeaponIK. The
+mode-2 import remains a separate source-zero pass rather than an alternative
+source owner.
+
+`acv` implements the first mutation whose complete live topology is now joined
+at runtime. It retains every previous owner/content/safety guard and adds three
+independent exact discriminators: TLS stage must be final Async, CreateContext
+must be `mode=1/flags=3`, and the complete group-zero list must contain one exact
+active Hands clip plus the proven single-block/single-finalizer suffix. Perform
+and the mode-2 import are pass-through; the read-only census is compiled out.
+
+Immediately before the sole command 3, after all stock animation/blend/copy and
+command-23 HandFix callbacks, `acv` appends the exact shipped one-sample
+`B725EA01 thug-04-lg-aggr-idle-high--part` command 6 in one newly allocated
+lane, then stock command 7 `{left=0,right=donor,out=0,mode=1,weight=1}`. Command
+2's actual lane count and the record word count are advanced only after capacity
+checks. The unchanged suffix then finalizes, runs joint conversion and exports
+local JointParams through command 27. The donor's authored ValidBits cover only
+the NPC arm/palm/hand-prop range; the shipped npc-normal -> Nadine retarget maps
+it to C39 joints 19..30, so body, spine, head, legs and fingers retain lane zero.
+
+Evidence quota is now four independent kinds: raw selector/PAK donor and
+ValidBits; shipped skeleton-retarget row; static generator/evaluator/scheduler
+dataflow; and the exact local Perform/Async runtime command inventories. The
+remaining competitors are falsifiable. **Hauthored-partial sufficient** predicts
+a stable two-arm high-rifle hold after the single injection. **Hwrong donor
+semantics** predicts an injection marker but a different/bad arm pose.
+**Hlater non-command owner** predicts a marker with unchanged pixels, despite
+the insertion occurring after all observed pose plugins and before finalization.
+
+Falsifiable `acv` prediction: role B draws Mazur and stands motionless without
+ADS for at least one second; the log must pass `dwell` and emit exactly one
+`NADINE-MAZUR-STEADY-HANDS injected ... donor=0xb725ea01` marker with a valid
+lane and samples `nonzero/1`. Nadine's arms must change to a coherent two-hand
+high-rifle hold and remain stable. P99, role A, ADS, movement, reload, holster,
+back attachment and sling remain stock. No marker means packaging failure;
+marker plus unchanged or malformed pixels rejects this donor/final-owner repair
+and forbids guard widening.
