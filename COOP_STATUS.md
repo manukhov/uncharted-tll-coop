@@ -24317,3 +24317,61 @@ high-rifle hold and remain stable. P99, role A, ADS, movement, reload, holster,
 back attachment and sling remain stock. No marker means packaging failure;
 marker plus unchanged or malformed pixels rejects this donor/final-owner repair
 and forbids guard widening.
+
+### 2026-08-14 RUNTIME REJECTED packaging (`acv`) / STATIC corrected exam (`acw`): final-list liveness must not depend on presentation-Player identity
+
+The `acv` exam used fresh role-A PID 20108 and role-B PID 20072. Both exact
+Create/Async hooks installed and both processes remained responsive. Role B
+advanced through `admission=owner` and `admission=dwell`, then emitted one
+`admission=hands-root`; there were zero `injected` and zero command-list reject
+markers. The user's observed arms again changed from the native draw hold to the
+broken steady hold. Because no command word was changed, this rejects only the
+`acv` admission packaging and does not test B725 or the final Async owner.
+
+The failed conjunction is now explained without weakening weapon or command
+scope. Runtime object evidence shows three different exact retained Player0
+addresses (`0x10E0A23280`, `0x10E0A22D80`, `0x10E0A22080`) during the same
+stationary Mazur WeaponOut interval, while every sample independently passes the
+Player/FG generation, legacy ED25/C39, weapon-parent and art guards. The generic
+dwell helper reset on `state.player != player`; this presentation-object address
+is therefore not a stable-idle invariant. Static lifetime analysis independently
+proves that the selected Player/FG and all clip pointers are consumed only inside
+the current synchronous Async invocation and are generation-validated again on
+every invocation. Anchoring the 350 ms dwell to session, exact art and body
+position/orientation preserves its behavioral purpose without retaining a stale
+object.
+
+The fragile live-root traversal is also redundant at the final boundary. Raw
+assets plus `AnimSnapshotNodeAnimation_InitializeFromDescriptor 0x141917D00`
+already exhaust the steady Hands source to two canonical ArtItemAnim objects:
+direct Player `27E57F43/FD6DBE03/7FB80CC8` or campaign-Chloe
+`6C2B2396/4B0F5DE3/7D11D4FD`. `acu` independently proved that the complete final
+Async mode-1/flags-3 list contains exactly one of these pointers. Command 6 is
+the first place where this liveness is consumed; requiring exactly one canonical
+pointer in the exact one-block list is stronger than requiring a one-track
+snapshot topology that can turn over before the same command list is built.
+
+`acw` therefore keeps the direct-root result when available, otherwise resolves
+both exhaustive canonical clips and lets the synchronous final list select
+exactly one. It reports the pointer actually observed, not an assumed source id.
+The existing exact role-B Player0/Mazur/WeaponOut/grenade-idle/no-cover/no-input/
+zero-movement scope, final Async TLS stage, mode1/flags3, group zero, one source,
+single block/finalizer, exact suffix, capacity and B725 `/1` checks are unchanged.
+P99, role A, ADS, movement, reload, holster and the mode-2 import remain stock.
+
+Evidence quota is four independent kinds: exact live object/generation runtime
+rows; static synchronous epoch lifetime; raw two-materialization asset topology;
+and the `acu` final-list source-one inventory. Competing hypotheses stay
+falsifiable. **Hpointer-dwell packaging** predicts `acw` reaches the list and
+injects once. **Hsource-really-absent** predicts a bounded source rejection or no
+marker and forbids further admission widening. **Hdonor/final-owner wrong** is
+still untested and predicts an injection marker with unchanged or malformed
+arms.
+
+Falsifiable `acw` prediction: stationary role-B Mazur reaches 350 ms despite
+retained-Player address turnover, then emits exactly one
+`NADINE-MAZUR-STEADY-HANDS injected ... resolved=7fb80cc8|7d11d4fd`
+`donor=b725ea01 samples=nonzero/1` marker. Only then must the broken steady pose
+be replaced by a stable two-arm high-rifle hold. Marker plus unchanged/bad arms
+rejects the donor and final-owner hypothesis; no marker remains packaging and
+does not authorize a broader mutation.

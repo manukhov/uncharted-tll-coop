@@ -4733,6 +4733,14 @@ stock cmd23 and immediately before the sole cmd3, append one exact one-sample
 `3,4,15,16,17,24(248B1AAE),27,5`. Require one injected marker plus a stable
 two-hand Mazur hold. Marker with no visual correction rejects the donor/final
 owner; no marker is packaging. P99/Perform/mode2/roleA/actions remain stock.
+Result: `acv` installed but emitted only owner/dwell/hands-root and zero injected
+rows; the user saw the unchanged native draw-to-broken-steady transition. Three
+exact retained Player0 addresses appeared inside that one stationary WeaponOut,
+so pointer-keyed dwell was not a valid presentation invariant. Next `acw` keeps
+the same 350 ms session/art/body-pose anchor, validates the current generation
+synchronously, and selects exactly one canonical `7FB80CC8` or `7D11D4FD` clip
+directly from the exact final Async list. Require one observed-source injection
+marker and a stable two-arm hold; marker plus bad/unchanged pixels rejects B725.
 
 ## Rule
 

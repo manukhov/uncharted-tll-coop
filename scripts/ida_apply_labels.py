@@ -1778,6 +1778,9 @@ FUNCTIONS = {
         "Local role-B Mazur runtime confirms both Perform and final Async normal "
         "mode-1/flags-3 lists carry one exact steady Hands clip and terminate in "
         "cmd3/4/15/16/17/joint-conversion-24/27/5. "
+        "The final command list, not a transient one-track snapshot topology, "
+        "is the synchronous liveness discriminator for the canonical Player or "
+        "Chloe Hands ArtItemAnim pointer. "
         "Its decimal-command-17 "
         "producer copies build-context qword 6 into the command payload and emits "
         "header 0x40011 at 0x141A90119. The command-16 header 0x00020010 is "
@@ -4271,6 +4274,9 @@ FUNCTIONS = {
         "Local role-B Mazur runtime distinguishes its 58-word mode-2/source-zero "
         "command-14 import from a later complete mode-1/flags-3/source-one main "
         "DAG in the same final Async job. "
+        "Retained presentation-Player addresses may turn over before this job; "
+        "each invocation revalidates the current Player/Fg generation and the "
+        "command list itself owns canonical clip liveness. "
         "When job flags contain 0x20, resolves retained owner at +0x1A8/+0x1B0 "
         "and dispatches owner vtable+0x410 then +0x418.",
     ),
