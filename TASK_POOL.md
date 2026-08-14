@@ -299,7 +299,7 @@
       already-live Hands snapshot can remain cached while base/run/breathing
       leaves rebuild. Delete the repair and do not interpret this as a measured
       complete Player-bundle replacement.
-- [ ] Resume statically at the first atomic command owner of Player joints
+- [x] Resume statically at the first atomic command owner of Player joints
       `21..32` after `AnimStateSnapshot_SnapshotAnimState 0x1418B24F0`.
       Close the command-6/7 merge and same-frame weights for
       `custom-weapon-part`, `custom-weapon-part-with-feather`, the adjacent
@@ -308,6 +308,23 @@
       Feather suppression or ProcessWeapon local correction. Any next runtime
       proposal must first distinguish an authored target/input error from a
       later pose-command ownership error with three independent evidence types.
+- [x] Reject final command-6 pointer substitution before runtime. P99 terminal
+      `B8FC6B25` has eighteen authored predecessors and command 6 has already
+      discarded the source/layer identity, so it cannot prove D350 provenance.
+      Mazur's exact `56C57AD2 + 283966ED` mode-1/0.7 pair is uniquely owned by
+      transition state `11EE475B`; stable WeaponOut samples instead have empty
+      `s_no-weapon 3889CC0E`, so the proposed 350 ms steady repair statically
+      predicts zero eligible pairs. Top-level evaluator command 24 is an opaque
+      joint-plugin writer, not a harmless packed-quaternion opcode. Remove the
+      speculative implementation and do not launch it.
+- [ ] Trace the persistent steady grip owner instead of another clip swap.
+      Close the exact construction and consumers of the left/right targets in
+      `PlayerWeaponIKAction_Update -> WeaponIKFeather_Apply 0x1418F2700`, plus
+      the writer/clear lifecycle of Player `+0x1CC/+0x1D0/+0x1D4`, for both P99
+      and Mazur. Compare the local and retained Nadine semantic inputs before
+      the solver and final command DAG. Do not revive blanket Feather
+      suppression: the next mutation requires a concrete differing field or
+      locator and three independent evidence classes.
 - [ ] Do not promote `abt` to an always-on general repair until independent
       melee/flinch/interact overlays are positively excluded. Weapon state 2 and
       grenade state 0 close their own action lifetimes but do not prove that

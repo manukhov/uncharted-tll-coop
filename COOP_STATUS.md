@@ -23872,3 +23872,81 @@ links successfully. The single `ida/tll.i64` now names
 `AnimStateInstance_ResolveSnapshotClipTiming 0x1418B32E0`; the headless label
 pass reports `1738 functions, 60 data names` and
 `save_database returned True`, and the restarted MCP resolves the saved name.
+
+### 2026-08-14 STATIC / REJECTED: final command-6 clip substitution is not a steady grip repair
+
+The command path after the rejected `acm` resolver is now closed far enough to
+reject another runtime proposal without launching the game. Direct animation
+nodes resolve their node-local clip at `AnimSnapshotNodeAnimation_ResolveClip
+0x141918070` and emit command 6 at
+`AnimSnapshotNodeAnimation_GenerateAnimCommands 0x1419182E0`. Blend nodes emit
+command 7 at `AnimSnapshotNodeBlend_GenerateAnimCommands 0x14191E5F0`; the
+terminal layer merge is the literal `left=0,right=1,out=0,mode=1,weight=1`
+command at `0x14189EC8C..0x14189ECD6`. `AnimCmdEvaluator_ApplyBlend
+0x14217CF90` unions ValidBits and makes the later ready layer the owner of its
+right-only and jointly valid rows. `AnimControl_BeginStepInternal
+0x141A78A60` stable-sorts the 0x20-byte descriptors by `+0x10`, so insertion
+order is not a valid ownership invariant.
+
+The steady shipped Base and Hands leaves are already Player-compatible. Base
+`idle 41C84248` reaches direct Player clips `41C84248/25CC08FD` with a broad
+mask including Player joints `21..28`; steady Hands `idle-hands 7FB80CC8`
+and run competitor `77A8107C` are direct Player clips owning `29..32`.
+Face has no intersection with `21..32`. The Breathing layer can carry those
+ValidBits, but its Chloe target `C7FB376F` is a neutral additive pose. An
+exhaustive raw-DC owner walk finds HandFix nodes only under reload, hang-aim and
+gesture states, not steady Base/Hands/Breathing/WeaponPartial; when present,
+HandFix changes shoulder/elbow/wrist chains `21..26`, not distal hands
+`29..32`.
+
+Two tempting final-command repairs are therefore **REJECTED**:
+
+- **P99 `B8FC6B25 -> D350A452`: REJECTED for lost provenance.** The
+  campaign-Chloe player-mesh table has eighteen distinct predecessors to the
+  same resolved `B8FC6B25` clip, including `D350A452`, `0A2F8976` and sixteen
+  other weapon-hand sources. Command 6 retains only the resolved clip pointer,
+  output lane and phase; it does not retain the node source id, overlay row,
+  layer or state. Lane-0/cmd3 liveness therefore proves only a live B8 pose,
+  not a P99/D350 origin. The exact discriminator exists before information loss
+  at node `+0x40/+0x44`, not in the final evaluator list. Runtime has already
+  shown the P99 outer resolver selecting `D350A452 -> D350A452`, so the visible
+  local-only fault remains downstream and no B8 pointer replacement is safe.
+- **Mazur `E117618A -> 56C57AD2`: REJECTED as a steady-state repair.** The
+  exact authored atomic pair is real: `56C57AD2[29..32]` plus
+  `283966ED[21..28]`, blended with mode 1 and weight 0.7 by the unique root
+  `anim-player.bin+0x64518`, state
+  `custom-weapon-part-with-feather 11EE475B`. A provenance parser can identify
+  that pair without confusing it with the unrelated `47C0A266` branch. But
+  this root is transition/request-time content. Durable stable WeaponOut
+  samples show WeaponPartial `s_no-weapon 3889CC0E` with an empty root after
+  the custom state disappears. The proposed 350 ms steady admission therefore
+  excludes the only proven source of the pair and statically predicts zero
+  approved commands. Moving the mutation into the transition would change a
+  different lifecycle and is not justified by the persistent-idle symptom.
+
+The evaluator audit also corrects a command-schema conflation. Top-level
+command 24 in `ProcessAnimCmdListSegment 0x141AB97C0` dispatches the job's
+plugin callback, ultimately including `sub_1406CD220`, fallback
+`sub_141937D20` and joint-retarget matrix writers. It is not the unrelated
+packed-quaternion inner-program opcode 24 and cannot be treated as harmless
+after cmd3 publication. This independently invalidated the speculative final
+command repair. The entire implementation was removed before build or runtime;
+the game was not launched.
+
+Competing hypotheses are now sharper. **Houter resolver identity** and
+**Hfinal resolved-clip substitution** are rejected. **Hmissing authored steady
+Base/Hands clips** is disfavoured because their node-local Player clips and
+masks are exact. The surviving frontier is a persistent downstream semantic
+owner: first trace `PlayerWeaponIKAction_Update -> WeaponIKFeather_Apply
+0x1418F2700` target construction and the lifecycle of Player fields
+`+0x1CC/+0x1D0/+0x1D4`, then distinguish stable Player/Nadine inputs from a
+later pose-command or locator error. Prior blanket Feather suppression remains
+rejected; no scalar, arm, clip or command mutation is runtime-ready.
+
+The canonical label pass now names the HandFix constructor, initializer,
+command generator and eliding factory at `0x141ABE820/0x141ABEB80/
+0x141ABEC00/0x141ABEEA0`, and corrects the registry search/order comments.
+Headless application reports `1742 functions, 60 data names` and
+`save_database returned True`; restarted MCP readback resolves all four names
+and the command generator's vtable/data xrefs. The mutation-free Release DLL
+also compiles and links successfully.

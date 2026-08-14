@@ -1417,8 +1417,9 @@ FUNCTIONS = {
     ),
     0x141A78A60: (
         "AnimControl_BeginStepInternal",
-        "Exact source assertion identifies AnimControl::BeginStepInternal. Sorts "
-        "the active 0x20-byte layer descriptors and dispatches object type 2 to "
+        "Exact source assertion identifies AnimControl::BeginStepInternal. "
+        "Stable-sorts the complete 0x20-byte layer-descriptor array in unsigned "
+        "ascending order by descriptor+0x10, then dispatches object type 2 to "
         "AnimStateLayer_Step before released layers are deactivated.",
     ),
     0x14189B7B0: (
@@ -1829,7 +1830,7 @@ FUNCTIONS = {
     ),
     0x14172B3E0: (
         "AnimControl_FindActiveType2LayerById",
-        "Binary-scans the AnimControl registry at +0x28/+0x30 for an enabled "
+        "Linearly scans the AnimControl registry at +0x28/+0x30 for an enabled "
         "32-byte entry with the requested layer id, then returns its layer only "
         "when layer+0x8 is exact type 2. PlayerWeaponAnimControl uses it for "
         "WeaponPartial 0xE2B990B9 at 0x14108C16E.",
@@ -3412,6 +3413,27 @@ FUNCTIONS = {
         "resolves the left and right wrist chains and invokes SolveArmIk for the "
         "two arms. Its inputs are plugin data plus mutable/const JointParams "
         "lanes; it has no Player or camera lookup.",
+    ),
+    0x141ABE820: (
+        "AnimSnapshotNodeHandFixIk_Construct",
+        "Constructs the RTTI anim-node-hand-fix-ik runtime node, its child link "
+        "and node-local plugin data used by the command-23 HandFix callback.",
+    ),
+    0x141ABEB80: (
+        "AnimSnapshotNodeHandFixIk_Initialize",
+        "Initializes the HandFix snapshot node and its authored left/right arm "
+        "JointSets before command generation.",
+    ),
+    0x141ABEC00: (
+        "AnimSnapshotNodeHandFixIk_GenerateAnimCommands",
+        "Generates the child pose commands and appends command 23 with plugin id "
+        "0x98FBC8FE only when the node's authored arm-enable word is nonzero.",
+    ),
+    0x141ABEEA0: (
+        "AnimSnapshotNodeHandFixIk_CreateOrElide",
+        "Factory for raw anim-node-hand-fix-ik (StringId 0x612A780B). Evaluates "
+        "hand-fix-ik-func 0x1DD77161 and returns the child directly when the "
+        "authored arm mask is zero; otherwise materializes the HandFix node.",
     ),
     0x1418F0B60: (
         "SolveArmIk",
