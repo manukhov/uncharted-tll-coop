@@ -4776,6 +4776,16 @@ Next `ada` keeps the same exact mutation and turns the bounded `acy` owner/list
 census on simultaneously. Do not widen any gate: require either one injected
 marker plus a corrected two-arm hold, or a detailed owner/list row that selects
 the current packaging failure with zero writes.
+Result: `ada` PIDs 21812/20616 finally emitted the exact injected marker at log
+80842 (`7D11D4FD -> B725EA01`, lane4, samples337/1) in the audited final Async
+source-one list. The user still saw the arms break after the first roughly two
+correct Draw seconds, with later Draws broken immediately. B725/final terminal
+partial is therefore RUNTIME REJECTED and compiled off in `adb`; do not retry
+or move it. The current static frontier is the exact Draw-completion boundary:
+Get action removal -> PlayerPlayWeaponOverlayAction enqueue -> state2 ->
+RefreshWeaponPartialAndIK. Compare its payload/requested custom-part states and
+final command owner against the initially correct state1 interval before any
+new mutation or runtime launch.
 
 ## Rule
 

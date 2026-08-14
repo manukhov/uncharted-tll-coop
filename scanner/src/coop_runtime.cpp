@@ -2463,7 +2463,7 @@ constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
 // acx still stopped at the compound owner gate before any list mutation. Keep
 // B725 disabled and census the already-read Player/FG/controller/art/idle fields
 // plus the bounded Perform/Async list until that exact prerequisite is closed.
-constexpr bool kEnableLegacyNadineMazurSteadyHandsNpcRepair = true;
+constexpr bool kEnableLegacyNadineMazurSteadyHandsNpcRepair = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = true;
 // The Mazur strap child owns a complete authored state-zero pose, but its
 // dynamic endpoint lookup fails because legacy Nadine has no strap2..strap14
@@ -58809,8 +58809,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-14ada "
-        "(exact Mazur repair with bounded owner/list diagnostics)");
+        "TLL co-op runtime init 2026-08-14adb "
+        "(B725 rejected; read-only Mazur transition analysis)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

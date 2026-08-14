@@ -24531,3 +24531,41 @@ grenade/weapon/art/idle gate and any reached final command list. Falsifiable
 prediction: a full pass produces `injected` plus the two-arm pose; otherwise
 the latest `NADINE-MAZUR-STEADY-HANDS-OWNER` row selects the packaging gate and
 there must be no visual change.
+
+### 2026-08-14 RUNTIME REJECTED (`ada`): B725 final-Async override is visually insufficient
+
+The decisive `ada` exam used role-A PID 21812 and role-B PID 20616. Both hooks
+installed and remained responsive. The user's independent timing observation
+was exact and repeatable: the first Draw held Mazur correctly for roughly two
+seconds, then the arms broke when the persistent hold settled; later Draws
+started broken immediately.
+
+Unlike every earlier package, `ada` exercised the mutation. Role B first logged
+the expected Draw controller rows `slot=-2,state=1` and `slot=1,state=1`, then
+passed the complete state-2 owner/art/idle scope. The final Async normal main
+list was `mode=1 flags=3 structural=1 source=1` with the exact audited suffix,
+and log line 80842 reported:
+
+`NADINE-MAZUR-STEADY-HANDS injected source=0x7fb80cc8`
+` resolved=0x7d11d4fd donor=0xb725ea01 group=0 lane=4 samples=337/1`.
+
+The marker occurred at the same Draw-to-persistent boundary after which the
+user saw the broken arms. Therefore the shipped NPC high-part donor was truly
+inserted into the final local-Nadine Async DAG and was visually insufficient.
+This **RUNTIME REJECTS** B725 sufficiency and the whole strategy of appending it
+as a weight-one terminal partial. Do not retry B725, widen its guards, move the
+same donor to Perform, or interpret another marker as progress. Build `adb`
+compiles the mutation off and retains only bounded diagnostics.
+
+The timing now promotes a different static frontier. `PlayerWeaponController_ApplyState
+0x1410AAFB0` leaves Draw only after the Get action completes, then removes it,
+equips the slot, constructs/enqueues `PlayerPlayWeaponOverlayAction`, writes
+`WeaponOut=2`, and invokes `RefreshWeaponPartialAndIK`. The correct first seconds
+and the break align with that exact persistent-overlay publication; subsequent
+immediate failure is compatible with cached persistent state. Competing causes
+are: the persistent overlay replaces the correct Draw-time custom Mazur pair;
+its state-2 command bundle is itself incompatible with legacy Nadine; or a
+state-2-only later writer consumes the new cached targets. The B725 result
+rejects a missing generic two-arm partial as a sufficient explanation. No new
+runtime is authorized until the exact Draw-time and persistent action payloads,
+requested states and first differing final command owner are closed statically.
