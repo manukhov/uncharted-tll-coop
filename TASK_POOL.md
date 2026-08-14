@@ -4757,6 +4757,18 @@ read Player/FG/skeleton, controller slot/state, grenade, weapon art/parent,
 expected-FG and idle/action/movement/cover fields. Use it once to choose
 controller vs presentation owner vs idle gate vs list placement. Do not infer
 anything from pixels and do not re-enable B725 before the exact row.
+Result: the valid repeated `acy` exam used PIDs 14216/16628. Role B showed the
+expected transient controller rows through Draw, then necessarily passed the
+full exact owner/art/idle scope and emitted the final Async normal main list
+with `mode=1 flags=3 structural=1 source=1` and the closed
+`3,4,15,16,17,24(248B1AAE),27,5` suffix. The user saw the stock-broken pose, as
+required by the read-only build. This rejects controller/owner/idle packaging
+as persistent blockers and proves exact final-list liveness. Build `acz`
+enables only the already-audited B725 insertion at that final Async list and
+turns the census off. Require one injected marker and a stable two-arm Mazur
+hold; marker plus unchanged pixels rejects donor/final-owner sufficiency, while
+no marker must have a bounded rejection reason. P99, role A, ADS, transitions,
+holster and auxiliary lists remain stock.
 
 ## Rule
 

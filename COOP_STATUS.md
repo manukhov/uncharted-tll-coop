@@ -24462,3 +24462,51 @@ Falsifiable `acy` prediction: one stationary role-B Mazur action must emit a
 raw controller/art/idle fields, or progress to the final Async source-one list.
 That single discriminator selects one hypothesis above; silence rejects the
 selector/owner reach itself. Visual appearance is not an outcome of this exam.
+
+### 2026-08-14 RUNTIME CONFIRMED (`acy`) / STATIC IMPLEMENTED (`acz`): exact owner and final Async source both pass
+
+The first `acy` launch was invalid because both game processes had already
+exited and the log had stopped at role assignment. The repeated exam used fresh
+role-A PID 14216 and role-B PID 16628; both remained responsive and the log was
+live during the user action. As expected for the read-only build, the user saw
+the unchanged broken Mazur hold.
+
+The owner census first observed the authored controller transitions on role B:
+inactive `slot=-1,state=0`, Draw `slot=-2,state=1`, then
+`slot=1,state=1`. Those rows are transient failures, not the terminal result.
+The same synchronous epoch subsequently emitted complete command rows, which is
+possible only after `seh_select_legacy_nadine_mazur_steady_hands_epoch` has
+passed the full Player/FG/skeleton/controller/grenade/weapon/art/idle scope and
+published a valid TLS epoch. Thus the persistent controller, presentation-owner
+and idle-gate hypotheses are rejected as packaging blockers.
+
+The decisive final row is role-B log line 80019: Async `mode=1 flags=0x3`, 338
+words/61 commands, `structural=1 source=1`, one complete block and the exact
+terminal sequence `...23(98FBC8FE),...,23(BCA80631),3,4,15,16,17,`
+`24(248B1AAE),27,5`. Independent Perform variants and the expected Async
+mode-2/source-zero control were also present. This confirms that the exact
+canonical steady Hands clip is rebuilt in the final visible-palette DAG after
+all Player post-blend/WeaponIK work and that the already audited
+joint-conversion suffix is the live local variant. `Hlist-placement` is
+therefore confirmed positively rather than rejected: the source is present at
+the exact mutation seam.
+
+Build `acz` enables the already statically closed B725 experiment and disables
+the census. Every previous guard remains: role B/Player0/screen0, legacy
+ED25/C39 owner, exact same-owner Mazur in WeaponOut state 2, grenade state 0,
+zero movement/input/cover, final Async normal caller, group zero,
+mode1/flags3, exactly one canonical source command, one block/finalizer, spare
+lane capacity, and the exact post-finalizer suffix. Immediately before command
+3 it appends the shipped one-sample `B725EA01` NPC Mazur high-part command and a
+stock mode1/weight1 blend into lane zero. P99, role A, Perform, auxiliary
+mode2, ADS, Draw/Holster/reload/switch and all non-Mazur lists remain stock.
+
+The evidence quota is now four independent types: exact Mazur selector/PAK
+content and ValidBits; the shipped npc-normal -> Nadine retarget map; static
+Async builder/evaluator/joint-conversion dataflow; and current role-B runtime
+owner plus final-list liveness. Falsifiable `acz` prediction: stationary local
+Nadine with Mazur must emit exactly one
+`NADINE-MAZUR-STEADY-HANDS injected ... donor=0xb725ea01` marker and settle into
+a stable two-arm high-rifle hold. Marker plus unchanged/broken pixels rejects
+B725 sufficiency and this final owner. No marker must select a bounded
+admission/parser rejection; it does not authorize widening the guard.
