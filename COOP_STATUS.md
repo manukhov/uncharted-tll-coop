@@ -24694,3 +24694,65 @@ weight endpoint at the visual break. The `ade` exam is: fresh spawn, first Draw
 and wait through the break, Holster and wait at least three seconds, second Draw
 and wait through one second. No visible change is expected or counted as
 progress.
+
+### 2026-08-15 RUNTIME REJECTED (`ade`) / STATIC: no persistent WeaponPartial fade; the full-arm Draw pose is transient
+
+The exact read-only exam used role-A PID 14884 and role-B PID 20300. Both
+transition and post-weight-update hooks installed, both processes remained
+responsive, and the user reproduced the same visible symptom. The first Draw
+could look correct briefly and then break; after a complete Holster dwell the
+second Draw again settled into the broken hold.
+
+The fade trace **rejects a leaked or indefinitely blended WeaponPartial track**.
+After the required complete Holster wait, the repeated custom request began
+from exactly one `s_no-weapon 0x3889CC0E` track and changed `tracks=1 -> 2`, not
+the earlier unpruned `2 -> 3` topology. On the second Draw, the old
+`s_no-weapon` source was pruned by age 109 ms. The new instance began as
+`s_weapon-grab 0x28B0F93B`, was retasked in place to
+`s_weapon-draw 0x1313FB4E` by age 453 ms, then a fresh
+`s_weapon-out 0x7405AACB` destination was created. The final stock clear
+created `s_no-weapon`; `s_weapon-draw` was gone by age 453 ms,
+`s_weapon-out` by age 781 ms, and from age 891 through 6422 ms the layer had
+exactly one full-weight `s_no-weapon` track. There is no surviving source,
+destination or extra track that can explain the persistent broken pose.
+
+The first clear request was captured only at age zero because the user
+holstered immediately after observing the break. Consequently this run does
+not independently time the first visible break against every point of that
+roughly 0.8-second clear fade. It does prove the stronger persistent result:
+after the fully completed Holster there is no old WeaponPartial topology to
+carry into the second Draw. Together with `add`, this runtime-rejects
+`Hloop-current`, `Hmissing-request` and `Hleaked-fade-track`.
+
+Independent asset data exposes the important ownership change hidden behind
+those state ids. `anim-player.bin` binds `s_weapon-grab` at record `+0x1D4C0`
+to root `+0x5D048` / animation `0xAFB364A4`, `s_weapon-draw` at
+`+0x1D6C0` to root `+0x5BD68` / animation `0x66846123`, and
+`s_weapon-out` at `+0x1D440` to root `+0x69510` / animation
+`0xD350A452`. Exact actor77 PAK headers put all three on the eight-group Player
+skeleton `0xFD6DBE03`, but their authored masks differ decisively:
+`0xAFB364A4` and `0x66846123` both author Player joints 21--32 (both complete
+arm/hand lanes), while `0xD350A452` authors only joints 30 and 32 (right distal
+hand). The subsequent `s_no-weapon` root is empty. Thus the only content in the
+observed WeaponPartial lifecycle that can make the initial two-handed hold
+look correct is intentionally transient; stock then reduces it to a right-hand
+partial and finally removes it.
+
+The leading hypothesis is now **Htransient-full-arm-mask**: the complete
+grab/draw partial temporarily hides the incompatible persistent Base/Hands or
+state-2 pose, and the fault becomes visible when stock advances to
+right-hand-only `s_weapon-out` and clears WeaponPartial. Competing
+**Hpersistent-NewIkWeapon/overlay** remains open because
+`PlayerWeaponController_ApplyState 0x1410AAFB0` publishes state 2 and calls
+`PlayerWeaponController_RefreshWeaponPartialAndIK 0x1410AA7B0` at the same
+boundary; its `NewIkWeapon` payload or a steady Base/Hands consumer may select
+the bad owner. A multi-second source/destination fade and cached old track are
+rejected as persistent causes.
+
+No transition clip is authorized to be frozen or looped: `s_weapon-grab` and
+`s_weapon-draw` are authored action states, not proven steady donors. Before
+another runtime launch, close their phase/duration and transition semantics,
+trace the `NewIkWeapon` consumer/lifetime, and identify which steady
+Base/Hands/IK owner receives Player joints 21--32 after the clear. The next
+mutation must replace that exact steady owner atomically; it must not prolong a
+Draw action or fight the stock clear.

@@ -4827,6 +4827,29 @@ Hdestination-fade requires a destination reaching weight one; no exact weight
 endpoint selects the later-writer alternative. The build is read-only and must
 not visibly change the pose.
 
+`ade` runtime result: after the required complete Holster wait, the second Draw
+started from one `s_no-weapon` track (`1 -> 2`, not `2 -> 3`). Its
+`s_weapon-grab 28B0F93B` source was pruned by 109 ms, the same instance became
+`s_weapon-draw 1313FB4E`, and the final clear removed `s_weapon-draw` by
+453 ms and `s_weapon-out 7405AACB` by 781 ms. From 891 through 6422 ms only one
+full-weight `s_no-weapon 3889CC0E` track remained. This RUNTIME REJECTS a
+persistent source/destination fade, leaked track, loop-current reuse and a
+missing repeated request. The first clear was interrupted by the user's
+immediate Holster, so do not claim the first visible break is independently
+timed to a particular intermediate weight.
+
+The new STATIC frontier is the content ownership change at that exact boundary.
+`anim-player.bin` maps `s_weapon-grab` -> `AFB364A4` and `s_weapon-draw` ->
+`66846123`; exact Player PAK masks for both cover joints 21--32. It then maps
+`s_weapon-out` -> `D350A452`, whose mask covers only joints 30/32, before the
+empty `s_no-weapon` state. The leading explanation is that the transient
+full-arm Draw partial briefly masks the broken steady Base/Hands or state-2
+owner. Do not freeze/loop a Draw clip. Before any new launch, close the exact
+phase/duration/transition semantics of those roots, trace the `NewIkWeapon`
+payload published by `PlayerWeaponController_RefreshWeaponPartialAndIK
+0x1410AA7B0`, and identify the steady post-clear owner of Player joints 21--32.
+Only an atomic replacement of that proven steady owner can earn a visual test.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
