@@ -4667,7 +4667,7 @@ Player1-only, native-only, both (with same/different world transform), or
 neither/packaging. Run only this automatic two-sample exam; do not add pose,
 visibility, weapon or cull mutation until the producer is identified.
 
-**RUNTIME REJECTED packaging (`acp`/`acq`) / STATIC corrected next exam (`acr`, Mazur grip only):** the previous
+**RUNTIME REJECTED packaging (`acp`/`acq`/`acr`) / STATIC corrected next exam (`acs`, Mazur grip only):** the previous
 outer-resolver and resolved-cmd6 substitutions remain REJECTED. The new exact
 hypothesis appends shipped NPC Mazur high-part `B725EA01` as a stock cmd6 and
 mode-1/weight-1 cmd7 into a fresh group-zero lane immediately before cmd3 in
@@ -4690,15 +4690,19 @@ same direct root/source `7FB80CC8`. `acq` admitted only those two state aliases
 but again stopped at `admission=content` with zero mutation. Direct PAK headers
 then proved the deterministic false reject: exact B725 and the Player partial
 family have one sample (`ANIM+0x22 == 1`), while the code required at least two.
-`acr` accepts nonzero sample counts, takes the source clip from the exact active
+`acr` accepted nonzero sample counts and took the source clip from the exact active
 Hands root, requires the exact B725 donor to remain one-sample, and emits donor
-phase zero. It also splits `donor` from `hands-root` admission. Every gameplay,
-owner, list and final-Async guard is unchanged. The stock-only visual result is
-now explicit: Mazur is held correctly for about one second and breaks at
-Draw->WeaponOut; WeaponIK cannot be that delayed switch because vtable +0x308
-starts it before Draw state 1. Run exactly one `acr` exam and require a marker
-whose donor sample count is `/1`; no marker means packaging, while a marker plus
-unchanged pixels rejects the donor/final-owner hypothesis.
+phase zero. Fresh PID 17400 then passed `owner` and donor but stopped at exact
+`hands-root`, again with zero mutation; the user saw the stock pose hold for
+roughly two seconds and then break. Static closure shows that the shared
+`7FB80CC8` raw Hands descriptor has exactly two valid runtime materializations:
+direct Player `7FB/0/0 -> 27E57F43/FD6DBE03`, or Chloe-remapped
+`7D11D4FD/ED25C708/C39CA709 -> 6C2B2396/4B0F5DE3`. `acs` admits only those two
+complete tuples and logs the resolved id. Every gameplay, owner, donor, list and
+final-Async guard is unchanged. Run exactly one `acs` exam and require
+`injected ... resolved=0x7fb80cc8|0x7d11d4fd ... samples=nonzero/1`; marker plus
+unchanged pixels rejects the donor/final-owner hypothesis, while another
+`hands-root` stop rejects the exhaustive materialization model.
 
 ## Rule
 

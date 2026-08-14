@@ -1554,7 +1554,12 @@ FUNCTIONS = {
         "Animation-node virtual slot 9. Resolves anim-node-name-func and "
         "anim-node-flip-func, initializes source/resolved animation ids at "
         "+0x40/+0x44, resolver keys at +0x48/+0x4C, phase descriptor +0x58, "
-        "phase +0x60/+0x64, and flags +0x68/+0x69.",
+        "phase +0x60/+0x64, and flags +0x68/+0x69. If SnapshotContext+0 "
+        "carries a live overlay it preserves the direct descriptor id and "
+        "zero keys; otherwise it calls AnimSetRemap and stores the receiver "
+        "lookup keys. The shared default/idle Hands descriptor can therefore "
+        "materialize either direct Player 7FB80CC8/0/0 or Chloe "
+        "7D11D4FD/ED25C708/C39CA709.",
     ),
     0x141917A30: (
         "AnimSnapshotNodeLeaf_RefreshBreadth",

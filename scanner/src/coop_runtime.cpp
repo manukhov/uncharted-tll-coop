@@ -45479,8 +45479,11 @@ bool idle_arm_pose_dwell_ready(
 constexpr std::uint32_t kLegacyNadineHandsLayerId = 0x2EAA36BCu;
 constexpr std::uint32_t kLegacyNadineDefaultHandsStateId = 0xFEC2DB76u;
 constexpr std::uint32_t kLegacyNadineIdleHandsStateId = 0x7FB80CC8u;
+constexpr std::uint32_t kLegacyNadineChloeIdleHandsClipId = 0x7D11D4FDu;
 constexpr std::uint32_t kPlayerAnimationDatabaseId = 0x27E57F43u;
 constexpr std::uint32_t kPlayerAnimationSkeletonId = 0xFD6DBE03u;
+constexpr std::uint32_t kChloeAnimationDatabaseId = 0x6C2B2396u;
+constexpr std::uint32_t kChloeAnimationSkeletonId = 0x4B0F5DE3u;
 constexpr std::uint32_t kNpcNormalAnimationDatabaseId = 0x2628A5DCu;
 constexpr std::uint32_t kNpcNormalAnimationSkeletonId = 0xBD7EEE2Fu;
 constexpr std::uint32_t kNpcMazurHighPartClipId = 0xB725EA01u;
@@ -45517,6 +45520,7 @@ struct LegacyNadineMazurSteadyHandsEpoch {
     void* anim_control = nullptr;
     void* source_clip = nullptr;
     void* donor_clip = nullptr;
+    std::uint32_t source_resolved_id = 0;
     std::uint16_t source_frame_count = 0;
     std::uint16_t donor_frame_count = 0;
 };
@@ -45575,12 +45579,15 @@ void* seh_resolve_exact_animation_clip(
 }
 
 bool seh_resolve_exact_steady_idle_hands_root(
-    void* player, void** source_clip_out, void** anim_control_out) {
-    if (source_clip_out == nullptr || anim_control_out == nullptr) {
+    void* player, void** source_clip_out, void** anim_control_out,
+    std::uint32_t* source_resolved_id_out) {
+    if (source_clip_out == nullptr || anim_control_out == nullptr ||
+        source_resolved_id_out == nullptr) {
         return false;
     }
     *source_clip_out = nullptr;
     *anim_control_out = nullptr;
+    *source_resolved_id_out = 0;
     __try {
         if (player == nullptr ||
             readable_bytes(static_cast<std::byte*>(player) +
@@ -45669,21 +45676,47 @@ bool seh_resolve_exact_steady_idle_hands_root(
         auto* const source_clip_data = source_clip_readable
             ? *reinterpret_cast<std::byte* const*>(source_clip + 0x28)
             : nullptr;
+        const std::uint32_t source_id =
+            *reinterpret_cast<const std::uint32_t*>(node + 0x40);
+        const std::uint32_t resolved_id =
+            *reinterpret_cast<const std::uint32_t*>(node + 0x44);
+        const std::uint32_t lookup_key_0 =
+            *reinterpret_cast<const std::uint32_t*>(node + 0x48);
+        const std::uint32_t lookup_key_1 =
+            *reinterpret_cast<const std::uint32_t*>(node + 0x4C);
+        const std::uint32_t source_database_id = source_clip_readable
+            ? *reinterpret_cast<const std::uint32_t*>(source_clip + 0x40)
+            : 0;
+        const std::uint32_t source_skeleton_id =
+            source_clip_data != nullptr &&
+                    readable_bytes(source_clip_data) >= 0x24
+                ? *reinterpret_cast<const std::uint32_t*>(
+                      source_clip_data + 0x04)
+                : 0;
+        // The raw default/idle Hands states share one direct descriptor whose
+        // source is 7FB80CC8. Snapshot construction has exactly two stock
+        // materializations. A live overlay preserves the direct Player clip;
+        // a null overlay asks AnimSet for the campaign-Chloe row and stores the
+        // receiver ED25/C39 lookup keys while the resolved ArtItemAnim remains
+        // the authored Chloe 6C2/4B0 clip. Accept only those two complete
+        // tuples; do not infer the root family from the state name alone.
+        const bool direct_player =
+            resolved_id == kLegacyNadineIdleHandsStateId &&
+            lookup_key_0 == 0 && lookup_key_1 == 0 &&
+            source_database_id == kPlayerAnimationDatabaseId &&
+            source_skeleton_id == kPlayerAnimationSkeletonId;
+        const bool remapped_chloe =
+            resolved_id == kLegacyNadineChloeIdleHandsClipId &&
+            lookup_key_0 == kLegacyNadineTargetSkeletonArtId &&
+            lookup_key_1 == kLegacyNadineUnderlyingSkeletonId &&
+            source_database_id == kChloeAnimationDatabaseId &&
+            source_skeleton_id == kChloeAnimationSkeletonId;
         if (*reinterpret_cast<const std::uintptr_t*>(node) !=
                 g_module + kAnimSnapshotNodeAnimationVtableRva ||
-            *reinterpret_cast<const std::uint32_t*>(node + 0x40) !=
-                kLegacyNadineIdleHandsStateId ||
-            *reinterpret_cast<const std::uint32_t*>(node + 0x44) !=
-                kLegacyNadineIdleHandsStateId ||
-            *reinterpret_cast<const std::uint32_t*>(node + 0x48) != 0 ||
-            *reinterpret_cast<const std::uint32_t*>(node + 0x4C) != 0 ||
-            !source_clip_readable ||
-            *reinterpret_cast<const std::uint32_t*>(source_clip + 0x40) !=
-                kPlayerAnimationDatabaseId ||
+            source_id != kLegacyNadineIdleHandsStateId ||
+            (!direct_player && !remapped_chloe) || !source_clip_readable ||
             source_clip_data == nullptr ||
             readable_bytes(source_clip_data) < 0x24 ||
-            *reinterpret_cast<const std::uint32_t*>(source_clip_data + 0x04) !=
-                kPlayerAnimationSkeletonId ||
             *reinterpret_cast<const std::uint16_t*>(source_clip_data + 0x22) ==
                 0 ||
             *reinterpret_cast<const std::uint8_t*>(node + 0x69) != 0) {
@@ -45705,10 +45738,12 @@ bool seh_resolve_exact_steady_idle_hands_root(
         }
         *source_clip_out = source_clip;
         *anim_control_out = anim_control;
+        *source_resolved_id_out = resolved_id;
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *source_clip_out = nullptr;
         *anim_control_out = nullptr;
+        *source_resolved_id_out = 0;
         return false;
     }
 }
@@ -45745,8 +45780,10 @@ seh_select_legacy_nadine_mazur_steady_hands_epoch(
         }
         void* source_clip = nullptr;
         void* anim_control = nullptr;
+        std::uint32_t source_resolved_id = 0;
         if (!seh_resolve_exact_steady_idle_hands_root(
-                player, &source_clip, &anim_control) ||
+                player, &source_clip, &anim_control,
+                &source_resolved_id) ||
             source_clip == nullptr || source_clip == donor_clip) {
             return LegacyNadineMazurSteadyHandsAdmission::kHandsRoot;
         }
@@ -45778,6 +45815,7 @@ seh_select_legacy_nadine_mazur_steady_hands_epoch(
         output->anim_control = anim_control;
         output->source_clip = source_clip;
         output->donor_clip = donor_clip;
+        output->source_resolved_id = source_resolved_id;
         output->source_frame_count = source_frame_count;
         output->donor_frame_count = donor_frame_count;
         return LegacyNadineMazurSteadyHandsAdmission::kAdmitted;
@@ -46015,7 +46053,8 @@ std::uint64_t __fastcall hooked_create_anim_cmds_for_object_for_nadine_mazur(
         !injected_logged.exchange(true, std::memory_order_relaxed)) {
         std::ostringstream line;
         line << "NADINE-MAZUR-STEADY-HANDS injected source=0x" << std::hex
-             << kLegacyNadineIdleHandsStateId << " donor=0x"
+             << kLegacyNadineIdleHandsStateId << " resolved=0x"
+             << epoch.source_resolved_id << " donor=0x"
              << kNpcMazurHighPartClipId << std::dec
              << " group=0 lane=" << donor_lane
              << " samples=" << epoch.source_frame_count << "/"
@@ -58351,8 +58390,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-14acr "
-        "(one-sample Mazur NPC partial admitted at final Async repair)");
+        "TLL co-op runtime init 2026-08-14acs "
+        "(exact direct/Chloe steady Hands roots admitted for Mazur NPC partial)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

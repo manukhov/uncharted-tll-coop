@@ -24111,3 +24111,48 @@ two-arm high-rifle hold only on local Nadine. A marker with unchanged/bad arms
 rejects both B725 sufficiency and this final command owner; `admission=donor`,
 `admission=hands-root`, or a bounded list rejection selects packaging without
 authorizing any wider mutation.
+
+### 2026-08-14 RUNTIME REJECTED packaging (`acr`) / STATIC corrected exam (`acs`): steady Hands has two exact stock materializations
+
+The `acr` exam used role-A PID 7196 and role-B PID 17400. Both exact hooks
+installed. Role B passed `admission=owner`, then stopped at the newly separated
+`admission=hands-root` marker (log lines 77406/77447). There were zero `dwell`,
+`injected` and command-list rejection rows, so no command word was changed and
+the B725 donor/final-Async hypothesis was not exercised. The user again observed
+the stock timeline: Mazur is held correctly for roughly two seconds, then the
+persistent hold breaks both arms. This confirms the Draw -> steady-Hands timing,
+not a mutation effect.
+
+The exact false restriction is now closed by three independent evidence types.
+First, raw `anim-player.bin` records `default-hands FEC2DB76` and `idle-hands
+7FB80CC8` share the direct Animation descriptor at `+0x78838`, whose source is
+`7FB80CC8`, with no name or flip callback. Second,
+`AnimSnapshotNodeAnimation_InitializeFromDescriptor 0x141917D00` has exactly two
+materialization paths: a live `SnapshotContext+0` overlay preserves the direct
+id and zero lookup keys; a null overlay calls
+`AnimSetRemap_ResolveAnimationId 0x1417CA2E0` and stores its returned resolved id
+and receiver keys. Third, the exact campaign-Chloe `run` table row at
+`player-anim-settings-chloe.bin+0x2DB28` maps `7FB80CC8 -> 7D11D4FD`; historical
+live master rows independently observed that exact resolution for retained
+owner0/Mazur/WeaponOut, while case-6 captures establish the corresponding
+receiver/source tuple `ED25C708/C39CA709 -> 6C2B2396/4B0F5DE3`.
+
+Therefore the root is exhaustively one of two strict tuples, not an arbitrary
+clip: direct Player `{resolved=7FB80CC8, keys=0/0,
+ArtItemAnim=27E57F43/FD6DBE03}` or stock Chloe-remapped
+`{resolved=7D11D4FD, keys=ED25C708/C39CA709,
+ArtItemAnim=6C2B2396/4B0F5DE3}`. `acs` admits both complete tuples while retaining
+the exact source descriptor `7FB80CC8`, one layer/track/instance, nonzero sample
+count and flip zero. No gameplay, owner, weapon, dwell, list, suffix or donor
+guard is widened. The injected marker now prints the observed resolved id.
+
+Competing hypotheses remain separated. **Hdelayed WeaponIK** stays rejected
+because WeaponIK starts before Draw state 1. **Harbitrary Hands root** is
+rejected by the raw descriptor plus the two-way initializer branch. **Hdonor
+insufficient/final writer wrong** remains untested until injection occurs.
+Falsifiable `acs` prediction: stationary role-B Mazur must pass `hands-root` and
+`dwell`, then emit exactly one `injected source=0x7fb80cc8 resolved=0x7fb80cc8`
+or `resolved=0x7d11d4fd`, donor `0xb725ea01`, samples `nonzero/1`. A marker plus
+unchanged/broken arms rejects the donor/final-owner hypothesis; another
+`hands-root` stop rejects this exhaustive materialization model and forbids
+further guard widening.
