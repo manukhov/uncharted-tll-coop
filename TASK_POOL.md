@@ -4864,6 +4864,17 @@ Require either `NADINE-MAZUR-DRAW-ENDPOINT injected donor=0x66846123 phase=10`
 or a detailed `NADINE-MAZUR-STEADY-HANDS-OWNER` row that selects the exact
 failed scope field before any further mutation.
 
+`adg` selected that field: local Nadine remained `slot=1, Draw=1` through the
+visible arm break and then auto-holstered through state 5; it never reached
+WeaponOut 2, so the draw-endpoint donor still did not execute. Build `adh` is
+read-only and restores the previously confirmed WeaponPartial transition/fade
+trace while disabling the pose mutation. Next exam is one fresh Mazur Draw with
+all input released, followed through the engine's automatic holster. Determine
+whether `s_weapon-draw 1313FB4E` reaches/stalls at terminal phase, whether
+`s_weapon-out 7405AACB` or `s_no-weapon 3889CC0E` is requested before the
+cancel, or whether the draw request itself is lost. Do not admit controller
+state 1 for mutation until this exact lifecycle is closed.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

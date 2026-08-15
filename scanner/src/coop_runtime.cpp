@@ -2465,21 +2465,21 @@ constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
 // the final Async group-zero list, blend only that clip's terminal sample over
 // exact local legacy-Nadine Mazur WeaponOut; P99, role A and transitions remain
 // stock.  This reuses the already-proved one-block/cmd24-safe insertion seam.
-constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = true;
-constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = true;
+constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
+constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 // Build ada proved a repeatable first-Draw-good -> steady-broken transition,
 // followed by immediately broken later Draws. The animation layer has exact
 // create-new and loop-current paths while consuming its bounded transition
 // queue. Observe that lifecycle for the retained local WeaponPartial layer;
 // never alter a request, instance, weight, or pose row in this census.
-constexpr bool kEnableWeaponPartialTransitionLifecycleCensus = false;
+constexpr bool kEnableWeaponPartialTransitionLifecycleCensus = true;
 // Build add rejected both loop-current reuse and a missing second request.
 // The first custom Draw transition nevertheless starts from one track while
 // the repeated Draw starts from two. Sample the exact WeaponPartial track and
 // instance fade fields after stock UpdateBlendWeights so the visual break can
 // be joined to a concrete source/destination weight endpoint. Read-only.
-constexpr bool kEnableWeaponPartialFadeTraceCensus = false;
+constexpr bool kEnableWeaponPartialFadeTraceCensus = true;
 // The Mazur strap child owns a complete authored state-zero pose, but its
 // dynamic endpoint lookup fails because legacy Nadine has no strap2..strap14
 // joints and hides the otherwise valid mesh. Reveal that exact published child
@@ -59669,8 +59669,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-15adg "
-        "(Mazur draw-pose repair + bounded owner admission census)");
+        "TLL co-op runtime init 2026-08-15adh "
+        "(read-only stalled Draw WeaponPartial lifecycle trace)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

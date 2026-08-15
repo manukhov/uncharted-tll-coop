@@ -24862,3 +24862,45 @@ failed field (`slot/state`, skeleton, art, FG or idle inputs). The former is the
 first valid visual exam of `66846123`; the latter selects a packaging repair
 without changing the pose. Silence after a live role-B Async hook would reject
 the selector reach itself.
+
+### 2026-08-15 RUNTIME CONFIRMED packaging (`adg`) / IMPLEMENTED read-only (`adh`): local Draw never completes and auto-holsters
+
+The `adg` exam used role-A PID 14904 and role-B PID 8224. Both hooks installed
+and the new bounded owner census reached the exact local legacy-Nadine Player.
+The user's sharper observation is that Mazur is not manually put away: after
+roughly five seconds of standing idle the game holsters it automatically.
+
+The role-B rows close the packaging failure. The controller moved from
+`slot=-2,state=1` to `slot=1,state=1`, but emitted no `state=2`, no complete
+scope row and no `NADINE-MAZUR-DRAW-ENDPOINT` injection/rejection before the
+automatic `slot=-2,state=5` Holster and final `slot=-1,state=0`. The arms were
+initially correct, broke while Draw was still state 1, and only then the native
+auto-holster ran. Thus `adf/adg` never evaluated `66846123`; the current defect
+is first a stuck/cancelled Get lifecycle, not a failed steady-WeaponOut donor.
+
+Three independent evidence classes earn a read-only endpoint trace rather than
+a state-1 mutation. Current runtime provides the exact controller sequence and
+user timing. Historical `ade` provides the healthy authored comparison:
+`s_weapon-grab -> s_weapon-draw -> s_weapon-out -> s_no-weapon`, with
+`slot=1,state=2` reached as `s_weapon-out` is requested. Static
+`PlayerWeaponController_ApplyState 0x1410AAFB0` changes Draw 1 to WeaponOut 2
+only after the Get action completes; the already verified
+`AnimStateLayer_TakeTransitions 0x1418A1350` and
+`AnimStateLayer_UpdateBlendWeights 0x1418A3820` expose every exact
+WeaponPartial request, state, phase and fade weight without modifying them.
+
+Competing outcomes are now distinct. **Hstalled-draw-terminal** predicts one
+`s_weapon-draw 1313FB4E` instance whose phase/weight reaches its endpoint while
+controller state remains 1, followed directly by Holster. **Hnative-clear-then-
+cancel** predicts `s_weapon-out` or `s_no-weapon` requests before the controller
+falls back. **Hnew-draw-request-loss** predicts the grab request but no draw
+retask/second queue sequence. A blind state-1 donor is rejected for now because
+it would also overwrite the initially correct authored Draw interval.
+
+Build `adh` disables the draw-endpoint mutation and its final-Async hooks. It
+reenables only the already runtime-proven, bounded transition/fade hooks from
+`ade`; no request, action, state, instance, weight, clip or pose field is
+written. Falsifiable exam: from a fresh spawn, draw Mazur once, release all
+input, and let the automatic holster finish without manually switching weapons.
+The exact request/state/phase sequence must select one competing outcome above.
+No visual correction is expected or counted as progress.
