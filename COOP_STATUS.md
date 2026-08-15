@@ -25080,3 +25080,59 @@ prediction therefore carries forward verbatim: a real test requires
 `injected stage=perform ... donor=66846123 phase=10 samples=.../11`; marker plus
 the same delayed break rejects sufficiency, while another markerless run is
 packaging and must not be interpreted visually.
+
+### 2026-08-15 RUNTIME CONFIRMED partial (`adm`) / STATIC IMPLEMENTED (`adn`): the Perform donor is visible; test the leading WeaponIKFeather overwrite
+
+Role-B PID 22448 emitted the exact earned marker at log line 84738:
+`NADINE-MAZUR-DRAW-ENDPOINT injected stage=perform source=7FB80CC8
+resolved=7D11D4FD donor=66846123 group=0 lane=4 phase=10 samples=337/11`.
+The visual result changed causally: the second arm stopped passing through the
+torso, one hand held the rifle correctly, and the other arm remained extended
+away from it. This confirms that the terminal Player draw donor reaches the
+visible pose, but rejects it as a sufficient standalone repair.
+
+The leading remaining-writer candidate is bounded by three independent evidence
+classes.
+First, the shipped `66846123` mask authors both interleaved Player arm chains
+21..32. Stock `248B1AAE` conversion maps those rows to the complete legacy
+Nadine C39 target range 19..30: clavicles 19/20, shoulders 21/22, elbows 23/24,
+wrists 25/26, palms 27/28 and hand-prop endpoints 29/30. Second, the earlier
+exact role-B Mazur boundary at log
+74111 measured `WeaponIKFeather_Apply 0x1418F2700` changing every C39 row 19..26
+and leaving rows 27..30 byte-stable. It can therefore overwrite the converted
+donor's first eight C39 rows on both sides, while the unchanged distal rows inherit those new
+parents in world space. Third, source control flow is synchronous:
+`sub_141A928F0` calls `AnimManager_PerformAnimBlend` at `0x141A92905` and then,
+on the same worker, Player vtable `+0x408` at `0x141A929A1`; phase 3 inside
+`Player_PostAnimBlending_Async` reaches `PlayerWeaponIKAction_Update ->
+WeaponIKFeather_Apply`. The later stable Async mode-2 command 14 imports the
+resulting `Fg+0x100` pose.
+
+`adn` therefore combines the already-confirmed Perform insertion with a paired
+bypass for one Perform-to-postblend pass. A separate pending TLS ticket is
+cleared at every Perform entry, populated only by a successful exact `66846123` insertion,
+and promoted only after the enclosing Perform returns normally.
+The Feather call is skipped through its native zero-weight no-write boundary
+only while that ticket matches the same Player/Fg/weapon runtime generations,
+role B owner 0, Mazur, WeaponOut state 2, and the full existing
+grenade/movement/action/cover idle scope. Channel 4 is cleared before enqueueing
+one persistent PlayerWeaponIKAction, phase 3 visits each node once, and that
+Update contains one Apply call; the ticket is therefore consumed on the first
+callsite hit. It also expires after 100 ms and is cleared on Player `+0x408`
+return or at the next Perform entry. A combined readiness bit is published only
+after Create, Perform, Async, Feather-callsite and Player-`+0x408` hooks all
+install. P99, Draw state 1, ADS state 4, role A and every frame without an
+actual donor insertion stay stock.
+
+Competing hypotheses remain explicit. `H-Feather-overwrite` predicts both the
+injection marker and `NADINE-WEAPON-IK-FEATHER-SUPPRESS ... pairedDonor=1`, after
+which both hands retain the two-hand endpoint. `H-donor-incomplete` predicts
+both markers but an arm still extended, selecting terminal-sample/helper/finger
+content that the donor does not sufficiently constrain.
+`H-later-postblend-or-async-writer` gives the same visual falsifier despite both
+markers and moves the frontier after Feather. A suppress marker without an
+injection marker is a ticket-packaging defect. An injection marker without
+suppression selects an owner/order mismatch or stock `apply_weight==0`, which is
+already a native Feather no-op and must be distinguished in the log before
+calling it packaging. No other grip/arm-pose mutation is enabled in this exam;
+the already accepted weapon attachment/back-frame package remains active.

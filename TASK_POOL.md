@@ -4924,6 +4924,21 @@ injector's `stage==Perform` guard was unreachable. `adm` installs Perform when
 either repair or census is enabled. Repeat the same one-Draw exam and require
 the exact Perform injection marker before judging pixels.
 
+`adm` produced the exact marker and a visible partial correction: the arm no
+longer crossed the torso, but one hand held the Mazur while the other remained
+extended. This confirms the Perform donor and rejects donor-only sufficiency.
+The exact earlier Mazur boundary measured WeaponIKFeather rewriting C39 rows
+19..26, while the Player 21..32 donor converts to C39 19..30. Build `adn` uses a same-thread TLS
+ticket set only by successful `66846123` insertion and bypasses Feather only for
+that same role-B/local/Mazur/WeaponOut/idle Player-Fg-weapon generation. Require
+both `DRAW-ENDPOINT injected` and `WEAPON-IK-FEATHER-SUPPRESS pairedDonor=1`.
+Both markers plus two correct hands confirms the combined repair; both markers
+plus an extended arm rejects Feather sufficiency and selects a later writer or
+insufficient terminal-sample/helper/finger content. A suppress marker without
+injection is packaging; injection without suppress also permits a stock
+`apply_weight==0` no-op and must be separated from owner/order failure in the
+log.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

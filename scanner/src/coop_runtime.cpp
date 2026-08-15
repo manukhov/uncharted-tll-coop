@@ -2454,12 +2454,12 @@ constexpr bool kEnableLegacyNadineWeaponIkFeatherInputCensus = false;
 // 0x141ED19BB boundary. This is a bounded read-only census: exact P99,
 // rightHand/joint30, WeaponOut and retained legacy Nadine only.
 constexpr bool kEnableLegacyNadineDrawnP99LocalTransformCensus = false;
-// The common resolver already selects the compatible P99/Mazur Player clips.
-// Local PlayerWeaponIKAction then runs WeaponIKFeather::Apply and commits both
-// arm targets; the retained remote Nadine does not show the defect. Suppress
-// only this exact local legacy-Nadine action through Apply's native zero-weight
-// no-op boundary while preserving action/NewIkWeapon/overlay lifecycle.
-constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
+// Build adm proved that the terminal Player draw donor fixes the distal hold,
+// while the independently measured later WeaponIKFeather pass is the leading
+// proximal-chain overwrite candidate. Bypass Apply only after this same thread
+// successfully completed a Perform pass containing that donor. P99, Draw, ADS
+// and every frame without the paired donor remain stock.
+constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = true;
 // adk proved that the stable broken hold keeps the authored Hands leaf in the
 // Perform main DAG while final Async has collapsed to the source-free mode-2
 // import. Blend the complete Player-arm s_weapon-draw terminal sample into the
@@ -44815,6 +44815,7 @@ using WeaponIkFeatherApplyFunction = std::uint8_t(__fastcall*)(
     void*, void*, float, void*, float, std::uint32_t, float,
     std::uint8_t, float);
 WeaponIkFeatherApplyFunction g_original_weapon_ik_feather_apply = nullptr;
+std::atomic<bool> g_legacy_nadine_weapon_ik_feather_hook_ready{false};
 
 struct NadineWeaponIkFeatherScope {
     int owner_index = -1;
@@ -44826,10 +44827,14 @@ struct NadineWeaponIkFeatherScope {
     std::byte* fg_anim_data = nullptr;
     std::byte* local_pose = nullptr;
     std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
     std::uint32_t art = 0;
     std::uint32_t draw_state = 0;
     int current_slot = -1;
 };
+
+bool legacy_nadine_mazur_draw_endpoint_allows_feather_bypass(
+    const NadineWeaponIkFeatherScope* scope);
 
 bool seh_select_legacy_nadine_weapon_ik_feather_scope(
     void* feather, void* feather_info, float apply_weight,
@@ -44971,6 +44976,7 @@ bool seh_select_legacy_nadine_weapon_ik_feather_scope(
         scope->fg_anim_data = fg;
         scope->local_pose = local_pose;
         scope->player_runtime_id = player_runtime_id;
+        scope->weapon_runtime_id = weapon_generation;
         scope->art = art;
         scope->draw_state = draw_state;
         scope->current_slot = current_slot;
@@ -45261,10 +45267,11 @@ std::uint8_t __fastcall hooked_weapon_ik_feather_apply(
          kEnableLegacyNadineWeaponIkFeatherSuppression) &&
         seh_select_legacy_nadine_weapon_ik_feather_scope(
             feather, feather_info, apply_weight, &scope);
-    if (kEnableLegacyNadineWeaponIkFeatherSuppression && scoped &&
-        g_net_role_b && scope.owner_index == 0) {
+    if (kEnableLegacyNadineWeaponIkFeatherSuppression &&
+        legacy_nadine_mazur_draw_endpoint_allows_feather_bypass(
+            scoped ? &scope : nullptr)) {
         static std::atomic<std::uint32_t> logged{0};
-        if (logged.fetch_add(1, std::memory_order_relaxed) < 96) {
+        if (logged.fetch_add(1, std::memory_order_relaxed) < 16) {
             std::ostringstream line;
             line << "NADINE-WEAPON-IK-FEATHER-SUPPRESS player=0x"
                  << std::hex
@@ -45280,6 +45287,7 @@ std::uint8_t __fastcall hooked_weapon_ik_feather_apply(
                  << " art=0x" << scope.art << std::dec
                  << " current=" << scope.current_slot
                  << " drawState=" << scope.draw_state
+                 << " pairedDonor=1"
                  << " weight=" << apply_weight
                  << " strength=" << strength
                  << " selector=" << hand_side_selector
@@ -45421,10 +45429,14 @@ bool install_legacy_nadine_weapon_ik_feather_suppression() {
         // rather than freeing executable memory behind a possibly live call.
         boot_log_line(
             "legacy-Nadine WeaponIKFeather boundary installed (rollback/protection WARNING; relay retained)");
+        g_legacy_nadine_weapon_ik_feather_hook_ready.store(
+            true, std::memory_order_release);
         return true;
     }
     boot_log_line(
         "legacy-Nadine WeaponIKFeather boundary installed (PlayerWeaponIKAction 0x1410959AC)");
+    g_legacy_nadine_weapon_ik_feather_hook_ready.store(
+        true, std::memory_order_release);
     return true;
 }
 
@@ -46366,6 +46378,8 @@ struct LegacyNadineMazurSteadyHandsEpoch {
     bool valid = false;
     void* player = nullptr;
     void* fg_anim_data = nullptr;
+    void* weapon = nullptr;
+    void* local_pose = nullptr;
     void* target_skeleton = nullptr;
     void* anim_control = nullptr;
     void* source_clip = nullptr;
@@ -46373,6 +46387,8 @@ struct LegacyNadineMazurSteadyHandsEpoch {
     void* donor_clip = nullptr;
     std::uint32_t source_resolved_id = 0;
     std::uint32_t alternate_source_resolved_id = 0;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
     std::uint16_t source_frame_count = 0;
     std::uint16_t alternate_source_frame_count = 0;
     std::uint16_t donor_frame_count = 0;
@@ -46380,6 +46396,74 @@ struct LegacyNadineMazurSteadyHandsEpoch {
 
 thread_local LegacyNadineMazurSteadyHandsEpoch
     g_legacy_nadine_mazur_steady_hands_epoch{};
+
+struct LegacyNadineMazurDrawEndpointTicket {
+    bool valid = false;
+    void* player = nullptr;
+    void* fg_anim_data = nullptr;
+    void* weapon = nullptr;
+    void* local_pose = nullptr;
+    void* target_skeleton = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    ULONGLONG captured_ms = 0;
+};
+
+thread_local LegacyNadineMazurDrawEndpointTicket
+    g_legacy_nadine_mazur_draw_endpoint_ticket{};
+thread_local LegacyNadineMazurDrawEndpointTicket
+    g_legacy_nadine_mazur_draw_endpoint_pending_ticket{};
+std::atomic<bool> g_legacy_nadine_mazur_paired_feather_hooks_ready{false};
+
+bool legacy_nadine_mazur_draw_endpoint_allows_feather_bypass(
+    const NadineWeaponIkFeatherScope* scope) {
+    const auto ticket = g_legacy_nadine_mazur_draw_endpoint_ticket;
+    // Channel 4 contains at most one PlayerWeaponIKAction and its Update has
+    // one Apply call. Consume before any scope check so a mismatch is a
+    // fail-closed stock frame rather than authorization for a later call.
+    if (ticket.valid) {
+        g_legacy_nadine_mazur_draw_endpoint_ticket = {};
+    }
+    const ULONGLONG now = GetTickCount64();
+    if (!g_legacy_nadine_mazur_paired_feather_hooks_ready.load(
+            std::memory_order_acquire) ||
+        !ticket.valid || scope == nullptr || !g_net_role_b ||
+        scope->owner_index != 0 || scope->art != kCoopRifleArtId ||
+        scope->draw_state != 2 || scope->current_slot < 0 ||
+        scope->player != ticket.player ||
+        scope->fg_anim_data != ticket.fg_anim_data ||
+        scope->weapon != ticket.weapon ||
+        scope->local_pose != ticket.local_pose ||
+        scope->player_runtime_id != ticket.player_runtime_id ||
+        scope->weapon_runtime_id != ticket.weapon_runtime_id ||
+        ticket.captured_ms == 0 || now < ticket.captured_ms ||
+        now - ticket.captured_ms > 100) {
+        return false;
+    }
+
+    // The enclosing +0x408 wrapper also clears an unused ticket on return.
+    IdleArmPoseOwnerScope owner{};
+    if (!seh_resolve_idle_arm_pose_owner_scope(scope->player, 0, &owner) ||
+        !local_player_is_steady_drawn_idle(owner) ||
+        owner.player != scope->player ||
+        owner.fg_anim_data != scope->fg_anim_data ||
+        owner.local_pose != scope->local_pose ||
+        owner.weapon != scope->weapon ||
+        owner.weapon_art_id != kCoopRifleArtId ||
+        owner.weapon_slot != scope->current_slot) {
+        return false;
+    }
+    __try {
+        if (*reinterpret_cast<void* const*>(
+                scope->fg_anim_data + kFgAnimDataSkeletonOffset) !=
+            ticket.target_skeleton) {
+            return false;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+    return true;
+}
 
 enum class LegacyNadineMazurSteadyHandsCommandStage : std::uint8_t {
     kNone = 0,
@@ -46734,6 +46818,9 @@ seh_select_legacy_nadine_mazur_steady_hands_epoch(
     __try {
         if ((!kEnableLegacyNadineMazurDrawEndpointRepair &&
              !kEnableLegacyNadineMazurSteadyHandsCommandCensus) ||
+            (kEnableLegacyNadineWeaponIkFeatherSuppression &&
+             !g_legacy_nadine_mazur_paired_feather_hooks_ready.load(
+                 std::memory_order_acquire)) ||
             !g_state_net.enabled || !g_net_role_b || expected_fg == nullptr) {
             return LegacyNadineMazurSteadyHandsAdmission::kPrerequisite;
         }
@@ -46819,6 +46906,8 @@ seh_select_legacy_nadine_mazur_steady_hands_epoch(
         output->valid = true;
         output->player = player;
         output->fg_anim_data = expected_fg;
+        output->weapon = owner.weapon;
+        output->local_pose = owner.local_pose;
         output->target_skeleton = *reinterpret_cast<void* const*>(
             static_cast<const std::byte*>(expected_fg) +
             kFgAnimDataSkeletonOffset);
@@ -46829,6 +46918,12 @@ seh_select_legacy_nadine_mazur_steady_hands_epoch(
         output->source_resolved_id = source_resolved_id;
         output->alternate_source_resolved_id =
             alternate_source_resolved_id;
+        output->player_runtime_id = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(player) +
+            kGameObjectRuntimeIdOffset);
+        output->weapon_runtime_id = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(owner.weapon) +
+            kGameObjectRuntimeIdOffset);
         output->source_frame_count = source_frame_count;
         output->alternate_source_frame_count =
             alternate_source_frame_count;
@@ -47313,6 +47408,19 @@ std::uint64_t __fastcall hooked_create_anim_cmds_for_object_for_nadine_mazur(
         seh_inject_legacy_nadine_mazur_steady_hands_commands(
             create_context, command_record, group, epoch, &donor_lane,
             &observed_source_resolved_id, &observed_source_frame_count);
+    if (injection == LegacyNadineMazurSteadyHandsInjection::kInjected) {
+        g_legacy_nadine_mazur_draw_endpoint_pending_ticket = {
+            true,
+            epoch.player,
+            epoch.fg_anim_data,
+            epoch.weapon,
+            epoch.local_pose,
+            epoch.target_skeleton,
+            epoch.player_runtime_id,
+            epoch.weapon_runtime_id,
+            0,
+        };
+    }
     static std::atomic<bool> injected_logged{false};
     if (injection == LegacyNadineMazurSteadyHandsInjection::kInjected &&
         !injected_logged.exchange(true, std::memory_order_relaxed)) {
@@ -47372,6 +47480,13 @@ void run_legacy_nadine_mazur_steady_hands_command_epoch(
         g_legacy_nadine_mazur_steady_hands_epoch;
     const LegacyNadineMazurSteadyHandsCommandStage previous_stage =
         g_legacy_nadine_mazur_steady_hands_command_stage;
+    if (stage == LegacyNadineMazurSteadyHandsCommandStage::kPerform) {
+        // Perform and Player +0x408 execute sequentially in sub_141A928F0 on
+        // this worker. Clearing here makes the ticket represent exactly this
+        // Perform invocation; only a successful cmd insertion republishes it.
+        g_legacy_nadine_mazur_draw_endpoint_ticket = {};
+        g_legacy_nadine_mazur_draw_endpoint_pending_ticket = {};
+    }
     g_legacy_nadine_mazur_steady_hands_epoch = {};
     g_legacy_nadine_mazur_steady_hands_command_stage = stage;
 
@@ -47405,6 +47520,14 @@ void run_legacy_nadine_mazur_steady_hands_command_epoch(
     }
 
     original(job);
+    if (stage == LegacyNadineMazurSteadyHandsCommandStage::kPerform) {
+        auto promoted = g_legacy_nadine_mazur_draw_endpoint_pending_ticket;
+        if (promoted.valid) {
+            promoted.captured_ms = GetTickCount64();
+            g_legacy_nadine_mazur_draw_endpoint_ticket = promoted;
+        }
+        g_legacy_nadine_mazur_draw_endpoint_pending_ticket = {};
+    }
     g_legacy_nadine_mazur_steady_hands_epoch = previous;
     g_legacy_nadine_mazur_steady_hands_command_stage = previous_stage;
 }
@@ -48192,6 +48315,13 @@ std::int64_t __fastcall hooked_player_post_anim_blending_async(void* player) {
         return 0;
     }
     const std::int64_t result = original(player);
+    if constexpr (kEnableLegacyNadineMazurDrawEndpointRepair &&
+                  kEnableLegacyNadineWeaponIkFeatherSuppression) {
+        // This vslot encloses every matching phase-3 WeaponIKAction update.
+        // Perform promoted the ticket immediately before the call; clearing it
+        // on return makes the authorization exact to this one postblend pass.
+        g_legacy_nadine_mazur_draw_endpoint_ticket = {};
+    }
     if constexpr (kEnableLegacyNadineIdleArmPoseRoundTrip) {
         if constexpr (kEnableLegacyNadineIdleArmPoseAdmissionCensus) {
             log_idle_arm_pose_postblend_entry(player);
@@ -48214,7 +48344,7 @@ bool install_legacy_nadine_idle_arm_pose_round_trip() {
         g_module + kPlayerPostAnimBlendingAsyncRva);
     if (slot == nullptr || *slot != expected) {
         boot_log_line(
-            "legacy-Nadine idle-arm round trip SKIPPED (slot mismatch)");
+            "legacy-Nadine Player postblend hook SKIPPED (slot mismatch)");
         return false;
     }
     g_original_player_post_anim_blending_async =
@@ -48224,7 +48354,7 @@ bool install_legacy_nadine_idle_arm_pose_round_trip() {
             slot, sizeof(void*), PAGE_READWRITE, &old_protection)) {
         g_original_player_post_anim_blending_async = nullptr;
         boot_log_line(
-            "legacy-Nadine idle-arm round trip SKIPPED (protect)");
+            "legacy-Nadine Player postblend hook SKIPPED (protect)");
         return false;
     }
     void* const previous = InterlockedCompareExchangePointer(
@@ -48236,7 +48366,7 @@ bool install_legacy_nadine_idle_arm_pose_round_trip() {
         VirtualProtect(slot, sizeof(void*), old_protection, &ignored);
         g_original_player_post_anim_blending_async = nullptr;
         boot_log_line(
-            "legacy-Nadine idle-arm round trip SKIPPED (slot race)");
+            "legacy-Nadine Player postblend hook SKIPPED (slot race)");
         return false;
     }
     FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
@@ -48245,7 +48375,7 @@ bool install_legacy_nadine_idle_arm_pose_round_trip() {
         slot, sizeof(void*), old_protection, &ignored);
     if (protection_restored) {
         boot_log_line(
-            "legacy-Nadine idle-arm round trip installed (Player +0x408)");
+            "legacy-Nadine Player postblend hook installed (Player +0x408)");
         return true;
     }
 
@@ -48268,9 +48398,9 @@ bool install_legacy_nadine_idle_arm_pose_round_trip() {
         // after the vtable slot is restored.
         boot_log_line(
             rollback_protection_restored
-                ? "legacy-Nadine idle-arm round trip SKIPPED "
+                ? "legacy-Nadine Player postblend hook SKIPPED "
                   "(protection restore rollback)"
-                : "legacy-Nadine idle-arm round trip SKIPPED "
+                : "legacy-Nadine Player postblend hook SKIPPED "
                   "(rollback verified; protection restore failed)");
         return false;
     }
@@ -48281,9 +48411,9 @@ bool install_legacy_nadine_idle_arm_pose_round_trip() {
     const bool hook_still_live = *slot == hook;
     boot_log_line(
         hook_still_live
-            ? "legacy-Nadine idle-arm round trip installed PARTIAL "
+            ? "legacy-Nadine Player postblend hook installed PARTIAL "
               "(rollback race; protection restore failed)"
-            : "legacy-Nadine idle-arm round trip SKIPPED (rollback race)");
+            : "legacy-Nadine Player postblend hook SKIPPED (rollback race)");
     return hook_still_live;
 }
 
@@ -59705,8 +59835,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-15adm "
-        "(Mazur steady Perform draw-endpoint repair, wrapper fixed)");
+        "TLL co-op runtime init 2026-08-15adn "
+        "(Mazur Perform endpoint plus paired Feather bypass)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -60129,20 +60259,38 @@ DWORD WINAPI install_hook(void*) {
     // Install only after role, peer endpoint and the ARMP session epoch are
     // immutable.  The vtable CAS is the publication barrier seen by animation
     // workers, so the hook never races partially initialized network state.
-    if constexpr (kEnableLegacyNadineIdleArmPoseRoundTrip &&
+    if constexpr ((kEnableLegacyNadineIdleArmPoseRoundTrip ||
+                   (kEnableLegacyNadineMazurDrawEndpointRepair &&
+                    kEnableLegacyNadineWeaponIkFeatherSuppression)) &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         if (state_net_started) {
             const bool admission_installed =
                 install_legacy_nadine_idle_arm_pose_round_trip();
-            if (admission_installed) {
-                install_legacy_nadine_idle_arm_palette_memcpy_hook();
-            } else {
+            if constexpr (kEnableLegacyNadineIdleArmPoseRoundTrip) {
+                if (admission_installed) {
+                    install_legacy_nadine_idle_arm_palette_memcpy_hook();
+                } else {
+                    boot_log_line(
+                        "legacy-Nadine idle-arm palette SKIPPED (admission hook)");
+                }
+            }
+            if constexpr (kEnableLegacyNadineMazurDrawEndpointRepair &&
+                          kEnableLegacyNadineWeaponIkFeatherSuppression) {
+                const bool paired_ready = admission_installed &&
+                    g_legacy_nadine_mazur_steady_hands_hooks_ready.load(
+                        std::memory_order_acquire) &&
+                    g_legacy_nadine_weapon_ik_feather_hook_ready.load(
+                        std::memory_order_acquire);
+                g_legacy_nadine_mazur_paired_feather_hooks_ready.store(
+                    paired_ready, std::memory_order_release);
                 boot_log_line(
-                    "legacy-Nadine idle-arm palette SKIPPED (admission hook)");
+                    paired_ready
+                        ? "legacy-Nadine Mazur paired endpoint/Feather repair READY"
+                        : "legacy-Nadine Mazur paired endpoint/Feather repair SKIPPED");
             }
         } else {
             boot_log_line(
-                "legacy-Nadine idle-arm round trip SKIPPED (state net)");
+                "legacy-Nadine Player postblend hook SKIPPED (state net)");
         }
     }
     // Role A applies its own attacks normally and receives relayed damage in the
