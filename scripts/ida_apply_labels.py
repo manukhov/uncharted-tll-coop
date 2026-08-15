@@ -8,6 +8,19 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-08-15: one-shot Player NewIkWeapon parameter mailbox ---
+    0x142052250: (
+        "StringIdPayloadMap_SetOrRemove",
+        "Stores or removes one StringId-keyed payload in the Player animation "
+        "parameter map. PlayerWeaponController_RefreshWeaponPartialAndIK uses "
+        "it to publish the 16-byte NewIkWeapon weak pair.",
+    ),
+    0x142052430: (
+        "StringIdPayloadMap_Erase",
+        "Finds one StringId-keyed node, frees its payload, unlinks it from the "
+        "bucket chain and decrements the map count. PlayerWeaponIKAction_Update "
+        "calls it immediately after copying NewIkWeapon into action+0x40/+0x48.",
+    ),
     # --- 2026-08-14: AnimStateLayer transition queue / instance reuse ---
     0x14189DCD0: (
         "AnimStateLayer_EnqueueTransitionRequest",

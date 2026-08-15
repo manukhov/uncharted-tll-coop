@@ -24756,3 +24756,75 @@ trace the `NewIkWeapon` consumer/lifetime, and identify which steady
 Base/Hands/IK owner receives Player joints 21--32 after the clear. The next
 mutation must replace that exact steady owner atomically; it must not prolong a
 Draw action or fight the stock clear.
+
+### 2026-08-15 STATIC (`adf`): terminal Draw sample as a final-Async steady Mazur partial
+
+The remaining `NewIkWeapon` competitor is now rejected as a persistent pose
+owner. `PlayerWeaponController_RefreshWeaponPartialAndIK 0x1410AABE0` writes an
+exact 16-byte ProcessWeapon weak pair under `NewIkWeapon` through
+`StringIdPayloadMap_SetOrRemove 0x142052250`. On the next
+`PlayerWeaponIKAction_Update 0x1410950E0`, the action copies that pair into
+`action+0x40/+0x48` and immediately calls `StringIdPayloadMap_Erase
+0x142052430`; the latter frees the payload, unlinks the bucket node and
+decrements the map count. `PlayerWeaponController_StartWeaponIKForSlot
+0x14109DA80` already constructed the same channel-4 action with the exact
+Player and ProcessWeapon weak pairs. The parameter is therefore a one-shot
+reference mailbox, not a timed pose, clip, weight or post-clear owner.
+
+Four independent evidence classes now support one narrow corrective exam:
+
+1. **Runtime lifecycle and state graph.** `ade` showed that the visibly good
+   interval contains the full-arm `s_weapon-grab` / `s_weapon-draw` partials,
+   while the persistent broken interval contains only right-distal
+   `s_weapon-out` and then the empty `s_no-weapon`. No old track survives.
+2. **Exact authored content.** `actor77.psarc/anim-player-movement.pak` resolves
+   `0x66846123 p-unholster-chest^idle-part` to Player database/skeleton
+   `27E57F43/FD6DBE03`, eight groups, eleven samples and exact ValidBits joints
+   21--32. `AFB364A4` has the same full-arm mask but is the earlier grab pose;
+   `D350A452` has one sample and only joints 30/32.
+3. **Exact phase semantics.** `AnimSnapshotNodeAnimation_GenerateAnimCommands
+   0x1419182E0` reads `clipData+0x22`, subtracts one and multiplies by the node's
+   normalized phase before emitting command 6 word 5. Therefore phase `10.0`
+   is the exact terminal sample of the eleven-sample Draw clip. The repair does
+   not freeze, loop or extend the Draw state; it evaluates only this authored
+   endpoint as a new partial in steady WeaponOut.
+4. **Final visible boundary.** The previously reached `ada` command injector
+   runs inside `AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00`, after
+   ordinary PlayerWeaponIK/Feather, and inserts command 6 plus a mode-1,
+   weight-1 command 7 immediately before the exact group-zero command 3.
+   The accepted suffix is unique. Its top-level command 24 id `248B1AAE`
+   dispatches through `0x1406CD220` to the `0x141937D20` matrix conversion
+   case, which reads the finalized workspace and exports matrices but does not
+   rewrite WorkBuffer lane zero. The later renderer consumes the Async-published
+   palette.
+
+The new mutation is deliberately narrower than the rejected NPC donor. Only
+role B, retained local Player0, legacy Nadine `ED25C708/C39CA709`, exact Mazur
+art `33E29A1B`, controller state `WeaponOut=2`, grenade-idle, no ADS/input,
+no movement and no cover can admit it after the existing steady dwell. The
+exact final list must contain one live stock Hands clip (`7FB80CC8` or its
+campaign-Chloe materialization `7D11D4FD`) and the previously proven one-block
+grammar. P99, role A, Draw/Holster/reload/ADS and every other command-list shape
+remain stock. The old `B725EA01` NPC partial is not reused: runtime `ada` proved
+that it could be injected at this seam without fixing the pose.
+
+Competing hypotheses remain falsifiable. **Hterminal-draw-endpoint** predicts
+that the authored final Draw sample is the complete two-handed pose that stock
+wrongly stops contributing after the transition. **Hbundle-insufficient**
+predicts that even this complete 21--32 partial cannot replace the incompatible
+steady Base/Hands composition. **Hlater-external-writer** predicts a valid
+injection marker followed by the same broken final palette; the exact Async
+ordering and `248B1AAE` semantics disfavor it. `AFB364A4` is rejected as the
+first choice because it is the earlier chest-grab phase, and resurrecting a
+WeaponPartial state or fade remains rejected by `ade`.
+
+Falsifiable `adf` prediction: on role B, draw Mazur and stand still without ADS
+for at least one second. The log must show build `2026-08-15adf`, both command
+hooks installed, then exactly one `NADINE-MAZUR-DRAW-ENDPOINT injected` marker
+with `donor=0x66846123`, `phase=10` and donor sample count `11`. Nadine's two
+hands must remain in the normal hold after the stock WeaponPartial clear instead
+of breaking after the initial seconds. There must be no injection while drawing,
+aiming, moving, holstering, using P99 or rendering role-A Player1. A marker with
+unchanged broken arms rejects the terminal endpoint as a sufficient donor; no
+marker plus a bounded admission/rejection row selects packaging rather than a
+visual failure.

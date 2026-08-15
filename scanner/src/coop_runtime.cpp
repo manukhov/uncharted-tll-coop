@@ -2460,23 +2460,25 @@ constexpr bool kEnableLegacyNadineDrawnP99LocalTransformCensus = false;
 // only this exact local legacy-Nadine action through Apply's native zero-weight
 // no-op boundary while preserving action/NewIkWeapon/overlay lifecycle.
 constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
-// acx still stopped at the compound owner gate before any list mutation. Keep
-// B725 disabled and census the already-read Player/FG/controller/art/idle fields
-// plus the bounded Perform/Async list until that exact prerequisite is closed.
-constexpr bool kEnableLegacyNadineMazurSteadyHandsNpcRepair = false;
+// ade proved that the complete Player-arm s_weapon-draw partial is the last
+// normal-looking owner before stock settles into the broken steady hold.  In
+// the final Async group-zero list, blend only that clip's terminal sample over
+// exact local legacy-Nadine Mazur WeaponOut; P99, role A and transitions remain
+// stock.  This reuses the already-proved one-block/cmd24-safe insertion seam.
+constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = true;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 // Build ada proved a repeatable first-Draw-good -> steady-broken transition,
 // followed by immediately broken later Draws. The animation layer has exact
 // create-new and loop-current paths while consuming its bounded transition
 // queue. Observe that lifecycle for the retained local WeaponPartial layer;
 // never alter a request, instance, weight, or pose row in this census.
-constexpr bool kEnableWeaponPartialTransitionLifecycleCensus = true;
+constexpr bool kEnableWeaponPartialTransitionLifecycleCensus = false;
 // Build add rejected both loop-current reuse and a missing second request.
 // The first custom Draw transition nevertheless starts from one track while
 // the repeated Draw starts from two. Sample the exact WeaponPartial track and
 // instance fade fields after stock UpdateBlendWeights so the visual break can
 // be joined to a concrete source/destination weight endpoint. Read-only.
-constexpr bool kEnableWeaponPartialFadeTraceCensus = true;
+constexpr bool kEnableWeaponPartialFadeTraceCensus = false;
 // The Mazur strap child owns a complete authored state-zero pose, but its
 // dynamic endpoint lookup fails because legacy Nadine has no strap2..strap14
 // joints and hides the otherwise valid mesh. Reveal that exact published child
@@ -46316,10 +46318,10 @@ bool idle_arm_pose_dwell_ready(
 
 // The stable Player Hands layer is generated before Base, so changing its
 // direct clip would still let Base win the proximal arm rows.  Scope the exact
-// final Async rebuild instead and append a normal partial-pose blend immediately
-// before that block's command-3.  This keeps the stock body in lane zero and
-// gives the native-NPC Mazur partial the last authored say only on joints that
-// its ValidBits contain.
+// final Async rebuild instead and append the terminal sample of the authored
+// Player s_weapon-draw partial immediately before that block's command-3.  The
+// clip covers only joints 21..32, keeping the stock body in lane zero while the
+// last known-good two-handed draw endpoint owns the complete arm/hand lanes.
 constexpr std::uint32_t kLegacyNadineHandsLayerId = 0x2EAA36BCu;
 constexpr std::uint32_t kLegacyNadineDefaultHandsStateId = 0xFEC2DB76u;
 constexpr std::uint32_t kLegacyNadineIdleHandsStateId = 0x7FB80CC8u;
@@ -46328,9 +46330,8 @@ constexpr std::uint32_t kPlayerAnimationDatabaseId = 0x27E57F43u;
 constexpr std::uint32_t kPlayerAnimationSkeletonId = 0xFD6DBE03u;
 constexpr std::uint32_t kChloeAnimationDatabaseId = 0x6C2B2396u;
 constexpr std::uint32_t kChloeAnimationSkeletonId = 0x4B0F5DE3u;
-constexpr std::uint32_t kNpcNormalAnimationDatabaseId = 0x2628A5DCu;
-constexpr std::uint32_t kNpcNormalAnimationSkeletonId = 0xBD7EEE2Fu;
-constexpr std::uint32_t kNpcMazurHighPartClipId = 0xB725EA01u;
+constexpr std::uint32_t kPlayerWeaponDrawFullArmClipId = 0x66846123u;
+constexpr std::uint16_t kPlayerWeaponDrawFullArmFrameCount = 11u;
 constexpr std::uint32_t kAnimCommandBeginObject = 0u;
 constexpr std::uint32_t kAnimCommandBeginControl = 1u;
 constexpr std::uint32_t kAnimCommandAllocateBlock = 2u;
@@ -46709,7 +46710,7 @@ seh_select_legacy_nadine_mazur_steady_hands_epoch(
     }
     *output = {};
     __try {
-        if ((!kEnableLegacyNadineMazurSteadyHandsNpcRepair &&
+        if ((!kEnableLegacyNadineMazurDrawEndpointRepair &&
              !kEnableLegacyNadineMazurSteadyHandsCommandCensus) ||
             !g_state_net.enabled || !g_net_role_b || expected_fg == nullptr) {
             return LegacyNadineMazurSteadyHandsAdmission::kPrerequisite;
@@ -46739,8 +46740,8 @@ seh_select_legacy_nadine_mazur_steady_hands_epoch(
         }
 
         void* const donor_clip = seh_resolve_exact_animation_clip(
-            kNpcNormalAnimationDatabaseId, kNpcNormalAnimationSkeletonId,
-            kNpcMazurHighPartClipId);
+            kPlayerAnimationDatabaseId, kPlayerAnimationSkeletonId,
+            kPlayerWeaponDrawFullArmClipId);
         if (donor_clip == nullptr) {
             return LegacyNadineMazurSteadyHandsAdmission::kDonor;
         }
@@ -47166,19 +47167,21 @@ seh_inject_legacy_nadine_mazur_steady_hands_commands(
         }
         float source_phase = 0.0F;
         std::memcpy(&source_phase, &source_phase_bits, sizeof(source_phase));
-        // The exact B725EA01 PAK header is a one-sample partial pose.
-        // ANIM+0x22 is the sample count: native timing code branches only when
-        // it is greater than one.  A one-sample donor is evaluated at phase
-        // zero; normalized multi-frame donor remapping is deliberately outside
-        // this exact repair.  The active source clip is used only as a liveness
-        // discriminator, so its native phase is not transferred.
+        // The exact 66846123 PAK header has eleven samples and authors Player
+        // joints 21..32. AnimSnapshotNodeAnimation_GenerateAnimCommands emits
+        // (sample_count - 1) * normalized_phase in cmd6.word5, so phase 10.0 is
+        // the authored terminal s_weapon-draw sample. The active steady Hands
+        // clip is used only as a final-list liveness discriminator; its phase
+        // is deliberately not transferred.
         if (observed_source_frame_count == 0 ||
             observed_source_resolved_id == 0 ||
-            epoch.donor_frame_count != 1 ||
+            epoch.donor_frame_count !=
+                kPlayerWeaponDrawFullArmFrameCount ||
             !std::isfinite(source_phase)) {
             return LegacyNadineMazurSteadyHandsInjection::kSource;
         }
-        const float donor_phase = 0.0F;
+        const float donor_phase = static_cast<float>(
+            kPlayerWeaponDrawFullArmFrameCount - 1u);
         std::uint32_t donor_phase_bits = 0;
         std::memcpy(
             &donor_phase_bits, &donor_phase, sizeof(donor_phase_bits));
@@ -47261,7 +47264,7 @@ std::uint64_t __fastcall hooked_create_anim_cmds_for_object_for_nadine_mazur(
 
     census_legacy_nadine_mazur_steady_hands_commands(
         create_context, command_record, group, epoch);
-    if constexpr (!kEnableLegacyNadineMazurSteadyHandsNpcRepair) {
+    if constexpr (!kEnableLegacyNadineMazurDrawEndpointRepair) {
         return result;
     }
     if (g_legacy_nadine_mazur_steady_hands_command_stage !=
@@ -47280,11 +47283,13 @@ std::uint64_t __fastcall hooked_create_anim_cmds_for_object_for_nadine_mazur(
     if (injection == LegacyNadineMazurSteadyHandsInjection::kInjected &&
         !injected_logged.exchange(true, std::memory_order_relaxed)) {
         std::ostringstream line;
-        line << "NADINE-MAZUR-STEADY-HANDS injected source=0x" << std::hex
+        line << "NADINE-MAZUR-DRAW-ENDPOINT injected source=0x" << std::hex
              << kLegacyNadineIdleHandsStateId << " resolved=0x"
              << observed_source_resolved_id << " donor=0x"
-             << kNpcMazurHighPartClipId << std::dec
+             << kPlayerWeaponDrawFullArmClipId << std::dec
              << " group=0 lane=" << donor_lane
+             << " phase="
+             << (kPlayerWeaponDrawFullArmFrameCount - 1u)
              << " samples=" << observed_source_frame_count << "/"
              << epoch.donor_frame_count;
         boot_log_line(line.str().c_str());
@@ -47295,7 +47300,7 @@ std::uint64_t __fastcall hooked_create_anim_cmds_for_object_for_nadine_mazur(
         if (reason < reject_logged.size() &&
             !reject_logged[reason].exchange(true, std::memory_order_relaxed)) {
             std::ostringstream line;
-            line << "NADINE-MAZUR-STEADY-HANDS rejected reason=" << reason;
+            line << "NADINE-MAZUR-DRAW-ENDPOINT rejected reason=" << reason;
             boot_log_line(line.str().c_str());
         }
     }
@@ -47464,8 +47469,8 @@ bool install_legacy_nadine_mazur_steady_hands_npc_repair() {
     resume_suspended_process_threads(suspended_threads);
     boot_log_line(
         installed
-            ? (kEnableLegacyNadineMazurSteadyHandsNpcRepair
-                   ? "legacy-Nadine Mazur steady-hands NPC partial repair installed"
+            ? (kEnableLegacyNadineMazurDrawEndpointRepair
+                   ? "legacy-Nadine Mazur draw-endpoint full-arm repair installed"
                    : "legacy-Nadine Mazur steady-hands command census installed (read-only)")
             : "legacy-Nadine Mazur steady-hands command hook PARTIAL (pass-through)");
     return installed;
@@ -59661,8 +59666,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-14ade "
-        "(read-only WeaponPartial new-vs-loop lifecycle census)");
+        "TLL co-op runtime init 2026-08-15adf "
+        "(local legacy-Nadine Mazur terminal draw-pose repair)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -59763,7 +59768,7 @@ DWORD WINAPI install_hook(void*) {
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_legacy_nadine_active_weapon_grip_overlay_repair();
     }
-    if constexpr ((kEnableLegacyNadineMazurSteadyHandsNpcRepair ||
+    if constexpr ((kEnableLegacyNadineMazurDrawEndpointRepair ||
                    kEnableLegacyNadineMazurSteadyHandsCommandCensus) &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_legacy_nadine_mazur_steady_hands_npc_repair();

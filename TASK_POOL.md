@@ -4838,17 +4838,20 @@ missing repeated request. The first clear was interrupted by the user's
 immediate Holster, so do not claim the first visible break is independently
 timed to a particular intermediate weight.
 
-The new STATIC frontier is the content ownership change at that exact boundary.
-`anim-player.bin` maps `s_weapon-grab` -> `AFB364A4` and `s_weapon-draw` ->
-`66846123`; exact Player PAK masks for both cover joints 21--32. It then maps
-`s_weapon-out` -> `D350A452`, whose mask covers only joints 30/32, before the
-empty `s_no-weapon` state. The leading explanation is that the transient
-full-arm Draw partial briefly masks the broken steady Base/Hands or state-2
-owner. Do not freeze/loop a Draw clip. Before any new launch, close the exact
-phase/duration/transition semantics of those roots, trace the `NewIkWeapon`
-payload published by `PlayerWeaponController_RefreshWeaponPartialAndIK
-0x1410AA7B0`, and identify the steady post-clear owner of Player joints 21--32.
-Only an atomic replacement of that proven steady owner can earn a visual test.
+The `adf` STATIC closure rejects `NewIkWeapon` as a pose owner: refresh publishes
+only a 16-byte ProcessWeapon weak pair, `PlayerWeaponIKAction_Update` copies it
+and immediately erases the StringId payload through `0x142052430`. Exact asset
+and generator data prove `66846123 p-unholster-chest^idle-part` has eleven
+samples on the Player skeleton, authors all joints 21--32, and command phase
+`10.0` selects its terminal sample. Reuse the already reached final-Async
+group-zero insertion seam to append this one terminal partial before command 3;
+do not prolong or loop the Draw state itself. Scope is role-B Player0 legacy
+Nadine, Mazur, steady WeaponOut only; P99, role A, ADS/movement/transitions and
+all non-exact list grammars remain stock. Prediction: after one second idle the
+log emits `NADINE-MAZUR-DRAW-ENDPOINT ... donor=0x66846123 phase=10 ... /11`
+and the initially correct two-handed pose remains correct. Marker plus broken
+arms rejects the donor; no marker selects bounded packaging telemetry. Full
+STATIC evidence and competitors are recorded in `COOP_STATUS.md`.
 
 ## Rule
 
