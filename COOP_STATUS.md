@@ -25094,9 +25094,10 @@ visible pose, but rejects it as a sufficient standalone repair.
 The leading remaining-writer candidate is bounded by three independent evidence
 classes.
 First, the shipped `66846123` mask authors both interleaved Player arm chains
-21..32. Stock `248B1AAE` conversion maps those rows to the complete legacy
-Nadine C39 target range 19..30: clavicles 19/20, shoulders 21/22, elbows 23/24,
-wrists 25/26, palms 27/28 and hand-prop endpoints 29/30. Second, the earlier
+21..32. The stock Player-to-Nadine retarget row 124 maps those rows to the
+complete legacy Nadine C39 target range 19..30: clavicles 19/20, shoulders
+21/22, elbows 23/24, wrists 25/26, palms 27/28 and hand-prop endpoints 29/30.
+Second, the earlier
 exact role-B Mazur boundary at log
 74111 measured `WeaponIKFeather_Apply 0x1418F2700` changing every C39 row 19..26
 and leaving rows 27..30 byte-stable. It can therefore overwrite the converted
