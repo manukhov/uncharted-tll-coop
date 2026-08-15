@@ -24904,3 +24904,39 @@ written. Falsifiable exam: from a fresh spawn, draw Mazur once, release all
 input, and let the automatic holster finish without manually switching weapons.
 The exact request/state/phase sequence must select one competing outcome above.
 No visual correction is expected or counted as progress.
+
+### 2026-08-15 RUNTIME CONFIRMED (`adh`) / IMPLEMENTED combined exam (`adi`): Draw completes normally before the delayed auto-holster
+
+The exact read-only `adh` cycle used role-A PID 22220 and role-B PID 9580.
+It rejects the apparent stuck-Draw interpretation from the shorter `adg`
+capture. Role B created `s_weapon-grab 28B0F93B`, retasked the same instance to
+`s_weapon-draw 1313FB4E`, and at log line 82711 requested
+`s_weapon-out 7405AACB` while publishing `slot=1,state=2`. At line 82715 it
+created `s_no-weapon 3889CC0E`; by line 82723 that empty state was the sole
+full-weight track and the controller remained WeaponOut 2 through the visible
+broken interval. Only much later, at line 82795, the game requested Holster
+`DF5B68FC` with `state=5`, matching the user's automatic roughly five-second
+put-away observation.
+
+Therefore **Hstalled-draw-terminal** and **Hnew-draw-request-loss** are runtime
+rejected. The winning lifecycle is the normal authored clear followed by a
+separate delayed auto-holster. This independently reproduces the `ade` sequence
+and proves a several-second exact `state=2 + s_no-weapon` window in which the
+terminal Draw endpoint repair is supposed to execute. The auto-holster does not
+prevent that exam and must remain stock.
+
+Build `adi` combines only already validated pieces: the exact `adf` final-Async
+terminal `66846123` repair, the bounded `adg` owner census, and the read-only
+`adh` transition/fade trace. Their targets are disjoint and all installers have
+already passed their own suspended-thread/prologue/readback tests. Mutation
+scope is unchanged: role-B Player0, legacy Nadine, exact Mazur, WeaponOut 2,
+grenade idle, neutral input/movement/cover and the exact final Async group-zero
+grammar. The lifecycle hooks only observe.
+
+Falsifiable `adi` prediction: one fresh Draw must first reproduce the exact
+`grab -> draw -> weapon-out -> no-weapon` rows. During the ensuing state-2
+window it must emit either `NADINE-MAZUR-DRAW-ENDPOINT injected donor=0x66846123
+phase=10 samples=.../11` or a detailed owner/admission/parser rejection. An
+injection marker plus the same broken arms finally rejects the terminal Draw
+endpoint itself; a corrected hold through the later native auto-holster confirms
+it. No marker is now a packaging result named by the simultaneous censuses.

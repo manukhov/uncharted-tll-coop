@@ -2465,8 +2465,8 @@ constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
 // the final Async group-zero list, blend only that clip's terminal sample over
 // exact local legacy-Nadine Mazur WeaponOut; P99, role A and transitions remain
 // stock.  This reuses the already-proved one-block/cmd24-safe insertion seam.
-constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
-constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = false;
+constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = true;
+constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = true;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 // Build ada proved a repeatable first-Draw-good -> steady-broken transition,
 // followed by immediately broken later Draws. The animation layer has exact
@@ -59669,8 +59669,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-15adh "
-        "(read-only stalled Draw WeaponPartial lifecycle trace)");
+        "TLL co-op runtime init 2026-08-15adi "
+        "(Mazur draw-endpoint repair + owner and lifecycle census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

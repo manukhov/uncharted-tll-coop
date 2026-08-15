@@ -4875,6 +4875,16 @@ whether `s_weapon-draw 1313FB4E` reaches/stalls at terminal phase, whether
 cancel, or whether the draw request itself is lost. Do not admit controller
 state 1 for mutation until this exact lifecycle is closed.
 
+`adh` closed it: the fresh Draw was not stuck. At line 82711 it entered
+`slot=1, WeaponOut=2`, line 82715 created `s_no-weapon`, and that empty track
+became sole/full-weight before the delayed native Holster at line 82795. The
+state-2 repair window is several seconds long. Build `adi` combines the exact
+terminal Draw repair with both bounded owner and transition/fade censuses so the
+next single Draw cannot be inconclusive. Require the normal lifecycle followed
+by either the exact `injected donor=66846123 phase=10 .../11` marker or a named
+owner/parser rejection. Marker plus broken pixels rejects the donor; keep the
+later automatic holster stock.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
