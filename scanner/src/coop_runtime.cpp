@@ -46979,17 +46979,29 @@ void census_legacy_nadine_mazur_steady_hands_commands(
         return;
     }
 
+    const std::size_t stage_index =
+        static_cast<std::size_t>(snapshot.stage);
+    if (stage_index >= 3) {
+        return;
+    }
+
+    // Perform and Async build different command DAGs.  Keep their bounded
+    // deduplication budgets independent so several upstream Perform variants
+    // cannot hide the later final-palette Async variants.
     static SRWLOCK lock = SRWLOCK_INIT;
-    static std::array<std::uint64_t, 8> signatures{};
-    static std::uint32_t signature_count = 0;
+    static std::array<std::array<std::uint64_t, 8>, 3> signatures{};
+    static std::array<std::uint32_t, 3> signature_counts{};
     bool emit = false;
     AcquireSRWLockExclusive(&lock);
     bool duplicate = false;
-    for (std::uint32_t index = 0; index < signature_count; ++index) {
-        duplicate = duplicate || signatures[index] == snapshot.signature;
+    auto& stage_signatures = signatures[stage_index];
+    auto& stage_signature_count = signature_counts[stage_index];
+    for (std::uint32_t index = 0; index < stage_signature_count; ++index) {
+        duplicate = duplicate ||
+                    stage_signatures[index] == snapshot.signature;
     }
-    if (!duplicate && signature_count < signatures.size()) {
-        signatures[signature_count++] = snapshot.signature;
+    if (!duplicate && stage_signature_count < stage_signatures.size()) {
+        stage_signatures[stage_signature_count++] = snapshot.signature;
         emit = true;
     }
     ReleaseSRWLockExclusive(&lock);
@@ -59689,8 +59701,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-15adj "
-        "(read-only Mazur idle admission + final command census)");
+        "TLL co-op runtime init 2026-08-15adk "
+        "(read-only Mazur per-stage final command census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

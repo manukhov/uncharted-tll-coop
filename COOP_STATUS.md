@@ -24978,3 +24978,33 @@ nonzero idle component, or reaches `idleParts=1/1/1` and emits a final Async
 `NADINE-MAZUR-STEADY-HANDS-CMDS` row. The latter closes command grammar without
 changing the pose; total silence would reject the Async owner reach assumed by
 the current selector.
+
+### 2026-08-15 RUNTIME CONFIRMED (`adj`) / IMPLEMENTED read-only (`adk`): shared census budget hid the second Async build
+
+Role-B PID 19468 closed the idle admission. A neutral Draw entered state 2 and
+did not emit another owner rejection, while the command census immediately saw
+seven distinct Perform lists with `mode=1`, `flags=3` and `source=1..2`. The
+first logged Async list was instead the exact stock structural sequence
+`0,1,2,9,3,4,14,15,16,17,24,24,26,5`, with `mode=2`, `flags=9` and
+`source=0`. No pose mutation was enabled.
+
+That result does not prove that the final Async pass lacks the donor. The
+diagnostic used one global eight-signature table: the seven distinct Perform
+lists plus the first Async list exhausted it. Independently, disassembly of
+`AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00` shows two direct
+`AnimManager_BuildCommandSegmentsForObjectMask 0x141A91490` calls. The first at
+`0x141A92D47` is the observed conditional mode-2 build; the second at
+`0x141A93038` is a later unconditional build whose mode is the runtime byte
+`v97`, followed by the final direct evaluator call at `0x141A932F8` and palette
+publication. Both reach the same post-Create census seam.
+
+Competing hypotheses are now exact. `H-final-source` predicts that the later
+Async build contains the Mazur source under its actual mode/flags. `H-no-final-
+source` predicts only source-zero Async variants. `H-identical-second` predicts
+that the second build is structurally identical to the first and is therefore
+correctly deduplicated. Build `adk` remains wholly read-only and gives Perform
+and Async independent eight-signature budgets. Falsifiable prediction: one
+neutral Draw must expose every distinct Async variant without Perform
+starvation. A later `source>0` row selects its exact mode/flags for the next
+static repair package; exhaustive source-zero Async rows reject the current
+final-Async donor seam rather than justify a blind mutation.

@@ -4897,6 +4897,16 @@ separate idle subpredicates. Require either a concrete nonzero field or
 `idleParts=1/1/1` plus `NADINE-MAZUR-STEADY-HANDS-CMDS`; do not relax the idle
 scope before this discriminator.
 
+`adj` closed the idle gate and exposed a second diagnostic packaging defect.
+PID 19468 emitted seven distinct Perform command signatures with `source>0`,
+then one Async `mode=2/flags=9/source=0`; those eight rows exhausted the shared
+table before the later unconditional Async build at `0x141A93038` could be
+observed. Build `adk` is still read-only and splits the bounded signature table
+by Perform/Async stage. One neutral Draw must now produce either a later Async
+`source>0` tuple with its exact mode/flags, or only source-zero Async variants.
+The former earns a statically scoped final-pass package; the latter rejects this
+donor seam. Do not re-enable endpoint mutation before this discriminator.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
