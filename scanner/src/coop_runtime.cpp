@@ -2466,6 +2466,7 @@ constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
 // exact local legacy-Nadine Mazur WeaponOut; P99, role A and transitions remain
 // stock.  This reuses the already-proved one-block/cmd24-safe insertion seam.
 constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = true;
+constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = true;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 // Build ada proved a repeatable first-Draw-good -> steady-broken transition,
 // followed by immediately broken later Draws. The animation layer has exact
@@ -46613,7 +46614,7 @@ void log_legacy_nadine_mazur_steady_hands_owner_scope(
     bool fg_match, bool art_match, bool idle_ok,
     std::uint64_t action_bits, bool cover,
     const IdleArmPoseOwnerScope& owner) {
-    if constexpr (!kEnableLegacyNadineMazurSteadyHandsCommandCensus) {
+    if constexpr (!kEnableLegacyNadineMazurSteadyHandsOwnerCensus) {
         return;
     }
     std::uint64_t signature = 1469598103934665603ull;
@@ -47470,7 +47471,9 @@ bool install_legacy_nadine_mazur_steady_hands_npc_repair() {
     boot_log_line(
         installed
             ? (kEnableLegacyNadineMazurDrawEndpointRepair
-                   ? "legacy-Nadine Mazur draw-endpoint full-arm repair installed"
+                   ? (kEnableLegacyNadineMazurSteadyHandsOwnerCensus
+                          ? "legacy-Nadine Mazur draw-endpoint repair + bounded owner census installed"
+                          : "legacy-Nadine Mazur draw-endpoint full-arm repair installed")
                    : "legacy-Nadine Mazur steady-hands command census installed (read-only)")
             : "legacy-Nadine Mazur steady-hands command hook PARTIAL (pass-through)");
     return installed;
@@ -59666,8 +59669,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-15adf "
-        "(local legacy-Nadine Mazur terminal draw-pose repair)");
+        "TLL co-op runtime init 2026-08-15adg "
+        "(Mazur draw-pose repair + bounded owner admission census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

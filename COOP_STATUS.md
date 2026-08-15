@@ -24828,3 +24828,37 @@ aiming, moving, holstering, using P99 or rendering role-A Player1. A marker with
 unchanged broken arms rejects the terminal endpoint as a sufficient donor; no
 marker plus a bounded admission/rejection row selects packaging rather than a
 visual failure.
+
+### 2026-08-15 RUNTIME INCONCLUSIVE (`adf`) / IMPLEMENTED discriminator (`adg`): terminal Draw donor was never executed
+
+The `adf` launch used role-A PID 21744 and role-B PID 21904. Both exact hooks
+installed (`locomotion_hook.log:82002-82082`), but the role-B segment emitted
+only one early compound `NADINE-MAZUR-STEADY-HANDS admission=owner` row at
+line 82140 and zero `NADINE-MAZUR-DRAW-ENDPOINT injected` or bounded
+`rejected` rows. The remaining Mazur rows all selected holstered
+`targSpineProp/AD047A`, not a drawn right-hand endpoint. The user's unchanged
+visual result therefore does **not** reject `66846123`: no donor command was
+inserted and the written `adf` prediction was not reached.
+
+The diagnostic blind spot was local packaging, not a new engine hypothesis.
+`log_legacy_nadine_mazur_steady_hands_owner_scope` already records the exact
+first failed Player/FG/skeleton/controller/grenade/weapon/art/idle fields and
+was runtime-confirmed in `acy`, but its compile-time gate was incorrectly tied
+to the now-disabled heavy command census. The one-bit admission logger then
+deduplicated every later failure under the same generic `owner` enum.
+
+Build `adg` separates the bounded owner census from the command census. It
+keeps the `adf` repair and every mutation guard unchanged, enables only the
+existing 250-ms/24-signature owner rows, and leaves the old Perform command
+census disabled. This adds no game virtual call or pose write. Competing
+packaging outcomes are now exact: controller rows identify holstered/Draw/
+WeaponOut state, complete scope plus `fg/art/idle` selects the final-list path,
+and a donor or hands-root failure remains a distinct admission enum.
+
+Falsifiable `adg` prediction: after drawing Mazur on role B and standing still
+without ADS for at least two seconds, either the existing `adf` injection row
+appears, or a `NADINE-MAZUR-STEADY-HANDS-OWNER` row names the first persistent
+failed field (`slot/state`, skeleton, art, FG or idle inputs). The former is the
+first valid visual exam of `66846123`; the latter selects a packaging repair
+without changing the pose. Silence after a live role-B Async hook would reject
+the selector reach itself.

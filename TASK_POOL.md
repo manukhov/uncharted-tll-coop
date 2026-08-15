@@ -4853,6 +4853,17 @@ and the initially correct two-handed pose remains correct. Marker plus broken
 arms rejects the donor; no marker selects bounded packaging telemetry. Full
 STATIC evidence and competitors are recorded in `COOP_STATUS.md`.
 
+The first `adf` runtime was inconclusive: both hooks installed, but role B
+emitted only the generic early `admission=owner`; there was no draw-endpoint
+injection/rejection marker and all logged Mazur attachments were still
+holstered on `AD047A`. Do not classify the terminal Draw donor as rejected.
+Build `adg` keeps the exact repair but decouples the already proven bounded
+owner census from the disabled heavy command census. Next exam: role B draws
+Mazur, releases every input, stays out of ADS and stands still for two seconds.
+Require either `NADINE-MAZUR-DRAW-ENDPOINT injected donor=0x66846123 phase=10`
+or a detailed `NADINE-MAZUR-STEADY-HANDS-OWNER` row that selects the exact
+failed scope field before any further mutation.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
