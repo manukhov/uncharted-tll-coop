@@ -47465,7 +47465,8 @@ bool install_legacy_nadine_mazur_steady_hands_npc_repair() {
                 create_commands_trampoline);
     }
     bool perform_ready = true;
-    if constexpr (kEnableLegacyNadineMazurSteadyHandsCommandCensus) {
+    if constexpr (kEnableLegacyNadineMazurDrawEndpointRepair ||
+                  kEnableLegacyNadineMazurSteadyHandsCommandCensus) {
         void* const perform_trampoline =
             create_commands_trampoline != nullptr
             ? install_fire_gate_detour(
@@ -59704,8 +59705,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-15adl "
-        "(Mazur steady Perform draw-endpoint repair)");
+        "TLL co-op runtime init 2026-08-15adm "
+        "(Mazur steady Perform draw-endpoint repair, wrapper fixed)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

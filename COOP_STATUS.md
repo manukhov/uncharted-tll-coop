@@ -25056,3 +25056,27 @@ with phase 10 and samples `nonzero/11`. A hold that remains normal confirms the
 producer repair; a marker followed by the same break rejects donor sufficiency
 and selects the intervening PlayerWeaponIK boundary. No marker is packaging and
 must produce a bounded owner/parser reason.
+
+### 2026-08-15 RUNTIME REJECTED packaging (`adl`) / IMPLEMENTED corrected (`adm`): Perform wrapper was compile-time omitted
+
+The user again observed the stock first-seconds-good -> broken transition, but
+role-B PID 15868 emitted zero `NADINE-MAZUR-DRAW-ENDPOINT` injection or parser
+rows. This does not test the donor. Exact source inspection found a deterministic
+installer error: `kEnableLegacyNadineMazurDrawEndpointRepair=true` while the
+read-only command census was false, but the Perform detour at
+`AnimManager_PerformAnimBlend 0x141A92260` was installed only inside
+`if constexpr (kEnableLegacyNadineMazurSteadyHandsCommandCensus)`. The local
+`perform_ready` defaulted true, so Create+Async installed, global readiness was
+published, and the boot log falsely reported the repair as installed. No thread
+could ever enter TLS `stage=Perform`; the injector's exact stage guard made the
+mutation unreachable.
+
+Build `adm` changes only that compile-time installer predicate to
+`repair || census`. Create, Perform and Async detours now remain one atomic
+installation package under the existing suspended-thread protocol. The exact
+owner, Mazur/state-2/idle, mode1/flags3, one-source, command grammar, capacity,
+terminal sample and role-B-only mutation are unchanged. The prior `adl`
+prediction therefore carries forward verbatim: a real test requires
+`injected stage=perform ... donor=66846123 phase=10 samples=.../11`; marker plus
+the same delayed break rejects sufficiency, while another markerless run is
+packaging and must not be interpreted visually.

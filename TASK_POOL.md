@@ -4917,6 +4917,13 @@ Async cmd14 imports that pose. Require `injected stage=perform ... phase=10
 samples=.../11` and a hold that stays normal. Marker plus the same break rejects
 the donor and selects intervening PlayerWeaponIK; no marker remains packaging.
 
+`adl` was a deterministic packaging failure: repair was true and census false,
+but the Perform detour was compiled only under the census flag. Create+Async
+still installed and readiness/boot logging falsely reported success, while the
+injector's `stage==Perform` guard was unreachable. `adm` installs Perform when
+either repair or census is enabled. Repeat the same one-Draw exam and require
+the exact Perform injection marker before judging pixels.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
