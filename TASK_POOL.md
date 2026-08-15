@@ -4885,6 +4885,18 @@ by either the exact `injected donor=66846123 phase=10 .../11` marker or a named
 owner/parser rejection. Marker plus broken pixels rejects the donor; keep the
 later automatic holster stock.
 
+`adi` remained packaging-inconclusive, not a donor failure. PID 16324 reached
+the normal `state=2 -> s_no-weapon` window for 5.375 seconds but emitted neither
+an injection nor parser rejection. Earlier owner rows exposed fire-hold
+`action=0x809` and then backward movement; the final neutral stationary cycle
+could not produce a new row because movement fields were absent from the
+deduplication signature. Build `adj` is read-only: endpoint mutation and the
+closed lifecycle/fade traces are disabled, while the final command census and
+an expanded owner row log exact action, magnitude, stick, world vector and
+separate idle subpredicates. Require either a concrete nonzero field or
+`idleParts=1/1/1` plus `NADINE-MAZUR-STEADY-HANDS-CMDS`; do not relax the idle
+scope before this discriminator.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

@@ -2465,21 +2465,21 @@ constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
 // the final Async group-zero list, blend only that clip's terminal sample over
 // exact local legacy-Nadine Mazur WeaponOut; P99, role A and transitions remain
 // stock.  This reuses the already-proved one-block/cmd24-safe insertion seam.
-constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = true;
+constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = true;
-constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
+constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = true;
 // Build ada proved a repeatable first-Draw-good -> steady-broken transition,
 // followed by immediately broken later Draws. The animation layer has exact
 // create-new and loop-current paths while consuming its bounded transition
 // queue. Observe that lifecycle for the retained local WeaponPartial layer;
 // never alter a request, instance, weight, or pose row in this census.
-constexpr bool kEnableWeaponPartialTransitionLifecycleCensus = true;
+constexpr bool kEnableWeaponPartialTransitionLifecycleCensus = false;
 // Build add rejected both loop-current reuse and a missing second request.
 // The first custom Draw transition nevertheless starts from one track while
 // the repeated Draw starts from two. Sample the exact WeaponPartial track and
 // instance fade fields after stock UpdateBlendWeights so the visual break can
 // be joined to a concrete source/destination weight endpoint. Read-only.
-constexpr bool kEnableWeaponPartialFadeTraceCensus = true;
+constexpr bool kEnableWeaponPartialFadeTraceCensus = false;
 // The Mazur strap child owns a complete authored state-zero pose, but its
 // dynamic endpoint lookup fails because legacy Nadine has no strap2..strap14
 // joints and hides the otherwise valid mesh. Reveal that exact published child
@@ -46622,6 +46622,11 @@ void log_legacy_nadine_mazur_steady_hands_owner_scope(
         signature ^= value;
         signature *= 1099511628211ull;
     };
+    const auto float_bits = [](float value) {
+        std::uint32_t bits = 0;
+        std::memcpy(&bits, &value, sizeof(bits));
+        return bits;
+    };
     mix(static_cast<std::uint32_t>(diagnostic.stage));
     mix(diagnostic.player_stable ? 1u : 0u);
     mix(diagnostic.player_vtable_match ? 1u : 0u);
@@ -46646,6 +46651,13 @@ void log_legacy_nadine_mazur_steady_hands_owner_scope(
     mix(idle_ok ? 1u : 0u);
     mix(action_bits);
     mix(cover ? 1u : 0u);
+    mix(float_bits(owner.move_magnitude));
+    for (const float value : owner.move_stick) {
+        mix(float_bits(value));
+    }
+    for (const float value : owner.move_world) {
+        mix(float_bits(value));
+    }
 
     static SRWLOCK lock = SRWLOCK_INIT;
     static std::uint64_t last_signature = 0;
@@ -46667,6 +46679,9 @@ void log_legacy_nadine_mazur_steady_hands_owner_scope(
     }
 
     std::ostringstream line;
+    const bool movement_ok = scope_ok && idle_arm_pose_movement_is_zero(
+        owner.move_stick, owner.move_world, owner.move_magnitude);
+    const bool action_ok = action_bits == 0 || action_bits == 0x9ull;
     line << "NADINE-MAZUR-STEADY-HANDS-OWNER stage="
          << static_cast<std::uint32_t>(diagnostic.stage) << ":"
          << idle_arm_pose_admission_stage_name(diagnostic.stage)
@@ -46698,8 +46713,13 @@ void log_legacy_nadine_mazur_steady_hands_owner_scope(
          << (art_match ? 1 : 0) << "/" << (idle_ok ? 1 : 0)
          << " action=0x" << std::hex << action_bits
          << " cover=" << std::dec << (cover ? 1 : 0)
+         << " idleParts=" << (movement_ok ? 1 : 0) << "/"
+         << (action_ok ? 1 : 0) << "/" << (!cover ? 1 : 0)
          << " move=" << owner.move_magnitude << "/"
-         << owner.move_stick[0] << "/" << owner.move_stick[1];
+         << owner.move_stick[0] << "/" << owner.move_stick[1]
+         << " world=" << owner.move_world[0] << "/"
+         << owner.move_world[1] << "/" << owner.move_world[2] << "/"
+         << owner.move_world[3];
     boot_log_line(line.str().c_str());
 }
 
@@ -59669,8 +59689,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-15adi "
-        "(Mazur draw-endpoint repair + owner and lifecycle census)");
+        "TLL co-op runtime init 2026-08-15adj "
+        "(read-only Mazur idle admission + final command census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

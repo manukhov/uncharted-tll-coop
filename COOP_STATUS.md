@@ -24940,3 +24940,41 @@ phase=10 samples=.../11` or a detailed owner/admission/parser rejection. An
 injection marker plus the same broken arms finally rejects the terminal Draw
 endpoint itself; a corrected hold through the later native auto-holster confirms
 it. No marker is now a packaging result named by the simultaneous censuses.
+
+### 2026-08-15 RUNTIME INCONCLUSIVE (`adi`) / IMPLEMENTED read-only (`adj`): idle subpredicate remained opaque
+
+Role-B PID 16324 reproduced the normal lifecycle more than once. In the final
+user-scripted cycle, `s_weapon-out 7405AACB` entered controller `WeaponOut=2`,
+then `s_no-weapon 3889CC0E` became the sole track and remained there for
+5.375 seconds before native Holster. There was no draw-endpoint injection or
+parser rejection. The donor is therefore still untested.
+
+The owner census proves that the failure remains inside the local idle
+predicate. An earlier state-2 sample had `action=0x809` (the independently
+resolved fire-hold bit `0x800`); another had neutral `action=0x9` but
+`moveMagnitude=1, moveStick=(0,-1)`. The final clean cycle held state 2 with
+neutral visible input, but its owner row was suppressed because the diagnostic
+signature mixed `idle_ok` and action while omitting all movement fields. It
+could not distinguish a changed magnitude/stick/world tuple with the same
+combined failure result.
+
+Three independent facts justify one more read-only discriminator rather than
+loosening the guard. First, runtime reached the exact Player/FG/skeleton/
+controller/weapon/art scope and only `local_player_is_steady_drawn_idle`
+remained false. Second, that predicate has only movement, cover and action
+leaves; runtime already logged `cover=0` and the two concrete action/movement
+failure forms. Third, `PlayerInputCommandState_DeriveMoveVectors 0x141E397C0`
+reads the raw pair, and on the exact zero-magnitude branch atomically writes
+zero to magnitude `+0x7C` and all three world-vector banks rooted at `+0x90`;
+it cannot legitimately retain an arbitrary nonzero index-0 world vector after
+a zero raw sample.
+
+Build `adj` is read-only. It disables the endpoint mutation and the now-closed
+WeaponPartial lifecycle/fade traces, enables the existing final command census,
+and extends the bounded owner signature/row with exact raw magnitude, stick and
+all four world-vector floats plus separate `movement/action/cover` booleans.
+Falsifiable prediction: one motionless neutral Draw either reports the concrete
+nonzero idle component, or reaches `idleParts=1/1/1` and emits a final Async
+`NADINE-MAZUR-STEADY-HANDS-CMDS` row. The latter closes command grammar without
+changing the pose; total silence would reject the Async owner reach assumed by
+the current selector.
