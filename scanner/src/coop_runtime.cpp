@@ -2460,14 +2460,15 @@ constexpr bool kEnableLegacyNadineDrawnP99LocalTransformCensus = false;
 // only this exact local legacy-Nadine action through Apply's native zero-weight
 // no-op boundary while preserving action/NewIkWeapon/overlay lifecycle.
 constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
-// ade proved that the complete Player-arm s_weapon-draw partial is the last
-// normal-looking owner before stock settles into the broken steady hold.  In
-// the final Async group-zero list, blend only that clip's terminal sample over
-// exact local legacy-Nadine Mazur WeaponOut; P99, role A and transitions remain
-// stock.  This reuses the already-proved one-block/cmd24-safe insertion seam.
-constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
+// adk proved that the stable broken hold keeps the authored Hands leaf in the
+// Perform main DAG while final Async has collapsed to the source-free mode-2
+// import. Blend the complete Player-arm s_weapon-draw terminal sample into the
+// exact Perform group-zero result so stock cmd27 writes it to Fg+0x100 and the
+// later Async cmd14 imports that same pose. P99, role A and transitions remain
+// stock.
+constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = true;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = true;
-constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = true;
+constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 // Build ada proved a repeatable first-Draw-good -> steady-broken transition,
 // followed by immediately broken later Draws. The animation layer has exact
 // create-new and loop-current paths while consuming its bounded transition
@@ -47166,9 +47167,9 @@ seh_inject_legacy_nadine_mazur_steady_hands_commands(
             return LegacyNadineMazurSteadyHandsInjection::kGrammar;
         }
         // Exact full-list suffix emitted after AnimControl's cmd3 in the
-        // current Async final-palette group zero: close object, prepare
-        // parameters, publish joint-program metadata, run the named
-        // joint-conversion post-pose plugin, export local JointParams, end.
+        // current Perform group zero: close object, prepare parameters,
+        // publish joint-program metadata, run the named joint-conversion
+        // post-pose plugin, export local JointParams to Fg+0x100, end.
         // The plugin consumes the finalized matrix workspace and does not
         // rewrite WorkBuffer lane zero; rejecting any different suffix keeps
         // that late-writer statement falsifiable.
@@ -47301,7 +47302,7 @@ std::uint64_t __fastcall hooked_create_anim_cmds_for_object_for_nadine_mazur(
         return result;
     }
     if (g_legacy_nadine_mazur_steady_hands_command_stage !=
-        LegacyNadineMazurSteadyHandsCommandStage::kAsync) {
+        LegacyNadineMazurSteadyHandsCommandStage::kPerform) {
         return result;
     }
 
@@ -47316,7 +47317,8 @@ std::uint64_t __fastcall hooked_create_anim_cmds_for_object_for_nadine_mazur(
     if (injection == LegacyNadineMazurSteadyHandsInjection::kInjected &&
         !injected_logged.exchange(true, std::memory_order_relaxed)) {
         std::ostringstream line;
-        line << "NADINE-MAZUR-DRAW-ENDPOINT injected source=0x" << std::hex
+        line << "NADINE-MAZUR-DRAW-ENDPOINT injected stage=perform source=0x"
+             << std::hex
              << kLegacyNadineIdleHandsStateId << " resolved=0x"
              << observed_source_resolved_id << " donor=0x"
              << kPlayerWeaponDrawFullArmClipId << std::dec
@@ -47333,7 +47335,8 @@ std::uint64_t __fastcall hooked_create_anim_cmds_for_object_for_nadine_mazur(
         if (reason < reject_logged.size() &&
             !reject_logged[reason].exchange(true, std::memory_order_relaxed)) {
             std::ostringstream line;
-            line << "NADINE-MAZUR-DRAW-ENDPOINT rejected reason=" << reason;
+            line << "NADINE-MAZUR-DRAW-ENDPOINT rejected stage=perform reason="
+                 << reason;
             boot_log_line(line.str().c_str());
         }
     }
@@ -59701,8 +59704,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-15adk "
-        "(read-only Mazur per-stage final command census)");
+        "TLL co-op runtime init 2026-08-15adl "
+        "(Mazur steady Perform draw-endpoint repair)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

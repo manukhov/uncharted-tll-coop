@@ -25008,3 +25008,51 @@ neutral Draw must expose every distinct Async variant without Perform
 starvation. A later `source>0` row selects its exact mode/flags for the next
 static repair package; exhaustive source-zero Async rows reject the current
 final-Async donor seam rather than justify a blind mutation.
+
+### 2026-08-15 RUNTIME CONFIRMED (`adk`) / STATIC IMPLEMENTED (`adl`): steady hold uses Perform -> local pose -> Async import
+
+Fresh role-B PID 19832 passed the neutral state-2 admission. It emitted eight
+independently budgeted Perform main variants, all `mode=1/flags=3`, all
+structural, and all with `source=1..2`. Async emitted only the already audited
+58-word auxiliary list `mode=2/flags=9/source=0`:
+`0,1,2,9,3,4,14,15,16,17,24(248B1AAE),24(514C0761),26,5`.
+No second distinct Async signature appeared during the steady interval, so a
+source-bearing final Async main DAG was not persistent in this sample. No pose
+mutation was enabled.
+
+This result combines with the earlier `acu` source-bearing Async-main capture
+rather than contradicting it. `acu` proved that `mode=1/source=1` can exist at
+the Draw-to-WeaponOut boundary; `adk` proves that the later broken steady hold
+has collapsed to the source-free mode-2 import while the source remains live in
+Perform. That temporal change is the first command-level event matching the
+user's repeatable first-Draw-good -> steady-broken observation.
+
+The next mutation is therefore upstream and follows a complete producer/
+consumer chain. `AnimManager_PerformAnimBlend 0x141A92260` builds the exact
+source-bearing main list; its terminal command 27 writes the finalized local
+`JointParams` to `FgAnimData+0x100`. Player postblend/WeaponIK runs afterward.
+The stable Async mode-2 list then uses command 14 to import that exact
+`Fg+0x100` pose before joint programs and final palette publication. The donor
+is the shipped eleven-sample `66846123 p-unholster-chest^idle-part`, whose
+terminal sample is the last visually normal Draw owner and whose Player mask is
+exactly joints 21..32. This is distinct from the runtime-rejected one-sample
+NPC `B725EA01` partial.
+
+Build `adl` enables only this exact Perform mutation. Under role-B local Nadine,
+Mazur, WeaponOut=2, grenade-idle, neutral input, zero movement and the existing
+one-block `mode=1/flags=3/source=1` grammar, it appends stock command 6 for the
+terminal Draw sample and a mode-1/weight-1 command 7 immediately before cmd3.
+The unchanged suffix executes joint conversion and cmd27; P99, role A,
+Draw/Holster/ADS/reload/movement and every Async list remain stock.
+
+Competing hypotheses are now falsifiable. `H-transient-owner` predicts that
+preserving the last normal full-arm partial in the persistent Perform producer
+keeps the two-hand hold through the later mode-2 import. `H-postblend-IK`
+predicts a valid Perform injection marker followed by the same break because
+PlayerWeaponIK overwrites the donor before Async imports it. `H-perform-source-
+absent` is rejected by the eight `adk` rows. Prediction: one neutral Draw must
+emit `NADINE-MAZUR-DRAW-ENDPOINT injected stage=perform donor=0x66846123`
+with phase 10 and samples `nonzero/11`. A hold that remains normal confirms the
+producer repair; a marker followed by the same break rejects donor sufficiency
+and selects the intervening PlayerWeaponIK boundary. No marker is packaging and
+must produce a bounded owner/parser reason.

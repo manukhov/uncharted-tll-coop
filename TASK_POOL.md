@@ -4907,6 +4907,16 @@ by Perform/Async stage. One neutral Draw must now produce either a later Async
 The former earns a statically scoped final-pass package; the latter rejects this
 donor seam. Do not re-enable endpoint mutation before this discriminator.
 
+`adk` closed the temporal command handoff. In stable WeaponOut, PID 19832
+produced eight structural Perform `mode1/flags3/source1..2` variants but only
+the 58-word Async `mode2/flags9/source0` import. The earlier `acu` Async-main
+source row was therefore transitional, while the persistent source remains in
+Perform. Build `adl` enables the full-arm `66846123` terminal Draw sample only
+in exact Perform group zero, before cmd27 exports `Fg+0x100`; the later stable
+Async cmd14 imports that pose. Require `injected stage=perform ... phase=10
+samples=.../11` and a hold that stays normal. Marker plus the same break rejects
+the donor and selects intervening PlayerWeaponIK; no marker remains packaging.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
