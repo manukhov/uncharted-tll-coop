@@ -4931,7 +4931,8 @@ The exact earlier Mazur boundary measured WeaponIKFeather rewriting C39 rows
 19..26, while the Player 21..32 donor converts to C39 19..30. Build `adn` uses a same-thread TLS
 ticket set only by successful `66846123` insertion and bypasses Feather only for
 that same role-B/local/Mazur/WeaponOut/idle Player-Fg-weapon generation. Require
-both `DRAW-ENDPOINT injected` and `WEAPON-IK-FEATHER-SUPPRESS pairedDonor=1`.
+the boot `paired endpoint/Feather repair READY`, then both
+`DRAW-ENDPOINT injected` and `WEAPON-IK-FEATHER-SUPPRESS pairedDonor=1`.
 Both markers plus two correct hands confirms the combined repair; both markers
 plus an extended arm rejects Feather sufficiency and selects a later writer or
 insufficient terminal-sample/helper/finger content. A suppress marker without

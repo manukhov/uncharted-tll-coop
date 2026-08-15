@@ -25125,8 +25125,9 @@ after Create, Perform, Async, Feather-callsite and Player-`+0x408` hooks all
 install. P99, Draw state 1, ADS state 4, role A and every frame without an
 actual donor insertion stay stock.
 
-Competing hypotheses remain explicit. `H-Feather-overwrite` predicts both the
-injection marker and `NADINE-WEAPON-IK-FEATHER-SUPPRESS ... pairedDonor=1`, after
+Competing hypotheses remain explicit. `H-Feather-overwrite` predicts the boot
+marker `legacy-Nadine Mazur paired endpoint/Feather repair READY`, the injection
+marker and `NADINE-WEAPON-IK-FEATHER-SUPPRESS ... pairedDonor=1`, after
 which both hands retain the two-hand endpoint. `H-donor-incomplete` predicts
 both markers but an arm still extended, selecting terminal-sample/helper/finger
 content that the donor does not sufficiently constrain.
