@@ -46357,6 +46357,7 @@ constexpr std::uint32_t kAnimCommandWordCountBlend = 6u;
 constexpr std::uint32_t kAnimCommandWordCountFinalizeBlock = 2u;
 constexpr std::uint32_t kAnimWorkBufferLaneCapacity = 64u;
 constexpr std::uint32_t kAnimPostPoseJointConversionId = 0x248B1AAEu;
+constexpr ULONGLONG kLegacyNadineMazurFeatherBypassTtlMs = 300;
 constexpr std::uintptr_t kAnimManagerCreateAnimCmdsNormalReturnRva =
     0x1A91604;
 
@@ -46433,11 +46434,10 @@ bool legacy_nadine_mazur_draw_endpoint_allows_feather_bypass(
         scope->player != ticket.player ||
         scope->fg_anim_data != ticket.fg_anim_data ||
         scope->weapon != ticket.weapon ||
-        scope->local_pose != ticket.local_pose ||
         scope->player_runtime_id != ticket.player_runtime_id ||
         scope->weapon_runtime_id != ticket.weapon_runtime_id ||
         ticket.captured_ms == 0 || now < ticket.captured_ms ||
-        now - ticket.captured_ms > 100) {
+        now - ticket.captured_ms > kLegacyNadineMazurFeatherBypassTtlMs) {
         return false;
     }
 
@@ -46447,19 +46447,9 @@ bool legacy_nadine_mazur_draw_endpoint_allows_feather_bypass(
         !local_player_is_steady_drawn_idle(owner) ||
         owner.player != scope->player ||
         owner.fg_anim_data != scope->fg_anim_data ||
-        owner.local_pose != scope->local_pose ||
         owner.weapon != scope->weapon ||
         owner.weapon_art_id != kCoopRifleArtId ||
         owner.weapon_slot != scope->current_slot) {
-        return false;
-    }
-    __try {
-        if (*reinterpret_cast<void* const*>(
-                scope->fg_anim_data + kFgAnimDataSkeletonOffset) !=
-            ticket.target_skeleton) {
-            return false;
-        }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
     }
     return true;
