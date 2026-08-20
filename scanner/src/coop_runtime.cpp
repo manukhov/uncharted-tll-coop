@@ -2447,14 +2447,16 @@ constexpr bool kEnableLegacyNadineGripSnapshotCensus = false;
 // lifecycle/scalars and near-identical arm rows, so this hot census has answered
 // its question and stays out of production.
 constexpr bool kEnableLegacyNadineWeaponIkFeatherInputCensus = false;
-// Build adu proved that the stock pre-postblend pose is only the one-handed
-// input to Player WeaponIK, while stock postblend is required to create the
-// second-hand closure.  The next discriminator is therefore read-only: at the
-// sole WeaponIKFeather::Apply -> SolveWeaponFeatherIk callsite, compare the
-// initial common hand-prop goal and the solved arm chains for local Chloe and
-// local legacy Nadine.  No pose, JointSet, map, weight or weapon field is
-// changed by this census.
+// Build adx proved that the stock Chloe/Nadine common goals diverge before the
+// solver. Build ady then located a matching live Chloe donor at retained owner
+// 1 inside role B. Keep the one-shot census alongside the live relay so the
+// exact source/target/scalar boundary remains visible during the exam.
 constexpr bool kEnablePlayerWeaponIkFeatherGoalCensus = true;
+// Build ady proved that role-B retained owner 1 supplies the same live Chloe
+// Mazur target as role-A local Chloe (0.00853 units / 1.22 degrees apart),
+// while role-B Nadine differs by 0.30061 units / 75.94 degrees.  Relay only
+// that normalized target inside the same process; keep the stock solver/maps.
+constexpr bool kEnableLegacyNadineWeaponIkGoalRelay = true;
 // Build acg proved that the two P99 WeaponIK paths share the same lifecycle and
 // scalar controls, but composing the interleaved arm hierarchy reveals a
 // residual 6.7 mm hand-endpoint split. Distinguish that upstream pose delta
@@ -44889,6 +44891,8 @@ using JointSetGetJointLocWsFunction = const float*(__fastcall*)(
     void*, std::int32_t);
 using TransformMakeRelativeFunction = void*(__fastcall*)(
     const float*, float*, const float*);
+using WeaponIkTransformComposeFunction = void*(__fastcall*)(
+    const float*, float*, const float*);
 
 WeaponIkFeatherSolveFunction g_original_weapon_ik_feather_solve = nullptr;
 JointChainFindNamedJointOffsetFunction
@@ -44896,9 +44900,12 @@ JointChainFindNamedJointOffsetFunction
 JointSetGetJointLocWsFunction g_original_weapon_ik_goal_get_joint_loc_ws =
     nullptr;
 TransformMakeRelativeFunction g_transform_make_relative = nullptr;
+WeaponIkTransformComposeFunction g_weapon_ik_transform_compose = nullptr;
 
 constexpr std::size_t kWeaponIkGoalChainJointCount = 5;
 constexpr ULONGLONG kWeaponIkGoalCensusDwellMs = 350;
+constexpr ULONGLONG kWeaponIkGoalRelayDwellMs = 350;
+constexpr ULONGLONG kWeaponIkGoalRelayFreshMs = 100;
 
 struct WeaponIkGoalLocator {
     std::array<float, 8> value{};
@@ -44915,7 +44922,13 @@ struct WeaponIkGoalGetterCaptureTls {
     void* expected_right_set = nullptr;
     bool left_captured = false;
     bool right_captured = false;
+    bool override_active = false;
+    bool override_world_ready = false;
+    bool left_overridden = false;
+    bool right_overridden = false;
     WeaponIkGoalChainSample before{};
+    WeaponIkGoalLocator override_relative{};
+    WeaponIkGoalLocator override_world{};
 };
 
 thread_local WeaponIkGoalGetterCaptureTls g_weapon_ik_goal_getter_capture_tls{};
@@ -44926,10 +44939,33 @@ struct WeaponIkGoalCensusScope {
     void* feather_info = nullptr;
     void* weapon = nullptr;
     std::byte* fg_anim_data = nullptr;
+    std::byte* target_skeleton = nullptr;
     std::uint32_t player_runtime_id = 0;
     std::uint32_t weapon_runtime_id = 0;
     std::uint32_t look = 0;
     std::uint32_t joint_count = 0;
+};
+
+struct WeaponIkGoalRelayDwell {
+    void* player = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    ULONGLONG stable_since_ms = 0;
+    ULONGLONG last_seen_ms = 0;
+};
+
+struct WeaponIkGoalRelaySnapshot {
+    bool valid = false;
+    std::uint32_t sequence = 0;
+    void* player = nullptr;
+    void* feather_info = nullptr;
+    void* weapon = nullptr;
+    std::byte* fg_anim_data = nullptr;
+    std::byte* target_skeleton = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    ULONGLONG captured_ms = 0;
+    WeaponIkGoalLocator relative{};
 };
 
 struct WeaponIkGoalCensusMemo {
@@ -44946,6 +44982,10 @@ WeaponIkGoalCensusMemo g_weapon_ik_goal_census_memos[2]{};
 std::atomic<std::uint32_t> g_weapon_ik_goal_census_entry_mask{0};
 std::atomic<std::uint32_t> g_weapon_ik_goal_census_admission_mask{0};
 std::atomic<std::uint32_t> g_weapon_ik_goal_census_complete_mask{0};
+SRWLOCK g_weapon_ik_goal_relay_lock = SRWLOCK_INIT;
+WeaponIkGoalRelayDwell g_weapon_ik_goal_relay_dwell[2]{};
+WeaponIkGoalRelaySnapshot g_weapon_ik_goal_relay_snapshot{};
+std::atomic<std::uint32_t> g_weapon_ik_goal_relay_sequence{0};
 std::array<std::uint32_t, kWeaponIkGoalChainJointCount>
     g_weapon_ik_goal_left_joint_ids{};
 std::array<std::uint32_t, kWeaponIkGoalChainJointCount>
@@ -45168,6 +45208,7 @@ bool seh_select_weapon_ik_goal_census_scope(
         output->feather_info = feather_info;
         output->weapon = weapon;
         output->fg_anim_data = fg;
+        output->target_skeleton = target_skeleton;
         output->player_runtime_id = player_runtime_id;
         output->weapon_runtime_id = weapon_runtime_id;
         output->look = look;
@@ -45228,6 +45269,243 @@ void finish_weapon_ik_goal_census_claim(
         }
     }
     ReleaseSRWLockExclusive(&g_weapon_ik_goal_census_lock);
+}
+
+void log_weapon_ik_goal_locator(
+    std::ostringstream& line, const char* prefix,
+    const WeaponIkGoalLocator& locator);
+
+bool weapon_ik_goal_relay_dwell_ready(
+    const WeaponIkGoalCensusScope& scope) {
+    if (scope.owner_index < 0 || scope.owner_index > 1) {
+        return false;
+    }
+    const ULONGLONG now = GetTickCount64();
+    bool ready = false;
+    AcquireSRWLockExclusive(&g_weapon_ik_goal_relay_lock);
+    auto& dwell = g_weapon_ik_goal_relay_dwell[scope.owner_index];
+    const bool reset = dwell.player != scope.player ||
+        dwell.player_runtime_id != scope.player_runtime_id ||
+        dwell.weapon_runtime_id != scope.weapon_runtime_id ||
+        dwell.stable_since_ms == 0 || dwell.last_seen_ms == 0 ||
+        now < dwell.last_seen_ms || now - dwell.last_seen_ms > 100;
+    if (reset) {
+        dwell = {};
+        dwell.player = scope.player;
+        dwell.player_runtime_id = scope.player_runtime_id;
+        dwell.weapon_runtime_id = scope.weapon_runtime_id;
+        dwell.stable_since_ms = now;
+    }
+    dwell.last_seen_ms = now;
+    ready = now >= dwell.stable_since_ms &&
+        now - dwell.stable_since_ms >= kWeaponIkGoalRelayDwellMs;
+    ReleaseSRWLockExclusive(&g_weapon_ik_goal_relay_lock);
+    return ready;
+}
+
+bool seh_weapon_ik_goal_relay_source_still_valid(
+    const WeaponIkGoalRelaySnapshot& snapshot) {
+    __try {
+        if (!snapshot.valid || snapshot.player == nullptr ||
+            snapshot.feather_info == nullptr || snapshot.weapon == nullptr ||
+            snapshot.fg_anim_data == nullptr ||
+            snapshot.target_skeleton == nullptr ||
+            retained_player_object(1) != snapshot.player ||
+            !player_object_stable(snapshot.player) ||
+            !player_screen_index_is(snapshot.player, 1) ||
+            !weapon_ik_goal_locator_valid(snapshot.relative)) {
+            return false;
+        }
+        auto* const player = static_cast<std::byte*>(snapshot.player);
+        if (*reinterpret_cast<const std::uint32_t*>(
+                player + kGameObjectRuntimeIdOffset) !=
+                snapshot.player_runtime_id ||
+            *reinterpret_cast<void* const*>(player + 0x4308) !=
+                snapshot.feather_info ||
+            *reinterpret_cast<std::byte* const*>(
+                player + kPlayerFgAnimDataOffset) != snapshot.fg_anim_data) {
+            return false;
+        }
+        std::uint32_t look = 0;
+        if (!seh_read_player_look(snapshot.player, &look) ||
+            look != kChloeAttachDonorLookId) {
+            return false;
+        }
+        auto* const fg = snapshot.fg_anim_data;
+        if (readable_bytes(fg) <
+                kFgAnimDataRetainedIdOffset + sizeof(std::uint32_t) ||
+            *reinterpret_cast<std::byte* const*>(
+                fg + kFgAnimDataSkeletonOffset) != snapshot.target_skeleton ||
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRetainedIdOffset) !=
+                snapshot.player_runtime_id) {
+            return false;
+        }
+        auto* const owner_cell = *reinterpret_cast<std::byte* const*>(
+            fg + kFgAnimDataRetainedHandleOffset);
+        auto* const underlying_skeleton =
+            *reinterpret_cast<std::byte* const*>(
+                snapshot.target_skeleton + 0x40);
+        if (owner_cell == nullptr || readable_bytes(owner_cell) < 0x10 ||
+            *reinterpret_cast<void* const*>(owner_cell + 0x8) !=
+                snapshot.player ||
+            readable_bytes(snapshot.target_skeleton) < 0x48 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                snapshot.target_skeleton + kSkeletonJointCountOffset) != 651 ||
+            underlying_skeleton == nullptr ||
+            readable_bytes(underlying_skeleton) < 0x12 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                underlying_skeleton + 0x04) != 0x4B0F5DE3u ||
+            *reinterpret_cast<const std::uint16_t*>(
+                underlying_skeleton + 0x10) != 651) {
+            return false;
+        }
+        int current_slot = -1;
+        std::uint32_t draw_state = 0;
+        if (!read_weapon_draw_state(
+                snapshot.player, current_slot, draw_state) ||
+            draw_state != 2 || current_slot < 0 || current_slot >= 18 ||
+            get_weapon_from_slot(snapshot.player, current_slot) !=
+                snapshot.weapon ||
+            readable_bytes(snapshot.weapon) < 0x864 ||
+            *reinterpret_cast<const std::uintptr_t*>(snapshot.weapon) !=
+                g_module + kProcessWeaponVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(snapshot.weapon) +
+                kGameObjectRuntimeIdOffset) != snapshot.weapon_runtime_id ||
+            weapon_art_id_from_object(snapshot.weapon) != kCoopRifleArtId ||
+            !seh_weapon_parent_resolves_to_owner(
+                snapshot.weapon, snapshot.player) ||
+            player_cover_state_field(snapshot.player)) {
+            return false;
+        }
+        auto* const grenade_controller = *reinterpret_cast<std::byte**>(
+            player + kPlayerFastGrenadeControllerOffset);
+        if (grenade_controller == nullptr ||
+            readable_bytes(grenade_controller) < 0x124 ||
+            *reinterpret_cast<const std::uintptr_t*>(grenade_controller) !=
+                g_module + kFastGrenadeControllerVtableRva ||
+            *reinterpret_cast<void* const*>(grenade_controller + 0x108) !=
+                snapshot.player ||
+            *reinterpret_cast<const std::uint32_t*>(
+                grenade_controller + 0x120) != 0) {
+            return false;
+        }
+        float move_stick[2]{};
+        float move_world[4]{};
+        std::memcpy(move_stick, player + 0x39C8, sizeof(move_stick));
+        std::memcpy(move_world, player + 0x3A30, sizeof(move_world));
+        const float move_magnitude = *reinterpret_cast<const float*>(
+            player + 0x3A1C);
+        return idle_arm_pose_movement_is_zero(
+            move_stick, move_world, move_magnitude);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool copy_fresh_weapon_ik_goal_relay_snapshot(
+    WeaponIkGoalRelaySnapshot* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    AcquireSRWLockShared(&g_weapon_ik_goal_relay_lock);
+    *output = g_weapon_ik_goal_relay_snapshot;
+    ReleaseSRWLockShared(&g_weapon_ik_goal_relay_lock);
+    const ULONGLONG now = GetTickCount64();
+    return output->valid && output->sequence != 0 &&
+        output->captured_ms != 0 && now >= output->captured_ms &&
+        now - output->captured_ms <= kWeaponIkGoalRelayFreshMs &&
+        seh_weapon_ik_goal_relay_source_still_valid(*output);
+}
+
+void publish_weapon_ik_goal_relay_snapshot(
+    const WeaponIkGoalCensusScope& scope,
+    const WeaponIkGoalLocator& relative) {
+    if (scope.owner_index != 1 ||
+        scope.look != kChloeAttachDonorLookId ||
+        !weapon_ik_goal_locator_valid(relative)) {
+        return;
+    }
+    WeaponIkGoalRelaySnapshot snapshot{};
+    snapshot.valid = true;
+    snapshot.sequence =
+        g_weapon_ik_goal_relay_sequence.fetch_add(
+            1, std::memory_order_acq_rel) + 1;
+    snapshot.player = scope.player;
+    snapshot.feather_info = scope.feather_info;
+    snapshot.weapon = scope.weapon;
+    snapshot.fg_anim_data = scope.fg_anim_data;
+    snapshot.target_skeleton = scope.target_skeleton;
+    snapshot.player_runtime_id = scope.player_runtime_id;
+    snapshot.weapon_runtime_id = scope.weapon_runtime_id;
+    snapshot.captured_ms = GetTickCount64();
+    snapshot.relative = relative;
+    AcquireSRWLockExclusive(&g_weapon_ik_goal_relay_lock);
+    g_weapon_ik_goal_relay_snapshot = snapshot;
+    ReleaseSRWLockExclusive(&g_weapon_ik_goal_relay_lock);
+
+    static std::atomic<unsigned> logs{0};
+    if (logs.fetch_add(1, std::memory_order_relaxed) < 8) {
+        std::ostringstream line;
+        line << "CHLOE-WEAPON-IK-GOAL-CAPTURE owner=1 seq="
+             << snapshot.sequence
+             << " runtime=0x" << std::hex << scope.player_runtime_id
+             << " weapon=0x" << scope.weapon_runtime_id << std::dec;
+        log_weapon_ik_goal_locator(line, "goalRel", relative);
+        write_log_line(line.str().c_str());
+    }
+}
+
+bool seh_capture_weapon_ik_goal_spine(
+    void* joint_set, WeaponIkGoalLocator* spine) {
+    if (joint_set == nullptr || spine == nullptr) {
+        return false;
+    }
+    *spine = {};
+    __try {
+        if (readable_bytes(joint_set) < 0x28) {
+            return false;
+        }
+        auto* const cache_owner = *reinterpret_cast<std::byte* const*>(
+            static_cast<std::byte*>(joint_set) + 0x20);
+        if (cache_owner == nullptr || readable_bytes(cache_owner) < 0x10) {
+            return false;
+        }
+        auto* const cached_locators = *reinterpret_cast<std::byte* const*>(
+            cache_owner + 0x08);
+        if (cached_locators == nullptr ||
+            readable_bytes(cached_locators) < sizeof(spine->value)) {
+            return false;
+        }
+        std::memcpy(
+            spine->value.data(), cached_locators, sizeof(spine->value));
+        return weapon_ik_goal_locator_valid(*spine);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *spine = {};
+        return false;
+    }
+}
+
+bool weapon_ik_goal_compose(
+    const WeaponIkGoalLocator& parent,
+    const WeaponIkGoalLocator& relative,
+    WeaponIkGoalLocator* world) {
+    if (world == nullptr || g_weapon_ik_transform_compose == nullptr ||
+        !weapon_ik_goal_locator_valid(parent) ||
+        !weapon_ik_goal_locator_valid(relative)) {
+        return false;
+    }
+    *world = {};
+    __try {
+        g_weapon_ik_transform_compose(
+            parent.value.data(), world->value.data(), relative.value.data());
+        return weapon_ik_goal_locator_valid(*world);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *world = {};
+        return false;
+    }
 }
 
 bool seh_capture_weapon_ik_goal_chain_side(
@@ -45524,6 +45802,31 @@ const float* capture_weapon_ik_goal_getter_result(
         captured = seh_capture_weapon_ik_goal_chain_side(
             joint_set, left_side, locators);
     }
+    if (result != nullptr && capture.override_active &&
+        joint_set == expected_set) {
+        if (left_side && !capture.override_world_ready) {
+            WeaponIkGoalLocator spine{};
+            capture.override_world_ready =
+                seh_capture_weapon_ik_goal_spine(joint_set, &spine) &&
+                weapon_ik_goal_compose(
+                    spine, capture.override_relative,
+                    &capture.override_world);
+            if (!capture.override_world_ready) {
+                // The left getter is always first at 0x1418F31CF.  Disarm
+                // before returning stock so the right call cannot become a
+                // torn one-sided substitution.
+                capture.override_active = false;
+            }
+        }
+        if (capture.override_active && capture.override_world_ready) {
+            if (left_side) {
+                capture.left_overridden = true;
+            } else {
+                capture.right_overridden = true;
+            }
+            return capture.override_world.value.data();
+        }
+    }
     return result;
 }
 
@@ -45567,7 +45870,9 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
         write_log_line(line.str().c_str());
     }
     WeaponIkGoalCensusScope scope{};
-    const bool selected = kEnablePlayerWeaponIkFeatherGoalCensus &&
+    const bool selected =
+        (kEnablePlayerWeaponIkFeatherGoalCensus ||
+         kEnableLegacyNadineWeaponIkGoalRelay) &&
         seh_select_weapon_ik_goal_census_scope(
             joint_sets, jacobian_maps, &scope);
     const std::uint32_t scope_bit = selected
@@ -45588,16 +45893,29 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
              << " weapon=0x" << scope.weapon_runtime_id << std::dec;
         write_log_line(line.str().c_str());
     }
+    const bool relay_dwell =
+        kEnableLegacyNadineWeaponIkGoalRelay && g_net_role_b && selected &&
+        weapon_ik_goal_relay_dwell_ready(scope);
+    const bool relay_source = relay_dwell && scope.owner_index == 1 &&
+        scope.look == kChloeAttachDonorLookId;
+    WeaponIkGoalRelaySnapshot relay_snapshot{};
+    const bool relay_target = relay_dwell && scope.owner_index == 0 &&
+        scope.look == kLegacyNadineAttachTargetLookId &&
+        copy_fresh_weapon_ik_goal_relay_snapshot(&relay_snapshot);
     const bool claimed = scoped && weapon_ik_goal_census_ready(scope);
 
     const WeaponIkGoalGetterCaptureTls previous_capture =
         g_weapon_ik_goal_getter_capture_tls;
-    if (claimed) {
+    if (claimed || relay_source || relay_target) {
         auto& capture = g_weapon_ik_goal_getter_capture_tls;
         capture = {};
-        capture.active = true;
+        capture.active = claimed || relay_source;
         capture.expected_left_set = joint_sets[0];
         capture.expected_right_set = joint_sets[1];
+        capture.override_active = relay_target;
+        if (relay_target) {
+            capture.override_relative = relay_snapshot.relative;
+        }
     }
 
     const auto original = g_original_weapon_ik_feather_solve;
@@ -45610,6 +45928,41 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
     const WeaponIkGoalGetterCaptureTls captured =
         g_weapon_ik_goal_getter_capture_tls;
     g_weapon_ik_goal_getter_capture_tls = previous_capture;
+
+    if (relay_source && captured.left_captured &&
+        captured.right_captured &&
+        weapon_ik_goal_same_spine_frame(
+            captured.before.left.front(),
+            captured.before.right.front())) {
+        WeaponIkGoalLocator goal{};
+        WeaponIkGoalLocator relative{};
+        if (weapon_ik_goal_build_initial_common_target(
+                captured.before, selector, strength, &goal) &&
+            weapon_ik_goal_make_relative(
+                captured.before.left.front(), goal, &relative)) {
+            publish_weapon_ik_goal_relay_snapshot(scope, relative);
+        }
+    }
+    if (relay_target && captured.left_overridden &&
+        captured.right_overridden) {
+        static std::atomic<unsigned> relay_logs{0};
+        if (relay_logs.fetch_add(1, std::memory_order_relaxed) < 16) {
+            const ULONGLONG now = GetTickCount64();
+            std::ostringstream line;
+            line << "NADINE-WEAPON-IK-GOAL-RELAY owner=0 sourceOwner=1"
+                 << " sourceSeq=" << relay_snapshot.sequence
+                 << " sourceAgeMs="
+                 << (now >= relay_snapshot.captured_ms
+                         ? now - relay_snapshot.captured_ms : 0)
+                 << " targetRuntime=0x" << std::hex
+                 << scope.player_runtime_id
+                 << " sourceRuntime=0x"
+                 << relay_snapshot.player_runtime_id << std::dec;
+            log_weapon_ik_goal_locator(
+                line, "goalRel", relay_snapshot.relative);
+            write_log_line(line.str().c_str());
+        }
+    }
 
     if (!claimed) {
         return;
@@ -45649,6 +46002,9 @@ bool install_player_weapon_ik_feather_goal_census() {
             g_module + kJointChainFindNamedJointOffsetRva);
     g_transform_make_relative = reinterpret_cast<TransformMakeRelativeFunction>(
         g_module + kTransformMakeRelativeRva);
+    g_weapon_ik_transform_compose =
+        reinterpret_cast<WeaponIkTransformComposeFunction>(
+            g_module + kTransformComposeRva);
     g_weapon_ik_goal_left_joint_ids = {
         kSpinedJointNameId,
         safe_string_id_hash("l_shoulder", 10),
@@ -45811,8 +46167,10 @@ bool install_player_weapon_ik_feather_goal_census() {
     }
     boot_log_line(
         protection_restored
-            ? "Player WeaponIK goal census READY (Solve + two stock getter callsites; read-only)"
-            : "Player WeaponIK goal census READY (protection WARNING; relay retained)");
+            ? (kEnableLegacyNadineWeaponIkGoalRelay
+                   ? "Player WeaponIK same-process goal relay READY (Solve + two stock getter callsites)"
+                   : "Player WeaponIK goal census READY (Solve + two stock getter callsites; read-only)")
+            : "Player WeaponIK goal package READY (protection WARNING; relay retained)");
     return true;
 }
 
@@ -61711,8 +62069,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20ady "
-        "(read-only retained-owner WeaponIK goal donor census)");
+        "TLL co-op runtime init 2026-08-20adz "
+        "(same-process Chloe-to-Nadine WeaponIK goal relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -62132,13 +62490,14 @@ DWORD WINAPI install_hook(void*) {
     log_line("local-player-1 -> Nadine bind hook ENABLED");
     log_line("one-shot split render activation ENABLED after login_state==3");
     const bool state_net_started = start_state_net();
-    if constexpr (kEnablePlayerWeaponIkFeatherGoalCensus &&
+    if constexpr ((kEnablePlayerWeaponIkFeatherGoalCensus ||
+                   kEnableLegacyNadineWeaponIkGoalRelay) &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         if (state_net_started) {
             install_player_weapon_ik_feather_goal_census();
         } else {
             boot_log_line(
-                "Player WeaponIK goal census SKIPPED (state net)");
+                "Player WeaponIK goal package SKIPPED (state net)");
         }
     }
     // Install only after role, peer endpoint and the ARMP session epoch are
