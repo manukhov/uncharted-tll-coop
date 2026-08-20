@@ -26176,3 +26176,23 @@ The exact post-multiply helper is saved as
 `JointSet_PostMultiplyJointRotationAndMarkValid 0x14181F710` in the single
 `ida/tll.i64`; headless application reported `1764 functions, 60 data names`
 and `save_database returned True`, and restarted MCP readback resolves the name.
+
+### 2026-08-20 RUNTIME INCONCLUSIVE (`aeh`): the right-hand-prop relay never admitted
+
+The visual result cannot reject the right-anchor calculation. Both processes
+loaded build `2026-08-20aeh` and installed the common-solver boundary, but the
+entire log contains zero `CHLOE-WEAPON-IK-RIGHT-PROP-CAPTURE`, zero
+`NADINE-WEAPON-IK-RIGHT-PROP-RELAY`, and zero
+`NADINE-MAZUR-RIGHT-PROP retained` rows. Role-B PID `1600` did emit the exact
+confirmed `56C57AD2 + 283966ED` injection and C39 `19..30` restoration markers.
+The user's unchanged low hold was therefore only the old two-hand baseline;
+the new correction did not execute once. Treating that picture as a semantic
+failure would be invalid.
+
+The live source also depended on retained owner 1 Chloe and therefore conflicts
+with the new test boundary for appearance 1: only one `tll.exe` copy may be
+launched. Build `aei-safe` disables this unexecuted relay and retains only the
+confirmed `82e7b9e` two-hand baseline. The next admissible repair must obtain an
+exact source inside the single Nadine process, with the full static evidence
+quota and a written discriminator before another launch; one hard-coded old
+Chloe sample is explicitly not sufficient.

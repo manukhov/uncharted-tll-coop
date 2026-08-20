@@ -2463,7 +2463,7 @@ constexpr bool kEnableLegacyNadineWeaponIkGoalRelay = false;
 // Chloe's live right hand-prop frame through Nadine's own arm geometry and the
 // stock SolveArmIk/JointSet rotation operators.  The stock terminal pass then
 // solves the left support arm from that corrected trigger-side anchor.
-constexpr bool kEnableLegacyNadineMazurRightHandPropRelay = true;
+constexpr bool kEnableLegacyNadineMazurRightHandPropRelay = false;
 // REJECTED in build aea: installing the internal 0x1418F2E0B observer crashed
 // role B after READY and before its first sample.  The writer hypothesis remains
 // STATIC, but this callsite is not an admissible runtime boundary.
@@ -63237,8 +63237,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20aeh "
-        "(82e7b9e two-hand baseline + Chloe right-hand-prop relay)");
+        "TLL co-op runtime init 2026-08-20aei-safe "
+        "(82e7b9e two-hand baseline; aeh relay disabled after zero markers)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

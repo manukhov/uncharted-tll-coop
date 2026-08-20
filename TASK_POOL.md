@@ -5177,7 +5177,21 @@ Keep the postblend preservation boundary; replace only its steady content.
       the weapon later consumes the right hand-prop attachment. Implement the
       narrow `aeh` semantic hand-prop relay through Nadine's own arm geometry.
 
-- [ ] Run the single written `aeh` exam. Require the combined READY marker,
+- [x] Runtime-inconclusive `aeh`: both installers reached READY and role B
+      emitted the exact confirmed authored-pair injection plus C39 `19..30`
+      restoration, but the log contains zero Chloe CAPTURE, Nadine RELAY or
+      `baselineRestore=0` markers. The user's unchanged low hold therefore came
+      only from the old baseline and cannot judge `H-right-anchor`. Disable the
+      relay in `aei-safe`; do not repeat its live-owner-1 admission. While
+      appearance 1 is the active task, launch exactly one game copy.
+
+- [ ] Replace the rejected two-process source dependency with a statically
+      closed single-process source for appearance 1. Require three independent
+      evidence types and an exact steady-Nadine/Mazur/WeaponOut discriminator;
+      do not hard-code one old Chloe frame and do not launch to discover the
+      source. Then run one copy only.
+
+  Original `aeh` prediction required the combined READY marker,
       fresh Chloe right-prop CAPTURE, Nadine right-prop RELAY and same-postblend
       `baselineRestore=0`. All markers plus both hands and Chloe's muzzle-up
       angle confirm `H-right-anchor`; all markers plus the old low angle reject
