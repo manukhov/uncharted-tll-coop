@@ -2454,20 +2454,15 @@ constexpr bool kEnableLegacyNadineWeaponIkFeatherInputCensus = false;
 // 0x141ED19BB boundary. This is a bounded read-only census: exact P99,
 // rightHand/joint30, WeaponOut and retained legacy Nadine only.
 constexpr bool kEnableLegacyNadineDrawnP99LocalTransformCensus = false;
-// Build adm proved that the terminal Player draw donor fixes the distal hold,
-// while the independently measured later WeaponIKFeather pass is the leading
-// proximal-chain overwrite candidate. Bypass Apply only after this same thread
-// successfully completed a Perform pass containing that donor. P99, Draw, ADS
-// and every frame without the paired donor remain stock.
-constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = true;
-// adk proved that the stable broken hold keeps the authored Hands leaf in the
-// Perform main DAG while final Async has collapsed to the source-free mode-2
-// import. Blend the complete Player-arm s_weapon-draw terminal sample into the
-// exact Perform group-zero result so stock cmd27 writes it to Fg+0x100 and the
-// later Async cmd14 imports that same pose. P99, role A and transitions remain
-// stock.
-constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = true;
-constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = true;
+// Builds adm--ado proved that the terminal Draw donor changes the visible hold,
+// but pairing it with the exact WeaponIKFeather no-op still left one arm out and
+// the final ado session terminated both game copies. Keep the complete grip
+// experiment disabled until its crash lifetime and the authored Mazur custom
+// pair are closed statically; do not leave the hot detours installed merely as
+// dormant ticket producers.
+constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
+constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
+constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 // Build ada proved a repeatable first-Draw-good -> steady-broken transition,
 // followed by immediately broken later Draws. The animation layer has exact
@@ -59852,8 +59847,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20ado "
-        "(persistent Mazur Perform endpoint plus paired Feather bypass)");
+        "TLL co-op runtime init 2026-08-20adp "
+        "(crashing Mazur grip experiment disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

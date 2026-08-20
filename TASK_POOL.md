@@ -4952,6 +4952,15 @@ paired suppress markers after the initial window. If those are continuous but
 the visual still breaks, reject the source-gate hypothesis and move to the
 postblend/Async late-writer frontier; do not relax further command-list guards.
 
+`ado` is runtime-rejected and crash-quarantined. Role-B PID 14492 emitted one
+exact endpoint injection plus sixteen paired Feather suppressions without a
+later source rejection, yet the grip stayed broken and twitching; the stock
+controller then performed its normal delayed Holster. Both game copies later
+terminated, with no crash-observer or WER row identifying the instruction.
+Build `adp` disables the endpoint, Feather and owner-census package together.
+Do not launch another grip mutation until the installed hot-hook lifetime and
+the exact `56C57AD2 + 283966ED` authored Mazur pair are closed statically.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

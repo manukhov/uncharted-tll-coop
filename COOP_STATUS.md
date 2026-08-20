@@ -25178,3 +25178,32 @@ initial source command disappears, with no subsequent reason 4 and no twitch;
 or extends; `H-donor-content` predicts a stable but still incorrect two-arm
 shape. A zero-source pass with `exactHandsRoot=0` must remain rejected. This is
 the sole written `ado` runtime discriminator.
+
+### 2026-08-20 RUNTIME REJECTED / CRASH (`ado` -> safe rollback `adp`)
+
+The exact `ado` discriminator was reached in role-B PID `14492`. The log has
+one `NADINE-MAZUR-DRAW-ENDPOINT injected ... liveSources=1 exactHandsRoot=1`
+row followed by sixteen consecutive
+`NADINE-WEAPON-IK-FEATHER-SUPPRESS ... pairedDonor=1` rows. There is no later
+source-rejection row in this cycle. The user still observed the same broken
+hold, and the stock controller subsequently entered `Holster=5` and
+`Inactive=0`; the roughly five-second automatic put-away is therefore not an
+admission failure and must remain stock.
+
+This result runtime-rejects both surviving visual predictions. Continuous
+donor admission plus the paired native Feather no-op neither restored the
+two-hand hold nor removed the visible twitch. `H-intermittent-source-gate` and
+`H-Feather-overwrite-as-sufficient` are rejected; the remaining alternatives
+are incompatible donor content, an authored Mazur-specific partial that the
+generic Draw endpoint omits, or a later postblend/command owner.
+
+After the visual report, both game copies terminated. The runtime log contains
+no crash-observer row and Windows produced no matching WER/Application-Error
+record, so the exact faulting instruction is not recovered. The common change
+was nevertheless the installed Create/Perform/Async plus Feather/postblend
+package, and a crash in either presentation invalidates it as an always-on
+repair. Build `adp` disables the endpoint mutation, paired Feather suppression
+and their owner census together, so none of those hot detours is installed.
+The accepted weapon attachment/back-frame package remains unchanged. No new
+grip mutation may be enabled until its crash lifetime and full authored
+Mazur-pair semantics are statically closed.
