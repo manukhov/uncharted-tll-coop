@@ -5100,6 +5100,17 @@ Keep the postblend preservation boundary; replace only its steady content.
       commit, later Player postblend, or final Async JointBlend/plugin) before
       any further runtime mutation.
 
+- [ ] Run the bounded read-only `aea` terminal-writer discriminator.  Keep the
+      proven same-process Chloe goal relay, but allow it only after the exact
+      `WeaponIK_Apply` observer at callsite `0x1418F2E0B` is READY.  In role-B
+      owner-0 legacy Nadine/Mazur/WeaponOut/zero-motion scope, capture raw C39
+      rows `19..30` immediately before and after the sole stock terminal Apply.
+      Require existing CAPTURE+RELAY markers, one terminal summary and twelve
+      rows.  Changes in `19..26` confirm the second `SolveArmIk`/commit as the
+      conflict; a zero mask rejects it and moves the frontier to later
+      Player/Async processing.  No suppression, smoothing, row restoration or
+      new clip mutation is permitted in this exam.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

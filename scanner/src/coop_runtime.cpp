@@ -2457,6 +2457,12 @@ constexpr bool kEnablePlayerWeaponIkFeatherGoalCensus = true;
 // while role-B Nadine differs by 0.30061 units / 75.94 degrees.  Relay only
 // that normalized target inside the same process; keep the stock solver/maps.
 constexpr bool kEnableLegacyNadineWeaponIkGoalRelay = true;
+// Build adz proved that a fresh live Chloe goal reaches Nadine but is
+// immediately lost visually.  WeaponIKFeather::Apply has one remaining exact
+// arm writer after that Solve: the sole call to WeaponIK::Apply at 0x1418F2E0B,
+// which runs another SolveArmIk and commits both JointSets.  Observe C39 rows
+// 19..30 immediately before/after that stock call; do not change its result.
+constexpr bool kEnableWeaponIkTerminalApplyCensus = true;
 // Build acg proved that the two P99 WeaponIK paths share the same lifecycle and
 // scalar controls, but composing the interleaved arm hierarchy reveals a
 // residual 6.7 mm hand-endpoint split. Distinguish that upstream pose delta
@@ -18737,6 +18743,8 @@ constexpr std::uintptr_t kWeaponIkFeatherLeftGoalGetterCallsiteRva =
     0x18F31CFu;
 constexpr std::uintptr_t kWeaponIkFeatherRightGoalGetterCallsiteRva =
     0x18F31DFu;
+constexpr std::uintptr_t kWeaponIkTerminalApplyCallsiteRva = 0x18F2E0Bu;
+constexpr std::uintptr_t kWeaponIkApplyRva = 0x18F1780u;
 constexpr std::uintptr_t kJointChainFindNamedJointOffsetRva = 0x181D750u;
 constexpr std::uintptr_t kJointSetGetJointLocWsRva = 0x181DA50u;
 constexpr std::uintptr_t kTransformMakeRelativeRva = 0x1990F0u;
@@ -44986,6 +44994,7 @@ SRWLOCK g_weapon_ik_goal_relay_lock = SRWLOCK_INIT;
 WeaponIkGoalRelayDwell g_weapon_ik_goal_relay_dwell[2]{};
 WeaponIkGoalRelaySnapshot g_weapon_ik_goal_relay_snapshot{};
 std::atomic<std::uint32_t> g_weapon_ik_goal_relay_sequence{0};
+std::atomic<bool> g_weapon_ik_terminal_apply_census_ready{false};
 std::array<std::uint32_t, kWeaponIkGoalChainJointCount>
     g_weapon_ik_goal_left_joint_ids{};
 std::array<std::uint32_t, kWeaponIkGoalChainJointCount>
@@ -45901,6 +45910,9 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
     WeaponIkGoalRelaySnapshot relay_snapshot{};
     const bool relay_target = relay_dwell && scope.owner_index == 0 &&
         scope.look == kLegacyNadineAttachTargetLookId &&
+        (!kEnableWeaponIkTerminalApplyCensus ||
+         g_weapon_ik_terminal_apply_census_ready.load(
+             std::memory_order_acquire)) &&
         copy_fresh_weapon_ik_goal_relay_snapshot(&relay_snapshot);
     const bool claimed = scoped && weapon_ik_goal_census_ready(scope);
 
@@ -46178,6 +46190,9 @@ using WeaponIkFeatherApplyFunction = std::uint8_t(__fastcall*)(
     void*, void*, float, void*, float, std::uint32_t, float,
     std::uint8_t, float);
 WeaponIkFeatherApplyFunction g_original_weapon_ik_feather_apply = nullptr;
+using WeaponIkTerminalApplyFunction = std::uint8_t(__fastcall*)(
+    void*, void*, void*, float, std::uint32_t);
+WeaponIkTerminalApplyFunction g_original_weapon_ik_terminal_apply = nullptr;
 std::atomic<bool> g_legacy_nadine_weapon_ik_feather_hook_ready{false};
 
 struct NadineWeaponIkFeatherScope {
@@ -46562,6 +46577,222 @@ void finish_weapon_ik_feather_census(
             << " postT=" << post[8] << ',' << post[9] << ',' << post[10];
         write_log_line(row.str().c_str());
     }
+}
+
+bool seh_select_weapon_ik_terminal_apply_scope(
+    void* feather, float apply_weight,
+    NadineWeaponIkFeatherScope* scope) {
+    if (scope == nullptr) {
+        return false;
+    }
+    *scope = {};
+    scope->current_slot = -1;
+    if (!g_net_role_b || feather == nullptr) {
+        return false;
+    }
+    void* feather_info = nullptr;
+    __try {
+        void* const player = retained_player_object(0);
+        if (player == nullptr || !player_object_stable(player) ||
+            readable_bytes(static_cast<std::byte*>(player) + 0x4308) <
+                sizeof(void*)) {
+            return false;
+        }
+        feather_info = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(player) + 0x4308);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+    return feather_info != nullptr &&
+        seh_select_legacy_nadine_weapon_ik_feather_scope(
+            feather, feather_info, apply_weight, scope) &&
+        scope->owner_index == 0 && scope->art == kCoopRifleArtId &&
+        scope->draw_state == 2 && scope->current_slot >= 0;
+}
+
+void finish_weapon_ik_terminal_apply_census(
+    const NadineWeaponIkFeatherScope& scope,
+    const WeaponIkFeatherPoseSample& before,
+    const WeaponIkFeatherPoseSample& after,
+    std::uint8_t stock_result, float apply_weight,
+    std::uint32_t selector) {
+    std::uint32_t changed_mask = 0;
+    std::array<std::uint32_t, kWeaponIkFeatherCensusJointCount> before_hash{};
+    std::array<std::uint32_t, kWeaponIkFeatherCensusJointCount> after_hash{};
+    for (std::size_t index = 0;
+         index < kWeaponIkFeatherCensusJointCount; ++index) {
+        before_hash[index] = 2166136261u;
+        after_hash[index] = 2166136261u;
+        aim_fingerprint_mix_bytes(
+            before_hash[index], before.rows[index].data(),
+            kJointLocalPoseStride);
+        aim_fingerprint_mix_bytes(
+            after_hash[index], after.rows[index].data(),
+            kJointLocalPoseStride);
+        if (before_hash[index] != after_hash[index]) {
+            changed_mask |= 1u << index;
+        }
+    }
+    std::ostringstream summary;
+    summary << "NADINE-WEAPON-IK-TERMINAL-APPLY role=B owner=0"
+            << " runtime=0x" << std::hex << scope.player_runtime_id
+            << " weapon=0x" << scope.weapon_runtime_id
+            << " changedMask=0x" << changed_mask << std::dec
+            << " weight=" << apply_weight
+            << " selector=" << selector
+            << " stock=" << static_cast<unsigned>(stock_result)
+            << " beforeHash=";
+    for (const auto value : before_hash) summary << value << ',';
+    summary << " afterHash=";
+    for (const auto value : after_hash) summary << value << ',';
+    write_log_line(summary.str().c_str());
+
+    for (std::size_t index = 0;
+         index < kWeaponIkFeatherCensusJointCount; ++index) {
+        const auto& pre = before.rows[index];
+        const auto& post = after.rows[index];
+        std::ostringstream row;
+        row << "NADINE-WEAPON-IK-TERMINAL-ROW joint="
+            << kWeaponIkFeatherCensusFirstJoint + index
+            << " changed="
+            << (before_hash[index] != after_hash[index] ? 1 : 0)
+            << " preQ=" << pre[4] << ',' << pre[5] << ',' << pre[6]
+            << ',' << pre[7]
+            << " preT=" << pre[8] << ',' << pre[9] << ',' << pre[10]
+            << " postQ=" << post[4] << ',' << post[5] << ',' << post[6]
+            << ',' << post[7]
+            << " postT=" << post[8] << ',' << post[9] << ',' << post[10];
+        write_log_line(row.str().c_str());
+    }
+}
+
+std::uint8_t __fastcall hooked_weapon_ik_terminal_apply_census(
+    void* feather, void* unused_rdx, void* unused_r8,
+    float apply_weight, std::uint32_t selector) {
+    NadineWeaponIkFeatherScope scope{};
+    const bool scoped = kEnableWeaponIkTerminalApplyCensus &&
+        seh_select_weapon_ik_terminal_apply_scope(
+            feather, apply_weight, &scope);
+    const bool claimed = scoped && weapon_ik_feather_census_ready(scope);
+    WeaponIkFeatherPoseSample before{};
+    const bool sampled = claimed &&
+        seh_capture_weapon_ik_feather_pose(scope, &before);
+    if (claimed && !sampled) {
+        write_log_line(
+            "NADINE-WEAPON-IK-TERMINAL rejected stage=pre-capture");
+        finish_weapon_ik_feather_census_claim(scope, false);
+    }
+    const auto original = g_original_weapon_ik_terminal_apply;
+    const std::uint8_t result = original != nullptr
+        ? original(
+              feather, unused_rdx, unused_r8, apply_weight, selector)
+        : 0;
+    if (sampled) {
+        WeaponIkFeatherPoseSample after{};
+        if (seh_capture_weapon_ik_feather_pose(scope, &after)) {
+            finish_weapon_ik_terminal_apply_census(
+                scope, before, after, result, apply_weight, selector);
+            finish_weapon_ik_feather_census_claim(scope, true);
+        } else {
+            write_log_line(
+                "NADINE-WEAPON-IK-TERMINAL rejected stage=post-capture");
+            finish_weapon_ik_feather_census_claim(scope, false);
+        }
+    }
+    return result;
+}
+
+bool install_weapon_ik_terminal_apply_census() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t new_displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kWeaponIkTerminalApplyCallsiteRva, kWeaponIkApplyRva,
+            reinterpret_cast<const void*>(
+                &hooked_weapon_ik_terminal_apply_census),
+            callsite, relay, new_displacement)) {
+        boot_log_line(
+            "WeaponIK terminal Apply census SKIPPED (callsite preflight)");
+        return false;
+    }
+    std::int32_t old_displacement = 0;
+    std::memcpy(
+        &old_displacement, callsite + 1, sizeof(old_displacement));
+    g_original_weapon_ik_terminal_apply =
+        reinterpret_cast<WeaponIkTerminalApplyFunction>(
+            g_module + kWeaponIkApplyRva);
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_weapon_ik_terminal_apply = nullptr;
+        boot_log_line(
+            "WeaponIK terminal Apply census SKIPPED (thread suspend)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (VirtualProtect(
+            callsite, 5, PAGE_EXECUTE_READWRITE, &old_protection) == 0) {
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_weapon_ik_terminal_apply = nullptr;
+        boot_log_line("WeaponIK terminal Apply census SKIPPED (protect)");
+        return false;
+    }
+    std::memcpy(
+        callsite + 1, &new_displacement, sizeof(new_displacement));
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    std::int32_t readback = 0;
+    std::memcpy(&readback, callsite + 1, sizeof(readback));
+    bool installed = callsite[0] == 0xE8 &&
+        readback == new_displacement;
+    bool rollback_verified = false;
+    if (!installed) {
+        std::memcpy(
+            callsite + 1, &old_displacement, sizeof(old_displacement));
+        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+        std::int32_t rollback_readback = 0;
+        std::memcpy(
+            &rollback_readback, callsite + 1,
+            sizeof(rollback_readback));
+        rollback_verified = callsite[0] == 0xE8 &&
+            rollback_readback == old_displacement;
+    }
+    DWORD ignored = 0;
+    bool protection_restored = VirtualProtect(
+        callsite, 5, old_protection, &ignored) != 0;
+    if (installed && !protection_restored) {
+        std::memcpy(
+            callsite + 1, &old_displacement, sizeof(old_displacement));
+        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+        std::int32_t rollback_readback = 0;
+        std::memcpy(
+            &rollback_readback, callsite + 1,
+            sizeof(rollback_readback));
+        rollback_verified = callsite[0] == 0xE8 &&
+            rollback_readback == old_displacement;
+        installed = false;
+        protection_restored = VirtualProtect(
+            callsite, 5, old_protection, &ignored) != 0;
+    }
+    resume_suspended_process_threads(suspended_threads);
+    if (!installed) {
+        if (rollback_verified) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+            g_original_weapon_ik_terminal_apply = nullptr;
+        }
+        boot_log_line(
+            rollback_verified && protection_restored
+                ? "WeaponIK terminal Apply census SKIPPED (verified rollback)"
+                : "WeaponIK terminal Apply census SKIPPED (rollback/protection WARNING; relay retained)");
+        return false;
+    }
+    g_weapon_ik_terminal_apply_census_ready.store(
+        true, std::memory_order_release);
+    boot_log_line(
+        protection_restored
+            ? "WeaponIK terminal Apply census READY (0x1418F2E0B; read-only)"
+            : "WeaponIK terminal Apply census READY (protection WARNING; relay retained)");
+    return true;
 }
 
 bool seh_find_weapon_ik_feather_census_owner(
@@ -62069,8 +62300,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20adz "
-        "(same-process Chloe-to-Nadine WeaponIK goal relay)");
+        "TLL co-op runtime init 2026-08-20aea "
+        "(read-only terminal WeaponIK writer census with live goal relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -62494,7 +62725,16 @@ DWORD WINAPI install_hook(void*) {
                    kEnableLegacyNadineWeaponIkGoalRelay) &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         if (state_net_started) {
-            install_player_weapon_ik_feather_goal_census();
+            const bool goal_package_ready =
+                install_player_weapon_ik_feather_goal_census();
+            if constexpr (kEnableWeaponIkTerminalApplyCensus) {
+                if (goal_package_ready) {
+                    install_weapon_ik_terminal_apply_census();
+                } else {
+                    boot_log_line(
+                        "WeaponIK terminal Apply census SKIPPED (goal package)");
+                }
+            }
         } else {
             boot_log_line(
                 "Player WeaponIK goal package SKIPPED (state net)");

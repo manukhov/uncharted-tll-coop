@@ -25838,3 +25838,40 @@ writer after the getter/Solve boundary in the remainder of
 stream.  Do not smooth, hard-code, copy another clip, or launch another
 mutation until the first post-relay writer that destroys the corrected hold is
 closed statically.
+
+### 2026-08-20 STATIC IMPLEMENTED (`aea`): isolate the sole terminal WeaponIK arm writer after the relayed Solve
+
+The first post-relay candidate is now exact rather than a broad "later writer".
+`WeaponIKFeather_Apply 0x1418F2700` calls the relayed
+`WeaponIKFeather_SolveWeaponFeatherIk` at `0x1418F29D0`, commits both Feather
+JointSets at `0x1418F29D7/0x1418F29E4`, and then makes the sole call to
+`WeaponIK_Apply 0x1418F1780` at `0x1418F2E0B`.  Inside that terminal function,
+the concrete wrist/prop locators are read at `0x1418F186A..0x1418F18BA`, a
+second `SolveArmIk 0x1418F0B60` runs at `0x1418F1C43`, and both JointSets are
+committed again at `0x1418F1DEE/0x1418F1DF9`.  Thus it is structurally capable
+of replacing the just-relayed proximal arm result before
+`WeaponIKFeather_Apply` returns.
+
+Three independent evidence classes authorize one read-only boundary exam.
+First, the exact sole-caller/callee graph and instruction order above close the
+writer.  Second, the callsite machine ABI is preserved: RCX/RDX/R8, XMM3 weight
+and stack `+0x20` selector are forwarded unchanged by the compiled wrapper, and
+its byte return is forwarded even though the outer caller immediately replaces
+AL with success.  Third, `adz` supplied continuous `0..32 ms` relay markers and
+the independent visual signature of a correct attempt immediately being lost.
+
+Build `aea` therefore keeps the already-proven `adz` live goal relay and adds
+only a read-only callsite wrapper at `0x1418F2E0B`.  Exact role-B owner-0 legacy
+Nadine/Mazur/WeaponOut/zero-motion scope captures raw C39 local-pose rows
+`19..30` after the first relayed Solve and again after stock terminal
+`WeaponIK_Apply`; stock executes once and no row is written by the census.  The
+relay itself is fail-closed until this observer reports READY.
+
+The falsifiable prediction is: both processes must load `aea`, role B must emit
+the existing CAPTURE and RELAY markers, then exactly one
+`NADINE-WEAPON-IK-TERMINAL-APPLY` summary plus twelve row records.  A nonzero
+mask on C39 `19..26` selects `H-terminal-WeaponIK`; a zero mask rejects it and
+selects the later Player/Async path.  A changed terminal boundary with no
+visible break would instead move the failure to a still-later writer.  Missing
+READY or terminal rows is packaging/admission and has no pose interpretation.
+The agent may relaunch/inject, but the user alone controls gameplay.
