@@ -1861,6 +1861,33 @@ FUNCTIONS = {
         "bytes for 25CC08FD total 395 bits (50 bytes), matching its encoded second "
         "stream displacement exactly.",
     ),
+    0x142193970: (
+        "AnimJointProgramOp15",
+        "Exact animation joint-program opcode 15 dispatch-table target. Used after "
+        "the variable-stream decode in the retail 5F913F74 group-zero program; its "
+        "worker remains semantically unnamed.",
+    ),
+    0x1421939F0: (
+        "AnimJointProgramOp16",
+        "Exact animation joint-program opcode 16 dispatch-table target. Used after "
+        "opcode 15 in the retail 5F913F74 group-zero program; its worker remains "
+        "semantically unnamed.",
+    ),
+    0x142193E30: (
+        "AnimJointProgramOp27",
+        "Exact animation joint-program opcode 27 dispatch-table target used by the "
+        "retail 5F913F74 group-zero program.",
+    ),
+    0x142193EF0: (
+        "AnimJointProgramOp29",
+        "Exact animation joint-program opcode 29 dispatch-table target used by the "
+        "retail 5F913F74 group-zero program.",
+    ),
+    0x142193F50: (
+        "AnimJointProgramOp30",
+        "Exact animation joint-program opcode 30 dispatch-table target used by the "
+        "retail 5F913F74 group-zero program.",
+    ),
     0x141A8FCF0: (
         "AnimManager_CreateAnimCmdsForObject",
         "Exact CreateAnimCmdsForObject source assertion in anim-mgr-jobs.cpp. "

@@ -2514,12 +2514,9 @@ constexpr bool kEnableLegacyNadineMazurTransientPostblendReplay = false;
 constexpr bool kEnableLegacyNadineMazurTransientPostblendCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
-// Observe the exact Chloe source JointParams at the stock retarget boundary.
-// The census is read-only and runs only for one retained role-B Nadine/Mazur
-// steady pass whose live Hands root is the canonical Chloe 7D11D4FD clip.
-// It distinguishes a complete 5F913F74 Base + 7D11D4FD Hands chain from a
-// mixed/dead tree before any further grip mutation is considered.
-constexpr bool kEnableLegacyNadineVirtualChloeGripSourceCensus = true;
+// REJECTED (aen): requiring the remapped Chloe Hands root before the nested
+// retarget capture made the promised source discriminator unreachable.
+constexpr bool kEnableLegacyNadineVirtualChloeGripSourceCensus = false;
 static_assert(
     !((kEnableLegacyNadineMazurAuthoredPairRepair ||
        kEnableLegacyNadineMazurTransientPostblendReplay) &&
@@ -64626,8 +64623,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20aen "
-        "(virtual Chloe Base+Hands source census; read-only grip path)");
+        "TLL co-op runtime init 2026-08-20aen-safe "
+        "(rejected virtual Chloe source census disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

@@ -26413,3 +26413,128 @@ H-dead-or-ambiguous. The census predicts no visual improvement; the currently
 malformed stock/fallback hold is expected to remain. Missing READY is
 packaging. Exactly one role-B Nadine process may be launched, and the agent
 must not send gameplay input.
+
+### 2026-08-20 RUNTIME REJECTED (`aen`) / STATIC: no live remapped Chloe Hands root; extract the source assets offline
+
+The one-process role-B exam reached the intended read-only package but never
+armed a source-pose epoch. PID `8488` printed build `2026-08-20aen` at log line
+92567 and exact three-callsite READY at 92629. After the user drew Mazur it
+printed the bounded first failures `admission=1`, then `2`, then `3`
+(92635/92676/92678), but zero `result=complete`, `result=incomplete`, source-row,
+exception or fatal rows. The process remained outside every mutation path.
+Thus this is not a visual grip result and it supplies no Chloe JointParams.
+
+The written discriminator was structurally too strong. Admission required the
+exact already-remapped Chloe Hands tuple
+`7D11D4FD/6C2B2396/4B0F5DE3` before installing the nested retarget capture. A
+direct Player `7FB80CC8` root, or any failure to materialize that desired tuple,
+therefore exits at stage 3 before the census can report the promised
+`baseCalls/handsCalls` alternative. Existing node-initialization dataflow makes
+the direct-root explanation leading: with a live overlay context,
+`AnimSnapshotNodeAnimation_InitializeFromDescriptor 0x141917D00` does not apply
+the node-local AnimSet remap, so the direct Hands descriptor remains
+`7FB80CC8`. The fresh stage-3 row is consistent with that STATIC result but does
+not by itself distinguish it from another exact-root failure. Build `aen` is
+RUNTIME REJECTED as a useful discriminator and must not be relaxed or reused as
+a pose repair.
+
+The shipped Chloe data is nevertheless exact and provides the next static
+frontier. In `actor77.psarc/anim-chloe-relaxed-movement.pak`, clip `5F913F74
+clo-uneasy-idle` has raw ANIM offset `0x17A460`, source skeleton `4B0F5DE3`,
+seven groups and mask `BFFC007FFC381C00:0`, including Chloe rows 29--37.
+`7D11D4FD clo-uneasy-idle-hands` has raw offset `0x1F0920`, the same skeleton,
+seven groups and exact rows 38--41. Its one-sample local transforms decode to:
+
+- palm 38: `Q=(0.138262067,-0.0871178343,-0.0056107597,0.986540726)`,
+  `T=(0,0,0.060546875)`;
+- palm 39: the same quaternion,
+  `T=(1.07288361e-06,-2.8014183e-06,-0.060546875)`;
+- hand-prop 40:
+  `Q=(0.519621088,-0.0188823644,0.120199737,0.845688716)`,
+  `T=(0.00184345245,-0.0294952393,0.0193481445)`;
+- hand-prop 41:
+  `Q=(0.806621391,0.0478425164,0.574347575,-0.131140718)`,
+  `T=(-0.00184345245,0.0294952393,-0.0193481445)`.
+
+The broad `5F913F74` clip is not constant-only. Its group-zero program begins
+with opcodes `22/24/11/27/29/30/15/16`; opcode 11 is command `0x060B` at raw
+offset `0x17A590`. `AnimJointProgramOp11_DecodeVariableBitStreams
+0x142193790` derives two packed streams and calls
+`AnimJointProgram_DecodeVariableBitStreams 0x142183540`; the later opcodes
+interpolate and reconstruct the animated rows.
+
+### 2026-08-20 STATIC: retail offline evaluation rejects raw Chloe clips as the final grip
+
+`scripts/native_anim_pose_audit.py` now evaluates that exact program without
+starting or attaching to the game. It pins `tll.exe` SHA-256
+`ED1371A4B47961ABC160E92AA0B9BDFD787638FA1A39BA2403B423AB45C210BE`, maps the
+PE into the helper process, applies only its DIR64 relocations and calls the
+retail opcode handlers at `0x142193790/3970/39F0/3CE0/3D60/3E30/3EF0/3F50`.
+The decoded opcode sequence is required to be exactly
+`22/24/11/27/29/30/15/16`, every target transform must be finite with a unit
+quaternion, and the helper is freed after evaluation. This is a reproducible
+offline asset audit, not a runtime hook or a replacement animation evaluator.
+
+Five independent phase samples `0/84/168/252/335` of the desired remapped
+`5F913F74` asset decode successfully. Opcode
+22 explicitly owns Chloe rows 29--37; opcode 24 owns only rows
+`0/3/10/11/12`, so the isolated packed-quaternion command cannot contaminate
+the arm result. Rows 29--37 at sample 335 are byte-identical to sample 0,
+closing the authored loop. Composing the decoded Base rows with constant Hands
+rows 38--41 through the retail `Transform_Compose 0x1401998F0` gives, at sample
+0, left hand-prop endpoint
+`P=(0.269608974,-0.392649442,-0.294229627)` and right endpoint
+`P=(-0.237812549,-0.336019695,-0.349244386)`, both relative to Chloe `spined`.
+Their positional gap is `0.51352717`; across all five samples it remains
+`0.513481763..0.543280607`.
+
+This is not a claim that `5F913F74` is the live Player `cmd6` leaf. Existing
+node dataflow instead identifies Player `25CC08FD` as the body endpoint and
+`7FB80CC8` as Hands; the outer `5F/7D` tuple can remain timing/remap metadata.
+The same offline evaluator now also decodes `25CC08FD`: 301 frames, stride 50,
+exact loop closure, and near-identity additive rotations with zero translations
+on Player rows 21--28. It cannot be chained as an absolute arm pose without the
+stock command evaluator's reference/additive composition. Thus neither the
+outer Chloe pair nor the raw Player leaves are a standalone final-pose donor.
+
+The exact endpoint result still rejects
+`H-raw-Chloe-clips-are-final-grip`. The independent live
+`adx` boundary measured Chloe's two hand-prop endpoints only `0.0293577` apart
+before `SolveWeaponFeatherIk`, almost eighteen times closer than the raw asset
+chain. Therefore stock reference/additive command composition and WeaponIK,
+rather than the isolated asset rows, materially construct the pre-solver pose.
+Directly copying, retargeting or phase-tuning `5F913F74+7D11D4FD` cannot
+reproduce the visible Chloe hold.
+
+A second independent asset comparison rejects the missing trigger-hand clip as
+the cause of the low muzzle in the stable `82e7b9e/adr` baseline. Player clips
+`56C57AD2` and `0A2F8976` have the same right palm row 30 and the same right
+hand-prop row 32 to quantization precision; `56C57AD2` already contains the
+exact Mazur-specific `0A2F8976` distal frame. Overlaying or substituting
+`0A2F8976` therefore cannot raise the rifle. The remaining spatial error is in
+the proximal arm/WeaponIK construction, not a missing right-hand partial.
+
+Competing hypotheses are now separated. Raw Chloe Base+Hands as a final pose is
+STATIC REJECTED by the exact endpoint gap; a missing `0A2F8976` trigger-hand
+lane is STATIC REJECTED by transform identity; aim/high-carry clips remain
+semantically out of scope and their tested high-carry result is RUNTIME
+REJECTED. The four calls at `PlayerWeaponIKAction_Update
+0x14109578A/799/7A8/7B7` are also exonerated as a spatial target builder: they
+read `r/l_wrist` and `r/l_hand_prop_attachment`, compute only the two distances,
+and attenuate the Apply weight; they do not write a Locator or arm row.
+
+The remaining single-process frontier is therefore the already-proven
+post-common-Solve trigger-side anchor. Two independent local-Chloe runs measured
+the final right hand-prop relative to `spined` only `0.0102249` position units /
+`1.88968` degrees apart. Its normalized midpoint is
+`P=(-0.008658425,-0.355107,-0.01403325)`,
+`Q=(0.390035796,0.408591428,0.156346330,0.810235119)`. Before this can replace
+the failed live-owner relay, the exact steady scope, existing
+`SolveArmIk`/wrist-rotation helper, baseline restore ordering and one-process
+falsifier must be reclosed around this stable semantic reference. No game
+launch is earned by the asset decode alone.
+
+The five newly identified dispatch targets are saved in the single IDB as
+`AnimJointProgramOp15/16/27/29/30`; headless application reported 1769 function
+names / 60 data names and `save_database returned True`, and restarted MCP
+lookups independently resolve all five names.

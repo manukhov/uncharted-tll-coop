@@ -5248,16 +5248,41 @@ Keep the postblend preservation boundary; replace only its steady content.
       target or engine retarget relation with three independent static evidence
       classes before another visual mutation.
 
-      Current bounded step: run read-only build `aen`. It scopes one exact
-      role-B/local-Nadine/Mazur/WeaponOut Perform, wraps the stock case-6
-      `RetargetAnimUsingBatchMgr` call and its nested
-      `RetargetPlugin_AddJointRetargetCommands`, and copies the live Chloe
-      source JointParams before retarget. Require READY and then exactly one
-      `5F913F74` Base call plus one `7D11D4FD` Hands call in the same pass.
-      Complete rows 29--41 select a coherent virtual-Chloe source; Hands-only,
-      duplicates or exhaustion reject it. This exam is read-only and predicts
-      no visual improvement. Launch exactly one role-B Nadine process and send
-      no gameplay input.
+      Read-only `aen` is REJECTED as a discriminator. PID `8488` reached exact
+      three-callsite READY, then bounded admissions 1/2/3 and no source result or
+      rows. Stage 3 is before nested capture because the selector itself required
+      the desired remapped `7D11D4FD` Hands root; a direct `7FB80CC8` root could
+      never produce the promised incomplete result. Do not weaken or rerun it.
+
+      The offline retail evaluation is complete. New
+      `scripts/native_anim_pose_audit.py` pins the exact EXE hash, invokes the
+      retail handlers for `22/24/11/27/29/30/15/16`, validates five authored
+      phase samples and composes `5F913F74` rows 29--37 with constant
+      `7D11D4FD` rows 38--41 through stock `Transform_Compose`. The raw Chloe
+      left/right hand-prop gap is `0.51348..0.54328`, versus only `0.0293577` at
+      the independent live `adx` pre-Solve boundary. Therefore the source clips
+      are not Chloe's final grip and direct row/phase copying is STATIC
+      REJECTED. Separately, `56C57AD2` already contains the exact
+      `0A2F8976` right palm/hand-prop transform, so a missing trigger-hand lane
+      cannot explain the low muzzle of the stable baseline.
+
+      The live body `cmd6` leaf is Player `25CC08FD`, not outer `5F913F74`.
+      Offline retail evaluation closes its 301-frame/stride-50 loop and shows
+      near-identity additive rotations plus zero translations on Player rows
+      21--28, so it also cannot be used outside stock reference/additive command
+      composition. The four `PlayerWeaponIKAction_Update` calls at
+      `0x14109578A..0x1410957B7` only measure wrist-to-prop distances and
+      attenuate Apply weight; they are not a missing target constructor.
+
+      Current static frontier is the post-common-Solve right-hand anchor. Two
+      independent local-Chloe runs place its steady right hand-prop reference
+      only `0.0102249` units / `1.88968` degrees apart; normalized midpoint
+      `P=(-0.008658425,-0.355107,-0.01403325)`,
+      `Q=(0.390035796,0.408591428,0.156346330,0.810235119)`. Reclose the old
+      `aeh` stock `SolveArmIk`/wrist-rotation path around this single-process
+      semantic reference and the confirmed 82e7b9e baseline. Require exact
+      role-B owner0 Mazur/WeaponOut/idle admission, postblend retention, three
+      evidence classes and a one-process written falsifier before launch.
 
   Original `aeh` prediction required the combined READY marker,
       fresh Chloe right-prop CAPTURE, Nadine right-prop RELAY and same-postblend
