@@ -25587,7 +25587,7 @@ the shared function entry.
 
 Second, instruction-level dataflow proves the spatial input.  Solve reads the
 current left and right `*_hand_prop_attachment` world locators at
-`0x1418F31D4/0x1418F31DF`, flips the shared blend as `1-strength` when the arm
+`0x1418F31CF/0x1418F31DF`, flips the shared blend as `1-strength` when the arm
 selector is nonzero, constructs one common position `R + w*(L-R)` plus a
 shortest-path quaternion slerp, and supplies that same goal to both Jacobian
 maps.  No ProcessWeapon locator, attachment transform or art-specific spatial
@@ -25637,7 +25637,7 @@ The canonical `ida/tll.i64` is saved with the additional STATIC label
 `JointSet_GetJointLocLs 0x14181D8E0`; `reports/apply_status_adv.txt` records
 `save_database returned True`.
 
-### 2026-08-20 RUNTIME INCONCLUSIVE (`adv`) / STATIC IMPLEMENTED (`adw`): sample after the stock WS refresh
+### 2026-08-20 RUNTIME INCONCLUSIVE (`adv`/`adw`) / STATIC IMPLEMENTED (`adx`): sample after the stock WS refresh
 
 The first read-only goal census proved its callsite and semantic admission but
 did not produce a pose sample.  PID `12192` (role A/Chloe) and PID `9448`
@@ -25660,8 +25660,17 @@ iteration also invokes `+0x30`, which makes the direct post-Solve read valid.
 This independently explains the symmetric pre-capture failure without changing
 any earlier scope, ABI or target-construction conclusion.
 
-Build `adw` therefore keeps the exact Solve relay at `0x1418F29D0` and adds
-read-only relays at the two existing getter calls `0x1418F31D4` and
+The first corrected package `adw` also made no observation and no mutation.
+Both PID `948` and PID `10384` loaded the expected build, but the atomic package
+logged `SKIPPED (three-callsite preflight)`.  Exact IDB bytes explain the
+fail-closed result: the left getter E8 begins at `0x1418F31CF`
+(`E8 7C A8 F2 FF -> 0x14181DA50`); `0x1418F31D4` is the following
+`mov rbx, rax`, not a callsite.  The right E8 at `0x1418F31DF` is correct.
+No census relay was published in either process, both remained responsive, and
+this packaging rejection supplies no pose evidence.
+
+Build `adx` therefore keeps the exact Solve relay at `0x1418F29D0` and adds
+read-only relays at the two existing getter calls `0x1418F31CF` and
 `0x1418F31DF`.  Each getter wrapper calls stock exactly once, copies the
 semantic chain only after stock has refreshed it, and returns the exact stock
 pointer.  A same-thread TLS scope binds those two samples to the admitted Solve

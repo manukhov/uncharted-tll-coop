@@ -18732,7 +18732,7 @@ constexpr std::uintptr_t kWeaponIkFeatherApplyRva = 0x18F2700u;
 constexpr std::uintptr_t kWeaponIkFeatherSolveCallsiteRva = 0x18F29D0u;
 constexpr std::uintptr_t kWeaponIkFeatherSolveRva = 0x18F2E50u;
 constexpr std::uintptr_t kWeaponIkFeatherLeftGoalGetterCallsiteRva =
-    0x18F31D4u;
+    0x18F31CFu;
 constexpr std::uintptr_t kWeaponIkFeatherRightGoalGetterCallsiteRva =
     0x18F31DFu;
 constexpr std::uintptr_t kJointChainFindNamedJointOffsetRva = 0x181D750u;
@@ -61629,7 +61629,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20adw "
+        "TLL co-op runtime init 2026-08-20adx "
         "(read-only post-refresh Chloe/Nadine WeaponIK goal census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

@@ -5034,8 +5034,13 @@ Keep the postblend preservation boundary; replace only its steady content.
       by the first stock `JointSet_GetJointLocWs` inside Solve.  This result is
       instrumentation-inconclusive and selects no pose hypothesis.
 
-- [ ] Run corrected read-only `adw`.  It keeps the exact Solve relay and wraps
-      only Solve's two existing WS getter calls at `0x1418F31D4/0x1418F31DF`.
+- [x] Run corrected read-only `adw`.  It failed closed at three-callsite
+      preflight in both processes because the documented left address
+      `0x1418F31D4` is the instruction after the getter call.  No relay was
+      published and no pose conclusion is allowed.
+
+- [ ] Run corrected read-only `adx`.  It keeps the exact Solve relay and wraps
+      only Solve's two existing WS getter calls at `0x1418F31CF/0x1418F31DF`.
       The wrappers copy after the stock refresh and return the original pointer;
       the post-Solve cache remains a passive direct read.  Require the new
       three-callsite READY marker, entry, admission, one GOAL row and ten CHAIN
