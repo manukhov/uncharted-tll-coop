@@ -25207,3 +25207,62 @@ and their owner census together, so none of those hot detours is installed.
 The accepted weapon attachment/back-frame package remains unchanged. No new
 grip mutation may be enabled until its crash lifetime and full authored
 Mazur-pair semantics are statically closed.
+
+### 2026-08-20 STATIC / IMPLEMENTED (`adq`): exact authored Mazur complement through two E8 callsites
+
+The post-crash audit rejects reusing either the generic `66846123` Draw pose or
+the paired Feather bypass.  The exact shipped Mazur state is
+`custom-weapon-part-with-feather 11EE475B`, root `anim-player.bin+0x64518`.
+Its two one-sample leaves are complementary: `56C57AD2
+lg2h-sniper-tkiv-carry-peek-hands` owns Player joints 29--32 and `283966ED
+lg2h-sniper-tkiv-carry-fatigue-walk-arms` owns Player joints 21--28.  Root
+weight `0.7` combines disjoint ValidBits, so it does not attenuate either leaf.
+The request-time `0.8` is only the layer fade stored in `+0x30/+0x34`; it is not
+a pose-command weight.  Replaying `0.8/0.7` against an already valid steady
+lane would therefore create another unauthored hybrid and is REJECTED.
+
+Three independent evidence classes earn one corrected exam.  First, the raw
+asset graph, exact masks and one-sample headers close the complete authored
+Player arm range 21--32.  Second, both clips use the same Player skeleton and
+the same stock Player-to-legacy-Nadine retarget row 124 as the steady pose;
+the retarget maps them to the complementary C39 range 19--30.  Third, an
+offline invocation of the executable's native ANIM handlers decoded all five
+phases of steady `25CC08FD`: its C39-source arm rotations remain near identity,
+whereas the authored pair differs by 23--151 degrees across Player joints
+21--28 and by 23--50 degrees at the hand-prop rows.  This rejects a skeleton-map
+split and gives a concrete content delta consistent with the repeatedly
+observed first-Draw-good -> steady-broken transition.  The earlier `adm` result
+independently proves that a Perform command overlay reaches visible pixels,
+although its generic donor was insufficient.
+
+The native decoder path is also closed to concrete addresses.  The steady clip
+uses joint-program opcodes `22/24/11/27/29/30/15/16`; opcode 11 at
+`0x142193790` dispatches `0x142183540`.  Its 33 per-track widths sum to 395 bits
+(50 bytes), exactly the second-stream displacement in the clip, so the offline
+result is an execution of the retail decoder rather than a guessed file parser.
+
+Build `adq` keeps all rejected Draw, Feather, postblend and Async hooks disabled.
+It patches only two exact stock calls: `0x141A92905 ->
+AnimManager_PerformAnimBlend 0x141A92260` scopes a TLS epoch, and the nested
+`0x141A915FF -> AnimManager_CreateAnimCmdsForObject 0x141A8FCF0` calls stock
+first and then edits only exact role-B/local-Nadine/Mazur/WeaponOut/idle group
+zero.  Both relays are installed in one suspended-thread transaction with
+readback and paired rollback.  The injector validates the complete known
+mode-1/flags-3 command grammar, exact post-cmd3 suffix and capacity, then adds
+`cmd6(56C)->scratch; cmd7(0,scratch->0,weight1); cmd6(283)->scratch;
+cmd7(0,scratch->0,weight1)` immediately before cmd3.  Reusing the scratch lane
+is exact because stock case-6 assigns its ValidBits before each overlay.  The
+Async Create callsite sees no TLS epoch and remains stock.  P99, role A,
+transitions, ADS, movement and stock WeaponIKFeather remain untouched.
+
+Competing hypotheses and the pre-run prediction are explicit.
+`H-authored-pair-expired` predicts the boot marker `legacy-Nadine Mazur
+authored-pair repair READY (exact E8 relays)`, then
+`NADINE-MAZUR-AUTHORED-PAIR injected ... hands=56C57AD2 arms=283966ED
+weights=1/1`; after that both hands must keep the Mazur in the same two-hand
+shape beyond the usual first seconds.  `H-stock-Feather-or-later-writer`
+predicts both markers but the same arm-out/broken hold, possibly with twitch.
+`H-custom-pair-not-the-initial-good-owner` gives the same visual falsifier.
+No READY marker or no injection marker is packaging/admission and must not be
+judged from pixels.  A crash rejects the callsite/memmove package immediately.
+This is the sole grip/arm-pose mutation enabled for `adq`.

@@ -1830,6 +1830,20 @@ FUNCTIONS = {
         "JointParams or evaluator pose lanes, so plugin IDs must be resolved before "
         "treating command 23 as read-only.",
     ),
+    0x142193790: (
+        "AnimJointProgramOp11_DecodeVariableBitStreams",
+        "Built-in joint-program opcode 11 handler. Reads the per-track bit-width "
+        "control stream, derives the two packed stream offsets and dispatches the "
+        "variable-bit decoder at 0x142183540. Offline execution against the retail "
+        "image decodes the 33-track/395-bit steady 25CC08FD group-zero block.",
+    ),
+    0x142183540: (
+        "AnimJointProgram_DecodeVariableBitStreams",
+        "Worker used by joint-program opcode 11 to decode paired variable-width "
+        "animation streams into the active JointParams rows. The opcode-11 control "
+        "bytes for 25CC08FD total 395 bits (50 bytes), matching its encoded second "
+        "stream displacement exactly.",
+    ),
     0x141A8FCF0: (
         "AnimManager_CreateAnimCmdsForObject",
         "Exact CreateAnimCmdsForObject source assertion in anim-mgr-jobs.cpp. "
@@ -3012,6 +3026,13 @@ FUNCTIONS = {
         "GPU_UPLOAD TaggedHeapAllocators. Registration writes context id 72 for "
         "GPU_UPLOAD and id 82 for CPU_ACCESS_ONLY, exactly matching the two "
         "FgAnimData skinning-buffer allocations at 0x1418C4FB0.",
+    ),
+    0x141A928F0: (
+        "AnimManager_PerformBlendAndDispatchPostBlendJob",
+        "Synchronous animation worker callback: calls PerformAnimBlend at exact "
+        "callsite 0x141A92905, then resolves the retained Fg owner and dispatches "
+        "Player vtable+0x408 at 0x141A929A1 on the same worker. This ordering is "
+        "the exact scope used by the Mazur authored-pair Perform callsite relay.",
     ),
     0x1415A9040: (
         "TaggedHeapAllocator_Init",

@@ -777,10 +777,20 @@ constexpr std::uintptr_t kAnimStateLayerUpdateBlendWeightsRva = 0x18A3820;
 // has appended the full per-group command suffix, so the repair can validate
 // capacity and every late command before inserting a partial pose at cmd3.
 constexpr std::uintptr_t kAnimManagerCreateAnimCmdsForObjectRva = 0x1A8FCF0;
+// Exact normal-builder CALL inside BuildCommandSegmentsForObjectMask.  The
+// callsite is used instead of detouring the 16-byte CreateAnimCmds prologue so
+// the repair cannot race animation workers across a partially written entry
+// jump.  Its stock bytes are E8 EC E6 FF FF.
+constexpr std::uintptr_t kAnimManagerCreateAnimCmdsNormalCallsiteRva =
+    0x1A915FF;
 // Source-identified PerformAnimBlend(AsyncUpdateJobData*). This is the normal
 // command-DAG producer that writes the persistent FgAnimData+0x100 local pose
 // before Player post-blend and the later Async joint-palette rebuild.
 constexpr std::uintptr_t kAnimManagerPerformAnimBlendRva = 0x1A92260;
+// Sole normal Perform call in AnimManager's post-blend worker.  The wrapper
+// scopes the nested CreateAnimCmds call above without touching either function
+// entry.  Its stock bytes are E8 56 F9 FF FF.
+constexpr std::uintptr_t kAnimManagerPerformAnimBlendCallsiteRva = 0x1A92905;
 constexpr std::uintptr_t kAnimManagerAsyncObjectUpdateJointBlendJobRva =
     0x1A92A00;
 // Read-only final holster discriminator. The anim-control event hook exposes

@@ -4961,6 +4961,20 @@ Build `adp` disables the endpoint, Feather and owner-census package together.
 Do not launch another grip mutation until the installed hot-hook lifetime and
 the exact `56C57AD2 + 283966ED` authored Mazur pair are closed statically.
 
+`adq` closes that prerequisite without restoring the crashing package.  The
+exact custom Mazur root uses complementary one-sample Player clips
+`56C57AD2[29..32] + 283966ED[21..28]`; raw masks, the shared retarget row 124,
+native offline decoding of steady `25CC08FD`, and the already confirmed Perform
+pixel boundary satisfy the evidence quota.  The request scalar `0.8` is a fade,
+not a pose blend; both complementary clips are therefore overlaid at weight
+1.0.  Only exact E8 callsites `0x141A92905` and `0x141A915FF` are patched in one
+suspended/readback/rollback transaction.  Require the boot READY marker and
+`NADINE-MAZUR-AUTHORED-PAIR injected ... hands=56C57AD2 arms=283966ED
+weights=1/1`.  Both markers plus a stable two-hand hold confirms the expired
+custom-pair hypothesis.  Both markers plus the same arm-out/twitch rejects
+pair-before-stock-Feather sufficiency and moves the frontier downstream.  No
+marker is packaging/admission; any crash rejects this relay/memmove package.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
