@@ -5004,14 +5004,20 @@ is draw-transition quality: Draw state 1 is still stock and the repair enters at
 WeaponOut state 2 with literal command weights 1.0, producing an abrupt visible
 handoff.
 
-- [ ] Close the native Draw fade before changing the confirmed steady repair.
-      Bind exact channel-1 `PlayerGetWeaponInHandAction` weak weapon identity to
-      the same Player/Fg/Mazur epoch, resolve WeaponPartial through
-      `AnimControl_FindActiveType2LayerById`, and prove current layer weight
-      `+0x28` from target/duration/start/curve fields `+0x2C..+0x3C` updated by
-      `AnimSimpleLayer_UpdateFade 0x141896950`.  Only then may the authored pair
-      be preserved during Draw state 1 using the native weight.  Do not use a
-      timer, hand-written transform interpolation or a broad state-1 gate.
+- [ ] Runtime-confirm `ads`, which closes the native transition without changing
+      Draw state 1.  The exact `11EE475B` WeaponPartial instance is already live
+      in state 2 and publishes the real track blend through
+      `AnimStateInstance+0x158` (`0.026 -> 0.881 -> 1.0` in the saved trace);
+      `AnimStateLayer_CreateAnimCommands` consumes that field at `0x14189EB4B`.
+      While this exact root exists, keep stock command generation and preserve
+      its post-Perform C39 rows 19--30 across Player `+0x408`.  After it expires,
+      use the confirmed full-weight steady overlay.  Require boot READY, a
+      `source=stock-transition` preserve/restore pair with `0<nativeWeight<1`,
+      then a `source=steady-overlay` inject/restore pair.  Success means a smooth
+      equip handoff and the already confirmed stable two-hand hold.  All markers
+      plus the same snap rejects the transition content itself; missing markers
+      is packaging/admission.  Do not add a wall-clock ramp, mutate state 1 or
+      send any in-game input—the user alone performs the gameplay test.
 
 ## Rule
 

@@ -2467,7 +2467,10 @@ constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
 // Perform pass evaluates this pair, but the later Player +0x408 postblend pass
 // still leaves the visible grip one-handed. Preserve only the engine-retargeted
 // C39 rows 19..30 across that exact postblend call so the final Async cmd14 can
-// consume the same authored result. P99, role A, ADS and transitions stay stock.
+// consume the same authored result. During the exact 11EE475B state-2 fade,
+// preserve the stock pose already blended with its published +0x158 weight;
+// only the later steady topology receives the full command overlay. Draw state
+// 1, P99, role A and ADS remain stock.
 constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = true;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
@@ -42268,7 +42271,10 @@ bool seh_capture_weapon_partial_fade_trace(
         }
         auto* const tracks = *reinterpret_cast<void* const* const*>(
             layer_bytes + 0x4F8);
-        if (tracks == nullptr) {
+        if (tracks == nullptr ||
+            readable_bytes(tracks) <
+                static_cast<std::size_t>(output->track_count) *
+                    sizeof(void*)) {
             return false;
         }
         output->captured_track_count = static_cast<std::uint32_t>(std::min<
@@ -47705,11 +47711,14 @@ bool install_legacy_nadine_mazur_steady_hands_npc_repair() {
 // Exact, crash-contained replacement for the rejected Draw/Feather package.
 // The shipped custom Mazur root combines these two one-sample Player clips:
 // 56C57AD2 owns distal hand rows 29..32 and 283966ED owns proximal arm rows
-// 21..28.  Their masks are disjoint, therefore applying both at weight 1.0 to
-// the current lane reproduces the authored union without importing a body pose
-// or suppressing the stock WeaponIK/Feather lifecycle.
+// 21..28. Their masks are disjoint, therefore applying both at full weight in
+// steady state reproduces the authored union without importing a body pose or
+// suppressing the stock WeaponIK/Feather lifecycle. While the exact 11EE475B
+// instance exists, stock CreateAnimCommands already blends that authored root;
+// preserve its post-Perform result instead of layering the correction twice.
 constexpr std::uint32_t kMazurAuthoredHandsClipId = 0x56C57AD2u;
 constexpr std::uint32_t kMazurAuthoredArmsClipId = 0x283966EDu;
+constexpr std::uint32_t kMazurAuthoredPairStateId = 0x11EE475Bu;
 constexpr std::uint16_t kMazurAuthoredPairFrameCount = 1u;
 
 enum class LegacyNadineMazurAuthoredPairAdmission : std::uint8_t {
@@ -47736,8 +47745,12 @@ struct LegacyNadineMazurAuthoredPairEpoch {
     void* target_skeleton = nullptr;
     void* hands_clip = nullptr;
     void* arms_clip = nullptr;
+    void* weapon_partial_layer = nullptr;
+    void* custom_pair_instance = nullptr;
     std::uint32_t player_runtime_id = 0;
     std::uint32_t weapon_runtime_id = 0;
+    std::uint32_t blend_weight_bits = 0x3F800000u;
+    bool transition_weighted = false;
 };
 
 constexpr std::size_t kMazurAuthoredPairFirstC39Joint = 19;
@@ -47752,8 +47765,12 @@ struct LegacyNadineMazurAuthoredPairPostBlendTicket {
     void* weapon = nullptr;
     void* local_pose = nullptr;
     void* target_skeleton = nullptr;
+    void* weapon_partial_layer = nullptr;
+    void* custom_pair_instance = nullptr;
     std::uint32_t player_runtime_id = 0;
     std::uint32_t weapon_runtime_id = 0;
+    std::uint32_t blend_weight_bits = 0x3F800000u;
+    bool transition_weighted = false;
     std::array<std::byte, kMazurAuthoredPairPoseBytes> pose{};
 };
 
@@ -47774,6 +47791,190 @@ thread_local LegacyNadineMazurAuthoredPairEpoch
 thread_local bool g_legacy_nadine_mazur_authored_pair_injected = false;
 thread_local LegacyNadineMazurAuthoredPairPostBlendTicket
     g_legacy_nadine_mazur_authored_pair_postblend_ticket{};
+
+// Resolve the exact outer transition weight that stock command generation uses
+// for custom-weapon-part-with-feather. Tracks are generated oldest-to-newest;
+// each newer track is folded over the accumulated pose with the last instance's
+// +0x158 weight. The saved Mazur trace independently observed this exact state
+// progress from near zero to one while the controller was already WeaponOut=2.
+// If 11EE475B is absent (the normal steady s_no-weapon topology), the confirmed
+// steady repair remains a full-weight contributor.
+bool seh_resolve_legacy_nadine_mazur_authored_pair_weight(
+    void* player, LegacyNadineMazurAuthoredPairEpoch* epoch) {
+    if (player == nullptr || epoch == nullptr ||
+        g_anim_control_find_active_type2_layer_by_id == nullptr) {
+        return false;
+    }
+    __try {
+        auto* const player_bytes = static_cast<std::byte*>(player);
+        if (readable_bytes(player_bytes) < 0x1DF8) {
+            return false;
+        }
+        auto* const weapon_anim_control =
+            *reinterpret_cast<std::byte**>(player_bytes + 0x1DF0);
+        if (weapon_anim_control == nullptr ||
+            readable_bytes(weapon_anim_control) < 0x30 ||
+            *reinterpret_cast<const std::uintptr_t*>(weapon_anim_control) !=
+                g_module + kPlayerWeaponAnimControlVtableRva ||
+            *reinterpret_cast<void* const*>(weapon_anim_control + 0x10) !=
+                player) {
+            return false;
+        }
+        void* const anim_control = *reinterpret_cast<void* const*>(
+            weapon_anim_control + 0x08);
+        void* const layer = anim_control != nullptr
+            ? g_anim_control_find_active_type2_layer_by_id(
+                  anim_control, kWeaponPartialLayerId)
+            : nullptr;
+        if (layer == nullptr || readable_bytes(layer) < 0x508 ||
+            *reinterpret_cast<const std::uintptr_t*>(layer) !=
+                g_module + kAnimStateLayerVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(layer) + 0x08) !=
+                kAnimStateLayerType) {
+            return false;
+        }
+
+        auto* const layer_bytes = static_cast<std::byte*>(layer);
+        const std::uint32_t track_count =
+            *reinterpret_cast<const std::uint32_t*>(layer_bytes + 0x500);
+        if (track_count == 0 || track_count > kMaxLiveWeaponPartialTracks) {
+            return false;
+        }
+        auto* const tracks = *reinterpret_cast<void* const* const*>(
+            layer_bytes + 0x4F8);
+        if (tracks == nullptr ||
+            readable_bytes(tracks) <
+                static_cast<std::size_t>(track_count) * sizeof(void*)) {
+            return false;
+        }
+
+        void* custom_instance = nullptr;
+        std::uint32_t custom_track_index = 0;
+        std::uint32_t custom_instance_index = 0;
+        std::uint32_t custom_instance_count = 0;
+        for (std::uint32_t track_index = 0;
+             track_index < track_count; ++track_index) {
+            auto* const track = static_cast<std::byte*>(tracks[track_index]);
+            if (track == nullptr || readable_bytes(track) < 0x14) {
+                return false;
+            }
+            const std::uint16_t capacity =
+                *reinterpret_cast<const std::uint16_t*>(track + 0x10);
+            const std::uint16_t instance_count =
+                *reinterpret_cast<const std::uint16_t*>(track + 0x12);
+            if (instance_count > capacity ||
+                instance_count > kMaxLiveWeaponPartialInstances) {
+                return false;
+            }
+            auto* const instances = instance_count != 0
+                ? *reinterpret_cast<void* const* const*>(track)
+                : nullptr;
+            if (instance_count != 0 &&
+                (instances == nullptr ||
+                 readable_bytes(instances) <
+                     static_cast<std::size_t>(instance_count) *
+                         sizeof(void*))) {
+                return false;
+            }
+            for (std::uint32_t instance_index = 0;
+                 instance_index < instance_count; ++instance_index) {
+                auto* const instance =
+                    static_cast<std::byte*>(instances[instance_index]);
+                if (instance == nullptr || readable_bytes(instance) < 0x15C ||
+                    *reinterpret_cast<const std::uintptr_t*>(instance) !=
+                        g_module + kAnimStateInstanceVtableRva) {
+                    return false;
+                }
+                if (*reinterpret_cast<const std::uint32_t*>(
+                        instance + 0x98) != kMazurAuthoredPairStateId) {
+                    continue;
+                }
+                if (custom_instance != nullptr) {
+                    return false;
+                }
+                custom_instance = instance;
+                custom_track_index = track_index;
+                custom_instance_index = instance_index;
+                custom_instance_count = instance_count;
+            }
+        }
+
+        epoch->weapon_partial_layer = layer;
+        epoch->custom_pair_instance = custom_instance;
+        epoch->blend_weight_bits = 0x3F800000u;
+        epoch->transition_weighted = false;
+        if (custom_instance == nullptr) {
+            return true;
+        }
+
+        // The dynamic root reads these exact fields. Refuse a stale or foreign
+        // 11EE475B instance rather than treating its state id as sufficient.
+        std::uint32_t player_second_blend_bits = 0;
+        std::uint32_t control_second_blend_bits = 0;
+        std::memcpy(
+            &player_second_blend_bits, player_bytes + 0x1D4,
+            sizeof(player_second_blend_bits));
+        std::memcpy(
+            &control_second_blend_bits, weapon_anim_control + 0x28,
+            sizeof(control_second_blend_bits));
+        if (*reinterpret_cast<const std::uint32_t*>(player_bytes + 0x1CC) !=
+                kMazurAuthoredHandsClipId ||
+            *reinterpret_cast<const std::uint32_t*>(player_bytes + 0x1D0) !=
+                kMazurAuthoredArmsClipId ||
+            player_second_blend_bits != 0x3F333333u ||
+            *reinterpret_cast<const std::uint32_t*>(
+                weapon_anim_control + 0x20) != kMazurAuthoredHandsClipId ||
+            *reinterpret_cast<const std::uint32_t*>(
+                weapon_anim_control + 0x24) != kMazurAuthoredArmsClipId ||
+            control_second_blend_bits != 0x3F333333u ||
+            custom_instance_index + 1 != custom_instance_count) {
+            return false;
+        }
+
+        // Track zero is newest. Only a track with an older sibling is folded
+        // through cmd7 with its last instance's +0x158 weight. A sole/oldest
+        // custom track is already a full contributor and remains weight one.
+        if (custom_track_index + 1 < track_count) {
+            float blend_weight = 0.0F;
+            std::memcpy(
+                &blend_weight,
+                static_cast<const std::byte*>(custom_instance) + 0x158,
+                sizeof(blend_weight));
+            if (!std::isfinite(blend_weight) || blend_weight < 0.0F ||
+                blend_weight > 1.0F) {
+                return false;
+            }
+            std::memcpy(
+                &epoch->blend_weight_bits, &blend_weight,
+                sizeof(epoch->blend_weight_bits));
+            epoch->transition_weighted = true;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_matches_legacy_nadine_mazur_authored_pair_create_context(
+    void* create_context, std::uint32_t group,
+    const LegacyNadineMazurAuthoredPairEpoch& epoch) {
+    __try {
+        return epoch.valid && create_context != nullptr && group == 0 &&
+            readable_bytes(create_context) >= 0x18 &&
+            *reinterpret_cast<void* const*>(create_context) ==
+                epoch.fg_anim_data &&
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(create_context) + 0x08) ==
+                epoch.target_skeleton &&
+            *reinterpret_cast<const std::uint8_t*>(
+                static_cast<const std::byte*>(create_context) + 0x10) == 1 &&
+            *reinterpret_cast<const std::uint8_t*>(
+                static_cast<const std::byte*>(create_context) + 0x11) == 3;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
 
 LegacyNadineMazurAuthoredPairAdmission
 seh_select_legacy_nadine_mazur_authored_pair_epoch(
@@ -47840,6 +48041,11 @@ seh_select_legacy_nadine_mazur_authored_pair_epoch(
             *reinterpret_cast<const std::uint32_t*>(
                 static_cast<const std::byte*>(owner.weapon) +
                 kGameObjectRuntimeIdOffset);
+        if (!seh_resolve_legacy_nadine_mazur_authored_pair_weight(
+                player, output)) {
+            *output = {};
+            return LegacyNadineMazurAuthoredPairAdmission::kOwner;
+        }
         return LegacyNadineMazurAuthoredPairAdmission::kAdmitted;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *output = {};
@@ -47888,14 +48094,29 @@ bool seh_capture_legacy_nadine_mazur_authored_pair_postblend_ticket(
                 kMazurAuthoredPairPoseBytes) {
             return false;
         }
+        if (epoch.custom_pair_instance != nullptr) {
+            LegacyNadineMazurAuthoredPairEpoch current{};
+            if (!seh_resolve_legacy_nadine_mazur_authored_pair_weight(
+                    epoch.player, &current) ||
+                current.weapon_partial_layer != epoch.weapon_partial_layer ||
+                current.custom_pair_instance != epoch.custom_pair_instance ||
+                current.blend_weight_bits != epoch.blend_weight_bits ||
+                current.transition_weighted != epoch.transition_weighted) {
+                return false;
+            }
+        }
         output->valid = true;
         output->player = epoch.player;
         output->fg_anim_data = epoch.fg_anim_data;
         output->weapon = epoch.weapon;
         output->local_pose = epoch.local_pose;
         output->target_skeleton = epoch.target_skeleton;
+        output->weapon_partial_layer = epoch.weapon_partial_layer;
+        output->custom_pair_instance = epoch.custom_pair_instance;
         output->player_runtime_id = epoch.player_runtime_id;
         output->weapon_runtime_id = epoch.weapon_runtime_id;
+        output->blend_weight_bits = epoch.blend_weight_bits;
+        output->transition_weighted = epoch.transition_weighted;
         std::memcpy(
             output->pose.data(),
             static_cast<const std::byte*>(epoch.local_pose) +
@@ -47949,6 +48170,17 @@ bool seh_restore_legacy_nadine_mazur_authored_pair_after_postblend(
                 kMazurAuthoredPairFirstC39Joint * kJointLocalPoseStride) <
                 ticket.pose.size()) {
             return false;
+        }
+        if (ticket.custom_pair_instance != nullptr) {
+            LegacyNadineMazurAuthoredPairEpoch current{};
+            if (!seh_resolve_legacy_nadine_mazur_authored_pair_weight(
+                    player, &current) ||
+                current.weapon_partial_layer != ticket.weapon_partial_layer ||
+                current.custom_pair_instance != ticket.custom_pair_instance ||
+                current.blend_weight_bits != ticket.blend_weight_bits ||
+                current.transition_weighted != ticket.transition_weighted) {
+                return false;
+            }
         }
         std::memcpy(
             static_cast<std::byte*>(ticket.local_pose) +
@@ -48144,6 +48376,34 @@ hooked_create_anim_cmds_for_legacy_nadine_mazur_authored_pair(
         return result;
     }
 
+    // During the authored custom-state lifetime, stock has already generated
+    // the exact pair and applied its native track fade. Mark that post-Perform
+    // pose for preservation without appending a second weighted copy.
+    if (epoch.custom_pair_instance != nullptr) {
+        if (!seh_matches_legacy_nadine_mazur_authored_pair_create_context(
+                create_context, group, epoch)) {
+            return result;
+        }
+        g_legacy_nadine_mazur_authored_pair_injected = true;
+        static std::atomic<bool> transition_logged{false};
+        if (!transition_logged.exchange(true, std::memory_order_relaxed)) {
+            float blend_weight = 0.0F;
+            std::memcpy(
+                &blend_weight, &epoch.blend_weight_bits,
+                sizeof(blend_weight));
+            std::ostringstream line;
+            line << "NADINE-MAZUR-AUTHORED-PAIR preserved"
+                 << " stage=perform source=stock-transition"
+                 << " state=0x" << std::hex << kMazurAuthoredPairStateId
+                 << std::dec << " group=" << group
+                 << " nativeWeight=" << blend_weight
+                 << " commandWeighted="
+                 << (epoch.transition_weighted ? 1 : 0);
+            boot_log_line(line.str().c_str());
+        }
+        return result;
+    }
+
     std::uint32_t scratch_lane = 0;
     const auto injection = seh_inject_legacy_nadine_mazur_authored_pair(
         create_context, command_record, group, epoch, &scratch_lane);
@@ -48156,7 +48416,7 @@ hooked_create_anim_cmds_for_legacy_nadine_mazur_authored_pair(
                  << " hands=0x" << std::hex << kMazurAuthoredHandsClipId
                  << " arms=0x" << kMazurAuthoredArmsClipId << std::dec
                  << " group=" << group << " lane=" << scratch_lane
-                 << " weights=1/1";
+                 << " weights=1/1 source=steady-overlay";
             boot_log_line(line.str().c_str());
         }
     } else if (injection != LegacyNadineMazurAuthoredPairInjection::kIgnored) {
@@ -48272,10 +48532,25 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
     if (ticket.valid &&
         seh_restore_legacy_nadine_mazur_authored_pair_after_postblend(
             player, ticket)) {
-        static std::atomic<bool> restored_logged{false};
-        if (!restored_logged.exchange(true, std::memory_order_relaxed)) {
-            boot_log_line(
-                "NADINE-MAZUR-AUTHORED-PAIR restored stage=postblend rows=19..30");
+        static std::array<std::atomic<bool>, 2> restored_logged{};
+        const bool stock_transition =
+            ticket.custom_pair_instance != nullptr;
+        const std::size_t log_index = stock_transition ? 0 : 1;
+        if (!restored_logged[log_index].exchange(
+                true, std::memory_order_relaxed)) {
+            float blend_weight = 0.0F;
+            std::memcpy(
+                &blend_weight, &ticket.blend_weight_bits,
+                sizeof(blend_weight));
+            char line[256]{};
+            std::snprintf(
+                line, sizeof(line),
+                "NADINE-MAZUR-AUTHORED-PAIR restored stage=postblend"
+                " rows=19..30 weight=%.6f source=%s commandWeighted=%u",
+                static_cast<double>(blend_weight),
+                stock_transition ? "stock-transition" : "steady-overlay",
+                ticket.transition_weighted ? 1u : 0u);
+            boot_log_line(line);
         }
     }
     return result;
@@ -48284,6 +48559,9 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
 bool install_legacy_nadine_mazur_authored_pair_repair() {
     g_legacy_nadine_mazur_authored_pair_ready.store(
         false, std::memory_order_release);
+    g_anim_control_find_active_type2_layer_by_id =
+        reinterpret_cast<AnimControlFindActiveType2LayerByIdFunction>(
+            g_module + kAnimControlFindActiveType2LayerByIdRva);
 
     std::uint8_t* create_site = nullptr;
     std::uint8_t* create_relay = nullptr;
@@ -48493,7 +48771,7 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     }
     boot_log_line(
         ready
-            ? "legacy-Nadine Mazur authored-pair preservation READY (three exact callsite relays)"
+            ? "legacy-Nadine Mazur authored-pair preservation READY (native state fade; three exact callsite relays)"
             : (rollback_verified
                    ? "legacy-Nadine Mazur authored-pair preservation SKIPPED (verified rollback)"
                    : "legacy-Nadine Mazur authored-pair preservation PARTIAL (pass-through; relays retained)"));
@@ -60696,7 +60974,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20adr "
+        "TLL co-op runtime init 2026-08-20ads "
         "(Mazur authored-pair preservation enabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

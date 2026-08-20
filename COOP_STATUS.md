@@ -25377,3 +25377,48 @@ passes the authored first scalar into WeaponPartial layer fields: target weight
 only if it reads that native current weight and proves the same action/weapon/Fg
 identity.  Do not introduce a wall-clock ramp, quaternion interpolation or a
 broad state-1 admission.
+
+### 2026-08-20 STATIC / IMPLEMENTED (`ads`): preserve the native `11EE475B` fade before the confirmed steady overlay
+
+The first transition hypothesis above is now corrected by stronger evidence:
+the visible handoff is not owned by controller Draw state 1 or by the layer's
+generic current-weight field `+0x28`.  Historical exact WeaponPartial rows show
+`custom-weapon-part-with-feather 11EE475B` already alive in controller
+`WeaponOut=2`, with its final `AnimStateInstance+0x158` advancing from
+`0.02609429` at age 0 through `0.8814188` at 109 ms to `1.0` at 219 ms.
+`AnimStateLayer_UpdateBlendWeights 0x1418A3820` publishes that field, while
+`AnimStateLayer_CreateAnimCommands 0x14189EA60` walks tracks oldest-to-newest
+and reads the last instance's exact `+0x158` at `0x14189EB4B` as the cmd7
+transition weight.  The state/root identity is independently closed by the
+exact dynamic `56C57AD2 + 283966ED`, second-blend `0.7` fields at
+Player `+0x1CC/+0x1D0/+0x1D4` and PlayerWeaponAnimControl
+`+0x20/+0x24/+0x28`.  Runtime history, producer/consumer disassembly and the
+asset/root identity are three independent evidence classes.
+
+Applying the confirmed full-weight pair during that lifetime would blend the
+transition twice.  Build `ads` instead resolves the exact active WeaponPartial
+layer and unique last `11EE475B` instance.  While it exists, the Create relay
+does not edit the command list: it lets stock Perform evaluate the native fade,
+captures the resulting engine-retargeted C39 rows 19--30, and preserves those
+rows across Player `+0x408`.  Only after `11EE475B` disappears does the existing
+full-weight steady overlay run and receive the same confirmed postblend
+preservation.  Every existing role-B/local-Nadine/Mazur/current-weapon,
+controller-state-2, no-ADS, no-movement, no-cover and no-grenade guard remains;
+Draw state 1, P99, role A and all other states stay stock.  No timer or manual
+transform interpolation was introduced.
+
+Competing hypotheses and the single written prediction are explicit.
+`H-native-fade-lost-at-postblend` predicts the boot marker
+`legacy-Nadine Mazur authored-pair preservation READY (native state fade; three
+exact callsite relays)`, then during equip
+`preserved stage=perform source=stock-transition state=0x11ee475b` with
+`nativeWeight` strictly between zero and one and the paired
+`restored stage=postblend ... source=stock-transition`; after the state expires,
+the already confirmed `injected ... weights=1/1 source=steady-overlay` and
+`restored ... source=steady-overlay` must follow.  The intermediate motion must
+be visibly smoother while the final two-hand hold remains correct.
+`H-transition-content-itself-abrupt` predicts all four marker classes and the
+same snap.  Missing transition markers selects state/root/admission packaging,
+not pixels; missing steady markers is a regression of the confirmed `adr`
+repair.  A crash rejects `ads` immediately.  The user alone controls gameplay;
+the agent may only prepare, launch or inject when explicitly requested.
