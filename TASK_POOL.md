@@ -5202,7 +5202,7 @@ Keep the postblend preservation boundary; replace only its steady content.
       baseline was disabled. This is admission/lifecycle-inconclusive and does
       not test the source content.
 
-- [~] Run one read-only `aek` first-fail census at the same Player `+0x408`
+- [x] Run one read-only `aek` first-fail census at the same Player `+0x408`
       callsite. Keep every grip/arm-pose mutation disabled. Once per 100 ms,
       log exact retained equality, owner/controller/idle admission and the
       bounded WeaponPartial track inventory including `1313FB4E`, `11EE475B`,
@@ -5213,6 +5213,23 @@ Keep the postblend preservation boundary; replace only its steady content.
       selects the custom-Mazur source mismatch; state 2 with only `7405/3889`
       proves the postblend sample is late. This exam predicts no pose change.
       Launch exactly one role-B/Nadine process; the user alone controls gameplay.
+
+      Runtime result: exact retained ENTRY and full lifecycle arrived. The
+      source window is controller state 2 with simultaneous
+      `11EE475B + 1313FB4E`, followed by `7405AACB` and `3889CC0E`. This rejects
+      reach, state-overlap, art and idle failures. Read-only memory inspection
+      found the final blocker: stock right-arm JointParams use NaN only in the
+      non-semantic scale/translation W lanes, while the old validator required
+      all 12 floats finite.
+
+- [~] Run the corrected one-process `ael` replay. Validate only
+      `scale.xyz + quaternion.xyzw + translation.xyz`, preserve the complete
+      raw 48-byte rows, and keep every original owner/topology gate. Require
+      READY, `captured source=s_weapon-draw`, and
+      `replayed trigger=s_no-weapon`. All three plus the initial correct hold
+      persisting confirms the transient postblend owner. All three plus a wrong
+      hold rejects source content/row sufficiency. Launch exactly one role-B
+      Nadine process; the user alone controls gameplay.
 
   Original `aeh` prediction required the combined READY marker,
       fresh Chloe right-prop CAPTURE, Nadine right-prop RELAY and same-postblend

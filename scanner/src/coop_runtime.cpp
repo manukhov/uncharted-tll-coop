@@ -2510,8 +2510,8 @@ constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = false;
 // the unexecuted mutation disabled. The next bounded pass observes the first
 // failed owner/idle/topology condition and the complete live WeaponPartial
 // state inventory at this same seam; it never writes a pose or animation field.
-constexpr bool kEnableLegacyNadineMazurTransientPostblendReplay = false;
-constexpr bool kEnableLegacyNadineMazurTransientPostblendCensus = true;
+constexpr bool kEnableLegacyNadineMazurTransientPostblendReplay = true;
+constexpr bool kEnableLegacyNadineMazurTransientPostblendCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 static_assert(
@@ -51104,7 +51104,16 @@ bool valid_legacy_nadine_mazur_transient_pose(
             row.data(),
             pose.data() + row_index * kJointLocalPoseStride,
             kJointLocalPoseStride);
-        if (!valid_pose_floats(row.data(), row.size()) ||
+        // JointParams is three 16-byte records: scale, quaternion and
+        // translation. Only xyz is semantic for scale/translation; their W
+        // lanes are engine service/padding values and stock C39 deliberately
+        // publishes NaN there on alternating arm rows. Preserve all 48 bytes
+        // verbatim, but validate only the ten semantic floats.
+        const bool scale_xyz_valid = std::isfinite(row[0]) &&
+            std::isfinite(row[1]) && std::isfinite(row[2]);
+        const bool translation_xyz_valid = std::isfinite(row[8]) &&
+            std::isfinite(row[9]) && std::isfinite(row[10]);
+        if (!scale_xyz_valid || !translation_xyz_valid ||
             !valid_network_orientation(row.data() + 4)) {
             return false;
         }
@@ -63920,8 +63929,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20aek "
-        "(one-process first-fail postblend census; all grip pose mutations disabled)");
+        "TLL co-op runtime init 2026-08-20ael "
+        "(one-process first-Draw postblend replay; semantic JointParams validation)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

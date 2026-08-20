@@ -26289,3 +26289,45 @@ failure to idle or pose validation. State 2 with `custom=1` but `draw=0`
 selects the exact custom-Mazur source mismatch. State 2 with only `7405` or
 `3889` proves the sample point is already too late. This single role-B process
 exam predicts no visual improvement; only the user controls gameplay.
+
+### 2026-08-20 CONFIRMED (`aek`) / STATIC IMPLEMENTED (`ael`): fix the false JointParams rejection
+
+The single role-B/Nadine census closed every `aej` packaging alternative. PID
+`11764` emitted both ENTRY categories and then the exact retained-Player row.
+The normal draw sequence was:
+
+- controller Draw 1 with `28B0F93B`, then `1313FB4E`;
+- controller WeaponOut 2 with exact idle scope and simultaneous
+  `11EE475B@0.218706 + 1313FB4E@0.764009`;
+- `11EE475B` alone, then `7405AACB + 11EE475B`, then `7405AACB`;
+- `3889CC0E + 7405AACB`, then sole `3889CC0E` before native Holster.
+
+Thus callsite reach, retained identity, controller overlap, Mazur art, idle
+admission and both candidate source states are CONFIRMED. The only remaining
+gate between that exact `draw=1,empty=0` row and the missing `captured` marker
+was `valid_legacy_nadine_mazur_transient_pose`.
+
+That validator was structurally wrong. `JointCache_InitializeAndAllocatePoseBuffers
+0x141686CD0` and `JointSet_AllocateAndSeedBuffers 0x14181E780` establish each
+48-byte JointParams row as scale `+0x00`, quaternion `+0x10`, translation
+`+0x20`; only xyz is semantic in scale and translation. Independent read-only
+`ReadProcessMemory` of the exact live C39 rows 19--30 found normalized
+quaternions (`q^2` within `0.9999997..1.0000001`) and finite semantic xyz on
+all twelve rows. Stock rows 20/22/24/26/28 intentionally contained NaN only in
+the two non-semantic W lanes at `+0x0C/+0x2C`. The old helper called
+`valid_pose_floats` across all twelve floats and therefore deterministically
+rejected the engine's valid right-arm rows. Existing raw-census code at the same
+JointCache boundary independently warns that a raw 48-byte row must not be
+treated as a network float payload.
+
+Build `ael` changes only this validation contract. It requires finite
+`scale.xyz`, a finite normalized quaternion, and finite `translation.xyz`,
+while preserving all 48 bytes verbatim, including the engine's service W
+lanes. The exact `aej` owner/topology gates and postblend capture/replay remain
+unchanged; the read-only census is disabled. The falsifier is now strict:
+READY plus `captured source=s_weapon-draw` and `replayed trigger=s_no-weapon`
+must all appear. With all markers, a persistent initial two-hand/muzzle-up pose
+confirms `H-transient-postblend-owner`; all markers plus a wrong pose rejects
+the sampled content/row sufficiency. A missing marker is still packaging and
+has no visual interpretation. Only one role-B process is permitted and only the
+user controls gameplay.
