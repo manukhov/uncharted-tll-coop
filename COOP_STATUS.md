@@ -25353,11 +25353,11 @@ role-B PID 13736.  Both processes stayed responsive; role B logged
 `NADINE-MAZUR-AUTHORED-PAIR injected stage=perform hands=0x56c57ad2
 arms=0x283966ed group=0 lane=4 weights=1/1` followed by
 `NADINE-MAZUR-AUTHORED-PAIR restored stage=postblend rows=19..30`.  The user
-then confirmed that local legacy Nadine kept the Mazur in the correct stable
-two-hand hold instead of returning to the former one-hand/arm-away pose.  This
-confirms `H-postblend-overwrite`: the authored complementary pair is sufficient,
-and preserving its engine-retargeted C39 rows across Player `+0x408` is the
-missing steady-state boundary.
+then confirmed that local legacy Nadine kept both hands on the Mazur instead of
+returning to the former one-hand/arm-away topology.  This confirms
+`H-postblend-overwrite` as the missing persistence boundary.  The later `ads`
+side-by-side image refines, but does not erase, this result: the preserved pose
+is stable and two-handed, yet it is not the same high horizontal hold as Chloe.
 
 One residual is now separated rather than hidden.  The draw/equip intermediate
 motion looks abrupt, as if transition frames are missing.  That observation is
@@ -25422,3 +25422,60 @@ same snap.  Missing transition markers selects state/root/admission packaging,
 not pixels; missing steady markers is a regression of the confirmed `adr`
 repair.  A crash rejects `ads` immediately.  The user alone controls gameplay;
 the agent may only prepare, launch or inject when explicitly requested.
+
+### 2026-08-20 RUNTIME REJECTED semantics (`ads`) / STATIC IMPLEMENTED (`adt`): replace the low-carry pair with the shipped Mazur high-carry pair
+
+The user-controlled `ads` exam used role-A PID 8328 and role-B PID 16592.  Both
+loaded the expected build and reported the three-relay READY marker.  Role B
+emitted only the steady markers
+`injected ... hands=56C57AD2 arms=283966ED ... source=steady-overlay` and
+`restored ... source=steady-overlay`; it emitted zero
+`source=stock-transition` markers.  Thus this action did not exercise the
+`11EE475B` preservation branch, and its transition quality remains unconfirmed.
+
+The supplied side-by-side image is nevertheless a decisive steady-content
+falsifier.  Chloe holds the rifle nearly horizontal at chest height, with the
+stock drawn into the right shoulder and the left hand under the fore-end.
+Nadine has both hands engaged but carries the whole weapon diagonally downward:
+the shoulder/elbow chain is low and the left support follows the barrel.  This
+matches the injected resource semantics exactly: `56C57AD2` is
+`lg2h-sniper-tkiv-carry-peek-hands` and `283966ED` is
+`lg2h-sniper-tkiv-carry-fatigue-walk-arms`.  Therefore `adr` remains CONFIRMED
+for postblend persistence and two-hand topology, but the claim that this pair
+matches Chloe's final hold is RUNTIME REJECTED.
+
+Three independent evidence classes identify one narrower replacement exam.
+First, the same exact Mazur overlay object has the paired rows
+`47C0A266 -> F4B56F62 lg2h-sniper-tkiv-basic-hands` and
+`47C0A266 -> 5676695B lg2h-sniper-tkiv-carry-high-arms`; this is a shipped
+Mazur-specific high-carry pair rather than an unrelated donor.  Second, direct
+PAK inspection proves both are one-sample Player/FD6 resources with exactly the
+same complementary masks as the current pair: `F4B56F62` owns joints 29--32
+and `5676695B` owns 21--28, using the same already-confirmed Player-to-C39
+retarget.  Third, raw constant-pose decoding gives a concrete visual delta from
+the current pair: the high pair changes Player shoulders/elbows/wrists/palms by
+9.2--69.5 degrees and changes the left hand-prop joint 31 by 146.6 degrees,
+while the right hand-prop joint 32 is identical.  That independently matches
+the image: the right trigger-side endpoint is already plausible, while the
+left support and the complete arm/weapon elevation are wrong.
+
+Build `adt` keeps the confirmed three-relay postblend boundary and all exact
+role-B/local-Nadine/Mazur/WeaponOut/no-ADS/no-motion guards.  It preserves the
+stock `56C57AD2 + 283966ED` pose only if the exact transition state `11EE475B`
+is actually present.  In the later steady topology it now overlays only
+`F4B56F62 + 5676695B` at full weight and preserves the resulting C39 rows
+19--30 across Player `+0x408`.  P99, role A, Draw state 1, ADS, movement and all
+non-Mazur content remain stock.  This is an explicit shipped-art correction
+policy: the abstract source `47C0A266` has no proven native steady producer, so
+the experiment does not claim that the engine would naturally select it.
+
+The written prediction is exact.  `adt` must report
+`Mazur high-carry preservation READY`, then role B must emit
+`injected ... hands=0xf4b56f62 arms=0x5676695b ... source=steady-overlay` and
+the paired postblend restore.  If `H-high-carry-content` is correct, Nadine's
+rifle becomes horizontal at chest/shoulder height, the left hand supports the
+fore-end, and the already stable two-hand topology remains.  Both markers plus
+the same diagonal low carry reject this pair and forbid another clip guess;
+missing markers are packaging/admission.  Transition smoothness is not an
+outcome unless the separate `source=stock-transition` marker appears.  The
+agent does not send any game input; the user alone performs the visual action.

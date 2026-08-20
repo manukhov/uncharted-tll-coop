@@ -4996,28 +4996,27 @@ stable two-hand hold confirms the postblend-overwrite repair.  All three plus
 the arm still away selects authored-content/omitted-helper or a later Async
 writer.  Any missing marker is packaging; any crash rejects the package.
 
-`adr` is runtime-confirmed for the steady hold.  Role-B PID 13736 emitted the
+`adr` is runtime-confirmed for the steady two-hand topology.  Role-B PID 13736 emitted the
 exact Perform injection and postblend restore markers, stayed responsive, and
-the user confirmed that local legacy Nadine now keeps the Mazur in the correct
-two-hand pose.  Keep this postblend preservation enabled.  The remaining defect
-is draw-transition quality: Draw state 1 is still stock and the repair enters at
-WeaponOut state 2 with literal command weights 1.0, producing an abrupt visible
-handoff.
+the user confirmed that local legacy Nadine now keeps both hands on the Mazur.
+The later `ads` side-by-side image refines the result: the pose is stable, but it
+is a diagonal low carry rather than Chloe's horizontal chest/shoulder hold.
+Keep the postblend preservation boundary; replace only its steady content.
 
-- [ ] Runtime-confirm `ads`, which closes the native transition without changing
-      Draw state 1.  The exact `11EE475B` WeaponPartial instance is already live
-      in state 2 and publishes the real track blend through
-      `AnimStateInstance+0x158` (`0.026 -> 0.881 -> 1.0` in the saved trace);
-      `AnimStateLayer_CreateAnimCommands` consumes that field at `0x14189EB4B`.
-      While this exact root exists, keep stock command generation and preserve
-      its post-Perform C39 rows 19--30 across Player `+0x408`.  After it expires,
-      use the confirmed full-weight steady overlay.  Require boot READY, a
-      `source=stock-transition` preserve/restore pair with `0<nativeWeight<1`,
-      then a `source=steady-overlay` inject/restore pair.  Success means a smooth
-      equip handoff and the already confirmed stable two-hand hold.  All markers
-      plus the same snap rejects the transition content itself; missing markers
-      is packaging/admission.  Do not add a wall-clock ramp, mutate state 1 or
-      send any in-game input—the user alone performs the gameplay test.
+- [ ] Runtime-confirm `adt`, the shipped Mazur high-carry content exam.  `ads`
+      reached only `source=steady-overlay` on role-B PID 16592 and the image
+      proves that `56C57AD2 carry-peek-hands + 283966ED
+      carry-fatigue-walk-arms` produces the wrong diagonal low carry.  Use the
+      exact companion pair `F4B56F62 basic-hands + 5676695B carry-high-arms`:
+      both are one-sample Player clips, masks remain complementary 29--32 and
+      21--28, and raw decoding changes the left hand-prop by 146.6 degrees while
+      preserving the right endpoint.  Require READY, exact high-pair injection
+      and postblend restore.  Success is a horizontal shoulder-height rifle with
+      left hand under the fore-end and stable two-hand hold.  Both markers plus
+      the same low carry reject this pair and forbid another clip guess.  The
+      native `11EE475B` branch remains stock/preserved when present, but its
+      smoothness is not judged without its own marker.  No in-game input may be
+      sent by the agent; the user performs the visual test.
 
 ## Rule
 

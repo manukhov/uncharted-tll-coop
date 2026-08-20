@@ -47709,15 +47709,17 @@ bool install_legacy_nadine_mazur_steady_hands_npc_repair() {
 }
 
 // Exact, crash-contained replacement for the rejected Draw/Feather package.
-// The shipped custom Mazur root combines these two one-sample Player clips:
-// 56C57AD2 owns distal hand rows 29..32 and 283966ED owns proximal arm rows
-// 21..28. Their masks are disjoint, therefore applying both at full weight in
-// steady state reproduces the authored union without importing a body pose or
-// suppressing the stock WeaponIK/Feather lifecycle. While the exact 11EE475B
-// instance exists, stock CreateAnimCommands already blends that authored root;
-// preserve its post-Perform result instead of layering the correction twice.
-constexpr std::uint32_t kMazurAuthoredHandsClipId = 0x56C57AD2u;
-constexpr std::uint32_t kMazurAuthoredArmsClipId = 0x283966EDu;
+// The shipped transition root combines 56C57AD2 carry-peek-hands with
+// 283966ED carry-fatigue-walk-arms. Preserve that root only while its exact
+// 11EE475B instance is alive. In steady WeaponOut, use the separate shipped
+// Mazur overlay pair F4B56F62 basic-hands + 5676695B carry-high-arms. Their
+// masks are complementary Player rows 29..32 and 21..28, so applying both at
+// full weight changes only the complete two-arm/hand partial and keeps body,
+// PlayerWeaponIK/Feather lifecycle and every non-Mazur state stock.
+constexpr std::uint32_t kMazurTransitionHandsClipId = 0x56C57AD2u;
+constexpr std::uint32_t kMazurTransitionArmsClipId = 0x283966EDu;
+constexpr std::uint32_t kMazurSteadyHighHandsClipId = 0xF4B56F62u;
+constexpr std::uint32_t kMazurSteadyHighArmsClipId = 0x5676695Bu;
 constexpr std::uint32_t kMazurAuthoredPairStateId = 0x11EE475Bu;
 constexpr std::uint16_t kMazurAuthoredPairFrameCount = 1u;
 
@@ -47919,14 +47921,14 @@ bool seh_resolve_legacy_nadine_mazur_authored_pair_weight(
             &control_second_blend_bits, weapon_anim_control + 0x28,
             sizeof(control_second_blend_bits));
         if (*reinterpret_cast<const std::uint32_t*>(player_bytes + 0x1CC) !=
-                kMazurAuthoredHandsClipId ||
+                kMazurTransitionHandsClipId ||
             *reinterpret_cast<const std::uint32_t*>(player_bytes + 0x1D0) !=
-                kMazurAuthoredArmsClipId ||
+                kMazurTransitionArmsClipId ||
             player_second_blend_bits != 0x3F333333u ||
             *reinterpret_cast<const std::uint32_t*>(
-                weapon_anim_control + 0x20) != kMazurAuthoredHandsClipId ||
+                weapon_anim_control + 0x20) != kMazurTransitionHandsClipId ||
             *reinterpret_cast<const std::uint32_t*>(
-                weapon_anim_control + 0x24) != kMazurAuthoredArmsClipId ||
+                weapon_anim_control + 0x24) != kMazurTransitionArmsClipId ||
             control_second_blend_bits != 0x3F333333u ||
             custom_instance_index + 1 != custom_instance_count) {
             return false;
@@ -48001,10 +48003,10 @@ seh_select_legacy_nadine_mazur_authored_pair_epoch(
 
         void* const hands_clip = seh_resolve_exact_animation_clip(
             kPlayerAnimationDatabaseId, kPlayerAnimationSkeletonId,
-            kMazurAuthoredHandsClipId);
+            kMazurSteadyHighHandsClipId);
         void* const arms_clip = seh_resolve_exact_animation_clip(
             kPlayerAnimationDatabaseId, kPlayerAnimationSkeletonId,
-            kMazurAuthoredArmsClipId);
+            kMazurSteadyHighArmsClipId);
         if (hands_clip == nullptr || arms_clip == nullptr ||
             hands_clip == arms_clip) {
             return LegacyNadineMazurAuthoredPairAdmission::kClips;
@@ -48413,8 +48415,8 @@ hooked_create_anim_cmds_for_legacy_nadine_mazur_authored_pair(
         if (!injected_logged.exchange(true, std::memory_order_relaxed)) {
             std::ostringstream line;
             line << "NADINE-MAZUR-AUTHORED-PAIR injected stage=perform"
-                 << " hands=0x" << std::hex << kMazurAuthoredHandsClipId
-                 << " arms=0x" << kMazurAuthoredArmsClipId << std::dec
+                 << " hands=0x" << std::hex << kMazurSteadyHighHandsClipId
+                 << " arms=0x" << kMazurSteadyHighArmsClipId << std::dec
                  << " group=" << group << " lane=" << scratch_lane
                  << " weights=1/1 source=steady-overlay";
             boot_log_line(line.str().c_str());
@@ -48771,7 +48773,7 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     }
     boot_log_line(
         ready
-            ? "legacy-Nadine Mazur authored-pair preservation READY (native state fade; three exact callsite relays)"
+            ? "legacy-Nadine Mazur high-carry preservation READY (native transition; three exact callsite relays)"
             : (rollback_verified
                    ? "legacy-Nadine Mazur authored-pair preservation SKIPPED (verified rollback)"
                    : "legacy-Nadine Mazur authored-pair preservation PARTIAL (pass-through; relays retained)"));
@@ -60974,8 +60976,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20ads "
-        "(Mazur authored-pair preservation enabled)");
+        "TLL co-op runtime init 2026-08-20adt "
+        "(Mazur high-carry pair preservation enabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
