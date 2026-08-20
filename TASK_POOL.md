@@ -5149,7 +5149,7 @@ Keep the postblend preservation boundary; replace only its steady content.
       for selector 1 is `Compose(rightProp, Relative(leftProp,leftWrist))`;
       right wrist is validation-only and `animScale` changes translations only.
 
-- [ ] Implement one bounded role-B terminal-target relay at the already-safe
+- [x] Implement one bounded role-B terminal-target relay at the already-safe
       four getter callsites.  Publish owner-1 Chloe's exact derived target
       relative to terminal `spined`; for exact owner-0 legacy Nadine/Mazur/
       WeaponOut/idle, compose it under Nadine `spined` and algebraically feed
@@ -5157,6 +5157,12 @@ Keep the postblend preservation boundary; replace only its steady content.
       markers with <=100 ms age.  Markers plus Chloe-like two-hand hold confirm
       `H-terminal-target`; markers plus the same pose select chain/proportion or
       a later writer; an initial fix followed by break selects lifetime/cadence.
+
+- [ ] Run the single written `aef` terminal-target exam.  Require both READY
+      boots and, on role B, both exact terminal CAPTURE/RELAY markers with
+      `sourceAgeMs<=100` before judging the pose.  Do not control either game
+      window.  After the user reports the steady hold, stop both processes and
+      classify the result against the written `H-terminal-target` falsifier.
 
 ## Rule
 

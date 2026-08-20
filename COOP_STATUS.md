@@ -26044,3 +26044,42 @@ The three newly resolved matrix helpers and the expanded `WeaponIK_Apply`
 formula comment are saved in the single `ida/tll.i64`; headless application
 reported `1763 functions, 60 data names` and `save_database returned True`, and
 the restarted MCP independently resolves all four saved names.
+
+### 2026-08-20 STATIC IMPLEMENTED (`aef`): relay only Chloe's derived terminal left-arm target
+
+This exam is earned by four independent evidence classes.  First, `aed`
+runtime proves a `0.113343`-unit / `75.865`-degree split after the exact terminal
+formula, with small same-character controls.  Second, the full disassembly
+proves the one-value formula, selected/opposite side mapping, final
+`SolveArmIk`, wrist-orientation correction and commits.  Third, `ady` runtime
+proves that role-B retained owner 1 is a fresh same-process Chloe donor under
+the same Mazur/WeaponOut/idle scope.  Fourth, `adz` continuously substituted the
+earlier pre-solver common target yet the pose broke later, selecting the
+terminal writer rather than transport cadence as the narrower remaining seam.
+
+Build `aef` keeps the rejected `0x1418F2E0B` detour disabled.  It reuses only the
+already-safe outer Apply relay at `0x1410959AC` and the four stock getter
+callsites.  After a 350-ms exact idle dwell, role-B owner 1 derives
+`Compose(rightProp, Relative(leftProp,leftWrist))`, normalizes it to that
+terminal JointSet's `spined`, and publishes a locked same-process snapshot.
+For exact role-B owner-0 legacy Nadine/Mazur/WeaponOut/idle and a snapshot no
+older than 100 ms, the left-wrist getter returns that target composed under
+Nadine's current terminal spine and the left-prop getter returns the already
+captured right prop.  Algebraically the untouched stock formula therefore
+returns exactly the donor target.  Right wrist, right-hand pose, JointSets,
+`SolveArmIk`, wrist-weight blend and both commits remain stock.  A combined
+release gate is published only after state networking, the outer Apply relay and
+all four getter relays are ready; any partial installation is pass-through.
+
+The written prediction is exact.  Both processes must load `aef`; role B must
+print `legacy-Nadine terminal WeaponIK target relay READY`, then repeated
+`CHLOE-WEAPON-IK-TERMINAL-TARGET-CAPTURE` and
+`NADINE-WEAPON-IK-TERMINAL-TARGET-RELAY` rows with `sourceAgeMs<=100`.  Those
+markers plus a stable Chloe-like left support hand confirm
+`H-terminal-target`.  Both markers plus the same one-hand pose reject target
+sufficiency and select Nadine chain/proportion or a later writer.  A brief
+correction followed by failure despite continuing fresh relay rows selects a
+later writer; failure only when rows stop selects lifetime/cadence.  Missing
+READY or either marker is packaging/admission and has no visual meaning.  Role
+A, P99, Draw, ADS, movement, cover and grenade must remain stock.  The agent may
+launch/inject, but only the user controls gameplay.
