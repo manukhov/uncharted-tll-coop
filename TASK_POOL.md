@@ -5248,6 +5248,17 @@ Keep the postblend preservation boundary; replace only its steady content.
       target or engine retarget relation with three independent static evidence
       classes before another visual mutation.
 
+      Current bounded step: run read-only build `aen`. It scopes one exact
+      role-B/local-Nadine/Mazur/WeaponOut Perform, wraps the stock case-6
+      `RetargetAnimUsingBatchMgr` call and its nested
+      `RetargetPlugin_AddJointRetargetCommands`, and copies the live Chloe
+      source JointParams before retarget. Require READY and then exactly one
+      `5F913F74` Base call plus one `7D11D4FD` Hands call in the same pass.
+      Complete rows 29--41 select a coherent virtual-Chloe source; Hands-only,
+      duplicates or exhaustion reject it. This exam is read-only and predicts
+      no visual improvement. Launch exactly one role-B Nadine process and send
+      no gameplay input.
+
   Original `aeh` prediction required the combined READY marker,
       fresh Chloe right-prop CAPTURE, Nadine right-prop RELAY and same-postblend
       `baselineRestore=0`. All markers plus both hands and Chloe's muzzle-up

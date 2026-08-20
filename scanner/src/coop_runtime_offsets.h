@@ -799,6 +799,17 @@ constexpr std::uintptr_t kAnimManagerPerformAnimBlendCallsiteRva = 0x1A92905;
 constexpr std::uintptr_t kAnimManagerPlayerPostBlendCallsiteRva = 0x1A929A1;
 constexpr std::uintptr_t kAnimManagerAsyncObjectUpdateJointBlendJobRva =
     0x1A92A00;
+// Cross-skeleton animation command case 6 resolves the exact source and
+// target skeletons, then calls RetargetAnimUsingBatchMgr.  Its nested
+// retarget post-pose plugin calls AddJointRetargetCommands while
+// SegmentContext+0x50 still points at the source JointParams.  The two exact
+// E8 callsites let a read-only census bind a live ArtItemAnim to those source
+// rows without detouring either hot function entry.
+constexpr std::uintptr_t kProcessAnimCmdRetargetCallsiteRva = 0x1AB9FC4;
+constexpr std::uintptr_t kRetargetAnimUsingBatchMgrRva = 0x193B2C0;
+constexpr std::uintptr_t kRetargetPostPoseAddCallsiteRva = 0x1937DBA;
+constexpr std::uintptr_t kRetargetPluginAddJointRetargetCommandsRva =
+    0x1936490;
 // Read-only final holster discriminator. The anim-control event hook exposes
 // authored named events, the binding builder exposes the selected gun_holster*
 // id and offsets, and the final mutation hook proves whether the state-script

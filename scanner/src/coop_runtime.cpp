@@ -2504,7 +2504,7 @@ constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
 // Build 82e7b9e/adr remains a stable two-hand fallback, but the user proved
 // that its low diagonal hold is not Chloe's steady pose. Keep it disabled in
 // the next exam so it cannot contaminate the source sample below.
-constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = true;
+constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = false;
 // Build aej installed the exact one-process postblend seam but produced no
 // capture/replay marker: the visual result was just the stock broken pose. Keep
 // the unexecuted mutation disabled. The next bounded pass observes the first
@@ -2514,6 +2514,12 @@ constexpr bool kEnableLegacyNadineMazurTransientPostblendReplay = false;
 constexpr bool kEnableLegacyNadineMazurTransientPostblendCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
+// Observe the exact Chloe source JointParams at the stock retarget boundary.
+// The census is read-only and runs only for one retained role-B Nadine/Mazur
+// steady pass whose live Hands root is the canonical Chloe 7D11D4FD clip.
+// It distinguishes a complete 5F913F74 Base + 7D11D4FD Hands chain from a
+// mixed/dead tree before any further grip mutation is considered.
+constexpr bool kEnableLegacyNadineVirtualChloeGripSourceCensus = true;
 static_assert(
     !((kEnableLegacyNadineMazurAuthoredPairRepair ||
        kEnableLegacyNadineMazurTransientPostblendReplay) &&
@@ -2528,6 +2534,13 @@ static_assert(
     !(kEnableLegacyNadineMazurTransientPostblendReplay &&
       kEnableLegacyNadineMazurTransientPostblendCensus),
     "transient-pose mutation and first-fail census are separate exams");
+static_assert(
+    !(kEnableLegacyNadineVirtualChloeGripSourceCensus &&
+      (kEnableLegacyNadineMazurAuthoredPairRepair ||
+       kEnableLegacyNadineMazurTransientPostblendReplay ||
+       kEnableLegacyNadineMazurDrawEndpointRepair ||
+       kEnableLegacyNadineWeaponIkFeatherSuppression)),
+    "virtual Chloe source census must remain read-only");
 static_assert(
     !kEnableLegacyNadineMazurRightHandPropRelay ||
         kEnableLegacyNadineMazurAuthoredPairRepair,
@@ -51053,6 +51066,690 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     return ready;
 }
 
+// The rejected clip substitutions and whole-C39 preservation policies never
+// proved which Chloe-authored rows actually coexist in one stock Perform.
+// Observe the source JointParams at the engine's own retarget boundary before
+// considering another mutation.  A complete source is the exact steady Chloe
+// Base clip 5F913F74 for joints 29..37 plus the exact Chloe Hands clip
+// 7D11D4FD for joints 38..41.  Together they form both complete arm chains
+// below Chloe spined=29.  This census never changes a command, pose or locator.
+constexpr std::uint32_t kLegacyNadineChloeIdleBaseClipId = 0x5F913F74u;
+constexpr std::size_t kVirtualChloeFirstJoint = 29;
+constexpr std::size_t kVirtualChloeLastJoint = 41;
+constexpr std::size_t kVirtualChloeJointCount =
+    kVirtualChloeLastJoint - kVirtualChloeFirstJoint + 1;
+constexpr std::size_t kVirtualChloePoseBytes =
+    kVirtualChloeJointCount * kJointLocalPoseStride;
+
+using VirtualChloeRetargetFunction = void*(__fastcall*)(
+    void*, float, void*, void*, int, void*, void**, void**);
+using VirtualChloeAddRetargetCommandsFunction = std::int64_t(__fastcall*)(
+    void*, void*, void*, void*, void*, void*, void*, void*);
+
+AnimManagerPerformAnimBlendFunction
+    g_original_perform_anim_blend_for_virtual_chloe_source = nullptr;
+VirtualChloeRetargetFunction g_original_virtual_chloe_retarget = nullptr;
+VirtualChloeAddRetargetCommandsFunction
+    g_original_virtual_chloe_add_retarget_commands = nullptr;
+std::atomic<bool> g_virtual_chloe_grip_source_census_ready{false};
+std::atomic<bool> g_virtual_chloe_grip_source_census_complete{false};
+std::atomic<std::uint32_t> g_virtual_chloe_grip_source_attempts{0};
+
+enum class VirtualChloeGripSourceAdmission : std::uint8_t {
+    kPrerequisite = 0,
+    kOwner = 1,
+    kTransition = 2,
+    kHandsRoot = 3,
+    kClips = 4,
+    kAdmitted = 5,
+};
+
+enum class VirtualChloeGripSourceKind : std::uint8_t {
+    kNone = 0,
+    kBase = 1,
+    kHands = 2,
+};
+
+struct VirtualChloeGripSourceEpoch {
+    bool valid = false;
+    void* player = nullptr;
+    void* fg_anim_data = nullptr;
+    void* weapon = nullptr;
+    void* local_pose = nullptr;
+    void* target_skeleton = nullptr;
+    void* anim_control = nullptr;
+    void* base_clip = nullptr;
+    void* hands_clip = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    std::uint16_t base_calls = 0;
+    std::uint16_t hands_calls = 0;
+    std::array<std::byte, kVirtualChloePoseBytes> pose{};
+};
+
+struct VirtualChloeRetargetTls {
+    bool active = false;
+    VirtualChloeGripSourceKind kind = VirtualChloeGripSourceKind::kNone;
+    void* retarget_entry = nullptr;
+    void* source_skeleton = nullptr;
+    void* target_skeleton = nullptr;
+};
+
+thread_local VirtualChloeGripSourceEpoch
+    g_virtual_chloe_grip_source_epoch{};
+thread_local VirtualChloeRetargetTls g_virtual_chloe_retarget_tls{};
+
+bool virtual_chloe_source_skeleton_matches(
+    void* skeleton, std::uint32_t database_id,
+    std::uint32_t underlying_id) {
+    __try {
+        auto* const bytes = static_cast<std::byte*>(skeleton);
+        if (bytes == nullptr || readable_bytes(bytes) < 0x48 ||
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x24) !=
+                database_id) {
+            return false;
+        }
+        auto* const underlying = *reinterpret_cast<std::byte* const*>(
+            bytes + 0x40);
+        return underlying != nullptr && readable_bytes(underlying) >= 0x12 &&
+            *reinterpret_cast<const std::uint32_t*>(underlying + 0x04) ==
+                underlying_id;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+VirtualChloeGripSourceAdmission
+seh_select_virtual_chloe_grip_source_epoch(
+    void* expected_fg, VirtualChloeGripSourceEpoch* output) {
+    if (output == nullptr) {
+        return VirtualChloeGripSourceAdmission::kPrerequisite;
+    }
+    *output = {};
+    __try {
+        if (!kEnableLegacyNadineVirtualChloeGripSourceCensus ||
+            !g_virtual_chloe_grip_source_census_ready.load(
+                std::memory_order_acquire) ||
+            g_virtual_chloe_grip_source_census_complete.load(
+                std::memory_order_acquire) ||
+            !g_state_net.enabled || !g_net_role_b || expected_fg == nullptr) {
+            return VirtualChloeGripSourceAdmission::kPrerequisite;
+        }
+        void* const player = retained_player_object(0);
+        IdleArmPoseOwnerScope owner{};
+        if (!seh_resolve_idle_arm_pose_owner_scope(player, 0, &owner) ||
+            owner.fg_anim_data != expected_fg ||
+            owner.weapon_art_id != kCoopRifleArtId ||
+            !local_player_is_steady_drawn_idle(owner)) {
+            return VirtualChloeGripSourceAdmission::kOwner;
+        }
+
+        LegacyNadineMazurAuthoredPairEpoch weapon_partial{};
+        if (!seh_resolve_legacy_nadine_mazur_authored_pair_weight(
+                player, &weapon_partial) ||
+            weapon_partial.custom_pair_instance != nullptr) {
+            return VirtualChloeGripSourceAdmission::kTransition;
+        }
+
+        void* hands_root_clip = nullptr;
+        void* anim_control = nullptr;
+        std::uint32_t hands_resolved_id = 0;
+        if (!seh_resolve_exact_steady_idle_hands_root(
+                player, &hands_root_clip, &anim_control,
+                &hands_resolved_id) ||
+            hands_resolved_id != kLegacyNadineChloeIdleHandsClipId) {
+            return VirtualChloeGripSourceAdmission::kHandsRoot;
+        }
+
+        void* const base_clip = seh_resolve_exact_animation_clip(
+            kChloeAnimationDatabaseId, kChloeAnimationSkeletonId,
+            kLegacyNadineChloeIdleBaseClipId);
+        void* const hands_clip = seh_resolve_exact_animation_clip(
+            kChloeAnimationDatabaseId, kChloeAnimationSkeletonId,
+            kLegacyNadineChloeIdleHandsClipId);
+        auto* const target_skeleton = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(expected_fg) +
+            kFgAnimDataSkeletonOffset);
+        if (base_clip == nullptr || hands_clip == nullptr ||
+            base_clip == hands_clip || hands_root_clip != hands_clip ||
+            target_skeleton == nullptr ||
+            !virtual_chloe_source_skeleton_matches(
+                target_skeleton, kLegacyNadineTargetSkeletonArtId,
+                kLegacyNadineUnderlyingSkeletonId)) {
+            return VirtualChloeGripSourceAdmission::kClips;
+        }
+
+        output->valid = true;
+        output->player = player;
+        output->fg_anim_data = expected_fg;
+        output->weapon = owner.weapon;
+        output->local_pose = owner.local_pose;
+        output->target_skeleton = target_skeleton;
+        output->anim_control = anim_control;
+        output->base_clip = base_clip;
+        output->hands_clip = hands_clip;
+        output->player_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(player) +
+                kGameObjectRuntimeIdOffset);
+        output->weapon_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(owner.weapon) +
+                kGameObjectRuntimeIdOffset);
+        return VirtualChloeGripSourceAdmission::kAdmitted;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return VirtualChloeGripSourceAdmission::kClips;
+    }
+}
+
+bool virtual_chloe_source_row_valid(const std::byte* row) {
+    if (row == nullptr) {
+        return false;
+    }
+    std::array<float, 12> values{};
+    std::memcpy(values.data(), row, kJointLocalPoseStride);
+    return std::isfinite(values[0]) && std::isfinite(values[1]) &&
+        std::isfinite(values[2]) &&
+        valid_network_orientation(values.data() + 4) &&
+        std::isfinite(values[8]) && std::isfinite(values[9]) &&
+        std::isfinite(values[10]);
+}
+
+bool virtual_chloe_source_row_to_locator(
+    const VirtualChloeGripSourceEpoch& epoch, std::size_t joint,
+    WeaponIkGoalLocator* locator) {
+    if (locator == nullptr || joint < kVirtualChloeFirstJoint ||
+        joint > kVirtualChloeLastJoint) {
+        return false;
+    }
+    *locator = {};
+    std::array<float, 12> row{};
+    std::memcpy(
+        row.data(),
+        epoch.pose.data() +
+            (joint - kVirtualChloeFirstJoint) * kJointLocalPoseStride,
+        kJointLocalPoseStride);
+    // Transform_Compose consumes rigid Locators. Refuse to hide authored
+    // scale rather than silently dropping it from the reported endpoint.
+    if (std::abs(row[0] - 1.0F) > 0.01F ||
+        std::abs(row[1] - 1.0F) > 0.01F ||
+        std::abs(row[2] - 1.0F) > 0.01F) {
+        return false;
+    }
+    locator->value[0] = row[8];
+    locator->value[1] = row[9];
+    locator->value[2] = row[10];
+    locator->value[3] = 0.0F;
+    locator->value[4] = row[4];
+    locator->value[5] = row[5];
+    locator->value[6] = row[6];
+    locator->value[7] = row[7];
+    return weapon_ik_goal_locator_valid(*locator);
+}
+
+bool virtual_chloe_compose_prop_relative(
+    const VirtualChloeGripSourceEpoch& epoch, bool left,
+    WeaponIkGoalLocator* prop_relative) {
+    if (prop_relative == nullptr || g_weapon_ik_transform_compose == nullptr) {
+        return false;
+    }
+    *prop_relative = {};
+    WeaponIkGoalLocator accumulated{};
+    accumulated.value[7] = 1.0F;
+    constexpr std::array<std::size_t, 6> kLeftChain{
+        30, 32, 34, 36, 38, 40};
+    constexpr std::array<std::size_t, 6> kRightChain{
+        31, 33, 35, 37, 39, 41};
+    const auto& chain = left ? kLeftChain : kRightChain;
+    for (const std::size_t joint : chain) {
+        WeaponIkGoalLocator local{};
+        WeaponIkGoalLocator next{};
+        if (!virtual_chloe_source_row_to_locator(epoch, joint, &local) ||
+            !weapon_ik_goal_compose(accumulated, local, &next)) {
+            return false;
+        }
+        accumulated = next;
+    }
+    *prop_relative = accumulated;
+    return true;
+}
+
+void log_virtual_chloe_source_complete(
+    const VirtualChloeGripSourceEpoch& epoch) {
+    WeaponIkGoalLocator left_prop{};
+    WeaponIkGoalLocator right_prop{};
+    const bool left_valid = virtual_chloe_compose_prop_relative(
+        epoch, true, &left_prop);
+    const bool right_valid = virtual_chloe_compose_prop_relative(
+        epoch, false, &right_prop);
+    std::ostringstream summary;
+    summary << "NADINE-VIRTUAL-CHLOE-SOURCE result=complete"
+            << " baseCalls=" << epoch.base_calls
+            << " handsCalls=" << epoch.hands_calls
+            << " base=0x" << std::hex
+            << kLegacyNadineChloeIdleBaseClipId
+            << " hands=0x" << kLegacyNadineChloeIdleHandsClipId
+            << std::dec << " rows=29..41"
+            << " propValid=" << (left_valid && right_valid ? 1 : 0);
+    if (left_valid) {
+        log_weapon_ik_goal_locator(summary, "leftPropRel", left_prop);
+    }
+    if (right_valid) {
+        log_weapon_ik_goal_locator(summary, "rightPropRel", right_prop);
+    }
+    write_log_line(summary.str().c_str());
+
+    for (std::size_t joint = kVirtualChloeFirstJoint;
+         joint <= kVirtualChloeLastJoint; ++joint) {
+        std::array<float, 12> row{};
+        std::memcpy(
+            row.data(),
+            epoch.pose.data() +
+                (joint - kVirtualChloeFirstJoint) * kJointLocalPoseStride,
+            kJointLocalPoseStride);
+        char line[384]{};
+        std::snprintf(
+            line, sizeof(line),
+            "NADINE-VIRTUAL-CHLOE-SOURCE-ROW joint=%zu source=%s "
+            "S=(%.9g,%.9g,%.9g) Q=(%.9g,%.9g,%.9g,%.9g) "
+            "T=(%.9g,%.9g,%.9g)",
+            joint, joint <= 37 ? "base" : "hands",
+            static_cast<double>(row[0]), static_cast<double>(row[1]),
+            static_cast<double>(row[2]), static_cast<double>(row[4]),
+            static_cast<double>(row[5]), static_cast<double>(row[6]),
+            static_cast<double>(row[7]), static_cast<double>(row[8]),
+            static_cast<double>(row[9]), static_cast<double>(row[10]));
+        write_log_line(line);
+    }
+}
+
+void* __fastcall hooked_retarget_for_virtual_chloe_source_census(
+    void* clip, float phase, void* source_skeleton, void* target_skeleton,
+    int group, void* retarget_entry, void** output_pose,
+    void** output_valid_bits) {
+    const auto original = g_original_virtual_chloe_retarget;
+    if (original == nullptr) {
+        return nullptr;
+    }
+    const VirtualChloeRetargetTls previous = g_virtual_chloe_retarget_tls;
+    g_virtual_chloe_retarget_tls = {};
+    const auto& epoch = g_virtual_chloe_grip_source_epoch;
+    if (epoch.valid && group == 0 && retarget_entry != nullptr &&
+        target_skeleton == epoch.target_skeleton &&
+        virtual_chloe_source_skeleton_matches(
+            source_skeleton, kChloeAnimationDatabaseId,
+            kChloeAnimationSkeletonId) &&
+        (clip == epoch.base_clip || clip == epoch.hands_clip)) {
+        g_virtual_chloe_retarget_tls.active = true;
+        g_virtual_chloe_retarget_tls.kind = clip == epoch.base_clip
+            ? VirtualChloeGripSourceKind::kBase
+            : VirtualChloeGripSourceKind::kHands;
+        g_virtual_chloe_retarget_tls.retarget_entry = retarget_entry;
+        g_virtual_chloe_retarget_tls.source_skeleton = source_skeleton;
+        g_virtual_chloe_retarget_tls.target_skeleton = target_skeleton;
+    }
+    void* const result = original(
+        clip, phase, source_skeleton, target_skeleton, group,
+        retarget_entry, output_pose, output_valid_bits);
+    g_virtual_chloe_retarget_tls = previous;
+    return result;
+}
+
+std::int64_t __fastcall
+hooked_add_retarget_commands_for_virtual_chloe_source_census(
+    void* work_buffer, void* segment_context, void* retarget_entry,
+    void* source_program, void* source_skeleton, void* target_skeleton,
+    void* output_pose, void* output_valid_bits) {
+    const auto original = g_original_virtual_chloe_add_retarget_commands;
+    if (original == nullptr) {
+        return 0;
+    }
+    __try {
+        const auto nested = g_virtual_chloe_retarget_tls;
+        auto& epoch = g_virtual_chloe_grip_source_epoch;
+        if (nested.active && epoch.valid && segment_context != nullptr &&
+            retarget_entry == nested.retarget_entry &&
+            source_skeleton == nested.source_skeleton &&
+            target_skeleton == nested.target_skeleton &&
+            readable_bytes(segment_context) >= 0x58) {
+            auto* const segment = static_cast<std::byte*>(segment_context);
+            auto* const group_descriptor =
+                *reinterpret_cast<std::byte* const*>(segment + 0x38);
+            auto* const source_pose =
+                *reinterpret_cast<std::byte* const*>(segment + 0x50);
+            if (group_descriptor != nullptr && source_pose != nullptr &&
+                readable_bytes(group_descriptor) >= 0x14 &&
+                *reinterpret_cast<const std::uint32_t*>(
+                    group_descriptor) == 0 &&
+                *reinterpret_cast<const std::uint16_t*>(
+                    group_descriptor + 0x10) > kVirtualChloeLastJoint &&
+                *reinterpret_cast<const std::uint16_t*>(
+                    group_descriptor + 0x12) > kVirtualChloeLastJoint &&
+                readable_bytes(source_pose) >=
+                    (kVirtualChloeLastJoint + 1) * kJointLocalPoseStride) {
+                const std::size_t first =
+                    nested.kind == VirtualChloeGripSourceKind::kBase
+                        ? 29 : 38;
+                const std::size_t last =
+                    nested.kind == VirtualChloeGripSourceKind::kBase
+                        ? 37 : 41;
+                bool valid = true;
+                for (std::size_t joint = first; joint <= last; ++joint) {
+                    if (!virtual_chloe_source_row_valid(
+                            source_pose + joint * kJointLocalPoseStride)) {
+                        valid = false;
+                        break;
+                    }
+                }
+                if (valid) {
+                    auto& count =
+                        nested.kind == VirtualChloeGripSourceKind::kBase
+                            ? epoch.base_calls : epoch.hands_calls;
+                    ++count;
+                    if (count == 1) {
+                        for (std::size_t joint = first;
+                             joint <= last; ++joint) {
+                            std::memcpy(
+                                epoch.pose.data() +
+                                    (joint - kVirtualChloeFirstJoint) *
+                                        kJointLocalPoseStride,
+                                source_pose + joint * kJointLocalPoseStride,
+                                kJointLocalPoseStride);
+                        }
+                    }
+                }
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        // The census is read-only and fail-closed; stock still runs once.
+    }
+    return original(
+        work_buffer, segment_context, retarget_entry, source_program,
+        source_skeleton, target_skeleton, output_pose, output_valid_bits);
+}
+
+void __fastcall hooked_perform_for_virtual_chloe_source_census(void* job) {
+    const auto original = g_original_perform_anim_blend_for_virtual_chloe_source;
+    if (original == nullptr) {
+        return;
+    }
+    const VirtualChloeGripSourceEpoch previous =
+        g_virtual_chloe_grip_source_epoch;
+    g_virtual_chloe_grip_source_epoch = {};
+
+    void* fg = nullptr;
+    bool exact_local_fg = false;
+    __try {
+        void* const player = retained_player_object(0);
+        if (job != nullptr && player != nullptr && readable_bytes(job) >= 0x10 &&
+            readable_bytes(static_cast<std::byte*>(player) +
+                           kPlayerFgAnimDataOffset) >= sizeof(void*)) {
+            fg = *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(job) + 0x08);
+            exact_local_fg = fg != nullptr &&
+                *reinterpret_cast<void* const*>(
+                    static_cast<const std::byte*>(player) +
+                    kPlayerFgAnimDataOffset) == fg;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        fg = nullptr;
+        exact_local_fg = false;
+    }
+
+    VirtualChloeGripSourceAdmission admission =
+        VirtualChloeGripSourceAdmission::kPrerequisite;
+    if (exact_local_fg) {
+        VirtualChloeGripSourceEpoch selected{};
+        admission = seh_select_virtual_chloe_grip_source_epoch(fg, &selected);
+        if (admission == VirtualChloeGripSourceAdmission::kAdmitted) {
+            g_virtual_chloe_grip_source_epoch = selected;
+        } else if (admission !=
+                   VirtualChloeGripSourceAdmission::kPrerequisite) {
+            static std::array<std::atomic<bool>, 6> logged{};
+            const std::size_t reason = static_cast<std::size_t>(admission);
+            if (reason < logged.size() &&
+                !logged[reason].exchange(true, std::memory_order_relaxed)) {
+                char line[128]{};
+                std::snprintf(
+                    line, sizeof(line),
+                    "NADINE-VIRTUAL-CHLOE-SOURCE admission=%zu", reason);
+                boot_log_line(line);
+            }
+        }
+    }
+
+    original(job);
+    auto& epoch = g_virtual_chloe_grip_source_epoch;
+    if (epoch.valid) {
+        const std::uint32_t attempt =
+            g_virtual_chloe_grip_source_attempts.fetch_add(
+                1, std::memory_order_relaxed) + 1;
+        if (epoch.base_calls == 1 && epoch.hands_calls == 1) {
+            bool rows_valid = true;
+            for (std::size_t index = 0;
+                 index < kVirtualChloeJointCount; ++index) {
+                if (!virtual_chloe_source_row_valid(
+                        epoch.pose.data() +
+                            index * kJointLocalPoseStride)) {
+                    rows_valid = false;
+                    break;
+                }
+            }
+            if (rows_valid) {
+                log_virtual_chloe_source_complete(epoch);
+                g_virtual_chloe_grip_source_census_complete.store(
+                    true, std::memory_order_release);
+            }
+        } else if (attempt <= 8) {
+            char line[192]{};
+            std::snprintf(
+                line, sizeof(line),
+                "NADINE-VIRTUAL-CHLOE-SOURCE result=incomplete attempt=%u baseCalls=%u handsCalls=%u",
+                attempt, static_cast<unsigned>(epoch.base_calls),
+                static_cast<unsigned>(epoch.hands_calls));
+            boot_log_line(line);
+        } else if (attempt == 64) {
+            boot_log_line(
+                "NADINE-VIRTUAL-CHLOE-SOURCE result=exhausted attempts=64");
+            g_virtual_chloe_grip_source_census_complete.store(
+                true, std::memory_order_release);
+        }
+    }
+    g_virtual_chloe_grip_source_epoch = previous;
+}
+
+bool install_virtual_chloe_grip_source_census() {
+    g_virtual_chloe_grip_source_census_ready.store(
+        false, std::memory_order_release);
+    g_anim_control_find_active_type2_layer_by_id =
+        reinterpret_cast<AnimControlFindActiveType2LayerByIdFunction>(
+            g_module + kAnimControlFindActiveType2LayerByIdRva);
+    g_weapon_ik_transform_compose =
+        reinterpret_cast<WeaponIkTransformComposeFunction>(
+            g_module + kTransformComposeRva);
+
+    struct PreparedCallsite {
+        std::uint8_t* address = nullptr;
+        std::uint8_t* relay = nullptr;
+        std::int32_t new_displacement = 0;
+        std::array<std::uint8_t, 5> stock{};
+        std::array<std::uint8_t, 5> patch{};
+        DWORD old_protection = 0;
+        bool protected_page = false;
+    };
+    std::array<PreparedCallsite, 3> sites{};
+    const bool preflight =
+        prepare_plain_callsite_relay(
+            kAnimManagerPerformAnimBlendCallsiteRva,
+            kAnimManagerPerformAnimBlendRva,
+            reinterpret_cast<const void*>(
+                &hooked_perform_for_virtual_chloe_source_census),
+            sites[0].address, sites[0].relay,
+            sites[0].new_displacement) &&
+        prepare_plain_callsite_relay(
+            kProcessAnimCmdRetargetCallsiteRva,
+            kRetargetAnimUsingBatchMgrRva,
+            reinterpret_cast<const void*>(
+                &hooked_retarget_for_virtual_chloe_source_census),
+            sites[1].address, sites[1].relay,
+            sites[1].new_displacement) &&
+        prepare_plain_callsite_relay(
+            kRetargetPostPoseAddCallsiteRva,
+            kRetargetPluginAddJointRetargetCommandsRva,
+            reinterpret_cast<const void*>(
+                &hooked_add_retarget_commands_for_virtual_chloe_source_census),
+            sites[2].address, sites[2].relay,
+            sites[2].new_displacement);
+    const auto free_relays = [&]() {
+        for (auto& site : sites) {
+            if (site.relay != nullptr) {
+                VirtualFree(site.relay, 0, MEM_RELEASE);
+                site.relay = nullptr;
+            }
+        }
+    };
+    if (!preflight) {
+        free_relays();
+        boot_log_line(
+            "virtual Chloe grip source census SKIPPED (three-callsite preflight)");
+        return false;
+    }
+    for (auto& site : sites) {
+        std::memcpy(site.stock.data(), site.address, site.stock.size());
+        site.patch = site.stock;
+        site.patch[0] = 0xE8;
+        std::memcpy(
+            site.patch.data() + 1, &site.new_displacement,
+            sizeof(site.new_displacement));
+    }
+
+    g_original_perform_anim_blend_for_virtual_chloe_source =
+        reinterpret_cast<AnimManagerPerformAnimBlendFunction>(
+            g_module + kAnimManagerPerformAnimBlendRva);
+    g_original_virtual_chloe_retarget =
+        reinterpret_cast<VirtualChloeRetargetFunction>(
+            g_module + kRetargetAnimUsingBatchMgrRva);
+    g_original_virtual_chloe_add_retarget_commands =
+        reinterpret_cast<VirtualChloeAddRetargetCommandsFunction>(
+            g_module + kRetargetPluginAddJointRetargetCommandsRva);
+
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        free_relays();
+        g_original_perform_anim_blend_for_virtual_chloe_source = nullptr;
+        g_original_virtual_chloe_retarget = nullptr;
+        g_original_virtual_chloe_add_retarget_commands = nullptr;
+        boot_log_line(
+            "virtual Chloe grip source census SKIPPED (thread suspend)");
+        return false;
+    }
+
+    bool protected_all = true;
+    for (auto& site : sites) {
+        site.protected_page = VirtualProtect(
+            site.address, site.patch.size(), PAGE_EXECUTE_READWRITE,
+            &site.old_protection) != 0;
+        protected_all = protected_all && site.protected_page;
+    }
+    if (!protected_all) {
+        DWORD ignored = 0;
+        for (auto& site : sites) {
+            if (site.protected_page) {
+                VirtualProtect(
+                    site.address, site.patch.size(), site.old_protection,
+                    &ignored);
+            }
+        }
+        resume_suspended_process_threads(suspended_threads);
+        free_relays();
+        g_original_perform_anim_blend_for_virtual_chloe_source = nullptr;
+        g_original_virtual_chloe_retarget = nullptr;
+        g_original_virtual_chloe_add_retarget_commands = nullptr;
+        boot_log_line(
+            "virtual Chloe grip source census SKIPPED (protect)");
+        return false;
+    }
+
+    for (const auto& site : sites) {
+        std::memcpy(site.address, site.patch.data(), site.patch.size());
+        FlushInstructionCache(
+            GetCurrentProcess(), site.address, site.patch.size());
+    }
+    const auto all_match = [&](bool patched) {
+        for (const auto& site : sites) {
+            const auto& expected = patched ? site.patch : site.stock;
+            if (std::memcmp(
+                    site.address, expected.data(), expected.size()) != 0) {
+                return false;
+            }
+        }
+        return true;
+    };
+    const auto restore_stock = [&]() {
+        for (const auto& site : sites) {
+            std::memcpy(site.address, site.stock.data(), site.stock.size());
+            FlushInstructionCache(
+                GetCurrentProcess(), site.address, site.stock.size());
+        }
+    };
+
+    bool installed = all_match(true);
+    bool rollback_verified = false;
+    if (!installed) {
+        restore_stock();
+        rollback_verified = all_match(false);
+    }
+    DWORD ignored = 0;
+    bool protections_restored = true;
+    for (const auto& site : sites) {
+        protections_restored =
+            (VirtualProtect(
+                 site.address, site.patch.size(), site.old_protection,
+                 &ignored) != 0) && protections_restored;
+    }
+    if (installed && !protections_restored) {
+        bool reopened_all = true;
+        for (auto& site : sites) {
+            DWORD retry_old = 0;
+            const bool reopened = VirtualProtect(
+                site.address, site.patch.size(), PAGE_EXECUTE_READWRITE,
+                &retry_old) != 0;
+            reopened_all = reopened_all && reopened;
+        }
+        if (reopened_all) {
+            restore_stock();
+            rollback_verified = all_match(false);
+        }
+        for (const auto& site : sites) {
+            VirtualProtect(
+                site.address, site.patch.size(), site.old_protection,
+                &ignored);
+        }
+        installed = false;
+    }
+
+    const bool ready = installed && protections_restored;
+    if (ready) {
+        g_virtual_chloe_grip_source_census_ready.store(
+            true, std::memory_order_release);
+    }
+    resume_suspended_process_threads(suspended_threads);
+    if (!installed && rollback_verified) {
+        free_relays();
+        g_original_perform_anim_blend_for_virtual_chloe_source = nullptr;
+        g_original_virtual_chloe_retarget = nullptr;
+        g_original_virtual_chloe_add_retarget_commands = nullptr;
+    }
+    boot_log_line(
+        ready
+            ? "virtual Chloe grip source census READY (Perform + Retarget + source JointParams; read-only)"
+            : (rollback_verified
+                   ? "virtual Chloe grip source census SKIPPED (verified rollback)"
+                   : "virtual Chloe grip source census PARTIAL (pass-through; relays retained)"));
+    return ready;
+}
+
 // Preserve the last engine-produced full-arm Draw pose before WeaponPartial
 // publishes its empty steady state. Unlike the rejected authored-pair baseline,
 // this source is captured after all stock Player postblend work from the same
@@ -63929,8 +64626,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20aem-safe "
-        "(stable two-hand Mazur baseline restored; rejected Draw replay disabled)");
+        "TLL co-op runtime init 2026-08-20aen "
+        "(virtual Chloe Base+Hands source census; read-only grip path)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -64425,6 +65122,15 @@ DWORD WINAPI install_hook(void*) {
                 combined_ready
                     ? "legacy-Nadine Mazur Chloe right-hand-prop relay READY (authored pair + stock arm IK)"
                     : "legacy-Nadine Mazur Chloe right-hand-prop relay SKIPPED (combined package)");
+        }
+    }
+    if constexpr (kEnableLegacyNadineVirtualChloeGripSourceCensus &&
+                  !kEnableRejectedNadineWeaponRuntimeProbes) {
+        if (state_net_started) {
+            install_virtual_chloe_grip_source_census();
+        } else {
+            boot_log_line(
+                "virtual Chloe grip source census SKIPPED (state net)");
         }
     }
     if constexpr ((kEnableLegacyNadineMazurTransientPostblendReplay ||

@@ -26356,3 +26356,60 @@ Its low diagonal muzzle remains a known semantic limitation, but it is stable
 and materially safer than the now-proven vertical Draw pose. The next frontier
 must resolve Chloe's final steady post-IK grip in a single Nadine process; no
 Draw/Grab/WeaponOut transition clip is an authorized donor.
+
+### 2026-08-20 RUNTIME INCONCLUSIVE (`aem-safe`) / STATIC IMPLEMENTED (`aen`): capture the live Chloe source pose before stock retarget
+
+The new user screenshot shows a fully collapsed pose: both hands are low in
+front of the pelvis and the rifle is almost vertical with its muzzle down.  It
+is not a small residual muzzle-angle error.  However, current PID `7792`
+contains only the `aem-safe` boot and authored-pair READY rows; it contains zero
+fresh `NADINE-MAZUR-AUTHORED-PAIR injected/restored` rows.  The screenshot
+therefore cannot be attributed to execution of the fallback pair in this Draw
+epoch.  It is a scope/admission observation, not a new semantic result for
+`56C57AD2 + 283966ED`.
+
+The next boundary is read-only and has three independent static evidence
+classes.  First, `ProcessAnimCmdListSegment 0x141AB97C0` case 6 resolves the
+source/target skeletons and calls `RetargetAnimUsingBatchMgr 0x14193B2C0` at
+the exact E8 `0x141AB9FC4`.  Its nested retarget post-pose callback reaches
+`RetargetPlugin_AddJointRetargetCommands 0x141936490` at exact E8
+`0x141937DBA`.  Second, the Add call receives the exact source/target
+ArtItemSkeleton objects and its live `SegmentContext+0x50` is the source
+JointParams; `SegmentContext+0x38` names the group descriptor and independently
+provides first-joint/workspace/parameter bounds.  Third, shipped Chloe assets
+close a complementary semantic chain in one skeleton namespace: steady
+`5F913F74` owns Chloe `spined/clavicle/shoulder/elbow/wrist` rows `29..37`,
+while canonical Hands `7D11D4FD` owns `palm/hand_prop_attachment` rows
+`38..41`.  The left chain is `29->30->32->34->36->38->40`, and the right is
+`29->31->33->35->37->39->41`.  Stock retarget row 157 then maps those semantic
+joints to legacy-Nadine C39.
+
+Competing hypotheses are explicit. **H-complete-remapped** predicts exactly one
+live `5F913F74` source call and exactly one `7D11D4FD` source call in the same
+steady Perform, yielding all thirteen valid rows and two rigid hand-prop
+locators relative to Chloe `spined`. **H-mixed-direct-base** predicts the exact
+7D Hands call without a matching Chloe Base call. **H-dead-or-ambiguous**
+predicts zero or duplicate exact calls, so no source can be promoted to a pose
+repair. These alternatives cannot be separated by another named-clip swap or
+by the post-retarget C39 rows that already lost source ownership.
+
+Build `aen` disables every grip/arm-pose mutation and installs only three exact
+callsite relays under suspended threads: normal Perform `0x141A92905`, case-6
+Retarget `0x141AB9FC4`, and retarget-plugin Add `0x141937DBA`. Admission requires
+one role-B/local Player0 legacy Nadine, current Mazur, `WeaponOut=2`, neutral
+steady input, no live `11EE475B` transition, and the exact remapped
+`7D11D4FD/6C2B2396/4B0F5DE3` Hands root. The nested relay copies only source
+JointParams and always calls stock once. It never edits a command, pose,
+locator, weapon or controller.
+
+The falsifiable prediction is written before runtime. A valid package must
+print `virtual Chloe grip source census READY`. After the user draws Mazur and
+stands still, `result=complete baseCalls=1 handsCalls=1 rows=29..41` plus 13
+source rows selects H-complete-remapped and supplies the only admissible
+single-process numeric Chloe source for the next static comparison. Repeated
+`result=incomplete ... baseCalls=0 handsCalls=1` selects H-mixed-direct-base.
+Duplicates, zero calls, an admission reason, or exhaustion select
+H-dead-or-ambiguous. The census predicts no visual improvement; the currently
+malformed stock/fallback hold is expected to remain. Missing READY is
+packaging. Exactly one role-B Nadine process may be launched, and the agent
+must not send gameplay input.
