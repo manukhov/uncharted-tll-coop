@@ -1365,8 +1365,11 @@ FUNCTIONS = {
     0x1418F1780: (
         "WeaponIK_Apply",
         "Terminal WeaponIK apply called by WeaponIKFeather_Apply after both "
-        "hand JointSets are solved and committed. It uses the shared arm-side "
-        "selector, not a weapon-art-specific policy.",
+        "hand JointSets are solved and committed. For selector 1 it builds the "
+        "left-arm target as Compose(rightHandProp, "
+        "MakeRelative(leftHandProp, leftWrist)); rightWrist is finite-checked "
+        "but does not enter the target. It then solves the left arm and applies "
+        "the target wrist rotation before committing both JointSets.",
     ),
     0x1418F1E60: (
         "WeaponIKFeatherInfo_ConstructForPlayerLook",
@@ -10665,6 +10668,25 @@ FUNCTIONS = {
         "Transform_Compose",
         "Composes parent * relative for the compact 32-byte translation/"
         "quaternion transform representation and writes the result argument.",
+    ),
+    0x14019A270: (
+        "Matrix4x4_FromTranslationQuaternion",
+        "Builds a rigid 4x4 matrix from the compact Locator translation at "
+        "+0 and quaternion at +0x10. WeaponIK_Apply uses it for the selected "
+        "and opposite wrist/hand-prop Locators before constructing the final "
+        "off-hand target.",
+    ),
+    0x14023ABB0: (
+        "Matrix4x4_InvertRigid",
+        "Inverts a rigid 4x4 transform. WeaponIK_Apply applies it to the "
+        "opposite hand-prop matrix before transferring the opposite wrist-to-"
+        "prop relation onto the selected hand-prop.",
+    ),
+    0x140EE7500: (
+        "Matrix4x4_NormalizeBasisRows",
+        "Normalizes the first three basis rows of a 4x4 transform in place. "
+        "WeaponIK_Apply uses it immediately before converting the transferred "
+        "off-hand target matrix back to a quaternion and translation.",
     ),
     0x1403421B0: (
         "Script_ReattachPlayerWeapon",

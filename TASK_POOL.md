@@ -5140,12 +5140,23 @@ Keep the postblend preservation boundary; replace only its steady content.
       `0.151592/68.523 deg`; same-character view controls remain below 0.021
       units / 6.81 degrees.  Terminal-input divergence is CONFIRMED.
 
-- [ ] Reconstruct the exact final goal built by `WeaponIK_Apply 0x1418F1780`
+- [x] Reconstruct the exact final goal built by `WeaponIK_Apply 0x1418F1780`
       from the four getter results before `SolveArmIk 0x1418F1C43`.  Trace all
       transform helpers, coordinate spaces and `animScale`; reject each
       competing combination.  Do not relay or copy the four raw Locators.  A
       future mutation requires a single derived, normalized goal plus three
-      independent static evidence types and a written falsifier.
+      independent static evidence types and a written falsifier.  Exact result
+      for selector 1 is `Compose(rightProp, Relative(leftProp,leftWrist))`;
+      right wrist is validation-only and `animScale` changes translations only.
+
+- [ ] Implement one bounded role-B terminal-target relay at the already-safe
+      four getter callsites.  Publish owner-1 Chloe's exact derived target
+      relative to terminal `spined`; for exact owner-0 legacy Nadine/Mazur/
+      WeaponOut/idle, compose it under Nadine `spined` and algebraically feed
+      only that target to the stock left-arm Solve.  Require source/target
+      markers with <=100 ms age.  Markers plus Chloe-like two-hand hold confirm
+      `H-terminal-target`; markers plus the same pose select chain/proportion or
+      a later writer; an initial fix followed by break selects lifetime/cadence.
 
 ## Rule
 

@@ -25987,3 +25987,60 @@ where `animScale` participates.  Only that derived goal may be considered for a
 future normalized Chloe-to-Nadine correction; blindly copying four Locators is
 explicitly forbidden.  Build `aee` disables the completed getter census and
 leaves all rejected pose mutations off.
+
+### 2026-08-20 STATIC: terminal WeaponIK transfers the left wrist-to-prop relation onto the right hand-prop
+
+The complete `WeaponIK_Apply 0x1418F1780` dataflow is now closed.  With the
+runtime-proven `selector=1`, JointSet 1 is the selected/right side and JointSet
+0 is the opposite/left side.  The four getter results at
+`0x1418F1872/1896/18A6/18B5` are therefore right wrist, left wrist, right
+hand-prop and left hand-prop.  Right wrist is finite-checked but has no later
+data dependency.  The remaining three Locators become matrices through
+`Matrix4x4_FromTranslationQuaternion 0x14019A270`; the left-prop matrix is
+inverted by `Matrix4x4_InvertRigid 0x14023ABB0`, and the two exact multiplies at
+`0x1418F1AFE/1B25` implement the compact-transform identity:
+
+`finalLeftTarget = Transform_Compose(rightHandProp,
+Transform_MakeRelative(leftHandProp, leftWrist))`.
+
+`Matrix4x4_NormalizeBasisRows 0x140EE7500` normalizes the result, then
+`Quaternion_FromOrthonormalBasis` plus the matrix translation populate the
+single arm target.  `SolveArmIk 0x1418F0B60` consumes it at `0x1418F1C43` for
+JointSet 0/left arm.  The following block computes target-versus-current wrist
+rotation, blends it by the smoothstep Apply weight, applies it through
+`0x14181F710`, and only then commits both JointSets at `0x1418F1DEE/1DF9`.
+Thus this is a position **and** orientation owner, not merely another locator
+observer.
+
+`animScale` is not read by `WeaponIK_Apply`.  Upstream
+`WeaponIKFeather_Apply 0x1418F2700` uses it only at `0x1418F27B0..27C9` to form
+`1 + smoothstep(applyWeight) * (animScale - 1)` and multiplies only each
+hand-prop local translation at `0x1418F2937`; the local quaternion is copied
+unchanged.  At the observed `applyWeight=1`, this factor is `animScale`.
+Consequently Chloe's `0.918` versus Nadine's `1.0` can affect target position
+but cannot cause the measured orientation split by itself; `H-animScale-only`
+is STATIC REJECTED.
+
+Applying the exact compact-transform formula to the `aed` samples gives local
+Chloe target `P=(0.209654,0.176687,0.282333)` and local Nadine target
+`P=(0.191069,0.285218,0.309211)`, separated by `0.113343` units and `75.865`
+degrees.  The derived local-versus-retained controls remain only
+`0.013218/3.067 deg` for Chloe and `0.017427/6.353 deg` for Nadine.  This
+independently preserves the measured body split after the actual stock terminal
+formula and rejects right-wrist or view noise as its source.
+
+The earned mutation frontier is now one value, not four: capture role-B owner-1
+Chloe's derived final target relative to her terminal JointSet `spined`, compose
+that relative target under owner-0 Nadine's same terminal spine, and substitute
+only the one target consumed by the left-arm `SolveArmIk`.  The existing exact
+getter callsite relays can express this without detouring the rejected
+`0x1418F2E0B`: return the desired target for left wrist and the already returned
+right hand-prop for left hand-prop, making the stock identity evaluate to the
+desired target.  Stock right-hand pose, JointSets, solver, wrist blend and
+commits remain enabled.  A runtime exam still requires an atomic readiness gate,
+fresh same-process owner-1 snapshot and a written marker/visual falsifier.
+
+The three newly resolved matrix helpers and the expanded `WeaponIK_Apply`
+formula comment are saved in the single `ida/tll.i64`; headless application
+reported `1763 functions, 60 data names` and `save_database returned True`, and
+the restarted MCP independently resolves all four saved names.
