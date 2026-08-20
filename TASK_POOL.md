@@ -5222,7 +5222,7 @@ Keep the postblend preservation boundary; replace only its steady content.
       non-semantic scale/translation W lanes, while the old validator required
       all 12 floats finite.
 
-- [~] Run the corrected one-process `ael` replay. Validate only
+- [x] Run the corrected one-process `ael` replay. Validate only
       `scale.xyz + quaternion.xyzw + translation.xyz`, preserve the complete
       raw 48-byte rows, and keep every original owner/topology gate. Require
       READY, `captured source=s_weapon-draw`, and
@@ -5230,6 +5230,23 @@ Keep the postblend preservation boundary; replace only its steady content.
       persisting confirms the transient postblend owner. All three plus a wrong
       hold rejects source content/row sufficiency. Launch exactly one role-B
       Nadine process; the user alone controls gameplay.
+
+      Runtime REJECTED: PID `11804` emitted READY, capture and replay. The
+      sealed source was the late Draw sample at phase `0.883051`; the user's
+      screenshot showed both hands collapsed low and a nearly vertical
+      muzzle-down rifle. This proves the sampled content is a transition pose,
+      not Chloe's final grip. Disable it permanently; do not phase-tune.
+
+- [x] Restore `aem-safe`: enable only the confirmed `82e7b9e/adr` authored
+      two-hand baseline and disable the rejected transient replay/census. Its
+      low diagonal muzzle is an explicit known limitation, not completion.
+
+- [~] Resolve the exact final steady Chloe post-IK grip without using a second
+      game process or any Draw/Grab/WeaponOut transition frame. Start from the
+      already-confirmed final right-wrist/hand-prop divergence and the rejected
+      pre-postblend row-copy experiments; identify a single-process semantic
+      target or engine retarget relation with three independent static evidence
+      classes before another visual mutation.
 
   Original `aeh` prediction required the combined READY marker,
       fresh Chloe right-prop CAPTURE, Nadine right-prop RELAY and same-postblend

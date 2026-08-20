@@ -2504,13 +2504,13 @@ constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
 // Build 82e7b9e/adr remains a stable two-hand fallback, but the user proved
 // that its low diagonal hold is not Chloe's steady pose. Keep it disabled in
 // the next exam so it cannot contaminate the source sample below.
-constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = false;
+constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = true;
 // Build aej installed the exact one-process postblend seam but produced no
 // capture/replay marker: the visual result was just the stock broken pose. Keep
 // the unexecuted mutation disabled. The next bounded pass observes the first
 // failed owner/idle/topology condition and the complete live WeaponPartial
 // state inventory at this same seam; it never writes a pose or animation field.
-constexpr bool kEnableLegacyNadineMazurTransientPostblendReplay = true;
+constexpr bool kEnableLegacyNadineMazurTransientPostblendReplay = false;
 constexpr bool kEnableLegacyNadineMazurTransientPostblendCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
@@ -63929,8 +63929,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20ael "
-        "(one-process first-Draw postblend replay; semantic JointParams validation)");
+        "TLL co-op runtime init 2026-08-20aem-safe "
+        "(stable two-hand Mazur baseline restored; rejected Draw replay disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

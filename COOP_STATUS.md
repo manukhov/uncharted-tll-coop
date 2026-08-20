@@ -26331,3 +26331,28 @@ confirms `H-transient-postblend-owner`; all markers plus a wrong pose rejects
 the sampled content/row sufficiency. A missing marker is still packaging and
 has no visual interpretation. Only one role-B process is permitted and only the
 user controls gameplay.
+
+### 2026-08-20 RUNTIME REJECTED (`ael`) / RESTORED SAFE (`aem-safe`): the last Draw endpoint is not Chloe's hold
+
+The corrected semantic validator made the complete proposed mutation execute.
+Role-B PID `11804` published READY, then exact markers:
+
+- `NADINE-MAZUR-TRANSIENT-POSE captured ... source=s_weapon-draw phase=0.658693`;
+- `NADINE-MAZUR-TRANSIENT-POSE replayed ... trigger=s_no-weapon sourcePhase=0.883051`.
+
+The second phase is the last refreshed Draw sample actually sealed and replayed.
+The user's screenshot shows the resulting pose unambiguously: both hands are
+collapsed low in front of the pelvis and the Mazur is nearly vertical with its
+muzzle down. This is not an angular residual of Chloe's chest/shoulder hold.
+It is the authored late transition endpoint itself. Because READY, capture and
+replay all occurred, `H-transient-postblend-owner` and the entire “freeze the
+last Draw local rows” strategy are RUNTIME REJECTED. Do not tune the capture
+phase or select another transition frame without independent static ownership;
+the visible first-good interval did not identify a unique final-pose sample.
+
+Build `aem-safe` disables both the rejected replay and its census and restores
+the runtime-confirmed `82e7b9e/adr` `56C57AD2 + 283966ED` two-hand baseline.
+Its low diagonal muzzle remains a known semantic limitation, but it is stable
+and materially safer than the now-proven vertical Draw pose. The next frontier
+must resolve Chloe's final steady post-IK grip in a single Nadine process; no
+Draw/Grab/WeaponOut transition clip is an authorized donor.
