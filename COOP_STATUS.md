@@ -25691,3 +25691,45 @@ stock getter callsites; read-only)`, followed by one `entry`, one exact
 samples may compare normalized goals, chains and solver scalars.  No visual
 change is predicted.  The agent may launch/inject both copies, but only the user
 controls gameplay.
+
+### 2026-08-20 RUNTIME CONFIRMED (`adx`): the steady Chloe/Nadine Feather goals diverge before the solver
+
+The corrected read-only package reached every written discriminator.  PID
+`17888` (role A/local Chloe) and PID `8480` (role B/local legacy Nadine) both
+loaded `2026-08-20adx` and installed the three exact callsite relays.  Each then
+emitted one entry, one exact body/art/WeaponOut admission, one complete GOAL row
+and all ten semantic CHAIN rows.  Both processes remained responsive and no
+new exception/fatal row was emitted.  The user's report that the pose began to
+break again is the expected unmodified stock symptom: this build never writes a
+pose or substitutes a solver input.
+
+The comparison is numerical and same-scope.  Both admitted samples use
+`selector=1`, `strength=0.5`, `tolerance=1`, `iterations=18`,
+`solveWeight=0.9`, and `minimumIterations=4`.  Chloe's common target relative
+to `spined` is position `(-0.131751,-0.337576,-0.0329704)` and quaternion
+`(0.483343,0.272804,0.0628102,0.829465)`.  Nadine's is
+`(-0.0378622,-0.10313,-0.158538)` and
+`(0.789708,0.438017,0.320224,0.286284)`.  The normalized target positions are
+`0.282041` apart and the shortest quaternion separation is `81.2885` degrees.
+This is far larger than the two initial endpoint gaps themselves
+(`0.0293577` Chloe, `0.0230098` Nadine) and cannot be explained by a scalar or
+selector split.
+
+Stock Solve also demonstrably executes rather than failing on Nadine: her
+left/right hand-prop gap falls from `0.0230098` to `0.00723289`; Chloe's falls
+from `0.0293577` to `0.0201687`.  Thus `H-lifecycle` is rejected for the
+captured steady frame and `H-target` is CONFIRMED as a real pre-solver
+divergence.  This does not yet prove that copying Chloe's numerical target is a
+complete repair: different body proportions/Jacobian chains, a later writer,
+or an upstream endpoint producer may still determine the exact final pose.
+
+The next mutation boundary must therefore preserve stock maps, Solve and
+commits and alter only the admitted common goal.  The strongest candidate is a
+live Chloe goal normalized to her `spined`, reconstructed in Nadine world space
+with `Transform_Compose 0x1401998F0`, then supplied through the two exact stock
+getter results so both endpoints yield that one target regardless of selector.
+Before runtime this still requires three-way closure of donor transport/lifetime
+(role-A packet versus same-process remote Chloe), exact return-pointer
+read-only semantics at both getter consumers, and target freshness/action scope.
+Do not hard-code this single sample, splice pose rows, or launch another
+mutation until that closure and a new falsifiable prediction are written.

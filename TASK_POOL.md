@@ -5039,7 +5039,7 @@ Keep the postblend preservation boundary; replace only its steady content.
       `0x1418F31D4` is the instruction after the getter call.  No relay was
       published and no pose conclusion is allowed.
 
-- [ ] Run corrected read-only `adx`.  It keeps the exact Solve relay and wraps
+- [x] Run corrected read-only `adx`.  It keeps the exact Solve relay and wraps
       only Solve's two existing WS getter calls at `0x1418F31CF/0x1418F31DF`.
       The wrappers copy after the stock refresh and return the original pointer;
       the post-Solve cache remains a passive direct read.  Require the new
@@ -5049,6 +5049,20 @@ Keep the postblend preservation boundary; replace only its steady content.
       geometry; equal results select a later writer/weapon placement.  This exam
       makes no visual change and authorizes no mutation.  Keep stock postblend;
       do not guess another clip, suppress Feather, or splice C39 rows.
+      Both complete samples arrived.  At identical steady solver scalars,
+      spine-relative Chloe and Nadine goals differ by `0.282041` position units
+      and `81.2885` degrees; Nadine's solver still reduces its endpoint gap to
+      `0.00723289`.  This CONFIRMS a pre-solver target divergence and rejects a
+      scalar/lifecycle explanation for the sampled frame, but does not yet prove
+      a goal-copy repair.
+
+- [ ] Close the exact live-goal transfer boundary statically before mutation.
+      Compare role-A packet transport with same-process remote-Chloe capture;
+      prove session/freshness and exact Mazur/WeaponOut ownership, reconstruct
+      the donor goal under Nadine `spined` via `Transform_Compose 0x1401998F0`,
+      and prove both getter return pointers are read-only through the complete
+      Solve consumer.  Keep stock Jacobian maps, Solve, commits and postblend.
+      A single hard-coded `adx` sample is forbidden.
 
 ## Rule
 
