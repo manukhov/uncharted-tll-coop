@@ -2468,7 +2468,7 @@ constexpr bool kEnableLegacyNadineMazurRightHandPropRelay = false;
 // hand-prop only 10.2 mm / 1.89 degrees apart. Use their normalized midpoint
 // as a one-process semantic reference, then preserve Nadine's own wrist-to-prop
 // relation and the stock SolveArmIk/terminal left-arm solve.
-constexpr bool kEnableLegacyNadineMazurChloeRightHandPropReference = true;
+constexpr bool kEnableLegacyNadineMazurChloeRightHandPropReference = false;
 // REJECTED in build aea: installing the internal 0x1418F2E0B observer crashed
 // role B after READY and before its first sample.  The writer hypothesis remains
 // STATIC, but this callsite is not an admissible runtime boundary.
@@ -64696,8 +64696,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20aep "
-        "(single-process steady Chloe right-hand-prop reference)");
+        "TLL co-op runtime init 2026-08-20aeq-safe "
+        "(inconclusive static Chloe right-hand reference disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

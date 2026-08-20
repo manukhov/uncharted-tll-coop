@@ -26617,3 +26617,34 @@ A raised muzzle with a detached or oscillating support hand selects
 scope or helper failure, and missing READY is packaging; neither has a visual
 interpretation. Exactly one role-B Nadine process is allowed, and the agent
 must not send gameplay input.
+
+### 2026-08-20 RUNTIME INCONCLUSIVE (`aep` -> `aeq-safe`): steady authored base and Feather correction do not overlap
+
+The single-process role-B test loaded `2026-08-20aep` in PID `4568`, remained
+responsive, and printed all three package READY markers. The exact steady
+authored pair then executed at log line 92822:
+`hands=56C57AD2 arms=283966ED group=0 lane=5 weights=1/1
+source=steady-overlay`. The postblend wrapper immediately printed the guarded
+fallback at 92823: `restored rows=19..30 ... source=steady-overlay`. The log
+contains zero `NADINE-WEAPON-IK-RIGHT-PROP-RELAY` and zero
+`NADINE-MAZUR-RIGHT-PROP retained` rows. The user's screenshot consequently
+matches the known `82e7b9e` low diagonal baseline exactly.
+
+This is not a semantic rejection of the numeric Chloe reference. It selects
+the written packaging alternative: no right-prop correction was applied. The
+goal boundary did run earlier for the same Nadine at selector 1, but the
+350-ms steady goal dwell completed outside the later exact steady-overlay
+authored-pair ticket. By the time the pair was eligible, no matching Feather
+Solve occurred inside that same postblend pass. Removing the same-pass key or
+blindly reusing the earlier JointSet would mix animation lifetimes and is
+forbidden.
+
+Build `aeq-safe` disables only the unexecuted static-reference mutation and
+retains the confirmed authored-pair fallback. The next static frontier is a
+late solve after the steady pair, not another coordinate guess: determine
+whether the persistent `Player+0x4308` WeaponIKFeatherInfo JointSets can be
+reseeded from the restored C39 pose, solve the right anchor, derive the stock
+terminal left target, and commit both chains before Async consumes
+`Fg+0x100`. This requires exact constructor/seed/commit lifetime and a proof
+that the action-owned terminal WeaponIK state is not required. No further
+runtime is earned yet.

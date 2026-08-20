@@ -5299,6 +5299,17 @@ Keep the postblend preservation boundary; replace only its steady content.
       selects terminal-left ordering. Launch exactly one role-B Nadine process;
       never control gameplay from automation.
 
+      Runtime `aep` was packaging-inconclusive, not a target-value result. PID
+      `4568` emitted exact steady `56C57AD2+283966ED` injection followed by the
+      guarded C39 `19..30` baseline restore, but zero static-right-prop and zero
+      `baselineRestore=0` markers. The screenshot therefore reproduced
+      `82e7b9e` exactly because the correction never ran. The earlier Feather
+      Solve and later steady-overlay ticket do not coexist in one postblend
+      pass. Build `aeq-safe` disables this unexecuted mutation. Statically close
+      a late solve using the persistent `Player+0x4308` paired JointSets after
+      baseline restoration; do not weaken the same-pass key or reuse a stale
+      action-owned JointSet.
+
   Original `aeh` prediction required the combined READY marker,
       fresh Chloe right-prop CAPTURE, Nadine right-prop RELAY and same-postblend
       `baselineRestore=0`. All markers plus both hands and Chloe's muzzle-up
