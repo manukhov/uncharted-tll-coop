@@ -791,6 +791,12 @@ constexpr std::uintptr_t kAnimManagerPerformAnimBlendRva = 0x1A92260;
 // scopes the nested CreateAnimCmds call above without touching either function
 // entry.  Its stock bytes are E8 56 F9 FF FF.
 constexpr std::uintptr_t kAnimManagerPerformAnimBlendCallsiteRva = 0x1A92905;
+// Exact six-byte indirect Player vtable+0x408 call in the same worker, after
+// the Perform call above and before AsyncObjectUpdateJointBlendJob.  A scoped
+// callsite relay can run stock post-blend first and then restore the exact
+// Perform-produced C39 arm rows without modifying the shared Player vtable.
+// Stock bytes: FF 90 08 04 00 00.
+constexpr std::uintptr_t kAnimManagerPlayerPostBlendCallsiteRva = 0x1A929A1;
 constexpr std::uintptr_t kAnimManagerAsyncObjectUpdateJointBlendJobRva =
     0x1A92A00;
 // Read-only final holster discriminator. The anim-control event hook exposes

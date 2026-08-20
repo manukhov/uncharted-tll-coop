@@ -3031,8 +3031,10 @@ FUNCTIONS = {
         "AnimManager_PerformBlendAndDispatchPostBlendJob",
         "Synchronous animation worker callback: calls PerformAnimBlend at exact "
         "callsite 0x141A92905, then resolves the retained Fg owner and dispatches "
-        "Player vtable+0x408 at 0x141A929A1 on the same worker. This ordering is "
-        "the exact scope used by the Mazur authored-pair Perform callsite relay.",
+        "Player vtable+0x408 through exact bytes FF 90 08 04 00 00 at "
+        "0x141A929A1 on the same worker. The final Async joint-blend job follows "
+        "separately, making these two callsites the exact Perform-to-postblend "
+        "handoff for the Mazur authored-pair preservation scope.",
     ),
     0x1415A9040: (
         "TaggedHeapAllocator_Init",
@@ -4366,8 +4368,11 @@ FUNCTIONS = {
         "Both direct BuildCommandSegments calls forward FgAnimData+0x08 as the "
         "builder flags byte stored in CreateContext+0x11. "
         "Local role-B Mazur runtime distinguishes its 58-word mode-2/source-zero "
-        "command-14 import from a later complete mode-1/flags-3/source-one main "
-        "DAG in the same final Async job. "
+        "command-14 import. In mode 2 the first Build at 0x141A92D47 selects and "
+        "Processes group zero at 0x141A92E78, then 0x141A92EE8..0x141A92EF8 "
+        "clears bit zero from both remaining masks before the later Build at "
+        "0x141A93038. Thus group zero imports the postblend Fg+0x100 bank once "
+        "before the final Fg+0x230 palette publication. "
         "Retained presentation-Player addresses may turn over before this job; "
         "each invocation revalidates the current Player/Fg generation and the "
         "command list itself owns canonical clip liveness. "

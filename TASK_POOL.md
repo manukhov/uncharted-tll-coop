@@ -4982,6 +4982,20 @@ the other arm away.  Disable the flag in `adq-safe`.  The next P0 is to close a
 post-Player-`+0x408`, final-Async command boundary with exact list ownership;
 do not retry a Perform donor, Feather bypass, or function-entry detour.
 
+`adr` closes that exact downstream boundary without a shared vtable or function
+entry hook.  `0x141A928F0` synchronously executes Perform `0x141A92905`, then
+the sole Player `+0x408` call `0x141A929A1`; exact earlier Mazur rows show stock
+postblend changes C39 19--26.  The final Async job builds/processes group zero
+first, removes group-zero from its remaining masks, and command 14 imports the
+postblend `Fg+0x100` bank before final palette publication.  Preserve the
+already engine-retargeted authored-pair rows C39 19--30 after Perform, run stock
+postblend, and restore only those 576 bytes before Async.  Require all three
+markers: `preservation READY (three exact callsite relays)`, `injected
+stage=perform`, and `restored stage=postblend rows=19..30`.  All three plus a
+stable two-hand hold confirms the postblend-overwrite repair.  All three plus
+the arm still away selects authored-content/omitted-helper or a later Async
+writer.  Any missing marker is packaging; any crash rejects the package.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

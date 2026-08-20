@@ -25293,3 +25293,55 @@ after Player `+0x408` and must prove the final Async command/list ownership; it
 must not re-enable Feather suppression or any function-entry detour.  The
 `adq-safe` build disables the authored-pair flag, so its two E8 relays are not
 installed.  All grip/arm-pose experiments are again off by default.
+
+### 2026-08-20 STATIC / IMPLEMENTED (`adr`): preserve the exact authored pair across Player postblend
+
+The `adq` negative localizes the first proven loss boundary.  The same worker
+callback `AnimManager_PerformBlendAndDispatchPostBlendJob 0x141A928F0` calls
+`AnimManager_PerformAnimBlend` at `0x141A92905`, then loads the retained Player
+vtable and makes the sole six-byte `Player +0x408` call at `0x141A929A1`
+(`FF 90 08 04 00 00`).  Historical exact Mazur boundary rows independently show
+that stock `WeaponIKFeather` inside this postblend phase changes C39 local-pose
+rows 19--26 while leaving 27--30 byte-stable.  The `adq` marker independently
+proves that the complementary `56C57AD2 + 283966ED` pair was already evaluated
+by the preceding Perform call.  These are distinct control-flow, runtime-pose
+and asset/mask evidence classes; the repair no longer guesses a new clip or
+suppresses an IK action.
+
+The downstream ownership is now closed statically.  In
+`AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00`, the first mode-2 Build
+at `0x141A92D47` selects group zero only and the direct Process call at
+`0x141A92E78` consumes its 58-word list.  The job then explicitly removes bit
+zero from both remaining masks at `0x141A92EE8..0x141A92EF8`; the later Build at
+`0x141A93038` cannot regenerate group zero.  Group zero's command 14 imports the
+post-Player local-pose bank from `FgAnimData+0x100`, after which commands
+15/16/17/24/26 build and publish the current palette at `Fg+0x230`.  Therefore
+the narrow writable handoff is not another command-list guess: save the exact
+engine-retargeted C39 rows 19--30 after the successful Perform return, call
+stock Player `+0x408` exactly once, then restore those same 576 bytes before the
+Async cmd14 import.  Async still invalidates/rebuilds world matrices, so no
+manual JointCache or palette write is introduced.
+
+Build `adr` uses three exact callsite relays installed in one suspended-thread
+transaction: Create `0x141A915FF`, Perform `0x141A92905`, and the indirect
+postblend call `0x141A929A1`.  The last relay redispatches the unchanged current
+vtable slot, preserves its return value, consumes a same-thread ticket keyed by
+Player/Fg/weapon/local-pose/skeleton plus both runtime generations, and restores
+only after stock returns.  The Perform and postblend sites share an image page,
+so the installer protects/restores that page once and verifies all three byte
+ranges atomically.  Readiness is published only after all writes and protection
+restores succeed.  P99, role A, states other than exact local WeaponOut, ADS,
+movement and every stock postblend/Async controller remain unmodified.
+
+Competing hypotheses and the written pre-run prediction are explicit.
+`H-postblend-overwrite` predicts the boot marker `legacy-Nadine Mazur
+authored-pair preservation READY (three exact callsite relays)`, followed in the
+same pass by `NADINE-MAZUR-AUTHORED-PAIR injected stage=perform` and
+`NADINE-MAZUR-AUTHORED-PAIR restored stage=postblend rows=19..30`; the grip must
+then remain a stable two-hand hold beyond the usual first seconds.
+`H-authored-content-or-omitted-helper` predicts both markers but the same arm-out
+pose.  `H-later-async-writer` predicts both markers followed by a break or
+twitch despite the exact cmd14 handoff.  Missing READY/injection/restore is a
+packaging or scope failure and must not be judged visually.  A crash rejects the
+three-relay/memmove package immediately.  No other grip/arm-pose mutation is
+enabled in this exam.

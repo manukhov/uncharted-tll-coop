@@ -2463,13 +2463,12 @@ constexpr bool kEnableLegacyNadineDrawnP99LocalTransformCensus = false;
 constexpr bool kEnableLegacyNadineWeaponIkFeatherSuppression = false;
 constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
 // Exact authored Mazur complement: carry-peek-hands owns Player joints 29..32
-// and carry-fatigue-walk-arms owns 21..28.  The stock custom root combines the
-// disjoint masks, so overlaying each one-sample clip at weight 1 is output-
-// equivalent while preserving the existing body pose and stock Feather pass.
-// Build adq reached this exact pair through the two callsites, but the visible
-// grip remained one-handed. Keep the bounded implementation for provenance;
-// do not leave a runtime-rejected pose mutation installed in production.
-constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = false;
+// and carry-fatigue-walk-arms owns 21..28. Build adq proved that the stock
+// Perform pass evaluates this pair, but the later Player +0x408 postblend pass
+// still leaves the visible grip one-handed. Preserve only the engine-retargeted
+// C39 rows 19..30 across that exact postblend call so the final Async cmd14 can
+// consume the same authored result. P99, role A, ADS and transitions stay stock.
+constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = true;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 static_assert(
@@ -29470,6 +29469,46 @@ bool prepare_plain_callsite_relay(
     return true;
 }
 
+bool prepare_six_byte_indirect_callsite_relay(
+    std::uintptr_t callsite_rva,
+    const std::array<std::uint8_t, 6>& expected_bytes,
+    const void* hook, std::uint8_t*& callsite, std::uint8_t*& relay,
+    std::array<std::uint8_t, 6>& patch_bytes) {
+    callsite = reinterpret_cast<std::uint8_t*>(g_module + callsite_rva);
+    relay = nullptr;
+    patch_bytes = {};
+    if (std::memcmp(
+            callsite, expected_bytes.data(), expected_bytes.size()) != 0) {
+        return false;
+    }
+    constexpr std::size_t kRelaySize = 14;
+    relay = static_cast<std::uint8_t*>(
+        allocate_executable_near(callsite, kRelaySize));
+    if (relay == nullptr) {
+        return false;
+    }
+    relay[0] = 0xFF;
+    relay[1] = 0x25;
+    *reinterpret_cast<std::uint32_t*>(relay + 2) = 0;
+    *reinterpret_cast<std::uintptr_t*>(relay + 6) =
+        reinterpret_cast<std::uintptr_t>(hook);
+    FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+
+    const std::int64_t displacement =
+        reinterpret_cast<std::intptr_t>(relay) -
+        reinterpret_cast<std::intptr_t>(callsite + 5);
+    if (displacement < INT32_MIN || displacement > INT32_MAX) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        relay = nullptr;
+        return false;
+    }
+    patch_bytes[0] = 0xE8;
+    const std::int32_t rel32 = static_cast<std::int32_t>(displacement);
+    std::memcpy(patch_bytes.data() + 1, &rel32, sizeof(rel32));
+    patch_bytes[5] = 0x90;
+    return true;
+}
+
 // At 0x14181AB33 R14 is the exact FgAnimData whose lock is held and whose
 // upload/current palette pointers supplied RCX/RDX. Surface it as Win64 arg4
 // without disturbing the original memcpy arguments or CALL return address.
@@ -47701,10 +47740,29 @@ struct LegacyNadineMazurAuthoredPairEpoch {
     std::uint32_t weapon_runtime_id = 0;
 };
 
+constexpr std::size_t kMazurAuthoredPairFirstC39Joint = 19;
+constexpr std::size_t kMazurAuthoredPairC39JointCount = 12;
+constexpr std::size_t kMazurAuthoredPairPoseBytes =
+    kMazurAuthoredPairC39JointCount * kJointLocalPoseStride;
+
+struct LegacyNadineMazurAuthoredPairPostBlendTicket {
+    bool valid = false;
+    void* player = nullptr;
+    void* fg_anim_data = nullptr;
+    void* weapon = nullptr;
+    void* local_pose = nullptr;
+    void* target_skeleton = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    std::array<std::byte, kMazurAuthoredPairPoseBytes> pose{};
+};
+
 using LegacyNadineMazurAuthoredPairCreateFunction =
     std::uint64_t(__fastcall*)(void*, void*, std::uint32_t);
 using LegacyNadineMazurAuthoredPairPerformFunction =
     void(__fastcall*)(void*);
+using LegacyNadineMazurAuthoredPairPostBlendFunction =
+    std::int64_t(__fastcall*)(void*);
 
 LegacyNadineMazurAuthoredPairCreateFunction
     g_original_create_anim_cmds_for_authored_mazur_pair = nullptr;
@@ -47713,6 +47771,9 @@ LegacyNadineMazurAuthoredPairPerformFunction
 std::atomic<bool> g_legacy_nadine_mazur_authored_pair_ready{false};
 thread_local LegacyNadineMazurAuthoredPairEpoch
     g_legacy_nadine_mazur_authored_pair_epoch{};
+thread_local bool g_legacy_nadine_mazur_authored_pair_injected = false;
+thread_local LegacyNadineMazurAuthoredPairPostBlendTicket
+    g_legacy_nadine_mazur_authored_pair_postblend_ticket{};
 
 LegacyNadineMazurAuthoredPairAdmission
 seh_select_legacy_nadine_mazur_authored_pair_epoch(
@@ -47783,6 +47844,119 @@ seh_select_legacy_nadine_mazur_authored_pair_epoch(
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *output = {};
         return LegacyNadineMazurAuthoredPairAdmission::kClips;
+    }
+}
+
+bool seh_capture_legacy_nadine_mazur_authored_pair_postblend_ticket(
+    const LegacyNadineMazurAuthoredPairEpoch& epoch,
+    LegacyNadineMazurAuthoredPairPostBlendTicket* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (!epoch.valid || epoch.player == nullptr ||
+            epoch.fg_anim_data == nullptr || epoch.weapon == nullptr ||
+            epoch.local_pose == nullptr || epoch.target_skeleton == nullptr ||
+            !player_object_stable(epoch.player) ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(epoch.player) +
+                kGameObjectRuntimeIdOffset) != epoch.player_runtime_id ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(epoch.player) +
+                kPlayerFgAnimDataOffset) != epoch.fg_anim_data ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(epoch.weapon) +
+                kGameObjectRuntimeIdOffset) != epoch.weapon_runtime_id ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(epoch.fg_anim_data) +
+                kFgAnimDataJointCacheLocalPoseOffset) != epoch.local_pose ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(epoch.fg_anim_data) +
+                kFgAnimDataSkeletonOffset) != epoch.target_skeleton ||
+            readable_bytes(epoch.target_skeleton) < 0x48 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(epoch.target_skeleton) + 0x24) !=
+                kLegacyNadineTargetSkeletonArtId ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(epoch.target_skeleton) +
+                kSkeletonJointCountOffset) !=
+                kLegacyNadineSkeletonJointCount ||
+            readable_bytes(
+                static_cast<const std::byte*>(epoch.local_pose) +
+                kMazurAuthoredPairFirstC39Joint * kJointLocalPoseStride) <
+                kMazurAuthoredPairPoseBytes) {
+            return false;
+        }
+        output->valid = true;
+        output->player = epoch.player;
+        output->fg_anim_data = epoch.fg_anim_data;
+        output->weapon = epoch.weapon;
+        output->local_pose = epoch.local_pose;
+        output->target_skeleton = epoch.target_skeleton;
+        output->player_runtime_id = epoch.player_runtime_id;
+        output->weapon_runtime_id = epoch.weapon_runtime_id;
+        std::memcpy(
+            output->pose.data(),
+            static_cast<const std::byte*>(epoch.local_pose) +
+                kMazurAuthoredPairFirstC39Joint * kJointLocalPoseStride,
+            output->pose.size());
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+bool seh_restore_legacy_nadine_mazur_authored_pair_after_postblend(
+    void* player,
+    const LegacyNadineMazurAuthoredPairPostBlendTicket& ticket) {
+    __try {
+        if (!ticket.valid || player == nullptr || player != ticket.player ||
+            !g_legacy_nadine_mazur_authored_pair_ready.load(
+                std::memory_order_acquire) ||
+            !g_net_role_b || player != retained_player_object(0) ||
+            !player_object_stable(player)) {
+            return false;
+        }
+        IdleArmPoseOwnerScope owner{};
+        if (!seh_resolve_idle_arm_pose_owner_scope(player, 0, &owner) ||
+            !local_player_is_steady_drawn_idle(owner) ||
+            owner.player != ticket.player ||
+            owner.fg_anim_data != ticket.fg_anim_data ||
+            owner.weapon != ticket.weapon ||
+            owner.local_pose != ticket.local_pose ||
+            owner.weapon_art_id != kCoopRifleArtId ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(owner.player) +
+                kGameObjectRuntimeIdOffset) != ticket.player_runtime_id ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(owner.weapon) +
+                kGameObjectRuntimeIdOffset) != ticket.weapon_runtime_id ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(owner.fg_anim_data) +
+                kFgAnimDataSkeletonOffset) != ticket.target_skeleton ||
+            readable_bytes(ticket.target_skeleton) < 0x48 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(ticket.target_skeleton) + 0x24) !=
+                kLegacyNadineTargetSkeletonArtId ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(ticket.target_skeleton) +
+                kSkeletonJointCountOffset) !=
+                kLegacyNadineSkeletonJointCount ||
+            readable_bytes(
+                static_cast<const std::byte*>(ticket.local_pose) +
+                kMazurAuthoredPairFirstC39Joint * kJointLocalPoseStride) <
+                ticket.pose.size()) {
+            return false;
+        }
+        std::memcpy(
+            static_cast<std::byte*>(ticket.local_pose) +
+                kMazurAuthoredPairFirstC39Joint * kJointLocalPoseStride,
+            ticket.pose.data(), ticket.pose.size());
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
     }
 }
 
@@ -47974,6 +48148,7 @@ hooked_create_anim_cmds_for_legacy_nadine_mazur_authored_pair(
     const auto injection = seh_inject_legacy_nadine_mazur_authored_pair(
         create_context, command_record, group, epoch, &scratch_lane);
     if (injection == LegacyNadineMazurAuthoredPairInjection::kInjected) {
+        g_legacy_nadine_mazur_authored_pair_injected = true;
         static std::atomic<bool> injected_logged{false};
         if (!injected_logged.exchange(true, std::memory_order_relaxed)) {
             std::ostringstream line;
@@ -48009,6 +48184,8 @@ hooked_perform_anim_blend_for_legacy_nadine_mazur_authored_pair(void* job) {
     const LegacyNadineMazurAuthoredPairEpoch previous =
         g_legacy_nadine_mazur_authored_pair_epoch;
     g_legacy_nadine_mazur_authored_pair_epoch = {};
+    g_legacy_nadine_mazur_authored_pair_injected = false;
+    g_legacy_nadine_mazur_authored_pair_postblend_ticket = {};
 
     bool exact_local_fg = false;
     void* fg = nullptr;
@@ -48055,49 +48232,135 @@ hooked_perform_anim_blend_for_legacy_nadine_mazur_authored_pair(void* job) {
     }
 
     original(job);
+    if (g_legacy_nadine_mazur_authored_pair_injected &&
+        g_legacy_nadine_mazur_authored_pair_epoch.valid) {
+        LegacyNadineMazurAuthoredPairPostBlendTicket ticket{};
+        if (seh_capture_legacy_nadine_mazur_authored_pair_postblend_ticket(
+                g_legacy_nadine_mazur_authored_pair_epoch, &ticket)) {
+            g_legacy_nadine_mazur_authored_pair_postblend_ticket = ticket;
+        }
+    }
     g_legacy_nadine_mazur_authored_pair_epoch = previous;
+}
+
+std::int64_t __fastcall
+hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
+    // The stock callsite has just loaded this exact object's vtable into RAX.
+    // We patch only the CALL instruction, not the vtable, so redispatch the
+    // unchanged +0x408 slot and preserve the stock return value exactly.
+    LegacyNadineMazurAuthoredPairPostBlendFunction original = nullptr;
+    __try {
+        auto* const vtable = player != nullptr
+            ? *reinterpret_cast<void***>(player)
+            : nullptr;
+        if (vtable != nullptr) {
+            original = reinterpret_cast<
+                LegacyNadineMazurAuthoredPairPostBlendFunction>(
+                    vtable[0x408 / sizeof(void*)]);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        original = nullptr;
+    }
+    if (original == nullptr) {
+        return 0;
+    }
+
+    const LegacyNadineMazurAuthoredPairPostBlendTicket ticket =
+        g_legacy_nadine_mazur_authored_pair_postblend_ticket;
+    g_legacy_nadine_mazur_authored_pair_postblend_ticket = {};
+    const std::int64_t result = original(player);
+    if (ticket.valid &&
+        seh_restore_legacy_nadine_mazur_authored_pair_after_postblend(
+            player, ticket)) {
+        static std::atomic<bool> restored_logged{false};
+        if (!restored_logged.exchange(true, std::memory_order_relaxed)) {
+            boot_log_line(
+                "NADINE-MAZUR-AUTHORED-PAIR restored stage=postblend rows=19..30");
+        }
+    }
+    return result;
 }
 
 bool install_legacy_nadine_mazur_authored_pair_repair() {
     g_legacy_nadine_mazur_authored_pair_ready.store(
         false, std::memory_order_release);
+
     std::uint8_t* create_site = nullptr;
     std::uint8_t* create_relay = nullptr;
     std::int32_t create_new_displacement = 0;
     std::uint8_t* perform_site = nullptr;
     std::uint8_t* perform_relay = nullptr;
     std::int32_t perform_new_displacement = 0;
-    if (!prepare_plain_callsite_relay(
+    std::uint8_t* postblend_site = nullptr;
+    std::uint8_t* postblend_relay = nullptr;
+    std::array<std::uint8_t, 6> postblend_patch{};
+    constexpr std::array<std::uint8_t, 6> kExpectedPostBlendCall{
+        0xFF, 0x90, 0x08, 0x04, 0x00, 0x00};
+
+    const bool preflight =
+        prepare_plain_callsite_relay(
             kAnimManagerCreateAnimCmdsNormalCallsiteRva,
             kAnimManagerCreateAnimCmdsForObjectRva,
             reinterpret_cast<const void*>(
                 &hooked_create_anim_cmds_for_legacy_nadine_mazur_authored_pair),
-            create_site, create_relay, create_new_displacement) ||
-        !prepare_plain_callsite_relay(
+            create_site, create_relay, create_new_displacement) &&
+        prepare_plain_callsite_relay(
             kAnimManagerPerformAnimBlendCallsiteRva,
             kAnimManagerPerformAnimBlendRva,
             reinterpret_cast<const void*>(
                 &hooked_perform_anim_blend_for_legacy_nadine_mazur_authored_pair),
-            perform_site, perform_relay, perform_new_displacement)) {
+            perform_site, perform_relay, perform_new_displacement) &&
+        prepare_six_byte_indirect_callsite_relay(
+            kAnimManagerPlayerPostBlendCallsiteRva,
+            kExpectedPostBlendCall,
+            reinterpret_cast<const void*>(
+                &hooked_player_postblend_for_legacy_nadine_mazur_authored_pair),
+            postblend_site, postblend_relay, postblend_patch);
+    const auto free_relays = [&]() {
         if (create_relay != nullptr) {
             VirtualFree(create_relay, 0, MEM_RELEASE);
         }
         if (perform_relay != nullptr) {
             VirtualFree(perform_relay, 0, MEM_RELEASE);
         }
+        if (postblend_relay != nullptr) {
+            VirtualFree(postblend_relay, 0, MEM_RELEASE);
+        }
+    };
+    if (!preflight) {
+        free_relays();
         boot_log_line(
-            "legacy-Nadine Mazur authored-pair repair SKIPPED (callsite preflight)");
+            "legacy-Nadine Mazur authored-pair preservation SKIPPED (callsite preflight)");
         return false;
     }
 
-    std::int32_t create_old_displacement = 0;
-    std::int32_t perform_old_displacement = 0;
+    struct PatchSite {
+        std::uint8_t* address = nullptr;
+        std::size_t size = 0;
+        std::array<std::uint8_t, 6> stock{};
+        std::array<std::uint8_t, 6> patch{};
+    };
+    std::array<PatchSite, 3> sites{};
+    sites[0].address = create_site;
+    sites[0].size = 5;
+    sites[1].address = perform_site;
+    sites[1].size = 5;
+    sites[2].address = postblend_site;
+    sites[2].size = 6;
+    for (auto& site : sites) {
+        std::memcpy(site.stock.data(), site.address, site.size);
+        std::memcpy(site.patch.data(), site.address, site.size);
+    }
+    sites[0].patch[0] = 0xE8;
     std::memcpy(
-        &create_old_displacement, create_site + 1,
-        sizeof(create_old_displacement));
+        sites[0].patch.data() + 1, &create_new_displacement,
+        sizeof(create_new_displacement));
+    sites[1].patch[0] = 0xE8;
     std::memcpy(
-        &perform_old_displacement, perform_site + 1,
-        sizeof(perform_old_displacement));
+        sites[1].patch.data() + 1, &perform_new_displacement,
+        sizeof(perform_new_displacement));
+    sites[2].patch = postblend_patch;
+
     g_original_create_anim_cmds_for_authored_mazur_pair =
         reinterpret_cast<LegacyNadineMazurAuthoredPairCreateFunction>(
             g_module + kAnimManagerCreateAnimCmdsForObjectRva);
@@ -48107,139 +48370,135 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
 
     SuspendedProcessThreads suspended_threads{};
     if (!suspend_other_process_threads(suspended_threads)) {
-        VirtualFree(create_relay, 0, MEM_RELEASE);
-        VirtualFree(perform_relay, 0, MEM_RELEASE);
+        free_relays();
         boot_log_line(
-            "legacy-Nadine Mazur authored-pair repair SKIPPED (thread suspend)");
+            "legacy-Nadine Mazur authored-pair preservation SKIPPED (thread suspend)");
         return false;
     }
 
+    // Perform and the following +0x408 call occupy the same image page. Protect
+    // that page once; protecting the two sites independently would make the
+    // second old-protection snapshot observe our temporary RWX state.
+    const std::size_t perform_page_span =
+        static_cast<std::size_t>((postblend_site + 6) - perform_site);
     DWORD create_old_protection = 0;
-    DWORD perform_old_protection = 0;
+    DWORD perform_page_old_protection = 0;
     const bool create_protected = VirtualProtect(
         create_site, 5, PAGE_EXECUTE_READWRITE,
         &create_old_protection) != 0;
-    const bool perform_protected = VirtualProtect(
-        perform_site, 5, PAGE_EXECUTE_READWRITE,
-        &perform_old_protection) != 0;
-    if (!create_protected || !perform_protected) {
+    const bool perform_page_protected = VirtualProtect(
+        perform_site, perform_page_span, PAGE_EXECUTE_READWRITE,
+        &perform_page_old_protection) != 0;
+    if (!create_protected || !perform_page_protected) {
         DWORD ignored = 0;
         if (create_protected) {
-            VirtualProtect(create_site, 5, create_old_protection, &ignored);
-        }
-        if (perform_protected) {
             VirtualProtect(
-                perform_site, 5, perform_old_protection, &ignored);
+                create_site, 5, create_old_protection, &ignored);
+        }
+        if (perform_page_protected) {
+            VirtualProtect(
+                perform_site, perform_page_span,
+                perform_page_old_protection, &ignored);
         }
         resume_suspended_process_threads(suspended_threads);
-        VirtualFree(create_relay, 0, MEM_RELEASE);
-        VirtualFree(perform_relay, 0, MEM_RELEASE);
+        free_relays();
         boot_log_line(
-            "legacy-Nadine Mazur authored-pair repair SKIPPED (protect)");
+            "legacy-Nadine Mazur authored-pair preservation SKIPPED (protect)");
         return false;
     }
 
-    std::memcpy(
-        create_site + 1, &create_new_displacement,
-        sizeof(create_new_displacement));
-    std::memcpy(
-        perform_site + 1, &perform_new_displacement,
-        sizeof(perform_new_displacement));
-    FlushInstructionCache(GetCurrentProcess(), create_site, 5);
-    FlushInstructionCache(GetCurrentProcess(), perform_site, 5);
-    std::int32_t create_readback = 0;
-    std::int32_t perform_readback = 0;
-    std::memcpy(&create_readback, create_site + 1, sizeof(create_readback));
-    std::memcpy(
-        &perform_readback, perform_site + 1, sizeof(perform_readback));
-    bool installed = create_site[0] == 0xE8 &&
-        perform_site[0] == 0xE8 &&
-        create_readback == create_new_displacement &&
-        perform_readback == perform_new_displacement;
+    for (const auto& site : sites) {
+        std::memcpy(site.address, site.patch.data(), site.size);
+        FlushInstructionCache(GetCurrentProcess(), site.address, site.size);
+    }
+    const auto all_match = [&](bool patch) {
+        for (const auto& site : sites) {
+            const auto& expected = patch ? site.patch : site.stock;
+            if (std::memcmp(
+                    site.address, expected.data(), site.size) != 0) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    bool installed = all_match(true);
     bool rollback_verified = false;
     if (!installed) {
-        std::memcpy(
-            create_site + 1, &create_old_displacement,
-            sizeof(create_old_displacement));
-        std::memcpy(
-            perform_site + 1, &perform_old_displacement,
-            sizeof(perform_old_displacement));
-        FlushInstructionCache(GetCurrentProcess(), create_site, 5);
-        FlushInstructionCache(GetCurrentProcess(), perform_site, 5);
-        std::memcpy(
-            &create_readback, create_site + 1, sizeof(create_readback));
-        std::memcpy(
-            &perform_readback, perform_site + 1,
-            sizeof(perform_readback));
-        rollback_verified = create_site[0] == 0xE8 &&
-            perform_site[0] == 0xE8 &&
-            create_readback == create_old_displacement &&
-            perform_readback == perform_old_displacement;
+        for (const auto& site : sites) {
+            std::memcpy(site.address, site.stock.data(), site.size);
+            FlushInstructionCache(GetCurrentProcess(), site.address, site.size);
+        }
+        rollback_verified = all_match(false);
     }
 
     DWORD ignored = 0;
     const bool create_restored = VirtualProtect(
         create_site, 5, create_old_protection, &ignored) != 0;
-    const bool perform_restored = VirtualProtect(
-        perform_site, 5, perform_old_protection, &ignored) != 0;
-    if (installed && (!create_restored || !perform_restored)) {
-        // A protection-restore failure must not leave an armed mutation. Try
-        // to reopen both sites, restore both stock displacements, and verify
-        // while every other process thread is still suspended.
+    const bool perform_page_restored = VirtualProtect(
+        perform_site, perform_page_span, perform_page_old_protection,
+        &ignored) != 0;
+    const bool protections_restored =
+        create_restored && perform_page_restored;
+
+    if (installed && !protections_restored) {
+        // Never publish an armed mutation on a page whose protection could not
+        // be restored. Reopen all three exact sites, roll every byte back and
+        // verify while every other process thread remains suspended.
         DWORD create_retry_old = 0;
         DWORD perform_retry_old = 0;
         const bool create_reopened = VirtualProtect(
             create_site, 5, PAGE_EXECUTE_READWRITE,
             &create_retry_old) != 0;
-        const bool perform_reopened = VirtualProtect(
-            perform_site, 5, PAGE_EXECUTE_READWRITE,
+        const bool perform_page_reopened = VirtualProtect(
+            perform_site, perform_page_span, PAGE_EXECUTE_READWRITE,
             &perform_retry_old) != 0;
-        if (create_reopened && perform_reopened) {
-            std::memcpy(
-                create_site + 1, &create_old_displacement,
-                sizeof(create_old_displacement));
-            std::memcpy(
-                perform_site + 1, &perform_old_displacement,
-                sizeof(perform_old_displacement));
-            FlushInstructionCache(GetCurrentProcess(), create_site, 5);
-            FlushInstructionCache(GetCurrentProcess(), perform_site, 5);
-            std::memcpy(
-                &create_readback, create_site + 1,
-                sizeof(create_readback));
-            std::memcpy(
-                &perform_readback, perform_site + 1,
-                sizeof(perform_readback));
-            rollback_verified = create_site[0] == 0xE8 &&
-                perform_site[0] == 0xE8 &&
-                create_readback == create_old_displacement &&
-                perform_readback == perform_old_displacement;
+        const bool reopened_all =
+            create_reopened && perform_page_reopened;
+        if (reopened_all) {
+            for (const auto& site : sites) {
+                std::memcpy(site.address, site.stock.data(), site.size);
+                FlushInstructionCache(
+                    GetCurrentProcess(), site.address, site.size);
+            }
+            rollback_verified = all_match(false);
             VirtualProtect(
                 create_site, 5, create_old_protection, &ignored);
             VirtualProtect(
-                perform_site, 5, perform_old_protection, &ignored);
+                perform_site, perform_page_span,
+                perform_page_old_protection, &ignored);
+        } else {
+            if (create_reopened) {
+                VirtualProtect(
+                    create_site, 5, create_old_protection, &ignored);
+            }
+            if (perform_page_reopened) {
+                VirtualProtect(
+                    perform_site, perform_page_span,
+                    perform_page_old_protection, &ignored);
+            }
         }
         installed = false;
     }
 
-    if (installed && create_restored && perform_restored) {
+    const bool ready = installed && protections_restored;
+    if (ready) {
         g_legacy_nadine_mazur_authored_pair_ready.store(
             true, std::memory_order_release);
     }
     resume_suspended_process_threads(suspended_threads);
 
     if (!installed && rollback_verified) {
-        VirtualFree(create_relay, 0, MEM_RELEASE);
-        VirtualFree(perform_relay, 0, MEM_RELEASE);
+        free_relays();
     }
     boot_log_line(
-        installed && create_restored && perform_restored
-            ? "legacy-Nadine Mazur authored-pair repair READY (exact E8 relays)"
+        ready
+            ? "legacy-Nadine Mazur authored-pair preservation READY (three exact callsite relays)"
             : (rollback_verified
-                   ? "legacy-Nadine Mazur authored-pair repair SKIPPED (verified rollback)"
-                   : "legacy-Nadine Mazur authored-pair repair PARTIAL (pass-through; relays retained)"));
-    return installed && create_restored && perform_restored;
+                   ? "legacy-Nadine Mazur authored-pair preservation SKIPPED (verified rollback)"
+                   : "legacy-Nadine Mazur authored-pair preservation PARTIAL (pass-through; relays retained)"));
+    return ready;
 }
-
 void log_idle_arm_pose_source_admission(
     void* player, const IdleArmPoseAdmissionDiagnostic& diagnostic) {
     if constexpr (!kEnableLegacyNadineIdleArmPoseAdmissionCensus) {
@@ -60437,7 +60696,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20adq-safe "
+        "TLL co-op runtime init 2026-08-20adr "
         "(runtime-rejected Mazur grip experiments disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
