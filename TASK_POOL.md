@@ -4975,6 +4975,13 @@ custom-pair hypothesis.  Both markers plus the same arm-out/twitch rejects
 pair-before-stock-Feather sufficiency and moves the frontier downstream.  No
 marker is packaging/admission; any crash rejects this relay/memmove package.
 
+`adq` is runtime-rejected as a pre-postblend repair.  PID 14424 emitted READY
+and the exact `56C57AD2 + 283966ED`, lane-5, weights-1/1 marker, while both
+processes stayed responsive, but Nadine still held the Mazur one-handed with
+the other arm away.  Disable the flag in `adq-safe`.  The next P0 is to close a
+post-Player-`+0x408`, final-Async command boundary with exact list ownership;
+do not retry a Perform donor, Feather bypass, or function-entry detour.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

@@ -25266,3 +25266,30 @@ predicts both markers but the same arm-out/broken hold, possibly with twitch.
 No READY marker or no injection marker is packaging/admission and must not be
 judged from pixels.  A crash rejects the callsite/memmove package immediately.
 This is the sole grip/arm-pose mutation enabled for `adq`.
+
+### 2026-08-20 RUNTIME REJECTED (`adq` -> safe disabled build): exact pair before stock postblend is insufficient
+
+The autonomous two-copy exam reached every required packaging boundary without
+a crash.  Role-B PID 14424 logged the exact READY marker at line 86627 and the
+exact mutation at line 86726:
+`NADINE-MAZUR-AUTHORED-PAIR injected stage=perform hands=56C57AD2
+arms=283966ED group=0 lane=5 weights=1/1`.  Both processes remained responsive
+through the normal delayed Holster window.
+
+The visual prediction failed.  Nadine still held the Mazur in one hand while
+the other arm remained lowered/away from the rifle; the result persisted beyond
+the usual initial-good interval.  This is not an admission or relay failure:
+the complete authored complementary pair was evaluated in the exact Perform
+producer.  It runtime-rejects `H-authored-pair-expired` as a sufficient
+standalone repair and selects the combined alternatives: stock Player
+postblend/WeaponIK or a later Async writer overwrites the pair, or the initial
+visually correct interval owns additional request-time state not present in the
+two clip transforms alone.
+
+The useful negative is sharper than `adm`: neither a generic full-arm Draw pose
+nor the exact Mazur custom pair survives to a correct steady hold when inserted
+before stock Player postblend.  The next admissible boundary must therefore be
+after Player `+0x408` and must prove the final Async command/list ownership; it
+must not re-enable Feather suppression or any function-entry detour.  The
+`adq-safe` build disables the authored-pair flag, so its two E8 relays are not
+installed.  All grip/arm-pose experiments are again off by default.

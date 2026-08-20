@@ -2466,8 +2466,10 @@ constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
 // and carry-fatigue-walk-arms owns 21..28.  The stock custom root combines the
 // disjoint masks, so overlaying each one-sample clip at weight 1 is output-
 // equivalent while preserving the existing body pose and stock Feather pass.
-// Use only exact E8 callsite relays; the rejected ado entry detours stay off.
-constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = true;
+// Build adq reached this exact pair through the two callsites, but the visible
+// grip remained one-handed. Keep the bounded implementation for provenance;
+// do not leave a runtime-rejected pose mutation installed in production.
+constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 static_assert(
@@ -60435,8 +60437,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20adp "
-        "(crashing Mazur grip experiment disabled)");
+        "TLL co-op runtime init 2026-08-20adq-safe "
+        "(runtime-rejected Mazur grip experiments disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
