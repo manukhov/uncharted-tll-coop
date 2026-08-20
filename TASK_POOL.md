@@ -5003,20 +5003,27 @@ The later `ads` side-by-side image refines the result: the pose is stable, but i
 is a diagonal low carry rather than Chloe's horizontal chest/shoulder hold.
 Keep the postblend preservation boundary; replace only its steady content.
 
-- [ ] Runtime-confirm `adt`, the shipped Mazur high-carry content exam.  `ads`
-      reached only `source=steady-overlay` on role-B PID 16592 and the image
-      proves that `56C57AD2 carry-peek-hands + 283966ED
-      carry-fatigue-walk-arms` produces the wrong diagonal low carry.  Use the
-      exact companion pair `F4B56F62 basic-hands + 5676695B carry-high-arms`:
-      both are one-sample Player clips, masks remain complementary 29--32 and
-      21--28, and raw decoding changes the left hand-prop by 146.6 degrees while
-      preserving the right endpoint.  Require READY, exact high-pair injection
-      and postblend restore.  Success is a horizontal shoulder-height rifle with
-      left hand under the fore-end and stable two-hand hold.  Both markers plus
-      the same low carry reject this pair and forbid another clip guess.  The
-      native `11EE475B` branch remains stock/preserved when present, but its
-      smoothness is not judged without its own marker.  No in-game input may be
-      sent by the agent; the user performs the visual test.
+- [x] Runtime-reject `adt` high-carry content.  Role-B PID 17648 emitted the
+      exact `F4B56F62 + 5676695B` injection and postblend restore, while role A
+      remained stock and both processes stayed responsive.  The user reported
+      that the resulting hold was entirely unlike Chloe.  There were zero
+      transition markers.  Do not try another named clip.
+
+- [ ] Runtime-confirm `adu`, the no-clip stock-pose preservation exam.  The
+      steady tree already produces a Chloe-authored Base `5F913F74` plus Hands
+      `7D11D4FD` bundle and stock retargets it into C39 before Player postblend.
+      Re-resolve and require that exact live `7D11D4FD` Hands tuple at
+      admission, capture and restore; reject the `11EE475B` transition so equip
+      remains entirely stock.
+      Snapshot C39 local rows 19--30 only after Perform returns, run stock
+      `Player +0x408`, then restore the same rows before Async cmd14 imports
+      them.  Require READY plus paired `NADINE-MAZUR-STOCK-POSE captured
+      stage=perform-return source=stock-steady` and `restored ...
+      source=stock-steady`.  Success requires the same horizontal shoulder-height
+      rifle and left fore-end support as Chloe.  Both markers plus another pose
+      reject pre-postblend sufficiency; missing markers are packaging.  The
+      agent launches/injects immediately after a fresh successful build but
+      never sends gameplay input; the user performs the visual test.
 
 ## Rule
 

@@ -25479,3 +25479,66 @@ the same diagonal low carry reject this pair and forbid another clip guess;
 missing markers are packaging/admission.  Transition smoothness is not an
 outcome unless the separate `source=stock-transition` marker appears.  The
 agent does not send any game input; the user alone performs the visual action.
+
+### 2026-08-20 RUNTIME REJECTED (`adt`) / STATIC IMPLEMENTED (`adu`): preserve the stock Chloe-authored pre-postblend bundle
+
+The `adt` exam reached the complete written mutation boundary; this was not a
+packaging or admission failure.  Role-B PID `17648` logged
+`NADINE-MAZUR-AUTHORED-PAIR injected stage=perform hands=0xf4b56f62
+arms=0x5676695b group=0 lane=5 weights=1/1 source=steady-overlay`, immediately
+followed by the exact postblend restore of C39 rows 19--30.  Role A emitted no
+mutation marker, as required.  Both processes remained responsive and the log
+contains no exception/fatal row.  The user nevertheless rejected the visual
+result as entirely different from Chloe's hold.  There were zero
+`source=stock-transition` rows, so this run says nothing about transition
+smoothness.  `H-high-carry-content` is RUNTIME REJECTED and another named clip
+must not be guessed.
+
+The next exam removes clip substitution altogether.  Three independent
+evidence classes identify a narrower stock boundary.  First, the ordinary
+steady Player tree materializes a Chloe-authored bundle before local Player
+postblend: Base state `41C84248` reaches the broad `5F913F74 clo-uneasy-idle`
+body/arm content, Hands layer `2EAA36BC` reaches
+`7D11D4FD clo-uneasy-idle-hands`, and steady WeaponPartial
+`E2B990B9/3889CC0E` is empty.  The direct node-local resolve/cmd6/cmd7 chain is
+`0x14191801C -> 0x1419182E0 -> 0x14191E5F0/0x14189EC8C`, not the rejected outer
+resolver tuple alone.  Second, shipped retarget row 157 maps that Chloe bundle
+through the shared map at `skel-retargets.bin+0x2720` into legacy-Nadine C39;
+the semantic arm/palm/prop chains land in rows 21--30, and preserving rows
+19--30 also includes both clavicles.  Third, the scheduler gives an exact
+synchronous handoff: Create `0x141A915FF`, Perform `0x141A92905`, then the sole
+Player `+0x408` call `0x141A929A1`, followed by final Async group-zero cmd14
+import.  Independent runtime evidence measured stock WeaponIK/postblend
+changing C39 rows 19--26, while `adr` proved that restoring these same local
+rows after `+0x408` reaches the visible final pose.
+
+Build `adu` therefore makes no animation command or clip edit.  Its exact
+Create relay only proves that the admitted mode-1/group-zero stock producer ran.
+After stock Perform returns, it snapshots the engine-produced 576-byte C39
+local-pose range 19--30, calls the unchanged Player `+0x408` slot exactly once,
+then restores the same bytes before Async imports them.  The ticket is
+same-thread and keyed by Player/Fg/weapon/local-pose/skeleton plus both runtime
+generations.  Admission, capture and restore each independently re-resolve the
+single live Hands root and require the complete campaign-Chloe tuple ending in
+`7D11D4FD`; any direct-Player or torn/replaced root fails closed.  The custom
+`11EE475B` instance must be absent, so every Draw/transition frame remains
+entirely stock.  All existing role-B/local-Nadine/Mazur/current-weapon,
+WeaponOut/no-ADS/no-motion/no-cover/no-grenade guards remain.  P99, role A,
+Draw, ADS, reload, movement, other weapons and every stock controller remain
+stock.  The three relays are installed atomically under suspended threads with
+readback and verified rollback.
+
+This is an earned discriminator, not yet a claim that pre-postblend Nadine is
+pixel-identical to Chloe after Chloe's own IK.  `H-postblend-corrupts-Chloe-
+bundle` predicts the boot marker `Mazur stock-pose preservation READY`, then a
+paired role-B `NADINE-MAZUR-STOCK-POSE captured stage=perform-return
+source=stock-steady rows=19..30` and `restored stage=postblend rows=19..30`.
+Only if those markers accompany Chloe's horizontal chest/shoulder rifle, right
+stock seated at the shoulder and left hand under the fore-end is the steady
+repair confirmed.  Both markers plus a different hold reject stock
+pre-postblend sufficiency and select Chloe-specific postblend/final-palette
+ownership.  A break or twitch after both markers selects a later writer.
+Missing READY/capture/restore is packaging or scope, not a visual result.
+Transition quality is not part of this test because transition admission is
+compile-time fail-closed.  The agent may launch and inject this completed exam
+but sends no gameplay input; the user alone controls both game instances.

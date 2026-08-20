@@ -2478,7 +2478,7 @@ static_assert(
     !(kEnableLegacyNadineMazurAuthoredPairRepair &&
       (kEnableLegacyNadineMazurDrawEndpointRepair ||
        kEnableLegacyNadineWeaponIkFeatherSuppression)),
-    "authored-pair exam must not compose with rejected Draw/Feather hooks");
+    "stock-pose exam must not compose with rejected Draw/Feather hooks");
 // Build ada proved a repeatable first-Draw-good -> steady-broken transition,
 // followed by immediately broken later Draws. The animation layer has exact
 // create-new and loop-current paths while consuming its bounded transition
@@ -47708,34 +47708,20 @@ bool install_legacy_nadine_mazur_steady_hands_npc_repair() {
     return installed;
 }
 
-// Exact, crash-contained replacement for the rejected Draw/Feather package.
-// The shipped transition root combines 56C57AD2 carry-peek-hands with
-// 283966ED carry-fatigue-walk-arms. Preserve that root only while its exact
-// 11EE475B instance is alive. In steady WeaponOut, use the separate shipped
-// Mazur overlay pair F4B56F62 basic-hands + 5676695B carry-high-arms. Their
-// masks are complementary Player rows 29..32 and 21..28, so applying both at
-// full weight changes only the complete two-arm/hand partial and keeps body,
-// PlayerWeaponIK/Feather lifecycle and every non-Mazur state stock.
+// Preserve the exact stock pose produced for legacy Nadine before Player
+// postblend. The previous low/high Mazur clip overlays both proved that this
+// handoff is visible, but neither reproduced Chloe's steady hold. This path no
+// longer selects or injects an animation clip: it snapshots the engine's own
+// complete C39 arm/hand result after Perform and restores it after +0x408.
 constexpr std::uint32_t kMazurTransitionHandsClipId = 0x56C57AD2u;
 constexpr std::uint32_t kMazurTransitionArmsClipId = 0x283966EDu;
-constexpr std::uint32_t kMazurSteadyHighHandsClipId = 0xF4B56F62u;
-constexpr std::uint32_t kMazurSteadyHighArmsClipId = 0x5676695Bu;
 constexpr std::uint32_t kMazurAuthoredPairStateId = 0x11EE475Bu;
-constexpr std::uint16_t kMazurAuthoredPairFrameCount = 1u;
 
 enum class LegacyNadineMazurAuthoredPairAdmission : std::uint8_t {
     kPrerequisite = 0,
     kOwner = 1,
     kClips = 2,
     kAdmitted = 3,
-};
-
-enum class LegacyNadineMazurAuthoredPairInjection : std::uint8_t {
-    kIgnored = 0,
-    kInjected = 1,
-    kRecord = 2,
-    kGrammar = 3,
-    kCapacity = 4,
 };
 
 struct LegacyNadineMazurAuthoredPairEpoch {
@@ -47745,12 +47731,13 @@ struct LegacyNadineMazurAuthoredPairEpoch {
     void* weapon = nullptr;
     void* local_pose = nullptr;
     void* target_skeleton = nullptr;
-    void* hands_clip = nullptr;
-    void* arms_clip = nullptr;
+    void* steady_hands_clip = nullptr;
+    void* steady_anim_control = nullptr;
     void* weapon_partial_layer = nullptr;
     void* custom_pair_instance = nullptr;
     std::uint32_t player_runtime_id = 0;
     std::uint32_t weapon_runtime_id = 0;
+    std::uint32_t steady_hands_resolved_id = 0;
     std::uint32_t blend_weight_bits = 0x3F800000u;
     bool transition_weighted = false;
 };
@@ -47767,10 +47754,13 @@ struct LegacyNadineMazurAuthoredPairPostBlendTicket {
     void* weapon = nullptr;
     void* local_pose = nullptr;
     void* target_skeleton = nullptr;
+    void* steady_hands_clip = nullptr;
+    void* steady_anim_control = nullptr;
     void* weapon_partial_layer = nullptr;
     void* custom_pair_instance = nullptr;
     std::uint32_t player_runtime_id = 0;
     std::uint32_t weapon_runtime_id = 0;
+    std::uint32_t steady_hands_resolved_id = 0;
     std::uint32_t blend_weight_bits = 0x3F800000u;
     bool transition_weighted = false;
     std::array<std::byte, kMazurAuthoredPairPoseBytes> pose{};
@@ -47790,7 +47780,7 @@ LegacyNadineMazurAuthoredPairPerformFunction
 std::atomic<bool> g_legacy_nadine_mazur_authored_pair_ready{false};
 thread_local LegacyNadineMazurAuthoredPairEpoch
     g_legacy_nadine_mazur_authored_pair_epoch{};
-thread_local bool g_legacy_nadine_mazur_authored_pair_injected = false;
+thread_local bool g_legacy_nadine_mazur_stock_pose_source_observed = false;
 thread_local LegacyNadineMazurAuthoredPairPostBlendTicket
     g_legacy_nadine_mazur_authored_pair_postblend_ticket{};
 
@@ -47799,8 +47789,9 @@ thread_local LegacyNadineMazurAuthoredPairPostBlendTicket
 // each newer track is folded over the accumulated pose with the last instance's
 // +0x158 weight. The saved Mazur trace independently observed this exact state
 // progress from near zero to one while the controller was already WeaponOut=2.
-// If 11EE475B is absent (the normal steady s_no-weapon topology), the confirmed
-// steady repair remains a full-weight contributor.
+// The stock-pose exam admits only when 11EE475B is absent. Its traversal here
+// proves that the transient custom root is no longer live; it does not inject
+// or synthesize a replacement weight.
 bool seh_resolve_legacy_nadine_mazur_authored_pair_weight(
     void* player, LegacyNadineMazurAuthoredPairEpoch* epoch) {
     if (player == nullptr || epoch == nullptr ||
@@ -48001,30 +47992,6 @@ seh_select_legacy_nadine_mazur_authored_pair_epoch(
             return LegacyNadineMazurAuthoredPairAdmission::kOwner;
         }
 
-        void* const hands_clip = seh_resolve_exact_animation_clip(
-            kPlayerAnimationDatabaseId, kPlayerAnimationSkeletonId,
-            kMazurSteadyHighHandsClipId);
-        void* const arms_clip = seh_resolve_exact_animation_clip(
-            kPlayerAnimationDatabaseId, kPlayerAnimationSkeletonId,
-            kMazurSteadyHighArmsClipId);
-        if (hands_clip == nullptr || arms_clip == nullptr ||
-            hands_clip == arms_clip) {
-            return LegacyNadineMazurAuthoredPairAdmission::kClips;
-        }
-        auto* const hands_data = *reinterpret_cast<std::byte* const*>(
-            static_cast<std::byte*>(hands_clip) + 0x28);
-        auto* const arms_data = *reinterpret_cast<std::byte* const*>(
-            static_cast<std::byte*>(arms_clip) + 0x28);
-        if (hands_data == nullptr || arms_data == nullptr ||
-            readable_bytes(hands_data) < 0x24 ||
-            readable_bytes(arms_data) < 0x24 ||
-            *reinterpret_cast<const std::uint16_t*>(hands_data + 0x22) !=
-                kMazurAuthoredPairFrameCount ||
-            *reinterpret_cast<const std::uint16_t*>(arms_data + 0x22) !=
-                kMazurAuthoredPairFrameCount) {
-            return LegacyNadineMazurAuthoredPairAdmission::kClips;
-        }
-
         output->valid = true;
         output->player = player;
         output->fg_anim_data = expected_fg;
@@ -48033,8 +48000,6 @@ seh_select_legacy_nadine_mazur_authored_pair_epoch(
         output->target_skeleton = *reinterpret_cast<void* const*>(
             static_cast<const std::byte*>(expected_fg) +
             kFgAnimDataSkeletonOffset);
-        output->hands_clip = hands_clip;
-        output->arms_clip = arms_clip;
         output->player_runtime_id =
             *reinterpret_cast<const std::uint32_t*>(
                 static_cast<const std::byte*>(player) +
@@ -48048,6 +48013,25 @@ seh_select_legacy_nadine_mazur_authored_pair_epoch(
             *output = {};
             return LegacyNadineMazurAuthoredPairAdmission::kOwner;
         }
+        // This exam is steady-only. Keep the native 11EE475B transition
+        // completely stock, and preserve only the already proven campaign-
+        // Chloe materialization of the canonical Hands root.
+        void* steady_hands_clip = nullptr;
+        void* steady_anim_control = nullptr;
+        std::uint32_t steady_hands_resolved_id = 0;
+        if (output->custom_pair_instance != nullptr ||
+            !seh_resolve_exact_steady_idle_hands_root(
+                player, &steady_hands_clip, &steady_anim_control,
+                &steady_hands_resolved_id) ||
+            steady_hands_clip == nullptr || steady_anim_control == nullptr ||
+            steady_hands_resolved_id !=
+                kLegacyNadineChloeIdleHandsClipId) {
+            *output = {};
+            return LegacyNadineMazurAuthoredPairAdmission::kOwner;
+        }
+        output->steady_hands_clip = steady_hands_clip;
+        output->steady_anim_control = steady_anim_control;
+        output->steady_hands_resolved_id = steady_hands_resolved_id;
         return LegacyNadineMazurAuthoredPairAdmission::kAdmitted;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *output = {};
@@ -48096,16 +48080,20 @@ bool seh_capture_legacy_nadine_mazur_authored_pair_postblend_ticket(
                 kMazurAuthoredPairPoseBytes) {
             return false;
         }
-        if (epoch.custom_pair_instance != nullptr) {
-            LegacyNadineMazurAuthoredPairEpoch current{};
-            if (!seh_resolve_legacy_nadine_mazur_authored_pair_weight(
-                    epoch.player, &current) ||
-                current.weapon_partial_layer != epoch.weapon_partial_layer ||
-                current.custom_pair_instance != epoch.custom_pair_instance ||
-                current.blend_weight_bits != epoch.blend_weight_bits ||
-                current.transition_weighted != epoch.transition_weighted) {
-                return false;
-            }
+        void* steady_hands_clip = nullptr;
+        void* steady_anim_control = nullptr;
+        std::uint32_t steady_hands_resolved_id = 0;
+        if (epoch.custom_pair_instance != nullptr ||
+            !seh_resolve_exact_steady_idle_hands_root(
+                epoch.player, &steady_hands_clip, &steady_anim_control,
+                &steady_hands_resolved_id) ||
+            steady_hands_clip != epoch.steady_hands_clip ||
+            steady_anim_control != epoch.steady_anim_control ||
+            steady_hands_resolved_id !=
+                epoch.steady_hands_resolved_id ||
+            steady_hands_resolved_id !=
+                kLegacyNadineChloeIdleHandsClipId) {
+            return false;
         }
         output->valid = true;
         output->player = epoch.player;
@@ -48113,10 +48101,14 @@ bool seh_capture_legacy_nadine_mazur_authored_pair_postblend_ticket(
         output->weapon = epoch.weapon;
         output->local_pose = epoch.local_pose;
         output->target_skeleton = epoch.target_skeleton;
+        output->steady_hands_clip = epoch.steady_hands_clip;
+        output->steady_anim_control = epoch.steady_anim_control;
         output->weapon_partial_layer = epoch.weapon_partial_layer;
         output->custom_pair_instance = epoch.custom_pair_instance;
         output->player_runtime_id = epoch.player_runtime_id;
         output->weapon_runtime_id = epoch.weapon_runtime_id;
+        output->steady_hands_resolved_id =
+            epoch.steady_hands_resolved_id;
         output->blend_weight_bits = epoch.blend_weight_bits;
         output->transition_weighted = epoch.transition_weighted;
         std::memcpy(
@@ -48173,16 +48165,20 @@ bool seh_restore_legacy_nadine_mazur_authored_pair_after_postblend(
                 ticket.pose.size()) {
             return false;
         }
-        if (ticket.custom_pair_instance != nullptr) {
-            LegacyNadineMazurAuthoredPairEpoch current{};
-            if (!seh_resolve_legacy_nadine_mazur_authored_pair_weight(
-                    player, &current) ||
-                current.weapon_partial_layer != ticket.weapon_partial_layer ||
-                current.custom_pair_instance != ticket.custom_pair_instance ||
-                current.blend_weight_bits != ticket.blend_weight_bits ||
-                current.transition_weighted != ticket.transition_weighted) {
-                return false;
-            }
+        void* steady_hands_clip = nullptr;
+        void* steady_anim_control = nullptr;
+        std::uint32_t steady_hands_resolved_id = 0;
+        if (ticket.custom_pair_instance != nullptr ||
+            !seh_resolve_exact_steady_idle_hands_root(
+                player, &steady_hands_clip, &steady_anim_control,
+                &steady_hands_resolved_id) ||
+            steady_hands_clip != ticket.steady_hands_clip ||
+            steady_anim_control != ticket.steady_anim_control ||
+            steady_hands_resolved_id !=
+                ticket.steady_hands_resolved_id ||
+            steady_hands_resolved_id !=
+                kLegacyNadineChloeIdleHandsClipId) {
+            return false;
         }
         std::memcpy(
             static_cast<std::byte*>(ticket.local_pose) +
@@ -48191,172 +48187,6 @@ bool seh_restore_legacy_nadine_mazur_authored_pair_after_postblend(
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
-    }
-}
-
-LegacyNadineMazurAuthoredPairInjection
-seh_inject_legacy_nadine_mazur_authored_pair(
-    void* create_context, void* command_record, std::uint32_t group,
-    const LegacyNadineMazurAuthoredPairEpoch& epoch,
-    std::uint32_t* scratch_lane_out) {
-    if (scratch_lane_out != nullptr) {
-        *scratch_lane_out = 0;
-    }
-    __try {
-        if (!epoch.valid || create_context == nullptr ||
-            command_record == nullptr || group != 0 ||
-            readable_bytes(create_context) < 0x18 ||
-            *reinterpret_cast<void* const*>(create_context) !=
-                epoch.fg_anim_data ||
-            *reinterpret_cast<void* const*>(
-                static_cast<const std::byte*>(create_context) + 0x08) !=
-                epoch.target_skeleton ||
-            *reinterpret_cast<const std::uint8_t*>(
-                static_cast<const std::byte*>(create_context) + 0x10) != 1 ||
-            *reinterpret_cast<const std::uint8_t*>(
-                static_cast<const std::byte*>(create_context) + 0x11) != 3 ||
-            readable_bytes(command_record) < 0x20) {
-            return LegacyNadineMazurAuthoredPairInjection::kIgnored;
-        }
-
-        auto* const record = static_cast<std::byte*>(command_record);
-        auto* const words = *reinterpret_cast<std::uint32_t**>(record);
-        const std::uint32_t capacity_words =
-            *reinterpret_cast<const std::uint32_t*>(record + 0x08);
-        const std::uint32_t word_count =
-            *reinterpret_cast<const std::uint32_t*>(record + 0x0C);
-        const std::uint32_t pending_count =
-            *reinterpret_cast<const std::uint32_t*>(record + 0x10);
-        void* const pending_header =
-            *reinterpret_cast<void* const*>(record + 0x18);
-        constexpr std::uint32_t kInsertedWords =
-            2u * (kAnimCommandWordCountAnimation +
-                  kAnimCommandWordCountBlend);
-        if (words == nullptr || word_count == 0 ||
-            (capacity_words != 1024 && capacity_words != 4096) ||
-            word_count > capacity_words || pending_count != 0 ||
-            pending_header != nullptr ||
-            capacity_words - word_count < kInsertedWords ||
-            readable_bytes(words) <
-                static_cast<std::size_t>(word_count + kInsertedWords) *
-                    sizeof(std::uint32_t)) {
-            return LegacyNadineMazurAuthoredPairInjection::kRecord;
-        }
-
-        std::uint32_t cursor = 0;
-        std::uint32_t object_begin_count = 0;
-        std::uint32_t control_begin_count = 0;
-        std::uint32_t opener_count = 0;
-        std::uint32_t opener_word = UINT32_MAX;
-        std::uint32_t finalizer_count = 0;
-        std::uint32_t finalizer_word = UINT32_MAX;
-        while (cursor < word_count) {
-            const std::uint32_t header = words[cursor];
-            const std::uint32_t opcode = header & 0xFFFFu;
-            const std::uint32_t command_words = header >> 16;
-            if (command_words == 0 || command_words > word_count - cursor) {
-                return LegacyNadineMazurAuthoredPairInjection::kGrammar;
-            }
-            if (opcode == kAnimCommandBeginObject) {
-                if (command_words != 2 || cursor != 0) {
-                    return LegacyNadineMazurAuthoredPairInjection::kGrammar;
-                }
-                ++object_begin_count;
-            } else if (opcode == kAnimCommandBeginControl) {
-                if (command_words != 2 || cursor != 2) {
-                    return LegacyNadineMazurAuthoredPairInjection::kGrammar;
-                }
-                ++control_begin_count;
-            } else if (opcode == kAnimCommandAllocateBlock) {
-                if (command_words != 4 || cursor != 4) {
-                    return LegacyNadineMazurAuthoredPairInjection::kGrammar;
-                }
-                ++opener_count;
-                opener_word = cursor;
-            } else if (opcode == kAnimCommandFinalizeBlock) {
-                if (command_words != kAnimCommandWordCountFinalizeBlock) {
-                    return LegacyNadineMazurAuthoredPairInjection::kGrammar;
-                }
-                ++finalizer_count;
-                finalizer_word = cursor;
-            }
-            cursor += command_words;
-        }
-        if (cursor != word_count || object_begin_count != 1 ||
-            control_begin_count != 1 || opener_count != 1 ||
-            opener_word == UINT32_MAX || finalizer_count != 1 ||
-            finalizer_word == UINT32_MAX) {
-            return LegacyNadineMazurAuthoredPairInjection::kGrammar;
-        }
-
-        std::uint32_t suffix =
-            finalizer_word + kAnimCommandWordCountFinalizeBlock;
-        const auto consume_suffix = [&](std::uint32_t opcode,
-                                        std::uint32_t command_words) {
-            if (suffix >= word_count ||
-                words[suffix] != ((command_words << 16) | opcode) ||
-                command_words > word_count - suffix) {
-                return false;
-            }
-            suffix += command_words;
-            return true;
-        };
-        if (!consume_suffix(4u, 2u) || !consume_suffix(15u, 4u) ||
-            !consume_suffix(16u, 2u) || !consume_suffix(17u, 4u)) {
-            return LegacyNadineMazurAuthoredPairInjection::kGrammar;
-        }
-        const std::uint32_t conversion_word = suffix;
-        if (!consume_suffix(24u, 6u) ||
-            words[conversion_word + 1] != kAnimPostPoseJointConversionId ||
-            !consume_suffix(27u, 6u) || !consume_suffix(5u, 2u) ||
-            suffix != word_count) {
-            return LegacyNadineMazurAuthoredPairInjection::kGrammar;
-        }
-
-        const std::uint32_t old_lane_count = words[opener_word + 2];
-        if (old_lane_count == 0 ||
-            old_lane_count >= kAnimWorkBufferLaneCapacity) {
-            return LegacyNadineMazurAuthoredPairInjection::kCapacity;
-        }
-        const std::uint32_t scratch_lane = old_lane_count;
-        const std::uint32_t suffix_words = word_count - finalizer_word;
-        std::memmove(
-            words + finalizer_word + kInsertedWords,
-            words + finalizer_word,
-            static_cast<std::size_t>(suffix_words) * sizeof(std::uint32_t));
-
-        auto emit_clip_overlay = [&](std::uint32_t*& output,
-                                     void* clip) {
-            output[0] =
-                (kAnimCommandWordCountAnimation << 16) |
-                kAnimCommandAnimation;
-            output[1] = 0;
-            std::memcpy(output + 2, &clip, sizeof(clip));
-            output[4] = scratch_lane;
-            output[5] = 0;
-            output += kAnimCommandWordCountAnimation;
-            output[0] =
-                (kAnimCommandWordCountBlend << 16) | kAnimCommandBlend;
-            output[1] = 0;
-            output[2] = scratch_lane;
-            output[3] = 0;
-            output[4] = 1;
-            output[5] = 0x3F800000u;
-            output += kAnimCommandWordCountBlend;
-        };
-        std::uint32_t* output = words + finalizer_word;
-        emit_clip_overlay(output, epoch.hands_clip);
-        emit_clip_overlay(output, epoch.arms_clip);
-
-        words[opener_word + 2] = scratch_lane + 1;
-        *reinterpret_cast<std::uint32_t*>(record + 0x0C) =
-            word_count + kInsertedWords;
-        if (scratch_lane_out != nullptr) {
-            *scratch_lane_out = scratch_lane;
-        }
-        return LegacyNadineMazurAuthoredPairInjection::kInjected;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return LegacyNadineMazurAuthoredPairInjection::kRecord;
     }
 }
 
@@ -48378,61 +48208,11 @@ hooked_create_anim_cmds_for_legacy_nadine_mazur_authored_pair(
         return result;
     }
 
-    // During the authored custom-state lifetime, stock has already generated
-    // the exact pair and applied its native track fade. Mark that post-Perform
-    // pose for preservation without appending a second weighted copy.
-    if (epoch.custom_pair_instance != nullptr) {
-        if (!seh_matches_legacy_nadine_mazur_authored_pair_create_context(
-                create_context, group, epoch)) {
-            return result;
-        }
-        g_legacy_nadine_mazur_authored_pair_injected = true;
-        static std::atomic<bool> transition_logged{false};
-        if (!transition_logged.exchange(true, std::memory_order_relaxed)) {
-            float blend_weight = 0.0F;
-            std::memcpy(
-                &blend_weight, &epoch.blend_weight_bits,
-                sizeof(blend_weight));
-            std::ostringstream line;
-            line << "NADINE-MAZUR-AUTHORED-PAIR preserved"
-                 << " stage=perform source=stock-transition"
-                 << " state=0x" << std::hex << kMazurAuthoredPairStateId
-                 << std::dec << " group=" << group
-                 << " nativeWeight=" << blend_weight
-                 << " commandWeighted="
-                 << (epoch.transition_weighted ? 1 : 0);
-            boot_log_line(line.str().c_str());
-        }
+    if (!seh_matches_legacy_nadine_mazur_authored_pair_create_context(
+            create_context, group, epoch)) {
         return result;
     }
-
-    std::uint32_t scratch_lane = 0;
-    const auto injection = seh_inject_legacy_nadine_mazur_authored_pair(
-        create_context, command_record, group, epoch, &scratch_lane);
-    if (injection == LegacyNadineMazurAuthoredPairInjection::kInjected) {
-        g_legacy_nadine_mazur_authored_pair_injected = true;
-        static std::atomic<bool> injected_logged{false};
-        if (!injected_logged.exchange(true, std::memory_order_relaxed)) {
-            std::ostringstream line;
-            line << "NADINE-MAZUR-AUTHORED-PAIR injected stage=perform"
-                 << " hands=0x" << std::hex << kMazurSteadyHighHandsClipId
-                 << " arms=0x" << kMazurSteadyHighArmsClipId << std::dec
-                 << " group=" << group << " lane=" << scratch_lane
-                 << " weights=1/1 source=steady-overlay";
-            boot_log_line(line.str().c_str());
-        }
-    } else if (injection != LegacyNadineMazurAuthoredPairInjection::kIgnored) {
-        static std::array<std::atomic<bool>, 5> rejected_logged{};
-        const std::size_t reason = static_cast<std::size_t>(injection);
-        if (reason < rejected_logged.size() &&
-            !rejected_logged[reason].exchange(
-                true, std::memory_order_relaxed)) {
-            std::ostringstream line;
-            line << "NADINE-MAZUR-AUTHORED-PAIR rejected reason="
-                 << reason;
-            boot_log_line(line.str().c_str());
-        }
-    }
+    g_legacy_nadine_mazur_stock_pose_source_observed = true;
     return result;
 }
 
@@ -48446,7 +48226,7 @@ hooked_perform_anim_blend_for_legacy_nadine_mazur_authored_pair(void* job) {
     const LegacyNadineMazurAuthoredPairEpoch previous =
         g_legacy_nadine_mazur_authored_pair_epoch;
     g_legacy_nadine_mazur_authored_pair_epoch = {};
-    g_legacy_nadine_mazur_authored_pair_injected = false;
+    g_legacy_nadine_mazur_stock_pose_source_observed = false;
     g_legacy_nadine_mazur_authored_pair_postblend_ticket = {};
 
     bool exact_local_fg = false;
@@ -48487,19 +48267,31 @@ hooked_perform_anim_blend_for_legacy_nadine_mazur_authored_pair(void* job) {
                 char line[128]{};
                 std::snprintf(
                     line, sizeof(line),
-                    "NADINE-MAZUR-AUTHORED-PAIR admission=%zu", reason);
+                    "NADINE-MAZUR-STOCK-POSE admission=%zu", reason);
                 boot_log_line(line);
             }
         }
     }
 
     original(job);
-    if (g_legacy_nadine_mazur_authored_pair_injected &&
+    if (g_legacy_nadine_mazur_stock_pose_source_observed &&
         g_legacy_nadine_mazur_authored_pair_epoch.valid) {
         LegacyNadineMazurAuthoredPairPostBlendTicket ticket{};
         if (seh_capture_legacy_nadine_mazur_authored_pair_postblend_ticket(
                 g_legacy_nadine_mazur_authored_pair_epoch, &ticket)) {
             g_legacy_nadine_mazur_authored_pair_postblend_ticket = ticket;
+            static std::atomic<bool> captured_logged{false};
+            if (!captured_logged.exchange(
+                    true, std::memory_order_relaxed)) {
+                char line[256]{};
+                std::snprintf(
+                    line, sizeof(line),
+                    "NADINE-MAZUR-STOCK-POSE captured"
+                    " stage=perform-return source=stock-steady"
+                    " hands=0x%08X rows=19..30",
+                    ticket.steady_hands_resolved_id);
+                boot_log_line(line);
+            }
         }
     }
     g_legacy_nadine_mazur_authored_pair_epoch = previous;
@@ -48534,24 +48326,15 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
     if (ticket.valid &&
         seh_restore_legacy_nadine_mazur_authored_pair_after_postblend(
             player, ticket)) {
-        static std::array<std::atomic<bool>, 2> restored_logged{};
-        const bool stock_transition =
-            ticket.custom_pair_instance != nullptr;
-        const std::size_t log_index = stock_transition ? 0 : 1;
-        if (!restored_logged[log_index].exchange(
+        static std::atomic<bool> restored_logged{false};
+        if (!restored_logged.exchange(
                 true, std::memory_order_relaxed)) {
-            float blend_weight = 0.0F;
-            std::memcpy(
-                &blend_weight, &ticket.blend_weight_bits,
-                sizeof(blend_weight));
             char line[256]{};
             std::snprintf(
                 line, sizeof(line),
-                "NADINE-MAZUR-AUTHORED-PAIR restored stage=postblend"
-                " rows=19..30 weight=%.6f source=%s commandWeighted=%u",
-                static_cast<double>(blend_weight),
-                stock_transition ? "stock-transition" : "steady-overlay",
-                ticket.transition_weighted ? 1u : 0u);
+                "NADINE-MAZUR-STOCK-POSE restored stage=postblend"
+                " source=stock-steady hands=0x%08X rows=19..30",
+                ticket.steady_hands_resolved_id);
             boot_log_line(line);
         }
     }
@@ -48610,7 +48393,7 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     if (!preflight) {
         free_relays();
         boot_log_line(
-            "legacy-Nadine Mazur authored-pair preservation SKIPPED (callsite preflight)");
+            "legacy-Nadine Mazur stock-pose preservation SKIPPED (callsite preflight)");
         return false;
     }
 
@@ -48652,7 +48435,7 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     if (!suspend_other_process_threads(suspended_threads)) {
         free_relays();
         boot_log_line(
-            "legacy-Nadine Mazur authored-pair preservation SKIPPED (thread suspend)");
+            "legacy-Nadine Mazur stock-pose preservation SKIPPED (thread suspend)");
         return false;
     }
 
@@ -48683,7 +48466,7 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
         resume_suspended_process_threads(suspended_threads);
         free_relays();
         boot_log_line(
-            "legacy-Nadine Mazur authored-pair preservation SKIPPED (protect)");
+            "legacy-Nadine Mazur stock-pose preservation SKIPPED (protect)");
         return false;
     }
 
@@ -48773,10 +48556,10 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     }
     boot_log_line(
         ready
-            ? "legacy-Nadine Mazur high-carry preservation READY (native transition; three exact callsite relays)"
+            ? "legacy-Nadine Mazur stock-pose preservation READY (three exact callsite relays)"
             : (rollback_verified
-                   ? "legacy-Nadine Mazur authored-pair preservation SKIPPED (verified rollback)"
-                   : "legacy-Nadine Mazur authored-pair preservation PARTIAL (pass-through; relays retained)"));
+                   ? "legacy-Nadine Mazur stock-pose preservation SKIPPED (verified rollback)"
+                   : "legacy-Nadine Mazur stock-pose preservation PARTIAL (pass-through; relays retained)"));
     return ready;
 }
 void log_idle_arm_pose_source_admission(
@@ -60976,8 +60759,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20adt "
-        "(Mazur high-carry pair preservation enabled)");
+        "TLL co-op runtime init 2026-08-20adu "
+        "(Mazur stock pre-postblend pose preservation enabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -61406,7 +61189,7 @@ DWORD WINAPI install_hook(void*) {
             install_legacy_nadine_mazur_authored_pair_repair();
         } else {
             boot_log_line(
-                "legacy-Nadine Mazur authored-pair repair SKIPPED (state net)");
+                "legacy-Nadine Mazur stock-pose repair SKIPPED (state net)");
         }
     }
     if constexpr ((kEnableLegacyNadineIdleArmPoseRoundTrip ||
