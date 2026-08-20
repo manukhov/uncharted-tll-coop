@@ -2509,6 +2509,12 @@ constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
 // Runtime-confirmed 82e7b9e/adr two-hand baseline. Build aep retains it as the
 // exact fail-closed pose under the one-process semantic right-hand reference.
 constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = true;
+// The static Chloe right-hand reference never overlapped the steady authored
+// pair at the earlier Feather callsite (aep). Re-seed the persistent
+// Player+0x4308 JointSets only after the confirmed pair has been restored,
+// solve both arms with stock operators, and let the later Async job consume the
+// resulting local pose.
+constexpr bool kEnableLegacyNadineMazurLateSteadyIkRepair = true;
 // Build aej installed the exact one-process postblend seam but produced no
 // capture/replay marker: the visual result was just the stock broken pose. Keep
 // the unexecuted mutation disabled. The next bounded pass observes the first
@@ -2550,6 +2556,15 @@ static_assert(
     !kEnableLegacyNadineMazurChloeRightHandPropReference ||
         kEnableLegacyNadineMazurAuthoredPairRepair,
     "right-hand-prop reference requires the confirmed authored-pair baseline");
+static_assert(
+    !kEnableLegacyNadineMazurLateSteadyIkRepair ||
+        kEnableLegacyNadineMazurAuthoredPairRepair,
+    "late steady IK requires the confirmed authored-pair baseline");
+static_assert(
+    !kEnableLegacyNadineMazurLateSteadyIkRepair ||
+        (!kEnableLegacyNadineMazurRightHandPropRelay &&
+         !kEnableLegacyNadineMazurChloeRightHandPropReference),
+    "late steady IK must be the only right-hand goal mutation");
 // Build ada proved a repeatable first-Draw-good -> steady-broken transition,
 // followed by immediately broken later Draws. The animation layer has exact
 // create-new and loop-current paths while consuming its bounded transition
@@ -18805,6 +18820,8 @@ constexpr std::array<std::uintptr_t, 4>
         0x18F1872u, 0x18F1896u, 0x18F18A6u, 0x18F18B5u};
 constexpr std::uintptr_t kJointChainFindNamedJointOffsetRva = 0x181D750u;
 constexpr std::uintptr_t kJointSetGetJointLocWsRva = 0x181DA50u;
+constexpr std::uintptr_t kJointSetAllocateAndSeedBuffersRva = 0x181E780u;
+constexpr std::uintptr_t kJointSetCommitJointTransformsRva = 0x181ECD0u;
 constexpr std::uintptr_t kJointSetMultiplyJointRotationRva = 0x181F710u;
 constexpr std::uintptr_t kSolveArmIkRva = 0x18F0B60u;
 constexpr std::uintptr_t kTransformMakeRelativeRva = 0x1990F0u;
@@ -44959,6 +44976,11 @@ using JointChainFindNamedJointOffsetFunction =
     std::int32_t(__fastcall*)(void*, std::uint32_t);
 using JointSetGetJointLocWsFunction = const float*(__fastcall*)(
     void*, std::int32_t);
+using JointSetAllocateAndSeedBuffersFunction = std::int64_t(__fastcall*)(void*);
+using JointSetCommitJointTransformsFunction = std::int64_t(__fastcall*)(
+    void*, std::uint8_t);
+using JointCacheRecomputeWorldLocatorFunction = void(__fastcall*)(
+    void*, std::uint32_t);
 using TransformMakeRelativeFunction = void*(__fastcall*)(
     const float*, float*, const float*);
 using WeaponIkTransformComposeFunction = void*(__fastcall*)(
@@ -44972,6 +44994,12 @@ JointChainFindNamedJointOffsetFunction
     g_joint_chain_find_named_joint_offset = nullptr;
 JointSetGetJointLocWsFunction g_original_weapon_ik_goal_get_joint_loc_ws =
     nullptr;
+JointSetAllocateAndSeedBuffersFunction g_joint_set_allocate_and_seed_buffers =
+    nullptr;
+JointSetCommitJointTransformsFunction
+    g_joint_set_commit_joint_transforms = nullptr;
+JointCacheRecomputeWorldLocatorFunction
+    g_joint_cache_recompute_world_locator = nullptr;
 TransformMakeRelativeFunction g_transform_make_relative = nullptr;
 WeaponIkTransformComposeFunction g_weapon_ik_transform_compose = nullptr;
 SolveArmIkFunction g_solve_arm_ik = nullptr;
@@ -46542,10 +46570,25 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
     finish_weapon_ik_goal_census_claim(scope, emitted);
 }
 
-bool install_player_weapon_ik_feather_goal_census() {
+bool initialize_weapon_ik_native_helpers() {
+    if (g_module == 0) {
+        return false;
+    }
     g_joint_chain_find_named_joint_offset =
         reinterpret_cast<JointChainFindNamedJointOffsetFunction>(
             g_module + kJointChainFindNamedJointOffsetRva);
+    g_original_weapon_ik_goal_get_joint_loc_ws =
+        reinterpret_cast<JointSetGetJointLocWsFunction>(
+            g_module + kJointSetGetJointLocWsRva);
+    g_joint_set_allocate_and_seed_buffers =
+        reinterpret_cast<JointSetAllocateAndSeedBuffersFunction>(
+            g_module + kJointSetAllocateAndSeedBuffersRva);
+    g_joint_set_commit_joint_transforms =
+        reinterpret_cast<JointSetCommitJointTransformsFunction>(
+            g_module + kJointSetCommitJointTransformsRva);
+    g_joint_cache_recompute_world_locator =
+        reinterpret_cast<JointCacheRecomputeWorldLocatorFunction>(
+            g_module + kJointCacheRecomputeWorldLocatorRva);
     g_transform_make_relative = reinterpret_cast<TransformMakeRelativeFunction>(
         g_module + kTransformMakeRelativeRva);
     g_weapon_ik_transform_compose =
@@ -46572,10 +46615,25 @@ bool install_player_weapon_ik_feather_goal_census() {
          index < kWeaponIkGoalChainJointCount; ++index) {
         if (g_weapon_ik_goal_left_joint_ids[index] == 0 ||
             g_weapon_ik_goal_right_joint_ids[index] == 0) {
-            boot_log_line(
-                "Player WeaponIK goal census SKIPPED (joint-name hash)");
             return false;
         }
+    }
+    return g_joint_chain_find_named_joint_offset != nullptr &&
+        g_original_weapon_ik_goal_get_joint_loc_ws != nullptr &&
+        g_joint_set_allocate_and_seed_buffers != nullptr &&
+        g_joint_set_commit_joint_transforms != nullptr &&
+        g_joint_cache_recompute_world_locator != nullptr &&
+        g_transform_make_relative != nullptr &&
+        g_weapon_ik_transform_compose != nullptr &&
+        g_solve_arm_ik != nullptr &&
+        g_joint_set_multiply_joint_rotation != nullptr;
+}
+
+bool install_player_weapon_ik_feather_goal_census() {
+    if (!initialize_weapon_ik_native_helpers()) {
+        boot_log_line(
+            "Player WeaponIK goal census SKIPPED (native helper init)");
+        return false;
     }
 
     struct PreparedCallsite {
@@ -46633,10 +46691,6 @@ bool install_player_weapon_ik_feather_goal_census() {
     g_original_weapon_ik_feather_solve =
         reinterpret_cast<WeaponIkFeatherSolveFunction>(
             g_module + kWeaponIkFeatherSolveRva);
-    g_original_weapon_ik_goal_get_joint_loc_ws =
-        reinterpret_cast<JointSetGetJointLocWsFunction>(
-            g_module + kJointSetGetJointLocWsRva);
-
     SuspendedProcessThreads suspended_threads{};
     if (!suspend_other_process_threads(suspended_threads)) {
         free_relays();
@@ -50456,6 +50510,343 @@ bool seh_capture_legacy_nadine_mazur_authored_pair_postblend_ticket(
     }
 }
 
+enum class LegacyNadineMazurLateSteadyIkResult : std::uint8_t {
+    kPrerequisite = 0,
+    kFeatherInfo = 1,
+    kJointCache = 2,
+    kSeed = 3,
+    kRightArm = 4,
+    kLeftArm = 5,
+    kCommit = 6,
+    kApplied = 7,
+};
+
+bool seh_reset_weapon_ik_joint_set(void* joint_set) {
+    __try {
+        if (joint_set == nullptr || readable_bytes(joint_set) < 0x28) {
+            return false;
+        }
+        auto* const vtable = *reinterpret_cast<void***>(joint_set);
+        if (vtable == nullptr || readable_bytes(vtable + 4) < sizeof(void*)) {
+            return false;
+        }
+        const auto reset = reinterpret_cast<void(__fastcall*)(void*)>(vtable[4]);
+        if (reset == nullptr) {
+            return false;
+        }
+        reset(joint_set);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_recompute_legacy_nadine_mazur_primary_arm_world_locators(
+    const LegacyNadineMazurAuthoredPairPostBlendTicket& ticket,
+    bool restore_pose) {
+    __try {
+        if (!ticket.valid || ticket.fg_anim_data == nullptr ||
+            ticket.local_pose == nullptr ||
+            g_joint_cache_recompute_world_locator == nullptr ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(ticket.fg_anim_data) +
+                kFgAnimDataJointCacheLocalPoseOffset) != ticket.local_pose ||
+            readable_bytes(
+                static_cast<const std::byte*>(ticket.local_pose) +
+                kMazurAuthoredPairFirstC39Joint * kJointLocalPoseStride) <
+                ticket.pose.size()) {
+            return false;
+        }
+        if (restore_pose) {
+            std::memcpy(
+                static_cast<std::byte*>(ticket.local_pose) +
+                    kMazurAuthoredPairFirstC39Joint * kJointLocalPoseStride,
+                ticket.pose.data(), ticket.pose.size());
+        }
+        auto* const joint_cache =
+            static_cast<std::byte*>(ticket.fg_anim_data) + 0x30;
+        for (std::uint32_t joint =
+                 static_cast<std::uint32_t>(
+                     kMazurAuthoredPairFirstC39Joint);
+             joint < kMazurAuthoredPairFirstC39Joint +
+                     kMazurAuthoredPairC39JointCount;
+             ++joint) {
+            g_joint_cache_recompute_world_locator(joint_cache, joint);
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_allocate_and_validate_weapon_ik_joint_set(
+    void* joint_set, bool* allocated_out) {
+    if (allocated_out != nullptr) {
+        *allocated_out = false;
+    }
+    __try {
+        if (joint_set == nullptr || readable_bytes(joint_set) < 0x50 ||
+            g_joint_set_allocate_and_seed_buffers == nullptr ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(joint_set) + 0x20) != nullptr ||
+            *reinterpret_cast<const std::uint16_t*>(
+                static_cast<const std::byte*>(joint_set) + 0x10) != 3) {
+            return false;
+        }
+        const std::int16_t count = *reinterpret_cast<const std::int16_t*>(
+            static_cast<const std::byte*>(joint_set) + 0x12);
+        if (count < 5 || count > 64) {
+            return false;
+        }
+        g_joint_set_allocate_and_seed_buffers(joint_set);
+        if (allocated_out != nullptr) {
+            *allocated_out = true;
+        }
+        auto* const buffers = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(joint_set) + 0x20);
+        return buffers != nullptr && readable_bytes(buffers) >= 5 * sizeof(void*);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_commit_weapon_ik_joint_set(void* joint_set) {
+    __try {
+        if (joint_set == nullptr || g_joint_set_commit_joint_transforms == nullptr) {
+            return false;
+        }
+        g_joint_set_commit_joint_transforms(joint_set, 1);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_solve_left_weapon_ik_chain_from_corrected_right_prop(
+    void** joint_sets, float* prop_gap_out, float* angle_gap_out) {
+    if (prop_gap_out != nullptr) {
+        *prop_gap_out = 0.0F;
+    }
+    if (angle_gap_out != nullptr) {
+        *angle_gap_out = 0.0F;
+    }
+    if (joint_sets == nullptr || g_solve_arm_ik == nullptr ||
+        g_joint_set_multiply_joint_rotation == nullptr ||
+        g_joint_chain_find_named_joint_offset == nullptr ||
+        g_original_weapon_ik_goal_get_joint_loc_ws == nullptr) {
+        return false;
+    }
+    __try {
+        void* const left_set = joint_sets[0];
+        const std::int32_t wrist_offset =
+            g_joint_chain_find_named_joint_offset(
+                left_set, g_weapon_ik_goal_left_joint_ids[3]);
+        const std::int16_t joint_count = left_set != nullptr
+            ? *reinterpret_cast<const std::int16_t*>(
+                  static_cast<const std::byte*>(left_set) + 0x12)
+            : 0;
+        if (left_set == nullptr || joint_count < 5 || joint_count > 64 ||
+            wrist_offset < 0 || wrist_offset >= joint_count) {
+            return false;
+        }
+
+        WeaponIkGoalChainSample current{};
+        WeaponIkGoalLocator prop_to_wrist{};
+        WeaponIkGoalLocator desired_left_wrist{};
+        if (!seh_capture_weapon_ik_goal_chain(joint_sets, &current) ||
+            !weapon_ik_goal_same_spine_frame(
+                current.left.front(), current.right.front()) ||
+            !weapon_ik_goal_make_relative(
+                current.left.back(), current.left[3], &prop_to_wrist) ||
+            !weapon_ik_goal_compose(
+                current.right.back(), prop_to_wrist,
+                &desired_left_wrist)) {
+            return false;
+        }
+
+        WeaponIkArmRequest request{};
+        request.joint_set = left_set;
+        std::memcpy(
+            request.target_position, desired_left_wrist.value.data(),
+            sizeof(request.target_position));
+        if (g_solve_arm_ik(&request, nullptr, nullptr) == 0) {
+            return false;
+        }
+
+        const float* const solved_wrist =
+            g_original_weapon_ik_goal_get_joint_loc_ws(
+                left_set, wrist_offset);
+        if (solved_wrist == nullptr || readable_bytes(solved_wrist) < 0x20) {
+            return false;
+        }
+        WeaponIkGoalLocator solved_wrist_locator{};
+        WeaponIkGoalLocator wrist_delta{};
+        std::memcpy(
+            solved_wrist_locator.value.data(), solved_wrist,
+            sizeof(solved_wrist_locator.value));
+        if (!weapon_ik_goal_make_relative(
+                solved_wrist_locator, desired_left_wrist,
+                &wrist_delta)) {
+            return false;
+        }
+        g_joint_set_multiply_joint_rotation(
+            left_set, wrist_offset, wrist_delta.value.data() + 4, 1);
+
+        WeaponIkGoalChainSample corrected{};
+        if (!seh_capture_weapon_ik_goal_chain(joint_sets, &corrected)) {
+            return false;
+        }
+        const float dx = corrected.left.back().value[0] -
+            corrected.right.back().value[0];
+        const float dy = corrected.left.back().value[1] -
+            corrected.right.back().value[1];
+        const float dz = corrected.left.back().value[2] -
+            corrected.right.back().value[2];
+        const float prop_gap = std::sqrt(dx * dx + dy * dy + dz * dz);
+        float quaternion_dot = 0.0F;
+        for (std::size_t index = 0; index < 4; ++index) {
+            quaternion_dot += corrected.left.back().value[index + 4] *
+                corrected.right.back().value[index + 4];
+        }
+        quaternion_dot = std::clamp(std::abs(quaternion_dot), 0.0F, 1.0F);
+        const float angle_gap =
+            2.0F * std::acos(quaternion_dot) * 57.29577951308232F;
+        if (!std::isfinite(prop_gap) || !std::isfinite(angle_gap)) {
+            return false;
+        }
+        if (prop_gap_out != nullptr) {
+            *prop_gap_out = prop_gap;
+        }
+        if (angle_gap_out != nullptr) {
+            *angle_gap_out = angle_gap;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+LegacyNadineMazurLateSteadyIkResult
+seh_apply_legacy_nadine_mazur_late_steady_ik(
+    const LegacyNadineMazurAuthoredPairPostBlendTicket& ticket,
+    float* right_position_error_out, float* right_angle_error_out,
+    float* left_prop_gap_out, float* left_angle_gap_out) {
+    if (!kEnableLegacyNadineMazurLateSteadyIkRepair || !ticket.valid ||
+        ticket.custom_pair_instance != nullptr || ticket.transition_weighted ||
+        !weapon_ik_goal_locator_valid(
+            kChloeSteadyMazurRightHandPropReference) ||
+        g_joint_chain_find_named_joint_offset == nullptr ||
+        g_original_weapon_ik_goal_get_joint_loc_ws == nullptr ||
+        g_joint_set_allocate_and_seed_buffers == nullptr ||
+        g_joint_set_commit_joint_transforms == nullptr ||
+        g_joint_cache_recompute_world_locator == nullptr ||
+        g_transform_make_relative == nullptr ||
+        g_weapon_ik_transform_compose == nullptr ||
+        g_solve_arm_ik == nullptr ||
+        g_joint_set_multiply_joint_rotation == nullptr) {
+        return LegacyNadineMazurLateSteadyIkResult::kPrerequisite;
+    }
+
+    void* feather_info = nullptr;
+    __try {
+        if (ticket.player == nullptr ||
+            readable_bytes(
+                static_cast<const std::byte*>(ticket.player) + 0x4308) <
+                sizeof(void*)) {
+            return LegacyNadineMazurLateSteadyIkResult::kFeatherInfo;
+        }
+        feather_info = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(ticket.player) + 0x4308);
+        if (feather_info == nullptr || readable_bytes(feather_info) < 0x150) {
+            return LegacyNadineMazurLateSteadyIkResult::kFeatherInfo;
+        }
+        auto* const info = static_cast<std::byte*>(feather_info);
+        if (*reinterpret_cast<void* const*>(info + 0x08) != ticket.player ||
+            *reinterpret_cast<void* const*>(info + 0x58) != ticket.player) {
+            return LegacyNadineMazurLateSteadyIkResult::kFeatherInfo;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return LegacyNadineMazurLateSteadyIkResult::kFeatherInfo;
+    }
+
+    if (!seh_recompute_legacy_nadine_mazur_primary_arm_world_locators(
+            ticket, false)) {
+        return LegacyNadineMazurLateSteadyIkResult::kJointCache;
+    }
+
+    void* joint_sets[2]{
+        feather_info,
+        static_cast<std::byte*>(feather_info) + 0x50};
+    bool left_seeded = false;
+    bool right_seeded = false;
+    const bool left_seed_valid =
+        seh_allocate_and_validate_weapon_ik_joint_set(
+            joint_sets[0], &left_seeded);
+    const bool right_seed_valid = left_seed_valid &&
+        seh_allocate_and_validate_weapon_ik_joint_set(
+            joint_sets[1], &right_seeded);
+    if (!left_seed_valid || !right_seed_valid) {
+        if (right_seeded) {
+            seh_reset_weapon_ik_joint_set(joint_sets[1]);
+        }
+        if (left_seeded) {
+            seh_reset_weapon_ik_joint_set(joint_sets[0]);
+        }
+        return LegacyNadineMazurLateSteadyIkResult::kSeed;
+    }
+
+    WeaponIkGoalChainSample baseline{};
+    WeaponIkGoalCensusScope scope{};
+    scope.owner_index = 0;
+    scope.player = ticket.player;
+    scope.feather_info = feather_info;
+    scope.weapon = ticket.weapon;
+    scope.fg_anim_data = static_cast<std::byte*>(ticket.fg_anim_data);
+    scope.target_skeleton = static_cast<std::byte*>(ticket.target_skeleton);
+    scope.player_runtime_id = ticket.player_runtime_id;
+    scope.weapon_runtime_id = ticket.weapon_runtime_id;
+    scope.look = kLegacyNadineAttachTargetLookId;
+    scope.joint_count = kLegacyNadineSkeletonJointCount;
+    WeaponIkGoalRelaySnapshot source{};
+    source.valid = true;
+    source.relative = kChloeSteadyMazurRightHandPropReference;
+    if (!seh_capture_weapon_ik_goal_chain(joint_sets, &baseline) ||
+        !weapon_ik_goal_same_spine_frame(
+            baseline.left.front(), baseline.right.front()) ||
+        !seh_apply_chloe_right_hand_prop_goal(
+            joint_sets, scope, source, baseline,
+            right_position_error_out, right_angle_error_out)) {
+        seh_reset_weapon_ik_joint_set(joint_sets[1]);
+        seh_reset_weapon_ik_joint_set(joint_sets[0]);
+        return LegacyNadineMazurLateSteadyIkResult::kRightArm;
+    }
+    if (!seh_solve_left_weapon_ik_chain_from_corrected_right_prop(
+            joint_sets, left_prop_gap_out, left_angle_gap_out)) {
+        seh_reset_weapon_ik_joint_set(joint_sets[1]);
+        seh_reset_weapon_ik_joint_set(joint_sets[0]);
+        return LegacyNadineMazurLateSteadyIkResult::kLeftArm;
+    }
+
+    const bool right_committed =
+        seh_commit_weapon_ik_joint_set(joint_sets[1]);
+    right_seeded = !right_committed;
+    const bool left_committed = right_committed &&
+        seh_commit_weapon_ik_joint_set(joint_sets[0]);
+    left_seeded = !left_committed;
+    if (!right_committed || !left_committed) {
+        if (right_seeded) {
+            seh_reset_weapon_ik_joint_set(joint_sets[1]);
+        }
+        if (left_seeded) {
+            seh_reset_weapon_ik_joint_set(joint_sets[0]);
+        }
+        seh_recompute_legacy_nadine_mazur_primary_arm_world_locators(
+            ticket, true);
+        return LegacyNadineMazurLateSteadyIkResult::kCommit;
+    }
+    return LegacyNadineMazurLateSteadyIkResult::kApplied;
+}
+
 bool seh_restore_legacy_nadine_mazur_authored_pair_after_postblend(
     void* player,
     const LegacyNadineMazurAuthoredPairPostBlendTicket& ticket) {
@@ -50890,6 +51281,50 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
     } else if (ticket.valid &&
         seh_restore_legacy_nadine_mazur_authored_pair_after_postblend(
             player, ticket)) {
+        LegacyNadineMazurLateSteadyIkResult late_ik_result =
+            LegacyNadineMazurLateSteadyIkResult::kPrerequisite;
+        float right_position_error = 0.0F;
+        float right_angle_error = 0.0F;
+        float left_prop_gap = 0.0F;
+        float left_angle_gap = 0.0F;
+        if constexpr (kEnableLegacyNadineMazurLateSteadyIkRepair) {
+            late_ik_result = seh_apply_legacy_nadine_mazur_late_steady_ik(
+                ticket, &right_position_error, &right_angle_error,
+                &left_prop_gap, &left_angle_gap);
+            if (late_ik_result ==
+                LegacyNadineMazurLateSteadyIkResult::kApplied) {
+                static std::atomic<bool> late_ik_applied_logged{false};
+                if (!late_ik_applied_logged.exchange(
+                        true, std::memory_order_relaxed)) {
+                    char line[320]{};
+                    std::snprintf(
+                        line, sizeof(line),
+                        "NADINE-MAZUR-LATE-IK applied stage=postblend"
+                        " source=static-Chloe-steady rightPosError=%.6f"
+                        " rightAngleErrorDeg=%.6f leftPropGap=%.6f"
+                        " leftAngleGapDeg=%.6f rows=19..30",
+                        static_cast<double>(right_position_error),
+                        static_cast<double>(right_angle_error),
+                        static_cast<double>(left_prop_gap),
+                        static_cast<double>(left_angle_gap));
+                    boot_log_line(line);
+                }
+            } else {
+                static std::array<std::atomic<bool>, 8> rejected_logged{};
+                const std::size_t reason =
+                    static_cast<std::size_t>(late_ik_result);
+                if (reason < rejected_logged.size() &&
+                    !rejected_logged[reason].exchange(
+                        true, std::memory_order_relaxed)) {
+                    char line[160]{};
+                    std::snprintf(
+                        line, sizeof(line),
+                        "NADINE-MAZUR-LATE-IK rejected stage=%zu",
+                        reason);
+                    boot_log_line(line);
+                }
+            }
+        }
         static std::array<std::atomic<bool>, 2> restored_logged{};
         const bool stock_transition =
             ticket.custom_pair_instance != nullptr;
@@ -50904,10 +51339,13 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
             std::snprintf(
                 line, sizeof(line),
                 "NADINE-MAZUR-AUTHORED-PAIR restored stage=postblend"
-                " rows=19..30 weight=%.6f source=%s commandWeighted=%u",
+                " rows=19..30 weight=%.6f source=%s commandWeighted=%u"
+                " lateIk=%u",
                 static_cast<double>(blend_weight),
                 stock_transition ? "stock-transition" : "steady-overlay",
-                ticket.transition_weighted ? 1u : 0u);
+                ticket.transition_weighted ? 1u : 0u,
+                late_ik_result == LegacyNadineMazurLateSteadyIkResult::kApplied
+                    ? 1u : 0u);
             boot_log_line(line);
         }
     }
@@ -50917,6 +51355,13 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
 bool install_legacy_nadine_mazur_authored_pair_repair() {
     g_legacy_nadine_mazur_authored_pair_ready.store(
         false, std::memory_order_release);
+    if constexpr (kEnableLegacyNadineMazurLateSteadyIkRepair) {
+        if (!initialize_weapon_ik_native_helpers()) {
+            boot_log_line(
+                "legacy-Nadine Mazur authored-pair preservation SKIPPED (late IK helper init)");
+            return false;
+        }
+    }
     g_anim_control_find_active_type2_layer_by_id =
         reinterpret_cast<AnimControlFindActiveType2LayerByIdFunction>(
             g_module + kAnimControlFindActiveType2LayerByIdRva);
@@ -51129,7 +51574,9 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     }
     boot_log_line(
         ready
-            ? "legacy-Nadine Mazur authored-pair preservation READY (native state fade; three exact callsite relays)"
+            ? (kEnableLegacyNadineMazurLateSteadyIkRepair
+                   ? "legacy-Nadine Mazur authored-pair + late steady IK READY (persistent Player+0x4308 JointSets; three exact callsite relays)"
+                   : "legacy-Nadine Mazur authored-pair preservation READY (native state fade; three exact callsite relays)")
             : (rollback_verified
                    ? "legacy-Nadine Mazur authored-pair preservation SKIPPED (verified rollback)"
                    : "legacy-Nadine Mazur authored-pair preservation PARTIAL (pass-through; relays retained)"));
@@ -64696,8 +65143,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20aeq-safe "
-        "(inconclusive static Chloe right-hand reference disabled)");
+        "TLL co-op runtime init 2026-08-20aer "
+        "(late two-arm IK after steady Mazur pose)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

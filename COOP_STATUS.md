@@ -26648,3 +26648,81 @@ terminal left target, and commit both chains before Async consumes
 `Fg+0x100`. This requires exact constructor/seed/commit lifetime and a proof
 that the action-owned terminal WeaponIK state is not required. No further
 runtime is earned yet.
+
+### 2026-08-20 STATIC / IMPLEMENTED (`aer`): late paired IK after the confirmed steady Mazur pose
+
+The `aep` failure was temporal, not numerical: the persistent Feather solve
+ran before the exact steady-overlay ticket existed. Build `aer` moves the
+correction to the already-confirmed boundary after the `56C57AD2 + 283966ED`
+pose has been restored and before the later Async JointBlend consumes
+`FgAnimData+0x100`. It does not reuse an earlier action-owned buffer or weaken
+the pass identity.
+
+Three independent evidence classes close this new seam.
+
+1. **Lifetime and ownership.** `WeaponIKFeatherInfo_ConstructForPlayerLook
+   0x1418F1E60` constructs a fixed 0x150-byte object stored at
+   `Player+0x4308`. It has no AnimAction vtable: its left/right JointSets are at
+   `+0/+0x50`, their solver maps at `+0xA0/+0xF8`, both JointSets retain the
+   same Player at `+0x08`, and the object is rebuilt only with the Player look.
+   It therefore survives the transient `PlayerWeaponIKAction` whose later
+   absence made `aep` miss.
+2. **Native seed/solve/commit dataflow.** `JointSet_AllocateAndSeedBuffers
+   0x14181E780` takes only one JointSet, obtains its owner Player and current
+   `FgAnimData/JointCache`, allocates the five receiver-local work arrays and
+   seeds the complete named chain from the current pose.
+   `JointSet_CommitJointTransformsAndReset 0x14181ECD0` takes only that
+   JointSet plus the stock boolean, copies every valid result through its
+   receiver-local joint-index array into `Fg+0x100`, then calls the JointSet
+   reset slot. Neither helper reads the vanished action object. Stock
+   `WeaponIKFeather_Apply 0x1418F2700` independently uses these exact
+   persistent sets and calls both helpers at `0x1418F27F1` and
+   `0x1418F29D7/0x1418F29E4`.
+3. **Pose/cache/order.** The confirmed C39 hierarchy for rows `19..30` is
+   parent-before-child. After restoring the pair, `aer` calls
+   `JointCache_RecomputeWorldLocatorFromLocalPose 0x141688320` in ascending
+   order so the newly seeded JointSets cannot observe stale postblend world
+   locators. The existing stock formula derives the support wrist as
+   `Compose(rightHandProp, Relative(leftHandProp,leftWrist))`; `aer` uses that
+   exact formula after solving the right chain to the two-sample Chloe
+   reference. It then commits right and left in stock order. The enclosing
+   callsite is still the synchronous Perform -> Player `+0x408` path, and the
+   separately queued Async job later rebuilds the visible palette from the
+   resulting local pose.
+
+The competing hypotheses are explicit. **H-late-anchor** predicts that the
+right trigger hand reaches the stable Chloe hand-prop frame and the derived
+left target keeps the support hand attached, producing the Chloe-like
+muzzle-up hold. **H-reference-content** predicts both native solves and commits
+succeed but the visual angle remains wrong, rejecting the two-sample reference
+as the desired steady anchor. **H-chain/proportion** predicts a large reported
+right residual or left prop gap even though the same stock operators ran,
+showing that Nadine's arm geometry cannot reach the Chloe target through this
+chain. **H-later-writer/binding** predicts small residuals and an applied
+marker but a later snap or unchanged weapon, moving the frontier past local
+JointSet output. The old `aep` same-pass Feather hook and all P99 mutations stay
+disabled.
+
+The implementation is fail-closed and steady-only. It requires the already
+validated role-B owner-0 legacy-Nadine/Mazur/WeaponOut/neutral-idle ticket,
+the exact Player/Fg/weapon/skeleton pointers and both generations, and no live
+`11EE475B` transition instance. It restores the known pair, recomputes C39
+world locators, reseeds both persistent JointSets, applies the right semantic
+anchor, derives/solves the left target, and commits both. Any failure resets
+the temporary JointSets and keeps or restores the known `82e7b9e` baseline.
+Draw/transition, ADS, movement, grenade, P99 and role A remain outside this
+mutation.
+
+The written one-process prediction precedes runtime. A valid package must print
+build `2026-08-20aer` and
+`legacy-Nadine Mazur authored-pair + late steady IK READY`. After the user draws
+Mazur and stands still, one exact pass must print both
+`NADINE-MAZUR-AUTHORED-PAIR injected ... source=steady-overlay` and
+`NADINE-MAZUR-LATE-IK applied stage=postblend ... rows=19..30`; the paired
+restore marker must contain `lateIk=1`. Those markers plus a stable two-hand
+muzzle-up hold confirm H-late-anchor. The markers plus the old low diagonal
+pose reject H-reference-content. A nonzero rejection stage is packaging or
+native-helper failure and has no visual interpretation. A raised rifle with a
+detached/jittering support hand selects H-chain/proportion; small logged errors
+with a later visual snap select H-later-writer/binding. Exactly one role-B
+Nadine process is allowed, and the agent must not send gameplay input.

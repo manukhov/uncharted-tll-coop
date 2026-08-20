@@ -5310,6 +5310,22 @@ Keep the postblend preservation boundary; replace only its steady content.
       baseline restoration; do not weaken the same-pass key or reuse a stale
       action-owned JointSet.
 
+      Build `aer` closes that late seam statically. The 0x150-byte
+      `Player+0x4308` WeaponIKFeatherInfo is look-owned rather than
+      action-owned; its paired JointSets can be reseeded through
+      `JointSet_AllocateAndSeedBuffers 0x14181E780` and committed through
+      `JointSet_CommitJointTransformsAndReset 0x14181ECD0` without the expired
+      PlayerWeaponIKAction. After restoring the confirmed `56C+283` rows,
+      recompute C39 `19..30` world locators in parent order, solve the right arm
+      to the stable two-sample Chloe hand-prop reference, derive the left wrist
+      with stock `Compose(rightProp, Relative(leftProp,leftWrist))`, solve it,
+      and commit both sets before Async consumes `Fg+0x100`. Admission is
+      steady-only and excludes live `11EE475B`, P99, role A, ADS and movement.
+      Runtime is earned only for one role-B Nadine process. Require build/READY,
+      exact steady injection, `NADINE-MAZUR-LATE-IK applied`, and restore
+      `lateIk=1`; only then interpret the visual pose. The agent launches but
+      never supplies gameplay input.
+
   Original `aeh` prediction required the combined READY marker,
       fresh Chloe right-prop CAPTURE, Nadine right-prop RELAY and same-postblend
       `baselineRestore=0`. All markers plus both hands and Chloe's muzzle-up
