@@ -5185,11 +5185,16 @@ Keep the postblend preservation boundary; replace only its steady content.
       relay in `aei-safe`; do not repeat its live-owner-1 admission. While
       appearance 1 is the active task, launch exactly one game copy.
 
-- [ ] Replace the rejected two-process source dependency with a statically
-      closed single-process source for appearance 1. Require three independent
-      evidence types and an exact steady-Nadine/Mazur/WeaponOut discriminator;
-      do not hard-code one old Chloe frame and do not launch to discover the
-      source. Then run one copy only.
+- [~] Run the statically closed one-process `aej` transient-postblend exam for
+      appearance 1. Disable the low `82e7b9e` authored-pair baseline. After
+      stock Player `+0x408`, capture the last exact local-Nadine C39 rows 19--30
+      while full-arm `s_weapon-draw 1313FB4E` is live and `s_no-weapon` is
+      absent; when `s_no-weapon 3889CC0E` appears, seal and replay that same
+      postblend sample. Require READY, `captured source=s_weapon-draw`, and
+      `replayed trigger=s_no-weapon`. All markers plus the initial muzzle-up
+      hold persisting confirms H-transient-postblend-owner; all markers plus a
+      wrong hold rejects it; missing a marker is packaging/lifecycle. Launch
+      exactly one role-B `tll.exe`; the user alone controls gameplay.
 
   Original `aeh` prediction required the combined READY marker,
       fresh Chloe right-prop CAPTURE, Nadine right-prop RELAY and same-postblend

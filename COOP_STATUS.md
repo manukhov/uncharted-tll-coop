@@ -26196,3 +26196,52 @@ confirmed `82e7b9e` two-hand baseline. The next admissible repair must obtain an
 exact source inside the single Nadine process, with the full static evidence
 quota and a written discriminator before another launch; one hard-coded old
 Chloe sample is explicitly not sufficient.
+
+### 2026-08-20 RUNTIME REJECTED (`aei-safe`) / STATIC IMPLEMENTED (`aej`): replay the first Draw's own postblend endpoint in one process
+
+The user reconfirmed that the restored `82e7b9e` baseline is stable but still
+not Chloe's hold: its Mazur muzzle remains low. This is the known semantic
+limit of `56C57AD2 + 283966ED`, not a new packaging failure. The baseline is
+disabled for `aej`; otherwise its steady injection and C39 restore would
+overwrite the source that this exam needs to observe. While appearance 1 is
+active, the agent must launch exactly one `tll.exe`; the user alone controls
+gameplay.
+
+Three independent evidence classes close a same-process source. First, the
+saved `add/ade/adh` lifecycle joins the user's repeatable first-Draw-good ->
+steady-broken transition to exact WeaponPartial states. On the normal path,
+controller `WeaponOut=2` begins while full-arm `s_weapon-draw 1313FB4E` is
+still live and `s_no-weapon 3889CC0E` is absent. Only later does the empty
+state appear and replace it. Second, shipped actor77 animation headers prove
+that `66846123`, the direct root of `s_weapon-draw`, authors all Player joints
+21--32, whereas `s_weapon-out 7405AACB` owns only right-distal joints 30/32 and
+`s_no-weapon` is an empty pose. This rejects a permanent skeleton split and
+identifies the exact ownership loss. Third, the scheduler calls stock Perform,
+then the sole Player `+0x408` at `0x141A929A1`; final Async cmd14 subsequently
+imports `Fg+0x100`. Build `adr` independently proved that a C39 rows 19--30
+write after this same `+0x408` reaches the visible palette.
+
+Build `aej` patches only the exact six-byte indirect Player-postblend callsite.
+It calls the stock `+0x408` slot first. Under exact role-B/local Player0,
+legacy-Nadine ED25/C39, Mazur, `WeaponOut=2`, grenade-idle, neutral input,
+stationary and out-of-cover scope, it walks the bounded live WeaponPartial
+tracks. While exactly one `s_weapon-draw` instance is live and
+`s_no-weapon` is absent, it refreshes a 576-byte snapshot of the engine's own
+postblend C39 rows 19--30. The first exact `s_no-weapon` observation seals
+that last pre-clear sample and restores it after stock postblend on subsequent
+eligible passes. The process-wide sample is pinned to Player/Fg/local-pose/
+skeleton and Player runtime generation; malformed topology, nonfinite pose,
+turnover, movement, ADS, reload, Holster, P99 and every other art fail closed.
+No clip, command list, IK solver, weapon object, packet or second process is
+used.
+
+Competing hypotheses remain falsifiable. **H-transient-postblend-owner**
+predicts `legacy-Nadine Mazur transient-pose replay READY`, at least one
+`NADINE-MAZUR-TRANSIENT-POSE captured ... source=s_weapon-draw`, then
+`replayed ... trigger=s_no-weapon`; the rifle must retain the same correct
+two-hand, muzzle-up endpoint it had immediately before the stock clear.
+**H-source-already-wrong** predicts both markers but the replayed hold is still
+not Chloe-like. **H-rows-insufficient-or-later-owner** predicts a correct
+captured interval followed by a wrong pose despite continuous replay. Missing
+READY/capture/replay is packaging or lifecycle and has no visual meaning. This
+is one bounded one-copy exam, not authorization to tune individual arm rows.

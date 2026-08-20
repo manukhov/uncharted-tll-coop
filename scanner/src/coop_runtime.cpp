@@ -2501,23 +2501,28 @@ static_assert(
        kEnableLegacyNadineWeaponIkFeatherSuppression)),
     "terminal target relay must be the only grip/arm-pose mutation");
 constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
-// Exact authored Mazur complement: carry-peek-hands owns Player joints 29..32
-// and carry-fatigue-walk-arms owns 21..28. Build adq proved that the stock
-// Perform pass evaluates this pair, but the later Player +0x408 postblend pass
-// still leaves the visible grip one-handed. Preserve only the engine-retargeted
-// C39 rows 19..30 across that exact postblend call so the final Async cmd14 can
-// consume the same authored result. During the exact 11EE475B state-2 fade,
-// preserve the stock pose already blended with its published +0x158 weight;
-// only the later steady topology receives the full command overlay. Draw state
-// 1, P99, role A and ADS remain stock.
-constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = true;
+// Build 82e7b9e/adr remains a stable two-hand fallback, but the user proved
+// that its low diagonal hold is not Chloe's steady pose. Keep it disabled in
+// the next exam so it cannot contaminate the source sample below.
+constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = false;
+// The stock first Draw already produces a short visually-correct two-hand pose.
+// Capture the exact local C39 rows 19..30 after stock Player postblend while
+// WeaponPartial still owns the full-arm s_weapon-draw state, then preserve its
+// last postblend sample after that state disappears. This is same-process and
+// same-skeleton: no second game copy, clip substitution or Chloe packet relay.
+constexpr bool kEnableLegacyNadineMazurTransientPostblendReplay = true;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 static_assert(
-    !(kEnableLegacyNadineMazurAuthoredPairRepair &&
+    !((kEnableLegacyNadineMazurAuthoredPairRepair ||
+       kEnableLegacyNadineMazurTransientPostblendReplay) &&
       (kEnableLegacyNadineMazurDrawEndpointRepair ||
        kEnableLegacyNadineWeaponIkFeatherSuppression)),
-    "authored-pair repair must not compose with rejected Draw/Feather hooks");
+    "Mazur postblend repair must not compose with rejected Draw/Feather hooks");
+static_assert(
+    !(kEnableLegacyNadineMazurAuthoredPairRepair &&
+      kEnableLegacyNadineMazurTransientPostblendReplay),
+    "only one Mazur postblend pose source may be active");
 static_assert(
     !kEnableLegacyNadineMazurRightHandPropRelay ||
         kEnableLegacyNadineMazurAuthoredPairRepair,
@@ -41345,6 +41350,8 @@ static_assert(legacy_nadine_weapon_partial_leg_clip_map_is_unique());
 constexpr std::uint32_t kWeaponPartialLayerId = 0xE2B990B9u;
 constexpr std::uint32_t kAnimStateLayerType = 2;
 constexpr std::uint32_t kWeaponPartialWeaponOutStateId = 0x7405AACBu;
+constexpr std::uint32_t kWeaponPartialDrawStateId = 0x1313FB4Eu;
+constexpr std::uint32_t kWeaponPartialNoWeaponStateId = 0x3889CC0Eu;
 constexpr std::uint32_t kWeaponPartialHolsterStateId = 0xDF5B68FCu;
 constexpr std::size_t kMaxLiveWeaponPartialTracks = 64;
 constexpr std::size_t kMaxLiveWeaponPartialInstances = 64;
@@ -51040,6 +51047,434 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
                    : "legacy-Nadine Mazur authored-pair preservation PARTIAL (pass-through; relays retained)"));
     return ready;
 }
+
+// Preserve the last engine-produced full-arm Draw pose before WeaponPartial
+// publishes its empty steady state. Unlike the rejected authored-pair baseline,
+// this source is captured after all stock Player postblend work from the same
+// local Nadine/C39 pass. The capture is process-wide because animation jobs may
+// migrate between workers on later frames.
+struct LegacyNadineMazurTransientPostblendPose {
+    bool valid = false;
+    bool sealed = false;
+    void* player = nullptr;
+    void* fg_anim_data = nullptr;
+    void* local_pose = nullptr;
+    void* target_skeleton = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t phase_bits = 0;
+    std::array<std::byte, kMazurAuthoredPairPoseBytes> pose{};
+};
+
+struct LegacyNadineMazurWeaponPartialTopology {
+    bool valid = false;
+    bool draw_live = false;
+    bool no_weapon_live = false;
+    void* layer = nullptr;
+    void* draw_instance = nullptr;
+    std::uint32_t draw_phase_bits = 0;
+};
+
+SRWLOCK g_legacy_nadine_mazur_transient_pose_lock = SRWLOCK_INIT;
+LegacyNadineMazurTransientPostblendPose
+    g_legacy_nadine_mazur_transient_postblend_pose{};
+std::atomic<bool> g_legacy_nadine_mazur_transient_postblend_ready{false};
+
+bool valid_legacy_nadine_mazur_transient_pose(
+    const std::array<std::byte, kMazurAuthoredPairPoseBytes>& pose) {
+    for (std::size_t row_index = 0;
+         row_index < kMazurAuthoredPairC39JointCount; ++row_index) {
+        std::array<float, 12> row{};
+        std::memcpy(
+            row.data(),
+            pose.data() + row_index * kJointLocalPoseStride,
+            kJointLocalPoseStride);
+        if (!valid_pose_floats(row.data(), row.size()) ||
+            !valid_network_orientation(row.data() + 4)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool seh_resolve_legacy_nadine_mazur_weapon_partial_topology(
+    void* player, LegacyNadineMazurWeaponPartialTopology* output) {
+    if (output == nullptr || player == nullptr ||
+        g_anim_control_find_active_type2_layer_by_id == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        auto* const player_bytes = static_cast<std::byte*>(player);
+        if (readable_bytes(player_bytes) < 0x1DF8) {
+            return false;
+        }
+        auto* const weapon_anim_control =
+            *reinterpret_cast<std::byte**>(player_bytes + 0x1DF0);
+        if (weapon_anim_control == nullptr ||
+            readable_bytes(weapon_anim_control) < 0x30 ||
+            *reinterpret_cast<const std::uintptr_t*>(weapon_anim_control) !=
+                g_module + kPlayerWeaponAnimControlVtableRva ||
+            *reinterpret_cast<void* const*>(weapon_anim_control + 0x10) !=
+                player) {
+            return false;
+        }
+        void* const anim_control = *reinterpret_cast<void* const*>(
+            weapon_anim_control + 0x08);
+        auto* const layer = static_cast<std::byte*>(
+            anim_control != nullptr
+                ? g_anim_control_find_active_type2_layer_by_id(
+                      anim_control, kWeaponPartialLayerId)
+                : nullptr);
+        if (layer == nullptr || readable_bytes(layer) < 0x508 ||
+            *reinterpret_cast<const std::uintptr_t*>(layer) !=
+                g_module + kAnimStateLayerVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(layer + 0x08) !=
+                kAnimStateLayerType) {
+            return false;
+        }
+
+        const std::uint32_t track_count =
+            *reinterpret_cast<const std::uint32_t*>(layer + 0x500);
+        auto* const tracks = *reinterpret_cast<void* const* const*>(
+            layer + 0x4F8);
+        if (track_count == 0 || track_count > kMaxLiveWeaponPartialTracks ||
+            tracks == nullptr ||
+            readable_bytes(tracks) <
+                static_cast<std::size_t>(track_count) * sizeof(void*)) {
+            return false;
+        }
+
+        std::uint32_t draw_count = 0;
+        for (std::uint32_t track_index = 0;
+             track_index < track_count; ++track_index) {
+            auto* const track = static_cast<std::byte*>(tracks[track_index]);
+            if (track == nullptr || readable_bytes(track) < 0x14) {
+                return false;
+            }
+            const std::uint16_t capacity =
+                *reinterpret_cast<const std::uint16_t*>(track + 0x10);
+            const std::uint16_t instance_count =
+                *reinterpret_cast<const std::uint16_t*>(track + 0x12);
+            if (instance_count > capacity ||
+                instance_count > kMaxLiveWeaponPartialInstances) {
+                return false;
+            }
+            auto* const instances = instance_count != 0
+                ? *reinterpret_cast<void* const* const*>(track)
+                : nullptr;
+            if (instance_count != 0 &&
+                (instances == nullptr ||
+                 readable_bytes(instances) <
+                     static_cast<std::size_t>(instance_count) *
+                         sizeof(void*))) {
+                return false;
+            }
+            for (std::uint32_t instance_index = 0;
+                 instance_index < instance_count; ++instance_index) {
+                auto* const instance =
+                    static_cast<std::byte*>(instances[instance_index]);
+                if (instance == nullptr || readable_bytes(instance) < 0x16C ||
+                    *reinterpret_cast<const std::uintptr_t*>(instance) !=
+                        g_module + kAnimStateInstanceVtableRva) {
+                    return false;
+                }
+                const std::uint32_t state =
+                    *reinterpret_cast<const std::uint32_t*>(instance + 0x98);
+                if (state == kWeaponPartialNoWeaponStateId &&
+                    track_index == 0) {
+                    output->no_weapon_live = true;
+                }
+                if (state != kWeaponPartialDrawStateId) {
+                    continue;
+                }
+                ++draw_count;
+                if (draw_count != 1) {
+                    return false;
+                }
+                float phase = 0.0F;
+                std::memcpy(&phase, instance + 0x168, sizeof(phase));
+                if (!std::isfinite(phase) || phase < 0.0F || phase > 1.01F) {
+                    return false;
+                }
+                output->draw_live = true;
+                output->draw_instance = instance;
+                std::memcpy(
+                    &output->draw_phase_bits, &phase,
+                    sizeof(output->draw_phase_bits));
+            }
+        }
+        output->layer = layer;
+        output->valid = true;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+bool legacy_nadine_mazur_transient_pose_key_matches(
+    const LegacyNadineMazurTransientPostblendPose& pose,
+    const IdleArmPoseOwnerScope& owner) {
+    if (!pose.valid || !owner.valid || pose.player != owner.player ||
+        pose.fg_anim_data != owner.fg_anim_data ||
+        pose.local_pose != owner.local_pose) {
+        return false;
+    }
+    __try {
+        return *reinterpret_cast<const std::uint32_t*>(
+                   static_cast<const std::byte*>(owner.player) +
+                   kGameObjectRuntimeIdOffset) == pose.player_runtime_id &&
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(owner.fg_anim_data) +
+                kFgAnimDataSkeletonOffset) == pose.target_skeleton;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+std::int64_t __fastcall
+hooked_player_postblend_for_legacy_nadine_mazur_transient_pose(void* player) {
+    LegacyNadineMazurAuthoredPairPostBlendFunction original = nullptr;
+    __try {
+        auto* const vtable = player != nullptr
+            ? *reinterpret_cast<void***>(player)
+            : nullptr;
+        if (vtable != nullptr) {
+            original = reinterpret_cast<
+                LegacyNadineMazurAuthoredPairPostBlendFunction>(
+                    vtable[0x408 / sizeof(void*)]);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        original = nullptr;
+    }
+    if (original == nullptr) {
+        return 0;
+    }
+
+    const std::int64_t result = original(player);
+    if (!g_legacy_nadine_mazur_transient_postblend_ready.load(
+            std::memory_order_acquire) ||
+        !g_net_role_b || player == nullptr ||
+        player != retained_player_object(0)) {
+        return result;
+    }
+
+    IdleArmPoseOwnerScope owner{};
+    LegacyNadineMazurWeaponPartialTopology topology{};
+    if (!seh_resolve_idle_arm_pose_owner_scope(player, 0, &owner) ||
+        owner.weapon_art_id != kCoopRifleArtId ||
+        !local_player_is_steady_drawn_idle(owner) ||
+        !seh_resolve_legacy_nadine_mazur_weapon_partial_topology(
+            player, &topology)) {
+        return result;
+    }
+
+    // Before s_no-weapon appears, keep refreshing the exact postblend sample.
+    // The first empty-state observation seals the last full-arm Draw result;
+    // later Draws cannot replace this first-process donor.
+    if (topology.draw_live && !topology.no_weapon_live) {
+        LegacyNadineMazurTransientPostblendPose captured{};
+        captured.valid = true;
+        captured.player = owner.player;
+        captured.fg_anim_data = owner.fg_anim_data;
+        captured.local_pose = owner.local_pose;
+        captured.phase_bits = topology.draw_phase_bits;
+        __try {
+            captured.target_skeleton = *reinterpret_cast<void* const*>(
+                owner.fg_anim_data + kFgAnimDataSkeletonOffset);
+            captured.player_runtime_id =
+                *reinterpret_cast<const std::uint32_t*>(
+                    static_cast<const std::byte*>(owner.player) +
+                    kGameObjectRuntimeIdOffset);
+            std::memcpy(
+                captured.pose.data(),
+                owner.local_pose +
+                    kMazurAuthoredPairFirstC39Joint * kJointLocalPoseStride,
+                captured.pose.size());
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            captured = {};
+        }
+        if (captured.valid && captured.target_skeleton != nullptr &&
+            valid_legacy_nadine_mazur_transient_pose(captured.pose)) {
+            bool stored = false;
+            AcquireSRWLockExclusive(
+                &g_legacy_nadine_mazur_transient_pose_lock);
+            auto& destination =
+                g_legacy_nadine_mazur_transient_postblend_pose;
+            if (!destination.sealed &&
+                (!destination.valid ||
+                 legacy_nadine_mazur_transient_pose_key_matches(
+                     destination, owner))) {
+                destination = captured;
+                stored = true;
+            }
+            ReleaseSRWLockExclusive(
+                &g_legacy_nadine_mazur_transient_pose_lock);
+            if (stored) {
+                static std::atomic<bool> captured_logged{false};
+                if (!captured_logged.exchange(
+                        true, std::memory_order_relaxed)) {
+                    float phase = 0.0F;
+                    std::memcpy(
+                        &phase, &captured.phase_bits, sizeof(phase));
+                    char line[224]{};
+                    std::snprintf(
+                        line, sizeof(line),
+                        "NADINE-MAZUR-TRANSIENT-POSE captured"
+                        " stage=postblend source=s_weapon-draw"
+                        " phase=%.6f rows=19..30",
+                        static_cast<double>(phase));
+                    boot_log_line(line);
+                }
+            }
+        }
+        return result;
+    }
+
+    LegacyNadineMazurTransientPostblendPose saved{};
+    AcquireSRWLockExclusive(&g_legacy_nadine_mazur_transient_pose_lock);
+    auto& persistent = g_legacy_nadine_mazur_transient_postblend_pose;
+    if (topology.no_weapon_live && persistent.valid &&
+        legacy_nadine_mazur_transient_pose_key_matches(persistent, owner)) {
+        persistent.sealed = true;
+        saved = persistent;
+    }
+    ReleaseSRWLockExclusive(&g_legacy_nadine_mazur_transient_pose_lock);
+    if (!saved.valid || !saved.sealed ||
+        !valid_legacy_nadine_mazur_transient_pose(saved.pose)) {
+        return result;
+    }
+
+    bool restored = false;
+    __try {
+        if (readable_bytes(
+                owner.local_pose +
+                    kMazurAuthoredPairFirstC39Joint * kJointLocalPoseStride) >=
+                saved.pose.size()) {
+            std::memcpy(
+                owner.local_pose +
+                    kMazurAuthoredPairFirstC39Joint * kJointLocalPoseStride,
+                saved.pose.data(), saved.pose.size());
+            restored = std::memcmp(
+                owner.local_pose +
+                    kMazurAuthoredPairFirstC39Joint * kJointLocalPoseStride,
+                saved.pose.data(), saved.pose.size()) == 0;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        restored = false;
+    }
+    if (restored) {
+        static std::atomic<bool> restored_logged{false};
+        if (!restored_logged.exchange(true, std::memory_order_relaxed)) {
+            float phase = 0.0F;
+            std::memcpy(&phase, &saved.phase_bits, sizeof(phase));
+            char line[224]{};
+            std::snprintf(
+                line, sizeof(line),
+                "NADINE-MAZUR-TRANSIENT-POSE replayed"
+                " stage=postblend trigger=s_no-weapon"
+                " sourcePhase=%.6f rows=19..30",
+                static_cast<double>(phase));
+            boot_log_line(line);
+        }
+    }
+    return result;
+}
+
+bool install_legacy_nadine_mazur_transient_postblend_replay() {
+    g_legacy_nadine_mazur_transient_postblend_ready.store(
+        false, std::memory_order_release);
+    g_anim_control_find_active_type2_layer_by_id =
+        reinterpret_cast<AnimControlFindActiveType2LayerByIdFunction>(
+            g_module + kAnimControlFindActiveType2LayerByIdRva);
+
+    std::uint8_t* site = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::array<std::uint8_t, 6> patch{};
+    constexpr std::array<std::uint8_t, 6> kExpectedCall{
+        0xFF, 0x90, 0x08, 0x04, 0x00, 0x00};
+    if (!prepare_six_byte_indirect_callsite_relay(
+            kAnimManagerPlayerPostBlendCallsiteRva, kExpectedCall,
+            reinterpret_cast<const void*>(
+                &hooked_player_postblend_for_legacy_nadine_mazur_transient_pose),
+            site, relay, patch)) {
+        if (relay != nullptr) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+        }
+        boot_log_line(
+            "legacy-Nadine Mazur transient-pose replay SKIPPED (callsite preflight)");
+        return false;
+    }
+
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line(
+            "legacy-Nadine Mazur transient-pose replay SKIPPED (thread suspend)");
+        return false;
+    }
+
+    std::array<std::uint8_t, 6> stock{};
+    std::memcpy(stock.data(), site, stock.size());
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            site, patch.size(), PAGE_EXECUTE_READWRITE,
+            &old_protection)) {
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(relay, 0, MEM_RELEASE);
+        boot_log_line(
+            "legacy-Nadine Mazur transient-pose replay SKIPPED (protect)");
+        return false;
+    }
+
+    std::memcpy(site, patch.data(), patch.size());
+    FlushInstructionCache(GetCurrentProcess(), site, patch.size());
+    bool installed =
+        std::memcmp(site, patch.data(), patch.size()) == 0;
+    bool rollback_verified = false;
+    if (!installed) {
+        std::memcpy(site, stock.data(), stock.size());
+        FlushInstructionCache(GetCurrentProcess(), site, stock.size());
+        rollback_verified =
+            std::memcmp(site, stock.data(), stock.size()) == 0;
+    }
+
+    DWORD ignored = 0;
+    const bool protection_restored =
+        VirtualProtect(site, patch.size(), old_protection, &ignored) != 0;
+    if (installed && !protection_restored) {
+        DWORD retry_old = 0;
+        if (VirtualProtect(
+                site, stock.size(), PAGE_EXECUTE_READWRITE,
+                &retry_old)) {
+            std::memcpy(site, stock.data(), stock.size());
+            FlushInstructionCache(GetCurrentProcess(), site, stock.size());
+            rollback_verified =
+                std::memcmp(site, stock.data(), stock.size()) == 0;
+            VirtualProtect(
+                site, stock.size(), old_protection, &ignored);
+        }
+        installed = false;
+    }
+
+    const bool ready = installed && protection_restored;
+    if (ready) {
+        g_legacy_nadine_mazur_transient_postblend_ready.store(
+            true, std::memory_order_release);
+    }
+    resume_suspended_process_threads(suspended_threads);
+    if (!installed && rollback_verified) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+    }
+    boot_log_line(
+        ready
+            ? "legacy-Nadine Mazur transient-pose replay READY (one exact postblend callsite; one-process source)"
+            : (rollback_verified
+                   ? "legacy-Nadine Mazur transient-pose replay SKIPPED (verified rollback)"
+                   : "legacy-Nadine Mazur transient-pose replay PARTIAL (pass-through; relay retained)"));
+    return ready;
+}
+
 void log_idle_arm_pose_source_admission(
     void* player, const IdleArmPoseAdmissionDiagnostic& diagnostic) {
     if constexpr (!kEnableLegacyNadineIdleArmPoseAdmissionCensus) {
@@ -63237,8 +63672,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20aei-safe "
-        "(82e7b9e two-hand baseline; aeh relay disabled after zero markers)");
+        "TLL co-op runtime init 2026-08-20aej "
+        "(one-process first-Draw postblend endpoint replay; low baseline disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -63733,6 +64168,15 @@ DWORD WINAPI install_hook(void*) {
                 combined_ready
                     ? "legacy-Nadine Mazur Chloe right-hand-prop relay READY (authored pair + stock arm IK)"
                     : "legacy-Nadine Mazur Chloe right-hand-prop relay SKIPPED (combined package)");
+        }
+    }
+    if constexpr (kEnableLegacyNadineMazurTransientPostblendReplay &&
+                  !kEnableRejectedNadineWeaponRuntimeProbes) {
+        if (state_net_started) {
+            install_legacy_nadine_mazur_transient_postblend_replay();
+        } else {
+            boot_log_line(
+                "legacy-Nadine Mazur transient-pose replay SKIPPED (state net)");
         }
     }
     if constexpr ((kEnableLegacyNadineIdleArmPoseRoundTrip ||
