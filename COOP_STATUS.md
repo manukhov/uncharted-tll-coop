@@ -25875,3 +25875,23 @@ selects the later Player/Async path.  A changed terminal boundary with no
 visible break would instead move the failure to a still-later writer.  Missing
 READY or terminal rows is packaging/admission and has no pose interpretation.
 The agent may relaunch/inject, but the user alone controls gameplay.
+
+### 2026-08-20 RUNTIME REJECTED (`aea`): internal terminal-Apply observer crashed role B before its first sample
+
+Both processes loaded build `aea`; PID `10304` and role-B PID `10236` emitted
+the goal-relay and terminal-Apply READY markers.  Role B then disappeared after
+the first ordinary co-op packet and before any
+`CHLOE-WEAPON-IK-GOAL-CAPTURE`, `NADINE-WEAPON-IK-GOAL-RELAY`,
+`NADINE-WEAPON-IK-TERMINAL-APPLY`, or terminal-row marker.  The remaining role-A
+process stayed responsive.  The crash observer was disabled and no minidump or
+matching Windows Application event was available, so the exact faulting
+instruction is not observable.
+
+This is a packaging/instrumentation failure, not a pose result.  It neither
+confirms nor rejects `WeaponIK_Apply` as the writer that destroys the relayed
+goal.  The internal callsite `0x1418F2E0B` is therefore REJECTED as a runtime
+boundary.  Build `aeb` disables the completed goal census, the semantically
+rejected live-goal relay, and this terminal observer.  A replacement census
+must correlate the already runtime-safe outer `PlayerWeaponIKAction` Apply
+callsite with the already runtime-safe Solve wrapper; do not re-enable the
+internal terminal detour.

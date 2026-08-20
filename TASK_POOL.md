@@ -5100,7 +5100,7 @@ Keep the postblend preservation boundary; replace only its steady content.
       commit, later Player postblend, or final Async JointBlend/plugin) before
       any further runtime mutation.
 
-- [ ] Run the bounded read-only `aea` terminal-writer discriminator.  Keep the
+- [x] Runtime-reject the bounded read-only `aea` terminal-writer discriminator.  Keep the
       proven same-process Chloe goal relay, but allow it only after the exact
       `WeaponIK_Apply` observer at callsite `0x1418F2E0B` is READY.  In role-B
       owner-0 legacy Nadine/Mazur/WeaponOut/zero-motion scope, capture raw C39
@@ -5109,7 +5109,11 @@ Keep the postblend preservation boundary; replace only its steady content.
       rows.  Changes in `19..26` confirm the second `SolveArmIk`/commit as the
       conflict; a zero mask rejects it and moves the frontier to later
       Player/Async processing.  No suppression, smoothing, row restoration or
-      new clip mutation is permitted in this exam.
+      new clip mutation is permitted in this exam.  Both processes reached
+      READY, but role B crashed before CAPTURE/RELAY or any terminal sample.
+      This is a packaging failure with no pose interpretation; reject the
+      internal `0x1418F2E0B` detour and replace it with correlated midpoint/final
+      observation at the already-safe outer Apply and Solve callsites.
 
 ## Rule
 

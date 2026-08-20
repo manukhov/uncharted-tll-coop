@@ -2447,22 +2447,19 @@ constexpr bool kEnableLegacyNadineGripSnapshotCensus = false;
 // lifecycle/scalars and near-identical arm rows, so this hot census has answered
 // its question and stays out of production.
 constexpr bool kEnableLegacyNadineWeaponIkFeatherInputCensus = false;
-// Build adx proved that the stock Chloe/Nadine common goals diverge before the
-// solver. Build ady then located a matching live Chloe donor at retained owner
-// 1 inside role B. Keep the one-shot census alongside the live relay so the
-// exact source/target/scalar boundary remains visible during the exam.
-constexpr bool kEnablePlayerWeaponIkFeatherGoalCensus = true;
+// Builds adx/ady answered the live-goal question. Build adz then proved that a
+// fresh same-process Chloe goal is only a contributor, not a complete repair.
+// Keep the completed census dormant outside an explicitly authorized exam.
+constexpr bool kEnablePlayerWeaponIkFeatherGoalCensus = false;
 // Build ady proved that role-B retained owner 1 supplies the same live Chloe
 // Mazur target as role-A local Chloe (0.00853 units / 1.22 degrees apart),
 // while role-B Nadine differs by 0.30061 units / 75.94 degrees.  Relay only
 // that normalized target inside the same process; keep the stock solver/maps.
-constexpr bool kEnableLegacyNadineWeaponIkGoalRelay = true;
-// Build adz proved that a fresh live Chloe goal reaches Nadine but is
-// immediately lost visually.  WeaponIKFeather::Apply has one remaining exact
-// arm writer after that Solve: the sole call to WeaponIK::Apply at 0x1418F2E0B,
-// which runs another SolveArmIk and commits both JointSets.  Observe C39 rows
-// 19..30 immediately before/after that stock call; do not change its result.
-constexpr bool kEnableWeaponIkTerminalApplyCensus = true;
+constexpr bool kEnableLegacyNadineWeaponIkGoalRelay = false;
+// REJECTED in build aea: installing the internal 0x1418F2E0B observer crashed
+// role B after READY and before its first sample.  The writer hypothesis remains
+// STATIC, but this callsite is not an admissible runtime boundary.
+constexpr bool kEnableWeaponIkTerminalApplyCensus = false;
 // Build acg proved that the two P99 WeaponIK paths share the same lifecycle and
 // scalar controls, but composing the interleaved arm hierarchy reveals a
 // residual 6.7 mm hand-endpoint split. Distinguish that upstream pose delta
@@ -62300,8 +62297,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20aea "
-        "(read-only terminal WeaponIK writer census with live goal relay)");
+        "TLL co-op runtime init 2026-08-20aeb "
+        "(safe rollback: rejected WeaponIK goal/terminal hooks disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
