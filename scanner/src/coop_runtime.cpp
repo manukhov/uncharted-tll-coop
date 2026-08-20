@@ -46377,6 +46377,7 @@ std::atomic<bool> g_legacy_nadine_mazur_steady_hands_hooks_ready{false};
 
 struct LegacyNadineMazurSteadyHandsEpoch {
     bool valid = false;
+    bool exact_hands_root = false;
     void* player = nullptr;
     void* fg_anim_data = nullptr;
     void* weapon = nullptr;
@@ -46849,9 +46850,11 @@ seh_select_legacy_nadine_mazur_steady_hands_epoch(
         void* anim_control = nullptr;
         std::uint32_t source_resolved_id = 0;
         std::uint32_t alternate_source_resolved_id = 0;
-        if (!seh_resolve_exact_steady_idle_hands_root(
+        const bool exact_hands_root =
+            seh_resolve_exact_steady_idle_hands_root(
                 player, &source_clip, &anim_control,
-                &source_resolved_id)) {
+                &source_resolved_id);
+        if (!exact_hands_root) {
             // Track count/root identity can turn over between the authored
             // Draw and steady WeaponOut snapshots.  The final command list is
             // the stronger synchronous liveness boundary: it must contain
@@ -46894,6 +46897,7 @@ seh_select_legacy_nadine_mazur_steady_hands_epoch(
                 donor_clip_data + 0x22);
 
         output->valid = true;
+        output->exact_hands_root = exact_hands_root;
         output->player = player;
         output->fg_anim_data = expected_fg;
         output->weapon = owner.weapon;
@@ -47134,7 +47138,8 @@ seh_inject_legacy_nadine_mazur_steady_hands_commands(
     void* create_context, void* command_record, std::uint32_t group,
     const LegacyNadineMazurSteadyHandsEpoch& epoch,
     std::uint32_t* donor_lane_out, std::uint32_t* source_resolved_id_out,
-    std::uint16_t* source_frame_count_out) {
+    std::uint16_t* source_frame_count_out,
+    std::uint32_t* live_source_count_out) {
     if (donor_lane_out != nullptr) {
         *donor_lane_out = 0;
     }
@@ -47143,6 +47148,9 @@ seh_inject_legacy_nadine_mazur_steady_hands_commands(
     }
     if (source_frame_count_out != nullptr) {
         *source_frame_count_out = 0;
+    }
+    if (live_source_count_out != nullptr) {
+        *live_source_count_out = 0;
     }
     __try {
         if (!epoch.valid || create_context == nullptr ||
@@ -47281,8 +47289,23 @@ seh_inject_legacy_nadine_mazur_steady_hands_commands(
             suffix != word_count) {
             return LegacyNadineMazurSteadyHandsInjection::kGrammar;
         }
-        if (source_count != 1) {
+        if (live_source_count_out != nullptr) {
+            *live_source_count_out = source_count;
+        }
+        if (source_count > 1 ||
+            (source_count == 0 && !epoch.exact_hands_root)) {
             return LegacyNadineMazurSteadyHandsInjection::kSource;
+        }
+        if (source_count == 0) {
+            // The exact enabled Hands registry root is a stronger persistent
+            // semantic owner than its optional cmd6 materialization.  Runtime
+            // proved that the stock list drops that cmd6 after the initial
+            // WeaponOut window while the same root, owner and state remain
+            // valid; requiring one live source made the repair alternate with
+            // stock frames.  Keep fallback-only epochs fail-closed.
+            observed_source_resolved_id = epoch.source_resolved_id;
+            observed_source_frame_count = epoch.source_frame_count;
+            source_phase_bits = 0;
         }
         float source_phase = 0.0F;
         std::memcpy(&source_phase, &source_phase_bits, sizeof(source_phase));
@@ -47393,11 +47416,13 @@ std::uint64_t __fastcall hooked_create_anim_cmds_for_object_for_nadine_mazur(
 
     std::uint32_t donor_lane = 0;
     std::uint32_t observed_source_resolved_id = 0;
+    std::uint32_t live_source_count = 0;
     std::uint16_t observed_source_frame_count = 0;
     const LegacyNadineMazurSteadyHandsInjection injection =
         seh_inject_legacy_nadine_mazur_steady_hands_commands(
             create_context, command_record, group, epoch, &donor_lane,
-            &observed_source_resolved_id, &observed_source_frame_count);
+            &observed_source_resolved_id, &observed_source_frame_count,
+            &live_source_count);
     if (injection == LegacyNadineMazurSteadyHandsInjection::kInjected) {
         g_legacy_nadine_mazur_draw_endpoint_pending_ticket = {
             true,
@@ -47421,6 +47446,8 @@ std::uint64_t __fastcall hooked_create_anim_cmds_for_object_for_nadine_mazur(
              << observed_source_resolved_id << " donor=0x"
              << kPlayerWeaponDrawFullArmClipId << std::dec
              << " group=0 lane=" << donor_lane
+             << " liveSources=" << live_source_count
+             << " exactHandsRoot=" << (epoch.exact_hands_root ? 1 : 0)
              << " phase="
              << (kPlayerWeaponDrawFullArmFrameCount - 1u)
              << " samples=" << observed_source_frame_count << "/"
@@ -59825,8 +59852,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-15adn "
-        "(Mazur Perform endpoint plus paired Feather bypass)");
+        "TLL co-op runtime init 2026-08-20ado "
+        "(persistent Mazur Perform endpoint plus paired Feather bypass)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

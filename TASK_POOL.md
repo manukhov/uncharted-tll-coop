@@ -4940,6 +4940,18 @@ injection is packaging; injection without suppress also permits a stock
 `apply_weight==0` no-op and must be separated from owner/order failure in the
 log.
 
+`adn` is now REJECTED as an intermittent final repair. PID 1928 produced one
+exact injection and 16 paired Feather suppressions, then `reason=4`; the user
+observed the corresponding brief improvement followed by a broken/twitching
+hold. Reason 4 is precisely loss of the optional idle-Hands cmd6 after the
+exact owner/root and final-list scope have already passed. Build `ado` permits a
+zero-source list only when the independent exact Hands registry/track/instance/
+Animation-root proof is live; fallback roots and source multiplicity remain
+rejected. Require continuous `injected ... liveSources=0 exactHandsRoot=1` and
+paired suppress markers after the initial window. If those are continuous but
+the visual still breaks, reject the source-gate hypothesis and move to the
+postblend/Async late-writer frontier; do not relax further command-list guards.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

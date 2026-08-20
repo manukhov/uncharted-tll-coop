@@ -25119,7 +25119,7 @@ role B owner 0, Mazur, WeaponOut state 2, and the full existing
 grenade/movement/action/cover idle scope. Channel 4 is cleared before enqueueing
 one persistent PlayerWeaponIKAction, phase 3 visits each node once, and that
 Update contains one Apply call; the ticket is therefore consumed on the first
-callsite hit. It also expires after 100 ms and is cleared on Player `+0x408`
+callsite hit. It also expires after 300 ms and is cleared on Player `+0x408`
 return or at the next Perform entry. A combined readiness bit is published only
 after Create, Perform, Async, Feather-callsite and Player-`+0x408` hooks all
 install. P99, Draw state 1, ADS state 4, role A and every frame without an
@@ -25138,3 +25138,43 @@ suppression selects an owner/order mismatch or stock `apply_weight==0`, which is
 already a native Feather no-op and must be distinguished in the log before
 calling it packaging. No other grip/arm-pose mutation is enabled in this exam;
 the already accepted weapon attachment/back-frame package remains active.
+
+### 2026-08-20 RUNTIME REJECTED intermittent (`adn`) / STATIC IMPLEMENTED (`ado`): keep the exact Hands-root donor across zero-cmd6 Perform passes
+
+The paired bypass is causal but intermittent, matching the user's report that
+the rifle grip briefly improves and then breaks or twitches. Role-B PID 1928
+first emitted the exact `DRAW-ENDPOINT injected` marker at line 85680 and then
+16 consecutive exact `WEAPON-IK-FEATHER-SUPPRESS ... pairedDonor=1` rows at
+85681--85701. The next bounded repair result was
+`DRAW-ENDPOINT rejected ... reason=4` at 85711. In code, reason 4 is exactly
+`kSource`: every owner, role-B/Mazur/WeaponOut/idle, Fg/skeleton, donor,
+mode-1/flags-3, group-zero, record and full suffix check has already passed,
+but that particular generated list no longer contains exactly one idle-Hands
+cmd6. The visual transition and marker transition agree: corrected and stock
+passes alternate; this is not an installer or ticket-TTL failure.
+
+Three independent evidence classes support the narrower persistent admission.
+First, the runtime sequence above proves the donor and paired Feather no-op both
+reach the visible pass before `kSource` closes them. Second,
+`seh_resolve_exact_steady_idle_hands_root` independently proves one enabled
+Hands registry record, one track and instance in `default-hands`/`idle-hands`,
+the exact Animation root and the complete Player or campaign-Chloe clip tuple;
+this semantic owner is checked before command generation. Third, the final
+Perform group-zero grammar is independently pinned to one object/control/block,
+the exact post-cmd3 suffix and the same retained Player/Fg/target skeleton. A
+missing optional Hands cmd6 in that already-proven list is therefore a liveness
+gap, not permission to change another actor or state.
+
+Build `ado` admits `source_count==0` only when that exact registry/root proof
+succeeded. It keeps `source_count>1` and fallback-only epochs fail-closed, and
+does not relax role, owner, Mazur art, state 2, idle/action/cover, group, grammar,
+capacity or paired Feather guards. Its marker adds `liveSources` and
+`exactHandsRoot`.
+
+Competing hypotheses remain: `H-intermittent-source-gate` predicts continuous
+`injected ... liveSources=0 exactHandsRoot=1` plus paired suppress rows after the
+initial source command disappears, with no subsequent reason 4 and no twitch;
+`H-later-writer` predicts both markers continuously but the arm still alternates
+or extends; `H-donor-content` predicts a stable but still incorrect two-arm
+shape. A zero-source pass with `exactHandsRoot=0` must remain rejected. This is
+the sole written `ado` runtime discriminator.
