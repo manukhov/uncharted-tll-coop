@@ -25733,3 +25733,40 @@ Before runtime this still requires three-way closure of donor transport/lifetime
 read-only semantics at both getter consumers, and target freshness/action scope.
 Do not hard-code this single sample, splice pose rows, or launch another
 mutation until that closure and a new falsifiable prediction are written.
+
+### 2026-08-20 STATIC IMPLEMENTED (`ady`): choose same-process Chloe goal versus a network donor
+
+Before adding a packet or changing a solver input, the existing three-callsite
+read-only census is extended to identify both retained Players independently.
+This is earned by three different evidence classes.  First, older exact
+`PlayerWeaponIKAction -> WeaponIKFeather_Apply` runtime rows repeatedly reached
+owner `1` in the role-B process (`NADINE-WEAPON-IK-ENTRY` at log lines
+`74035`, `74404`, and `74785`), so the rendered remote Chloe does execute the
+same terminal subsystem.  Second, the user's side-by-side observation says
+that this role-B Chloe presentation is the correct visual donor while local
+Nadine is malformed.  Third, `WeaponIKFeather_SolveWeaponFeatherIk
+0x1418F2E50` reads only the two returned 32-byte hand-prop Locators at
+`0x1418F31E4..0x1418F32A6`; it neither writes through the return pointers nor
+retains them, and the owner is recoverable exactly from
+`JointSet[0] == Player+0x4308` plus the retained screen, look, Fg owner,
+skeleton, WeaponOut/current Mazur and parent chain.
+
+The competing transport hypotheses are now explicit.  `H-same-process` says
+role-B owner `1` supplies a fresh Chloe/`4B0F5DE3`/651-joint Mazur goal, avoiding
+UDP cadence and making it the narrower donor.  `H-roleA-packet` says owner `1`
+reaches Solve but its puppet controller never reaches the exact steady
+WeaponOut admission; only role-A local Chloe is therefore authoritative.
+`H-no-Chloe-solve` says the earlier owner-1 entry is only a transient or another
+weapon and no usable Chloe goal exists in role B.
+
+Build `ady` remains strictly read-only.  It keeps stock Solve and both stock
+getters, uses one memo/completion bit per retained owner, and logs actual
+`owner/body/look/skeleton` rather than deriving body from process role.  The
+falsifiable prediction is: role B must first emit `entry owner=0` and
+`entry owner=1`; `H-same-process` additionally requires an admitted complete
+`owner=1 body=Chloe look=0x3F334972 joints=651` Mazur goal after the 350-ms
+steady dwell.  Its normalized goal should be close to role-A owner-0 Chloe and
+remain materially separated from role-B owner-0 Nadine.  Entry without that
+admission selects `H-roleA-packet`; no owner-1 entry selects
+`H-no-Chloe-solve`.  No visual change is predicted and no gameplay input is
+sent by the agent.

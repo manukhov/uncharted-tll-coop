@@ -5064,6 +5064,16 @@ Keep the postblend preservation boundary; replace only its steady content.
       Solve consumer.  Keep stock Jacobian maps, Solve, commits and postblend.
       A single hard-coded `adx` sample is forbidden.
 
+- [ ] Run the bounded read-only `ady` donor-location discriminator.  The exact
+      Solve/getter package now records owner 0 and owner 1 separately.  In the
+      role-B process, require both entry markers and then either a complete
+      `owner=1 body=Chloe look=0x3F334972 joints=651` Mazur/WeaponOut goal or a
+      clean entry-without-admission result.  A complete owner-1 sample selects
+      same-process relay and avoids network cadence; entry without admission
+      selects the endpoint-authenticated role-A packet; no owner-1 entry rejects
+      that local donor entirely.  Stock Solve/getters remain unchanged and the
+      exam predicts no visual difference.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

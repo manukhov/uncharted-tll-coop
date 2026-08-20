@@ -44921,6 +44921,7 @@ struct WeaponIkGoalGetterCaptureTls {
 thread_local WeaponIkGoalGetterCaptureTls g_weapon_ik_goal_getter_capture_tls{};
 
 struct WeaponIkGoalCensusScope {
+    int owner_index = -1;
     void* player = nullptr;
     void* feather_info = nullptr;
     void* weapon = nullptr;
@@ -44941,10 +44942,10 @@ struct WeaponIkGoalCensusMemo {
 };
 
 SRWLOCK g_weapon_ik_goal_census_lock = SRWLOCK_INIT;
-WeaponIkGoalCensusMemo g_weapon_ik_goal_census_memo{};
-std::atomic<bool> g_weapon_ik_goal_census_entry_logged{false};
-std::atomic<bool> g_weapon_ik_goal_census_admission_logged{false};
-std::atomic<bool> g_weapon_ik_goal_census_complete{false};
+WeaponIkGoalCensusMemo g_weapon_ik_goal_census_memos[2]{};
+std::atomic<std::uint32_t> g_weapon_ik_goal_census_entry_mask{0};
+std::atomic<std::uint32_t> g_weapon_ik_goal_census_admission_mask{0};
+std::atomic<std::uint32_t> g_weapon_ik_goal_census_complete_mask{0};
 std::array<std::uint32_t, kWeaponIkGoalChainJointCount>
     g_weapon_ik_goal_left_joint_ids{};
 std::array<std::uint32_t, kWeaponIkGoalChainJointCount>
@@ -45022,9 +45023,26 @@ bool seh_select_weapon_ik_goal_census_scope(
             jacobian_maps == nullptr) {
             return false;
         }
-        void* const player = retained_player_object(0);
-        if (player == nullptr || !player_object_stable(player) ||
-            !player_screen_index_is(player, 0)) {
+        void* player = nullptr;
+        int owner_index = -1;
+        for (int index = 0; index < 2; ++index) {
+            void* const candidate = retained_player_object(index);
+            if (candidate == nullptr || !player_object_stable(candidate) ||
+                !player_screen_index_is(
+                    candidate, static_cast<std::uint32_t>(index)) ||
+                readable_bytes(
+                    static_cast<std::byte*>(candidate) + 0x4308) <
+                    sizeof(void*) ||
+                *reinterpret_cast<void* const*>(
+                    static_cast<std::byte*>(candidate) + 0x4308) !=
+                    joint_sets[0]) {
+                continue;
+            }
+            player = candidate;
+            owner_index = index;
+            break;
+        }
+        if (player == nullptr || owner_index < 0) {
             return false;
         }
         auto* const player_bytes = static_cast<std::byte*>(player);
@@ -45043,10 +45061,9 @@ bool seh_select_weapon_ik_goal_census_scope(
             return false;
         }
         std::uint32_t look = 0;
-        const std::uint32_t expected_look = g_net_role_b
-            ? kLegacyNadineAttachTargetLookId
-            : kChloeAttachDonorLookId;
-        if (!seh_read_player_look(player, &look) || look != expected_look) {
+        if (!seh_read_player_look(player, &look) ||
+            (look != kLegacyNadineAttachTargetLookId &&
+             look != kChloeAttachDonorLookId)) {
             return false;
         }
         auto* const fg = *reinterpret_cast<std::byte**>(
@@ -45072,10 +45089,12 @@ bool seh_select_weapon_ik_goal_census_scope(
                 target_skeleton + kSkeletonJointCountOffset);
         auto* const underlying_skeleton =
             *reinterpret_cast<std::byte**>(target_skeleton + 0x40);
-        const std::uint32_t expected_underlying_id = g_net_role_b
+        const bool legacy_nadine =
+            look == kLegacyNadineAttachTargetLookId;
+        const std::uint32_t expected_underlying_id = legacy_nadine
             ? kLegacyNadineUnderlyingSkeletonId
             : 0x4B0F5DE3u;
-        const std::uint32_t expected_joint_count = g_net_role_b ? 580u : 651u;
+        const std::uint32_t expected_joint_count = legacy_nadine ? 580u : 651u;
         if (joint_count != expected_joint_count ||
             underlying_skeleton == nullptr ||
             readable_bytes(underlying_skeleton) < 0x12 ||
@@ -45136,12 +45155,15 @@ bool seh_select_weapon_ik_goal_census_scope(
                 return false;
             }
         }
-        const std::uint64_t action_bits =
-            g_cached_local_input_buttons.load(std::memory_order_acquire) &
-            ~kInputBlockButtonBaseMask;
-        if (action_bits != 0 && action_bits != 0x9ull) {
-            return false;
+        if (owner_index == 0) {
+            const std::uint64_t action_bits =
+                g_cached_local_input_buttons.load(std::memory_order_acquire) &
+                ~kInputBlockButtonBaseMask;
+            if (action_bits != 0 && action_bits != 0x9ull) {
+                return false;
+            }
         }
+        output->owner_index = owner_index;
         output->player = player;
         output->feather_info = feather_info;
         output->weapon = weapon;
@@ -45158,10 +45180,13 @@ bool seh_select_weapon_ik_goal_census_scope(
 }
 
 bool weapon_ik_goal_census_ready(const WeaponIkGoalCensusScope& scope) {
+    if (scope.owner_index < 0 || scope.owner_index > 1) {
+        return false;
+    }
     const ULONGLONG now = GetTickCount64();
     bool ready = false;
     AcquireSRWLockExclusive(&g_weapon_ik_goal_census_lock);
-    auto& memo = g_weapon_ik_goal_census_memo;
+    auto& memo = g_weapon_ik_goal_census_memos[scope.owner_index];
     const bool reset = memo.player != scope.player ||
         memo.runtime_id != scope.player_runtime_id ||
         memo.stable_since_ms == 0 || memo.last_seen_ms == 0 ||
@@ -45187,9 +45212,12 @@ bool weapon_ik_goal_census_ready(const WeaponIkGoalCensusScope& scope) {
 
 void finish_weapon_ik_goal_census_claim(
     const WeaponIkGoalCensusScope& scope, bool emitted) {
+    if (scope.owner_index < 0 || scope.owner_index > 1) {
+        return;
+    }
     const ULONGLONG now = GetTickCount64();
     AcquireSRWLockExclusive(&g_weapon_ik_goal_census_lock);
-    auto& memo = g_weapon_ik_goal_census_memo;
+    auto& memo = g_weapon_ik_goal_census_memos[scope.owner_index];
     if (memo.player == scope.player &&
         memo.runtime_id == scope.player_runtime_id && memo.claimed) {
         memo.claimed = false;
@@ -45338,6 +45366,39 @@ bool weapon_ik_goal_same_spine_frame(
         std::abs(quaternion_dot) >= 0.999F;
 }
 
+bool seh_find_weapon_ik_goal_census_owner(
+    void** joint_sets, int* owner_out, void** player_out) {
+    if (owner_out == nullptr || player_out == nullptr) {
+        return false;
+    }
+    *owner_out = -1;
+    *player_out = nullptr;
+    __try {
+        if (joint_sets == nullptr) {
+            return false;
+        }
+        for (int index = 0; index < 2; ++index) {
+            void* const candidate = retained_player_object(index);
+            if (candidate == nullptr ||
+                readable_bytes(
+                    static_cast<std::byte*>(candidate) + 0x4308) <
+                    sizeof(void*) ||
+                *reinterpret_cast<void* const*>(
+                    static_cast<std::byte*>(candidate) + 0x4308) !=
+                    joint_sets[0]) {
+                continue;
+            }
+            *owner_out = index;
+            *player_out = candidate;
+            return true;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *owner_out = -1;
+        *player_out = nullptr;
+    }
+    return false;
+}
+
 void log_weapon_ik_goal_locator(
     std::ostringstream& line, const char* prefix,
     const WeaponIkGoalLocator& locator) {
@@ -45401,7 +45462,9 @@ bool finish_weapon_ik_goal_census(
     std::ostringstream summary;
     summary << "PLAYER-WEAPON-IK-GOAL role="
             << (g_net_role_b ? 'B' : 'A')
-            << " body=" << (g_net_role_b ? "Nadine" : "Chloe")
+            << " owner=" << scope.owner_index
+            << " body=" << (scope.look == kChloeAttachDonorLookId
+                    ? "Chloe" : "Nadine")
             << " runtime=0x" << std::hex << scope.player_runtime_id
             << " look=0x" << scope.look << std::dec
             << " joints=" << scope.joint_count
@@ -45425,7 +45488,9 @@ bool finish_weapon_ik_goal_census(
             std::ostringstream row;
             row << "PLAYER-WEAPON-IK-CHAIN role="
                 << (g_net_role_b ? 'B' : 'A')
-                << " body=" << (g_net_role_b ? "Nadine" : "Chloe")
+                << " owner=" << scope.owner_index
+                << " body=" << (scope.look == kChloeAttachDonorLookId
+                        ? "Chloe" : "Nadine")
                 << " side=" << (side == 0 ? 'L' : 'R')
                 << " joint=" << kNames[index];
             log_weapon_ik_goal_locator(
@@ -45478,11 +45543,21 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
     void** joint_sets, void** jacobian_maps, std::uint32_t selector,
     float strength, float tolerance, int iterations, float solve_weight,
     int minimum_iterations) {
-    if (!g_weapon_ik_goal_census_entry_logged.exchange(
-            true, std::memory_order_acq_rel)) {
+    int entry_owner = -1;
+    void* entry_player = nullptr;
+    seh_find_weapon_ik_goal_census_owner(
+        joint_sets, &entry_owner, &entry_player);
+    const std::uint32_t entry_bit = entry_owner >= 0 && entry_owner < 2
+        ? 1u << entry_owner : 0u;
+    if (entry_bit != 0 &&
+        (g_weapon_ik_goal_census_entry_mask.fetch_or(
+             entry_bit, std::memory_order_acq_rel) & entry_bit) == 0) {
         std::ostringstream line;
         line << "PLAYER-WEAPON-IK-GOAL entry role="
              << (g_net_role_b ? 'B' : 'A')
+             << " owner=" << entry_owner
+             << " player=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(entry_player) << std::dec
              << " selector=" << selector
              << " strength=" << strength
              << " tolerance=" << tolerance
@@ -45492,16 +45567,23 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
         write_log_line(line.str().c_str());
     }
     WeaponIkGoalCensusScope scope{};
-    const bool scoped = kEnablePlayerWeaponIkFeatherGoalCensus &&
-        !g_weapon_ik_goal_census_complete.load(std::memory_order_acquire) &&
+    const bool selected = kEnablePlayerWeaponIkFeatherGoalCensus &&
         seh_select_weapon_ik_goal_census_scope(
             joint_sets, jacobian_maps, &scope);
-    if (scoped && !g_weapon_ik_goal_census_admission_logged.exchange(
-            true, std::memory_order_acq_rel)) {
+    const std::uint32_t scope_bit = selected
+        ? 1u << scope.owner_index : 0u;
+    const bool scoped = selected &&
+        (g_weapon_ik_goal_census_complete_mask.load(
+             std::memory_order_acquire) & scope_bit) == 0;
+    if (scoped &&
+        (g_weapon_ik_goal_census_admission_mask.fetch_or(
+             scope_bit, std::memory_order_acq_rel) & scope_bit) == 0) {
         std::ostringstream line;
         line << "PLAYER-WEAPON-IK-GOAL admission role="
              << (g_net_role_b ? 'B' : 'A')
-             << " body=" << (g_net_role_b ? "Nadine" : "Chloe")
+             << " owner=" << scope.owner_index
+             << " body=" << (scope.look == kChloeAttachDonorLookId
+                    ? "Chloe" : "Nadine")
              << " runtime=0x" << std::hex << scope.player_runtime_id
              << " weapon=0x" << scope.weapon_runtime_id << std::dec;
         write_log_line(line.str().c_str());
@@ -45537,16 +45619,16 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
     if (!sampled_before) {
         write_log_line(
             "PLAYER-WEAPON-IK-GOAL rejected stage=stock-getter-capture");
-        g_weapon_ik_goal_census_complete.store(
-            true, std::memory_order_release);
+        g_weapon_ik_goal_census_complete_mask.fetch_or(
+            scope_bit, std::memory_order_release);
         finish_weapon_ik_goal_census_claim(scope, false);
         return;
     }
     WeaponIkGoalChainSample after{};
     if (!seh_capture_weapon_ik_goal_chain(joint_sets, &after)) {
         write_log_line("PLAYER-WEAPON-IK-GOAL rejected stage=post-capture");
-        g_weapon_ik_goal_census_complete.store(
-            true, std::memory_order_release);
+        g_weapon_ik_goal_census_complete_mask.fetch_or(
+            scope_bit, std::memory_order_release);
         finish_weapon_ik_goal_census_claim(scope, false);
         return;
     }
@@ -45556,8 +45638,8 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
     if (!emitted) {
         write_log_line("PLAYER-WEAPON-IK-GOAL rejected stage=relative-transform");
     }
-    g_weapon_ik_goal_census_complete.store(
-        true, std::memory_order_release);
+    g_weapon_ik_goal_census_complete_mask.fetch_or(
+        scope_bit, std::memory_order_release);
     finish_weapon_ik_goal_census_claim(scope, emitted);
 }
 
@@ -61629,8 +61711,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20adx "
-        "(read-only post-refresh Chloe/Nadine WeaponIK goal census)");
+        "TLL co-op runtime init 2026-08-20ady "
+        "(read-only retained-owner WeaponIK goal donor census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
