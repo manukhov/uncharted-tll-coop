@@ -177,6 +177,14 @@ FUNCTIONS = {
         "rotation at buffers[0]+0x20*index+0x10 and marks that joint valid through "
         "the JointSet vtable.",
     ),
+    0x14181F710: (
+        "JointSet_PostMultiplyJointRotationAndMarkValid",
+        "Post-multiplies the selected JointSet locator rotation by the supplied "
+        "normalized quaternion, stores the result in buffers[0]+0x20*index+0x10, "
+        "then marks the joint valid through vtable +0x48. WeaponIK_Apply computes "
+        "inverse(current wrist WS) * desired wrist WS and uses this exact helper "
+        "to make the wrist orientation reach its target before commit.",
+    ),
     0x1420FDA00: (
         "MoveLegIkNew_BindLegJointSets",
         "MoveLegIkNew initialization slot. Binds its left/right JointSet pointers "

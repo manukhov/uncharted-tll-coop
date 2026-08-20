@@ -5164,11 +5164,25 @@ Keep the postblend preservation boundary; replace only its steady content.
       therefore admission/packaging, not a semantic target falsifier.  Disable
       `aef` in `aeg-safe`.
 
-- [ ] Restore the exact runtime-confirmed `82e7b9e` / `adr` steady two-hand
+- [x] Restore the exact runtime-confirmed `82e7b9e` / `adr` steady two-hand
       implementation as the active working baseline without reverting later
       static findings.  Its known residual is precise: stable low diagonal carry
       rather than Chloe's high horizontal chest/shoulder hold.  Keep all later
       rejected high-pair/stock-pose/whole-Feather mutations disabled.
+
+- [x] Close the muzzle-angle owner before another launch. Runtime common-Solve
+      samples show a large Chloe/Nadine split in the right wrist/hand-prop
+      relative to `spined`; terminal `WeaponIK_Apply` solves only the left arm,
+      while `0x14181F710` is the exact stock right-wrist quaternion operator and
+      the weapon later consumes the right hand-prop attachment. Implement the
+      narrow `aeh` semantic hand-prop relay through Nadine's own arm geometry.
+
+- [ ] Run the single written `aeh` exam. Require the combined READY marker,
+      fresh Chloe right-prop CAPTURE, Nadine right-prop RELAY and same-postblend
+      `baselineRestore=0`. All markers plus both hands and Chloe's muzzle-up
+      angle confirm `H-right-anchor`; all markers plus the old low angle reject
+      it; a raised muzzle with a detached support hand selects terminal-left
+      ordering. The agent may launch both copies but must not control gameplay.
 
 ## Rule
 

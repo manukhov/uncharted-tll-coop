@@ -26105,3 +26105,74 @@ also already recorded: that pose is a low diagonal carry, not Chloe's high
 horizontal chest/shoulder hold.  Restore that exact confirmed implementation as
 the working baseline without reverting later IDB labels or rejected findings;
 do not treat an `aef` zero-marker session as a reason to discard it.
+
+### 2026-08-20 CONFIRMED + STATIC IMPLEMENTED (`aeh`): keep the 82e7b9e two-hand base and correct Chloe's trigger-side hand-prop
+
+The exact `82e7b9e` build was rerun before this change, not inferred from the
+old report. Role-A PID `16872` and role-B PID `13440` both reached READY; role B
+emitted the exact steady `56C57AD2 + 283966ED` injection and C39 `19..30`
+postblend-restore markers. The user confirmed that the result was stable and
+two-handed, then supplied the remaining discriminator: Chloe holds the Mazur
+with its muzzle up, while this Nadine result holds it muzzle down. The working
+baseline is therefore restored verbatim from `82e7b9e`; later rejected
+high-pair, stock-pose, whole-Feather and terminal-left-target mutations remain
+disabled.
+
+The new right-anchor hypothesis has four independent evidence classes. First,
+the runtime-confirmed low pair proves that both authored arm/hand lanes reach
+the visible pose; missing-left-lane is no longer a candidate. Second, the
+completed read-only common-solver census gives a large trigger-side split after
+stock Solve in the same Mazur/WeaponOut/idle scope. Local Chloe's right wrist
+relative to `spined` is `P=(-0.122670,-0.327285,-0.0357381)`,
+`Q=(-0.376345,-0.699687,0.0018304,0.607288)` and her right hand-prop is
+`P=(-0.00558245,-0.357043,-0.0176287)`,
+`Q=(0.395121,0.410824,0.160518,0.805814)`. Local legacy Nadine instead has
+right wrist `P=(-0.240021,-0.244327,0.0222875)`,
+`Q=(-0.440876,-0.510671,-0.296903,0.675790)` and right hand-prop
+`P=(-0.161354,-0.328486,-0.00214335)`,
+`Q=(0.669452,0.310616,-0.035561,0.673860)`. Same-character local/retained
+controls remain below `0.021` position units / `6.81` degrees, so this is not
+view noise.
+
+Third, exact code dataflow separates the two roles. The common callsite
+`0x1418F29D0` runs before both `JointSet_CommitJointTransformsAndReset` calls at
+`0x1418F29DA/29E4`. `WeaponIK_Apply 0x1418F1780` then treats the right wrist as
+validation/input and solves only the opposite left arm at `0x1418F1C43`; its
+quaternion block computes `inverse(currentWristWs) * desiredWristWs` and calls
+`JointSet_PostMultiplyJointRotationAndMarkValid 0x14181F710` before committing
+both sets. Thus the rejected `aef` seam could move the support arm but could not
+rotate the trigger-side anchor that fixes the rifle's muzzle direction. Fourth,
+the exact C39 hierarchy is right shoulder `22` -> elbow `24` -> wrist `26` ->
+palm `28` -> hand-prop `30`, and the later
+`NdAttachableObject_PostJointUpdate_Async 0x141ED28E0` consumes the published
+owner attachment to place the weapon; it does not rewrite Player arm locals.
+
+Build `aeh` therefore changes no clip and copies no skeleton row. After the
+stock common Solve, role-B owner 1 publishes Chloe's live right hand-prop
+relative to her `spined`. For exact role-B owner 0 legacy Nadine/Mazur/
+WeaponOut/idle, the same hook composes that semantic hand-prop frame under
+Nadine's `spined`, subtracts Nadine's current `wrist -> hand-prop` transform,
+and obtains the wrist goal that preserves Nadine's own hand proportions. It
+calls stock `SolveArmIk 0x1418F0B60` for the existing right JointSet, then uses
+the exact stock `0x14181F710` quaternion operator. The untouched caller commits
+the result, and the untouched terminal pass solves the left support arm from
+the corrected right hand-prop. The old C39 `19..30` restore is skipped only
+when this exact correction succeeded in the same Player postblend call;
+otherwise the confirmed low two-hand baseline remains the fail-closed result.
+
+Competing hypotheses and the runtime prediction are explicit. `H-right-anchor`
+predicts READY plus repeated `CHLOE-WEAPON-IK-RIGHT-PROP-CAPTURE`,
+`NADINE-WEAPON-IK-RIGHT-PROP-RELAY` with `sourceAgeMs<=100`, and
+`NADINE-MAZUR-RIGHT-PROP retained ... baselineRestore=0`; with all three, Nadine
+must keep both hands on the rifle and its muzzle must rise to Chloe's angle.
+All markers plus the same low muzzle rejects right-anchor sufficiency and
+selects weapon-binding/downstream placement. A raised muzzle with a detached
+left hand selects the terminal-left solve/order. Missing READY or any relay
+marker is packaging/admission and has no visual meaning. P99, role A, Draw,
+ADS, movement, cover and grenade remain stock. The agent may launch/inject,
+but only the user controls gameplay.
+
+The exact post-multiply helper is saved as
+`JointSet_PostMultiplyJointRotationAndMarkValid 0x14181F710` in the single
+`ida/tll.i64`; headless application reported `1764 functions, 60 data names`
+and `save_database returned True`, and restarted MCP readback resolves the name.

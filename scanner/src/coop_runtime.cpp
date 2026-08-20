@@ -2456,6 +2456,14 @@ constexpr bool kEnablePlayerWeaponIkFeatherGoalCensus = false;
 // while role-B Nadine differs by 0.30061 units / 75.94 degrees.  Relay only
 // that normalized target inside the same process; keep the stock solver/maps.
 constexpr bool kEnableLegacyNadineWeaponIkGoalRelay = false;
+// Build 82e7b9e/adr is the runtime-confirmed stable two-hand baseline, but its
+// muzzle remains low because stock WeaponIK leaves the trigger-side/right
+// wrist and hand-prop in Nadine's substantially different spine-relative
+// frame.  Keep the authored 56C/283 pair as the pre-IK pose, then transfer only
+// Chloe's live right hand-prop frame through Nadine's own arm geometry and the
+// stock SolveArmIk/JointSet rotation operators.  The stock terminal pass then
+// solves the left support arm from that corrected trigger-side anchor.
+constexpr bool kEnableLegacyNadineMazurRightHandPropRelay = true;
 // REJECTED in build aea: installing the internal 0x1418F2E0B observer crashed
 // role B after READY and before its first sample.  The writer hypothesis remains
 // STATIC, but this callsite is not an admissible runtime boundary.
@@ -2502,14 +2510,18 @@ constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
 // preserve the stock pose already blended with its published +0x158 weight;
 // only the later steady topology receives the full command overlay. Draw state
 // 1, P99, role A and ADS remain stock.
-constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = false;
+constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = true;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 static_assert(
     !(kEnableLegacyNadineMazurAuthoredPairRepair &&
       (kEnableLegacyNadineMazurDrawEndpointRepair ||
        kEnableLegacyNadineWeaponIkFeatherSuppression)),
-    "stock-pose exam must not compose with rejected Draw/Feather hooks");
+    "authored-pair repair must not compose with rejected Draw/Feather hooks");
+static_assert(
+    !kEnableLegacyNadineMazurRightHandPropRelay ||
+        kEnableLegacyNadineMazurAuthoredPairRepair,
+    "right-hand-prop relay requires the confirmed authored-pair baseline");
 // Build ada proved a repeatable first-Draw-good -> steady-broken transition,
 // followed by immediately broken later Draws. The animation layer has exact
 // create-new and loop-current paths while consuming its bounded transition
@@ -18765,6 +18777,8 @@ constexpr std::array<std::uintptr_t, 4>
         0x18F1872u, 0x18F1896u, 0x18F18A6u, 0x18F18B5u};
 constexpr std::uintptr_t kJointChainFindNamedJointOffsetRva = 0x181D750u;
 constexpr std::uintptr_t kJointSetGetJointLocWsRva = 0x181DA50u;
+constexpr std::uintptr_t kJointSetMultiplyJointRotationRva = 0x181F710u;
+constexpr std::uintptr_t kSolveArmIkRva = 0x18F0B60u;
 constexpr std::uintptr_t kTransformMakeRelativeRva = 0x1990F0u;
 constexpr std::uintptr_t kPlayerWeaponIkActionVtableRva = 0x2A483A0u;
 constexpr std::uintptr_t kWeaponIkFeatherVtableRva = 0x2B0FFD8u;
@@ -44919,6 +44933,9 @@ using TransformMakeRelativeFunction = void*(__fastcall*)(
     const float*, float*, const float*);
 using WeaponIkTransformComposeFunction = void*(__fastcall*)(
     const float*, float*, const float*);
+using SolveArmIkFunction = std::uint8_t(__fastcall*)(void*, void*, void*);
+using JointSetMultiplyJointRotationFunction = std::int64_t(__fastcall*)(
+    void*, std::int32_t, const float*, std::uint8_t);
 
 WeaponIkFeatherSolveFunction g_original_weapon_ik_feather_solve = nullptr;
 JointChainFindNamedJointOffsetFunction
@@ -44927,6 +44944,9 @@ JointSetGetJointLocWsFunction g_original_weapon_ik_goal_get_joint_loc_ws =
     nullptr;
 TransformMakeRelativeFunction g_transform_make_relative = nullptr;
 WeaponIkTransformComposeFunction g_weapon_ik_transform_compose = nullptr;
+SolveArmIkFunction g_solve_arm_ik = nullptr;
+JointSetMultiplyJointRotationFunction g_joint_set_multiply_joint_rotation =
+    nullptr;
 
 constexpr std::size_t kWeaponIkGoalChainJointCount = 5;
 constexpr ULONGLONG kWeaponIkGoalCensusDwellMs = 350;
@@ -45036,10 +45056,23 @@ WeaponIkGoalRelayDwell g_weapon_ik_goal_relay_dwell[2]{};
 WeaponIkGoalRelaySnapshot g_weapon_ik_goal_relay_snapshot{};
 std::atomic<std::uint32_t> g_weapon_ik_goal_relay_sequence{0};
 std::atomic<bool> g_weapon_ik_terminal_apply_census_ready{false};
+std::atomic<bool> g_legacy_nadine_mazur_right_prop_relay_ready{false};
 std::array<std::uint32_t, kWeaponIkGoalChainJointCount>
     g_weapon_ik_goal_left_joint_ids{};
 std::array<std::uint32_t, kWeaponIkGoalChainJointCount>
     g_weapon_ik_goal_right_joint_ids{};
+
+struct WeaponIkRightPropAppliedTls {
+    bool valid = false;
+    void* player = nullptr;
+    void* fg_anim_data = nullptr;
+    void* weapon = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+};
+
+thread_local WeaponIkRightPropAppliedTls
+    g_weapon_ik_right_prop_applied_tls{};
 
 bool weapon_ik_goal_locator_valid(const WeaponIkGoalLocator& locator) {
     for (const float value : locator.value) {
@@ -45651,6 +45684,147 @@ bool weapon_ik_goal_make_relative(
     }
 }
 
+struct alignas(16) WeaponIkArmRequest {
+    void* joint_set = nullptr;
+    std::int32_t arm_index = -1;
+    std::uint32_t reserved_0c = 0;
+    float target_position[4]{};
+    float solved_position[4]{};
+    float weight = 1.0F;
+    std::uint8_t use_secondary_constraint = 0;
+    std::array<std::byte, 11> reserved_35{};
+};
+
+static_assert(sizeof(WeaponIkArmRequest) == 0x40);
+static_assert(offsetof(WeaponIkArmRequest, target_position) == 0x10);
+static_assert(offsetof(WeaponIkArmRequest, weight) == 0x30);
+
+bool seh_apply_chloe_right_hand_prop_goal(
+    void** joint_sets, const WeaponIkGoalCensusScope& scope,
+    const WeaponIkGoalRelaySnapshot& source,
+    const WeaponIkGoalChainSample& stock_after,
+    float* position_error_out, float* angle_error_out) {
+    if (position_error_out != nullptr) {
+        *position_error_out = 0.0F;
+    }
+    if (angle_error_out != nullptr) {
+        *angle_error_out = 0.0F;
+    }
+    if (joint_sets == nullptr || !source.valid || scope.owner_index != 0 ||
+        scope.look != kLegacyNadineAttachTargetLookId ||
+        g_solve_arm_ik == nullptr ||
+        g_joint_set_multiply_joint_rotation == nullptr ||
+        g_joint_chain_find_named_joint_offset == nullptr ||
+        g_original_weapon_ik_goal_get_joint_loc_ws == nullptr ||
+        !weapon_ik_goal_locator_valid(source.relative)) {
+        return false;
+    }
+    __try {
+        void* const right_set = joint_sets[1];
+        if (right_set == nullptr || readable_bytes(right_set) < 0x50 ||
+            *reinterpret_cast<const std::uint16_t*>(
+                static_cast<const std::byte*>(right_set) + 0x10) != 3) {
+            return false;
+        }
+        const std::int16_t joint_count =
+            *reinterpret_cast<const std::int16_t*>(
+                static_cast<const std::byte*>(right_set) + 0x12);
+        const std::int32_t wrist_offset =
+            g_joint_chain_find_named_joint_offset(
+                right_set, g_weapon_ik_goal_right_joint_ids[3]);
+        if (joint_count < 5 || joint_count > 64 || wrist_offset < 0 ||
+            wrist_offset >= joint_count) {
+            return false;
+        }
+
+        WeaponIkGoalLocator desired_prop_world{};
+        WeaponIkGoalLocator wrist_to_prop{};
+        WeaponIkGoalLocator identity{};
+        WeaponIkGoalLocator prop_to_wrist{};
+        WeaponIkGoalLocator desired_wrist_world{};
+        identity.value[7] = 1.0F;
+        if (!weapon_ik_goal_compose(
+                stock_after.right.front(), source.relative,
+                &desired_prop_world) ||
+            !weapon_ik_goal_make_relative(
+                stock_after.right[3], stock_after.right[4],
+                &wrist_to_prop) ||
+            !weapon_ik_goal_make_relative(
+                wrist_to_prop, identity, &prop_to_wrist) ||
+            !weapon_ik_goal_compose(
+                desired_prop_world, prop_to_wrist,
+                &desired_wrist_world)) {
+            return false;
+        }
+
+        WeaponIkArmRequest request{};
+        request.joint_set = right_set;
+        std::memcpy(
+            request.target_position, desired_wrist_world.value.data(),
+            sizeof(request.target_position));
+        if (g_solve_arm_ik(&request, nullptr, nullptr) == 0) {
+            return false;
+        }
+
+        const float* const solved_wrist =
+            g_original_weapon_ik_goal_get_joint_loc_ws(
+                right_set, wrist_offset);
+        if (solved_wrist == nullptr || readable_bytes(solved_wrist) < 0x20) {
+            return false;
+        }
+        WeaponIkGoalLocator solved_wrist_locator{};
+        WeaponIkGoalLocator wrist_delta{};
+        std::memcpy(
+            solved_wrist_locator.value.data(), solved_wrist,
+            sizeof(solved_wrist_locator.value));
+        if (!weapon_ik_goal_make_relative(
+                solved_wrist_locator, desired_wrist_world,
+                &wrist_delta)) {
+            return false;
+        }
+        g_joint_set_multiply_joint_rotation(
+            right_set, wrist_offset, wrist_delta.value.data() + 4, 1);
+
+        std::array<WeaponIkGoalLocator,
+                   kWeaponIkGoalChainJointCount> corrected_right{};
+        WeaponIkGoalLocator corrected_prop_relative{};
+        if (!seh_capture_weapon_ik_goal_chain_side(
+                right_set, false, &corrected_right) ||
+            !weapon_ik_goal_make_relative(
+                corrected_right.front(), corrected_right.back(),
+                &corrected_prop_relative)) {
+            return false;
+        }
+        const float dx = corrected_prop_relative.value[0] -
+            source.relative.value[0];
+        const float dy = corrected_prop_relative.value[1] -
+            source.relative.value[1];
+        const float dz = corrected_prop_relative.value[2] -
+            source.relative.value[2];
+        const float position_error = std::sqrt(dx * dx + dy * dy + dz * dz);
+        float quaternion_dot = 0.0F;
+        for (std::size_t index = 0; index < 4; ++index) {
+            quaternion_dot += corrected_prop_relative.value[index + 4] *
+                source.relative.value[index + 4];
+        }
+        quaternion_dot = std::clamp(std::abs(quaternion_dot), 0.0F, 1.0F);
+        const float angle_error =
+            2.0F * std::acos(quaternion_dot) * 57.29577951308232F;
+        if (!std::isfinite(position_error) || !std::isfinite(angle_error)) {
+            return false;
+        }
+        if (position_error_out != nullptr) {
+            *position_error_out = position_error;
+        }
+        if (angle_error_out != nullptr) {
+            *angle_error_out = angle_error;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 const float* capture_weapon_ik_terminal_getter_result(
     std::size_t getter_index, void* joint_set, std::int32_t joint_offset) {
     const auto original = g_original_weapon_ik_goal_get_joint_loc_ws;
@@ -46092,7 +46266,8 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
     WeaponIkGoalCensusScope scope{};
     const bool selected =
         (kEnablePlayerWeaponIkFeatherGoalCensus ||
-         kEnableLegacyNadineWeaponIkGoalRelay) &&
+         kEnableLegacyNadineWeaponIkGoalRelay ||
+         kEnableLegacyNadineMazurRightHandPropRelay) &&
         seh_select_weapon_ik_goal_census_scope(
             joint_sets, jacobian_maps, &scope);
     const std::uint32_t scope_bit = selected
@@ -46114,7 +46289,9 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
         write_log_line(line.str().c_str());
     }
     const bool relay_dwell =
-        kEnableLegacyNadineWeaponIkGoalRelay && g_net_role_b && selected &&
+        (kEnableLegacyNadineWeaponIkGoalRelay ||
+         kEnableLegacyNadineMazurRightHandPropRelay) &&
+        g_net_role_b && selected &&
         weapon_ik_goal_relay_dwell_ready(scope);
     const bool relay_source = relay_dwell && scope.owner_index == 1 &&
         scope.look == kChloeAttachDonorLookId;
@@ -46125,6 +46302,20 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
          g_weapon_ik_terminal_apply_census_ready.load(
              std::memory_order_acquire)) &&
         copy_fresh_weapon_ik_goal_relay_snapshot(&relay_snapshot);
+    const bool right_prop_source =
+        kEnableLegacyNadineMazurRightHandPropRelay && relay_dwell &&
+        scope.owner_index == 1 &&
+        scope.look == kChloeAttachDonorLookId &&
+        g_legacy_nadine_mazur_right_prop_relay_ready.load(
+            std::memory_order_acquire);
+    WeaponIkGoalRelaySnapshot right_prop_snapshot{};
+    const bool right_prop_target =
+        kEnableLegacyNadineMazurRightHandPropRelay && relay_dwell &&
+        scope.owner_index == 0 &&
+        scope.look == kLegacyNadineAttachTargetLookId &&
+        g_legacy_nadine_mazur_right_prop_relay_ready.load(
+            std::memory_order_acquire) &&
+        copy_fresh_weapon_ik_goal_relay_snapshot(&right_prop_snapshot);
     const bool claimed = scoped && weapon_ik_goal_census_ready(scope);
 
     const WeaponIkGoalGetterCaptureTls previous_capture =
@@ -46187,6 +46378,57 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
         }
     }
 
+    WeaponIkGoalChainSample right_prop_after{};
+    const bool right_prop_after_valid =
+        (right_prop_source || right_prop_target) &&
+        seh_capture_weapon_ik_goal_chain(joint_sets, &right_prop_after) &&
+        weapon_ik_goal_same_spine_frame(
+            right_prop_after.left.front(),
+            right_prop_after.right.front());
+    if (right_prop_source && right_prop_after_valid) {
+        WeaponIkGoalLocator right_prop_relative{};
+        if (weapon_ik_goal_make_relative(
+                right_prop_after.right.front(),
+                right_prop_after.right.back(),
+                &right_prop_relative)) {
+            publish_weapon_ik_goal_relay_snapshot(
+                scope, right_prop_relative,
+                "CHLOE-WEAPON-IK-RIGHT-PROP-CAPTURE");
+        }
+    }
+    if (right_prop_target && right_prop_after_valid) {
+        float position_error = 0.0F;
+        float angle_error = 0.0F;
+        if (seh_apply_chloe_right_hand_prop_goal(
+                joint_sets, scope, right_prop_snapshot,
+                right_prop_after, &position_error, &angle_error)) {
+            g_weapon_ik_right_prop_applied_tls = {
+                true,
+                scope.player,
+                scope.fg_anim_data,
+                scope.weapon,
+                scope.player_runtime_id,
+                scope.weapon_runtime_id};
+            static std::atomic<unsigned> applied_logs{0};
+            if (applied_logs.fetch_add(
+                    1, std::memory_order_relaxed) < 16) {
+                const ULONGLONG now = GetTickCount64();
+                std::ostringstream line;
+                line << "NADINE-WEAPON-IK-RIGHT-PROP-RELAY owner=0"
+                     << " sourceOwner=1 sourceSeq="
+                     << right_prop_snapshot.sequence
+                     << " sourceAgeMs="
+                     << (now >= right_prop_snapshot.captured_ms
+                             ? now - right_prop_snapshot.captured_ms : 0)
+                     << " positionError=" << position_error
+                     << " angleErrorDeg=" << angle_error;
+                log_weapon_ik_goal_locator(
+                    line, "goalRel", right_prop_snapshot.relative);
+                write_log_line(line.str().c_str());
+            }
+        }
+    }
+
     if (!claimed) {
         return;
     }
@@ -46228,6 +46470,11 @@ bool install_player_weapon_ik_feather_goal_census() {
     g_weapon_ik_transform_compose =
         reinterpret_cast<WeaponIkTransformComposeFunction>(
             g_module + kTransformComposeRva);
+    g_solve_arm_ik = reinterpret_cast<SolveArmIkFunction>(
+        g_module + kSolveArmIkRva);
+    g_joint_set_multiply_joint_rotation =
+        reinterpret_cast<JointSetMultiplyJointRotationFunction>(
+            g_module + kJointSetMultiplyJointRotationRva);
     g_weapon_ik_goal_left_joint_ids = {
         kSpinedJointNameId,
         safe_string_id_hash("l_shoulder", 10),
@@ -46390,9 +46637,11 @@ bool install_player_weapon_ik_feather_goal_census() {
     }
     boot_log_line(
         protection_restored
-            ? (kEnableLegacyNadineWeaponIkGoalRelay
-                   ? "Player WeaponIK same-process goal relay READY (Solve + two stock getter callsites)"
-                   : "Player WeaponIK goal census READY (Solve + two stock getter callsites; read-only)")
+            ? (kEnableLegacyNadineMazurRightHandPropRelay
+                   ? "Player WeaponIK right-hand-prop relay boundary READY (Solve + two stock getter callsites)"
+                   : (kEnableLegacyNadineWeaponIkGoalRelay
+                          ? "Player WeaponIK same-process goal relay READY (Solve + two stock getter callsites)"
+                          : "Player WeaponIK goal census READY (Solve + two stock getter callsites; read-only)"))
             : "Player WeaponIK goal package READY (protection WARNING; relay retained)");
     return true;
 }
@@ -49712,15 +49961,24 @@ bool install_legacy_nadine_mazur_steady_hands_npc_repair() {
 // handoff is visible, but neither reproduced Chloe's steady hold. This path no
 // longer selects or injects an animation clip: it snapshots the engine's own
 // complete C39 arm/hand result after Perform and restores it after +0x408.
-constexpr std::uint32_t kMazurTransitionHandsClipId = 0x56C57AD2u;
-constexpr std::uint32_t kMazurTransitionArmsClipId = 0x283966EDu;
+constexpr std::uint32_t kMazurAuthoredHandsClipId = 0x56C57AD2u;
+constexpr std::uint32_t kMazurAuthoredArmsClipId = 0x283966EDu;
 constexpr std::uint32_t kMazurAuthoredPairStateId = 0x11EE475Bu;
+constexpr std::uint16_t kMazurAuthoredPairFrameCount = 1u;
 
 enum class LegacyNadineMazurAuthoredPairAdmission : std::uint8_t {
     kPrerequisite = 0,
     kOwner = 1,
     kClips = 2,
     kAdmitted = 3,
+};
+
+enum class LegacyNadineMazurAuthoredPairInjection : std::uint8_t {
+    kIgnored = 0,
+    kInjected = 1,
+    kRecord = 2,
+    kGrammar = 3,
+    kCapacity = 4,
 };
 
 struct LegacyNadineMazurAuthoredPairEpoch {
@@ -49730,13 +49988,12 @@ struct LegacyNadineMazurAuthoredPairEpoch {
     void* weapon = nullptr;
     void* local_pose = nullptr;
     void* target_skeleton = nullptr;
-    void* steady_hands_clip = nullptr;
-    void* steady_anim_control = nullptr;
+    void* hands_clip = nullptr;
+    void* arms_clip = nullptr;
     void* weapon_partial_layer = nullptr;
     void* custom_pair_instance = nullptr;
     std::uint32_t player_runtime_id = 0;
     std::uint32_t weapon_runtime_id = 0;
-    std::uint32_t steady_hands_resolved_id = 0;
     std::uint32_t blend_weight_bits = 0x3F800000u;
     bool transition_weighted = false;
 };
@@ -49753,13 +50010,10 @@ struct LegacyNadineMazurAuthoredPairPostBlendTicket {
     void* weapon = nullptr;
     void* local_pose = nullptr;
     void* target_skeleton = nullptr;
-    void* steady_hands_clip = nullptr;
-    void* steady_anim_control = nullptr;
     void* weapon_partial_layer = nullptr;
     void* custom_pair_instance = nullptr;
     std::uint32_t player_runtime_id = 0;
     std::uint32_t weapon_runtime_id = 0;
-    std::uint32_t steady_hands_resolved_id = 0;
     std::uint32_t blend_weight_bits = 0x3F800000u;
     bool transition_weighted = false;
     std::array<std::byte, kMazurAuthoredPairPoseBytes> pose{};
@@ -49779,7 +50033,7 @@ LegacyNadineMazurAuthoredPairPerformFunction
 std::atomic<bool> g_legacy_nadine_mazur_authored_pair_ready{false};
 thread_local LegacyNadineMazurAuthoredPairEpoch
     g_legacy_nadine_mazur_authored_pair_epoch{};
-thread_local bool g_legacy_nadine_mazur_stock_pose_source_observed = false;
+thread_local bool g_legacy_nadine_mazur_authored_pair_injected = false;
 thread_local LegacyNadineMazurAuthoredPairPostBlendTicket
     g_legacy_nadine_mazur_authored_pair_postblend_ticket{};
 
@@ -49788,9 +50042,8 @@ thread_local LegacyNadineMazurAuthoredPairPostBlendTicket
 // each newer track is folded over the accumulated pose with the last instance's
 // +0x158 weight. The saved Mazur trace independently observed this exact state
 // progress from near zero to one while the controller was already WeaponOut=2.
-// The stock-pose exam admits only when 11EE475B is absent. Its traversal here
-// proves that the transient custom root is no longer live; it does not inject
-// or synthesize a replacement weight.
+// If 11EE475B is absent (the normal steady s_no-weapon topology), the confirmed
+// steady repair remains a full-weight contributor.
 bool seh_resolve_legacy_nadine_mazur_authored_pair_weight(
     void* player, LegacyNadineMazurAuthoredPairEpoch* epoch) {
     if (player == nullptr || epoch == nullptr ||
@@ -49911,14 +50164,14 @@ bool seh_resolve_legacy_nadine_mazur_authored_pair_weight(
             &control_second_blend_bits, weapon_anim_control + 0x28,
             sizeof(control_second_blend_bits));
         if (*reinterpret_cast<const std::uint32_t*>(player_bytes + 0x1CC) !=
-                kMazurTransitionHandsClipId ||
+                kMazurAuthoredHandsClipId ||
             *reinterpret_cast<const std::uint32_t*>(player_bytes + 0x1D0) !=
-                kMazurTransitionArmsClipId ||
+                kMazurAuthoredArmsClipId ||
             player_second_blend_bits != 0x3F333333u ||
             *reinterpret_cast<const std::uint32_t*>(
-                weapon_anim_control + 0x20) != kMazurTransitionHandsClipId ||
+                weapon_anim_control + 0x20) != kMazurAuthoredHandsClipId ||
             *reinterpret_cast<const std::uint32_t*>(
-                weapon_anim_control + 0x24) != kMazurTransitionArmsClipId ||
+                weapon_anim_control + 0x24) != kMazurAuthoredArmsClipId ||
             control_second_blend_bits != 0x3F333333u ||
             custom_instance_index + 1 != custom_instance_count) {
             return false;
@@ -49991,6 +50244,30 @@ seh_select_legacy_nadine_mazur_authored_pair_epoch(
             return LegacyNadineMazurAuthoredPairAdmission::kOwner;
         }
 
+        void* const hands_clip = seh_resolve_exact_animation_clip(
+            kPlayerAnimationDatabaseId, kPlayerAnimationSkeletonId,
+            kMazurAuthoredHandsClipId);
+        void* const arms_clip = seh_resolve_exact_animation_clip(
+            kPlayerAnimationDatabaseId, kPlayerAnimationSkeletonId,
+            kMazurAuthoredArmsClipId);
+        if (hands_clip == nullptr || arms_clip == nullptr ||
+            hands_clip == arms_clip) {
+            return LegacyNadineMazurAuthoredPairAdmission::kClips;
+        }
+        auto* const hands_data = *reinterpret_cast<std::byte* const*>(
+            static_cast<std::byte*>(hands_clip) + 0x28);
+        auto* const arms_data = *reinterpret_cast<std::byte* const*>(
+            static_cast<std::byte*>(arms_clip) + 0x28);
+        if (hands_data == nullptr || arms_data == nullptr ||
+            readable_bytes(hands_data) < 0x24 ||
+            readable_bytes(arms_data) < 0x24 ||
+            *reinterpret_cast<const std::uint16_t*>(hands_data + 0x22) !=
+                kMazurAuthoredPairFrameCount ||
+            *reinterpret_cast<const std::uint16_t*>(arms_data + 0x22) !=
+                kMazurAuthoredPairFrameCount) {
+            return LegacyNadineMazurAuthoredPairAdmission::kClips;
+        }
+
         output->valid = true;
         output->player = player;
         output->fg_anim_data = expected_fg;
@@ -49999,6 +50276,8 @@ seh_select_legacy_nadine_mazur_authored_pair_epoch(
         output->target_skeleton = *reinterpret_cast<void* const*>(
             static_cast<const std::byte*>(expected_fg) +
             kFgAnimDataSkeletonOffset);
+        output->hands_clip = hands_clip;
+        output->arms_clip = arms_clip;
         output->player_runtime_id =
             *reinterpret_cast<const std::uint32_t*>(
                 static_cast<const std::byte*>(player) +
@@ -50012,25 +50291,6 @@ seh_select_legacy_nadine_mazur_authored_pair_epoch(
             *output = {};
             return LegacyNadineMazurAuthoredPairAdmission::kOwner;
         }
-        // This exam is steady-only. Keep the native 11EE475B transition
-        // completely stock, and preserve only the already proven campaign-
-        // Chloe materialization of the canonical Hands root.
-        void* steady_hands_clip = nullptr;
-        void* steady_anim_control = nullptr;
-        std::uint32_t steady_hands_resolved_id = 0;
-        if (output->custom_pair_instance != nullptr ||
-            !seh_resolve_exact_steady_idle_hands_root(
-                player, &steady_hands_clip, &steady_anim_control,
-                &steady_hands_resolved_id) ||
-            steady_hands_clip == nullptr || steady_anim_control == nullptr ||
-            steady_hands_resolved_id !=
-                kLegacyNadineChloeIdleHandsClipId) {
-            *output = {};
-            return LegacyNadineMazurAuthoredPairAdmission::kOwner;
-        }
-        output->steady_hands_clip = steady_hands_clip;
-        output->steady_anim_control = steady_anim_control;
-        output->steady_hands_resolved_id = steady_hands_resolved_id;
         return LegacyNadineMazurAuthoredPairAdmission::kAdmitted;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *output = {};
@@ -50079,20 +50339,16 @@ bool seh_capture_legacy_nadine_mazur_authored_pair_postblend_ticket(
                 kMazurAuthoredPairPoseBytes) {
             return false;
         }
-        void* steady_hands_clip = nullptr;
-        void* steady_anim_control = nullptr;
-        std::uint32_t steady_hands_resolved_id = 0;
-        if (epoch.custom_pair_instance != nullptr ||
-            !seh_resolve_exact_steady_idle_hands_root(
-                epoch.player, &steady_hands_clip, &steady_anim_control,
-                &steady_hands_resolved_id) ||
-            steady_hands_clip != epoch.steady_hands_clip ||
-            steady_anim_control != epoch.steady_anim_control ||
-            steady_hands_resolved_id !=
-                epoch.steady_hands_resolved_id ||
-            steady_hands_resolved_id !=
-                kLegacyNadineChloeIdleHandsClipId) {
-            return false;
+        if (epoch.custom_pair_instance != nullptr) {
+            LegacyNadineMazurAuthoredPairEpoch current{};
+            if (!seh_resolve_legacy_nadine_mazur_authored_pair_weight(
+                    epoch.player, &current) ||
+                current.weapon_partial_layer != epoch.weapon_partial_layer ||
+                current.custom_pair_instance != epoch.custom_pair_instance ||
+                current.blend_weight_bits != epoch.blend_weight_bits ||
+                current.transition_weighted != epoch.transition_weighted) {
+                return false;
+            }
         }
         output->valid = true;
         output->player = epoch.player;
@@ -50100,14 +50356,10 @@ bool seh_capture_legacy_nadine_mazur_authored_pair_postblend_ticket(
         output->weapon = epoch.weapon;
         output->local_pose = epoch.local_pose;
         output->target_skeleton = epoch.target_skeleton;
-        output->steady_hands_clip = epoch.steady_hands_clip;
-        output->steady_anim_control = epoch.steady_anim_control;
         output->weapon_partial_layer = epoch.weapon_partial_layer;
         output->custom_pair_instance = epoch.custom_pair_instance;
         output->player_runtime_id = epoch.player_runtime_id;
         output->weapon_runtime_id = epoch.weapon_runtime_id;
-        output->steady_hands_resolved_id =
-            epoch.steady_hands_resolved_id;
         output->blend_weight_bits = epoch.blend_weight_bits;
         output->transition_weighted = epoch.transition_weighted;
         std::memcpy(
@@ -50164,20 +50416,16 @@ bool seh_restore_legacy_nadine_mazur_authored_pair_after_postblend(
                 ticket.pose.size()) {
             return false;
         }
-        void* steady_hands_clip = nullptr;
-        void* steady_anim_control = nullptr;
-        std::uint32_t steady_hands_resolved_id = 0;
-        if (ticket.custom_pair_instance != nullptr ||
-            !seh_resolve_exact_steady_idle_hands_root(
-                player, &steady_hands_clip, &steady_anim_control,
-                &steady_hands_resolved_id) ||
-            steady_hands_clip != ticket.steady_hands_clip ||
-            steady_anim_control != ticket.steady_anim_control ||
-            steady_hands_resolved_id !=
-                ticket.steady_hands_resolved_id ||
-            steady_hands_resolved_id !=
-                kLegacyNadineChloeIdleHandsClipId) {
-            return false;
+        if (ticket.custom_pair_instance != nullptr) {
+            LegacyNadineMazurAuthoredPairEpoch current{};
+            if (!seh_resolve_legacy_nadine_mazur_authored_pair_weight(
+                    player, &current) ||
+                current.weapon_partial_layer != ticket.weapon_partial_layer ||
+                current.custom_pair_instance != ticket.custom_pair_instance ||
+                current.blend_weight_bits != ticket.blend_weight_bits ||
+                current.transition_weighted != ticket.transition_weighted) {
+                return false;
+            }
         }
         std::memcpy(
             static_cast<std::byte*>(ticket.local_pose) +
@@ -50186,6 +50434,172 @@ bool seh_restore_legacy_nadine_mazur_authored_pair_after_postblend(
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
+    }
+}
+
+LegacyNadineMazurAuthoredPairInjection
+seh_inject_legacy_nadine_mazur_authored_pair(
+    void* create_context, void* command_record, std::uint32_t group,
+    const LegacyNadineMazurAuthoredPairEpoch& epoch,
+    std::uint32_t* scratch_lane_out) {
+    if (scratch_lane_out != nullptr) {
+        *scratch_lane_out = 0;
+    }
+    __try {
+        if (!epoch.valid || create_context == nullptr ||
+            command_record == nullptr || group != 0 ||
+            readable_bytes(create_context) < 0x18 ||
+            *reinterpret_cast<void* const*>(create_context) !=
+                epoch.fg_anim_data ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(create_context) + 0x08) !=
+                epoch.target_skeleton ||
+            *reinterpret_cast<const std::uint8_t*>(
+                static_cast<const std::byte*>(create_context) + 0x10) != 1 ||
+            *reinterpret_cast<const std::uint8_t*>(
+                static_cast<const std::byte*>(create_context) + 0x11) != 3 ||
+            readable_bytes(command_record) < 0x20) {
+            return LegacyNadineMazurAuthoredPairInjection::kIgnored;
+        }
+
+        auto* const record = static_cast<std::byte*>(command_record);
+        auto* const words = *reinterpret_cast<std::uint32_t**>(record);
+        const std::uint32_t capacity_words =
+            *reinterpret_cast<const std::uint32_t*>(record + 0x08);
+        const std::uint32_t word_count =
+            *reinterpret_cast<const std::uint32_t*>(record + 0x0C);
+        const std::uint32_t pending_count =
+            *reinterpret_cast<const std::uint32_t*>(record + 0x10);
+        void* const pending_header =
+            *reinterpret_cast<void* const*>(record + 0x18);
+        constexpr std::uint32_t kInsertedWords =
+            2u * (kAnimCommandWordCountAnimation +
+                  kAnimCommandWordCountBlend);
+        if (words == nullptr || word_count == 0 ||
+            (capacity_words != 1024 && capacity_words != 4096) ||
+            word_count > capacity_words || pending_count != 0 ||
+            pending_header != nullptr ||
+            capacity_words - word_count < kInsertedWords ||
+            readable_bytes(words) <
+                static_cast<std::size_t>(word_count + kInsertedWords) *
+                    sizeof(std::uint32_t)) {
+            return LegacyNadineMazurAuthoredPairInjection::kRecord;
+        }
+
+        std::uint32_t cursor = 0;
+        std::uint32_t object_begin_count = 0;
+        std::uint32_t control_begin_count = 0;
+        std::uint32_t opener_count = 0;
+        std::uint32_t opener_word = UINT32_MAX;
+        std::uint32_t finalizer_count = 0;
+        std::uint32_t finalizer_word = UINT32_MAX;
+        while (cursor < word_count) {
+            const std::uint32_t header = words[cursor];
+            const std::uint32_t opcode = header & 0xFFFFu;
+            const std::uint32_t command_words = header >> 16;
+            if (command_words == 0 || command_words > word_count - cursor) {
+                return LegacyNadineMazurAuthoredPairInjection::kGrammar;
+            }
+            if (opcode == kAnimCommandBeginObject) {
+                if (command_words != 2 || cursor != 0) {
+                    return LegacyNadineMazurAuthoredPairInjection::kGrammar;
+                }
+                ++object_begin_count;
+            } else if (opcode == kAnimCommandBeginControl) {
+                if (command_words != 2 || cursor != 2) {
+                    return LegacyNadineMazurAuthoredPairInjection::kGrammar;
+                }
+                ++control_begin_count;
+            } else if (opcode == kAnimCommandAllocateBlock) {
+                if (command_words != 4 || cursor != 4) {
+                    return LegacyNadineMazurAuthoredPairInjection::kGrammar;
+                }
+                ++opener_count;
+                opener_word = cursor;
+            } else if (opcode == kAnimCommandFinalizeBlock) {
+                if (command_words != kAnimCommandWordCountFinalizeBlock) {
+                    return LegacyNadineMazurAuthoredPairInjection::kGrammar;
+                }
+                ++finalizer_count;
+                finalizer_word = cursor;
+            }
+            cursor += command_words;
+        }
+        if (cursor != word_count || object_begin_count != 1 ||
+            control_begin_count != 1 || opener_count != 1 ||
+            opener_word == UINT32_MAX || finalizer_count != 1 ||
+            finalizer_word == UINT32_MAX) {
+            return LegacyNadineMazurAuthoredPairInjection::kGrammar;
+        }
+
+        std::uint32_t suffix =
+            finalizer_word + kAnimCommandWordCountFinalizeBlock;
+        const auto consume_suffix = [&](std::uint32_t opcode,
+                                        std::uint32_t command_words) {
+            if (suffix >= word_count ||
+                words[suffix] != ((command_words << 16) | opcode) ||
+                command_words > word_count - suffix) {
+                return false;
+            }
+            suffix += command_words;
+            return true;
+        };
+        if (!consume_suffix(4u, 2u) || !consume_suffix(15u, 4u) ||
+            !consume_suffix(16u, 2u) || !consume_suffix(17u, 4u)) {
+            return LegacyNadineMazurAuthoredPairInjection::kGrammar;
+        }
+        const std::uint32_t conversion_word = suffix;
+        if (!consume_suffix(24u, 6u) ||
+            words[conversion_word + 1] != kAnimPostPoseJointConversionId ||
+            !consume_suffix(27u, 6u) || !consume_suffix(5u, 2u) ||
+            suffix != word_count) {
+            return LegacyNadineMazurAuthoredPairInjection::kGrammar;
+        }
+
+        const std::uint32_t old_lane_count = words[opener_word + 2];
+        if (old_lane_count == 0 ||
+            old_lane_count >= kAnimWorkBufferLaneCapacity) {
+            return LegacyNadineMazurAuthoredPairInjection::kCapacity;
+        }
+        const std::uint32_t scratch_lane = old_lane_count;
+        const std::uint32_t suffix_words = word_count - finalizer_word;
+        std::memmove(
+            words + finalizer_word + kInsertedWords,
+            words + finalizer_word,
+            static_cast<std::size_t>(suffix_words) * sizeof(std::uint32_t));
+
+        auto emit_clip_overlay = [&](std::uint32_t*& output,
+                                     void* clip) {
+            output[0] =
+                (kAnimCommandWordCountAnimation << 16) |
+                kAnimCommandAnimation;
+            output[1] = 0;
+            std::memcpy(output + 2, &clip, sizeof(clip));
+            output[4] = scratch_lane;
+            output[5] = 0;
+            output += kAnimCommandWordCountAnimation;
+            output[0] =
+                (kAnimCommandWordCountBlend << 16) | kAnimCommandBlend;
+            output[1] = 0;
+            output[2] = scratch_lane;
+            output[3] = 0;
+            output[4] = 1;
+            output[5] = 0x3F800000u;
+            output += kAnimCommandWordCountBlend;
+        };
+        std::uint32_t* output = words + finalizer_word;
+        emit_clip_overlay(output, epoch.hands_clip);
+        emit_clip_overlay(output, epoch.arms_clip);
+
+        words[opener_word + 2] = scratch_lane + 1;
+        *reinterpret_cast<std::uint32_t*>(record + 0x0C) =
+            word_count + kInsertedWords;
+        if (scratch_lane_out != nullptr) {
+            *scratch_lane_out = scratch_lane;
+        }
+        return LegacyNadineMazurAuthoredPairInjection::kInjected;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return LegacyNadineMazurAuthoredPairInjection::kRecord;
     }
 }
 
@@ -50207,11 +50621,61 @@ hooked_create_anim_cmds_for_legacy_nadine_mazur_authored_pair(
         return result;
     }
 
-    if (!seh_matches_legacy_nadine_mazur_authored_pair_create_context(
-            create_context, group, epoch)) {
+    // During the authored custom-state lifetime, stock has already generated
+    // the exact pair and applied its native track fade. Mark that post-Perform
+    // pose for preservation without appending a second weighted copy.
+    if (epoch.custom_pair_instance != nullptr) {
+        if (!seh_matches_legacy_nadine_mazur_authored_pair_create_context(
+                create_context, group, epoch)) {
+            return result;
+        }
+        g_legacy_nadine_mazur_authored_pair_injected = true;
+        static std::atomic<bool> transition_logged{false};
+        if (!transition_logged.exchange(true, std::memory_order_relaxed)) {
+            float blend_weight = 0.0F;
+            std::memcpy(
+                &blend_weight, &epoch.blend_weight_bits,
+                sizeof(blend_weight));
+            std::ostringstream line;
+            line << "NADINE-MAZUR-AUTHORED-PAIR preserved"
+                 << " stage=perform source=stock-transition"
+                 << " state=0x" << std::hex << kMazurAuthoredPairStateId
+                 << std::dec << " group=" << group
+                 << " nativeWeight=" << blend_weight
+                 << " commandWeighted="
+                 << (epoch.transition_weighted ? 1 : 0);
+            boot_log_line(line.str().c_str());
+        }
         return result;
     }
-    g_legacy_nadine_mazur_stock_pose_source_observed = true;
+
+    std::uint32_t scratch_lane = 0;
+    const auto injection = seh_inject_legacy_nadine_mazur_authored_pair(
+        create_context, command_record, group, epoch, &scratch_lane);
+    if (injection == LegacyNadineMazurAuthoredPairInjection::kInjected) {
+        g_legacy_nadine_mazur_authored_pair_injected = true;
+        static std::atomic<bool> injected_logged{false};
+        if (!injected_logged.exchange(true, std::memory_order_relaxed)) {
+            std::ostringstream line;
+            line << "NADINE-MAZUR-AUTHORED-PAIR injected stage=perform"
+                 << " hands=0x" << std::hex << kMazurAuthoredHandsClipId
+                 << " arms=0x" << kMazurAuthoredArmsClipId << std::dec
+                 << " group=" << group << " lane=" << scratch_lane
+                 << " weights=1/1 source=steady-overlay";
+            boot_log_line(line.str().c_str());
+        }
+    } else if (injection != LegacyNadineMazurAuthoredPairInjection::kIgnored) {
+        static std::array<std::atomic<bool>, 5> rejected_logged{};
+        const std::size_t reason = static_cast<std::size_t>(injection);
+        if (reason < rejected_logged.size() &&
+            !rejected_logged[reason].exchange(
+                true, std::memory_order_relaxed)) {
+            std::ostringstream line;
+            line << "NADINE-MAZUR-AUTHORED-PAIR rejected reason="
+                 << reason;
+            boot_log_line(line.str().c_str());
+        }
+    }
     return result;
 }
 
@@ -50225,7 +50689,7 @@ hooked_perform_anim_blend_for_legacy_nadine_mazur_authored_pair(void* job) {
     const LegacyNadineMazurAuthoredPairEpoch previous =
         g_legacy_nadine_mazur_authored_pair_epoch;
     g_legacy_nadine_mazur_authored_pair_epoch = {};
-    g_legacy_nadine_mazur_stock_pose_source_observed = false;
+    g_legacy_nadine_mazur_authored_pair_injected = false;
     g_legacy_nadine_mazur_authored_pair_postblend_ticket = {};
 
     bool exact_local_fg = false;
@@ -50266,31 +50730,19 @@ hooked_perform_anim_blend_for_legacy_nadine_mazur_authored_pair(void* job) {
                 char line[128]{};
                 std::snprintf(
                     line, sizeof(line),
-                    "NADINE-MAZUR-STOCK-POSE admission=%zu", reason);
+                    "NADINE-MAZUR-AUTHORED-PAIR admission=%zu", reason);
                 boot_log_line(line);
             }
         }
     }
 
     original(job);
-    if (g_legacy_nadine_mazur_stock_pose_source_observed &&
+    if (g_legacy_nadine_mazur_authored_pair_injected &&
         g_legacy_nadine_mazur_authored_pair_epoch.valid) {
         LegacyNadineMazurAuthoredPairPostBlendTicket ticket{};
         if (seh_capture_legacy_nadine_mazur_authored_pair_postblend_ticket(
                 g_legacy_nadine_mazur_authored_pair_epoch, &ticket)) {
             g_legacy_nadine_mazur_authored_pair_postblend_ticket = ticket;
-            static std::atomic<bool> captured_logged{false};
-            if (!captured_logged.exchange(
-                    true, std::memory_order_relaxed)) {
-                char line[256]{};
-                std::snprintf(
-                    line, sizeof(line),
-                    "NADINE-MAZUR-STOCK-POSE captured"
-                    " stage=perform-return source=stock-steady"
-                    " hands=0x%08X rows=19..30",
-                    ticket.steady_hands_resolved_id);
-                boot_log_line(line);
-            }
         }
     }
     g_legacy_nadine_mazur_authored_pair_epoch = previous;
@@ -50321,19 +50773,46 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
     const LegacyNadineMazurAuthoredPairPostBlendTicket ticket =
         g_legacy_nadine_mazur_authored_pair_postblend_ticket;
     g_legacy_nadine_mazur_authored_pair_postblend_ticket = {};
+    g_weapon_ik_right_prop_applied_tls = {};
     const std::int64_t result = original(player);
-    if (ticket.valid &&
+    const WeaponIkRightPropAppliedTls right_prop_applied =
+        g_weapon_ik_right_prop_applied_tls;
+    g_weapon_ik_right_prop_applied_tls = {};
+    const bool keep_corrected_postblend =
+        ticket.valid && right_prop_applied.valid &&
+        right_prop_applied.player == ticket.player &&
+        right_prop_applied.fg_anim_data == ticket.fg_anim_data &&
+        right_prop_applied.weapon == ticket.weapon &&
+        right_prop_applied.player_runtime_id == ticket.player_runtime_id &&
+        right_prop_applied.weapon_runtime_id == ticket.weapon_runtime_id;
+    if (keep_corrected_postblend) {
+        static std::atomic<bool> corrected_logged{false};
+        if (!corrected_logged.exchange(true, std::memory_order_relaxed)) {
+            boot_log_line(
+                "NADINE-MAZUR-RIGHT-PROP retained stage=postblend"
+                " source=Chloe-relative stockIK=1 baselineRestore=0");
+        }
+    } else if (ticket.valid &&
         seh_restore_legacy_nadine_mazur_authored_pair_after_postblend(
             player, ticket)) {
-        static std::atomic<bool> restored_logged{false};
-        if (!restored_logged.exchange(
+        static std::array<std::atomic<bool>, 2> restored_logged{};
+        const bool stock_transition =
+            ticket.custom_pair_instance != nullptr;
+        const std::size_t log_index = stock_transition ? 0 : 1;
+        if (!restored_logged[log_index].exchange(
                 true, std::memory_order_relaxed)) {
+            float blend_weight = 0.0F;
+            std::memcpy(
+                &blend_weight, &ticket.blend_weight_bits,
+                sizeof(blend_weight));
             char line[256]{};
             std::snprintf(
                 line, sizeof(line),
-                "NADINE-MAZUR-STOCK-POSE restored stage=postblend"
-                " source=stock-steady hands=0x%08X rows=19..30",
-                ticket.steady_hands_resolved_id);
+                "NADINE-MAZUR-AUTHORED-PAIR restored stage=postblend"
+                " rows=19..30 weight=%.6f source=%s commandWeighted=%u",
+                static_cast<double>(blend_weight),
+                stock_transition ? "stock-transition" : "steady-overlay",
+                ticket.transition_weighted ? 1u : 0u);
             boot_log_line(line);
         }
     }
@@ -50392,7 +50871,7 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     if (!preflight) {
         free_relays();
         boot_log_line(
-            "legacy-Nadine Mazur stock-pose preservation SKIPPED (callsite preflight)");
+            "legacy-Nadine Mazur authored-pair preservation SKIPPED (callsite preflight)");
         return false;
     }
 
@@ -50434,7 +50913,7 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     if (!suspend_other_process_threads(suspended_threads)) {
         free_relays();
         boot_log_line(
-            "legacy-Nadine Mazur stock-pose preservation SKIPPED (thread suspend)");
+            "legacy-Nadine Mazur authored-pair preservation SKIPPED (thread suspend)");
         return false;
     }
 
@@ -50465,7 +50944,7 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
         resume_suspended_process_threads(suspended_threads);
         free_relays();
         boot_log_line(
-            "legacy-Nadine Mazur stock-pose preservation SKIPPED (protect)");
+            "legacy-Nadine Mazur authored-pair preservation SKIPPED (protect)");
         return false;
     }
 
@@ -50555,10 +51034,10 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     }
     boot_log_line(
         ready
-            ? "legacy-Nadine Mazur stock-pose preservation READY (three exact callsite relays)"
+            ? "legacy-Nadine Mazur authored-pair preservation READY (native state fade; three exact callsite relays)"
             : (rollback_verified
-                   ? "legacy-Nadine Mazur stock-pose preservation SKIPPED (verified rollback)"
-                   : "legacy-Nadine Mazur stock-pose preservation PARTIAL (pass-through; relays retained)"));
+                   ? "legacy-Nadine Mazur authored-pair preservation SKIPPED (verified rollback)"
+                   : "legacy-Nadine Mazur authored-pair preservation PARTIAL (pass-through; relays retained)"));
     return ready;
 }
 void log_idle_arm_pose_source_admission(
@@ -62758,8 +63237,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20aeg-safe "
-        "(aef terminal-target relay disabled after zero-marker exam)");
+        "TLL co-op runtime init 2026-08-20aeh "
+        "(82e7b9e two-hand baseline + Chloe right-hand-prop relay)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -63191,14 +63670,16 @@ DWORD WINAPI install_hook(void*) {
     log_line("local-player-1 -> Nadine bind hook ENABLED");
     log_line("one-shot split render activation ENABLED after login_state==3");
     const bool state_net_started = start_state_net();
+    bool weapon_ik_goal_package_ready = false;
     if constexpr ((kEnablePlayerWeaponIkFeatherGoalCensus ||
-                   kEnableLegacyNadineWeaponIkGoalRelay) &&
+                   kEnableLegacyNadineWeaponIkGoalRelay ||
+                   kEnableLegacyNadineMazurRightHandPropRelay) &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         if (state_net_started) {
-            const bool goal_package_ready =
+            weapon_ik_goal_package_ready =
                 install_player_weapon_ik_feather_goal_census();
             if constexpr (kEnableWeaponIkTerminalApplyCensus) {
-                if (goal_package_ready) {
+                if (weapon_ik_goal_package_ready) {
                     install_weapon_ik_terminal_apply_census();
                 } else {
                     boot_log_line(
@@ -63231,11 +63712,27 @@ DWORD WINAPI install_hook(void*) {
     // workers, so the hook never races partially initialized network state.
     if constexpr (kEnableLegacyNadineMazurAuthoredPairRepair &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
+        bool authored_pair_ready = false;
         if (state_net_started) {
-            install_legacy_nadine_mazur_authored_pair_repair();
+            authored_pair_ready =
+                install_legacy_nadine_mazur_authored_pair_repair();
         } else {
             boot_log_line(
-                "legacy-Nadine Mazur stock-pose repair SKIPPED (state net)");
+                "legacy-Nadine Mazur authored-pair repair SKIPPED (state net)");
+        }
+        if constexpr (kEnableLegacyNadineMazurRightHandPropRelay) {
+            const bool combined_ready = authored_pair_ready &&
+                weapon_ik_goal_package_ready &&
+                g_solve_arm_ik != nullptr &&
+                g_joint_set_multiply_joint_rotation != nullptr &&
+                g_transform_make_relative != nullptr &&
+                g_weapon_ik_transform_compose != nullptr;
+            g_legacy_nadine_mazur_right_prop_relay_ready.store(
+                combined_ready, std::memory_order_release);
+            boot_log_line(
+                combined_ready
+                    ? "legacy-Nadine Mazur Chloe right-hand-prop relay READY (authored pair + stock arm IK)"
+                    : "legacy-Nadine Mazur Chloe right-hand-prop relay SKIPPED (combined package)");
         }
     }
     if constexpr ((kEnableLegacyNadineIdleArmPoseRoundTrip ||
