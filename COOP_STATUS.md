@@ -26083,3 +26083,25 @@ later writer; failure only when rows stop selects lifetime/cadence.  Missing
 READY or either marker is packaging/admission and has no visual meaning.  Role
 A, P99, Draw, ADS, movement, cover and grenade must remain stock.  The agent may
 launch/inject, but only the user controls gameplay.
+
+### 2026-08-20 RUNTIME INCONCLUSIVE (`aef` -> `aeg-safe`): combined package ready, but the terminal relay never admitted
+
+The fresh two-copy run used role-A PID `18636` and role-B PID `11620`.  Both
+loaded `2026-08-20aef`, installed the outer Apply and four getter callsite
+relays, published the combined terminal-target `READY` marker, remained
+responsive, and produced no exception/fatal row.  However, the complete log
+contains **zero** `CHLOE-WEAPON-IK-TERMINAL-TARGET-CAPTURE` and zero
+`NADINE-WEAPON-IK-TERMINAL-TARGET-RELAY` rows.  The user observed the arms break
+almost immediately, but the written prediction explicitly classifies missing
+either marker as packaging/admission with no visual meaning.  Therefore this
+run neither confirms nor rejects the terminal-target formula; `aef` is
+RUNTIME INCONCLUSIVE and its flag is disabled in `aeg-safe`.
+
+The user's reference to commit `82e7b9e` is consistent with the durable record,
+not hindsight.  Its inherited `adr` boundary is RUNTIME CONFIRMED: exact
+`56C57AD2 + 283966ED` injection followed by restoration of C39 rows 19--30
+across Player `+0x408` produced a stable two-hand hold.  The known residual is
+also already recorded: that pose is a low diagonal carry, not Chloe's high
+horizontal chest/shoulder hold.  Restore that exact confirmed implementation as
+the working baseline without reverting later IDB labels or rejected findings;
+do not treat an `aef` zero-marker session as a reason to discard it.

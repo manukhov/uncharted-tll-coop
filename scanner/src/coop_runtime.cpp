@@ -2464,13 +2464,11 @@ constexpr bool kEnableWeaponIkTerminalApplyCensus = false;
 // by terminal WeaponIK::Apply.  The bounded census is complete and remains off
 // in the production-safe package; 0x1418F2E0B remains rejected.
 constexpr bool kEnableWeaponIkTerminalGetterCensus = false;
-// Build aef tests the single terminal target proved by aed plus static matrix
-// dataflow.  In role B only, publish owner-1 Chloe's final target relative to
-// terminal spined and feed that one value to owner-0 legacy Nadine by making
-// stock WeaponIK_Apply's Relative(leftProp,leftWrist)->rightProp identity
-// evaluate to the donor target.  All stock JointSets, Solve, wrist blend and
-// commits remain enabled.
-constexpr bool kEnableLegacyNadineWeaponIkTerminalGoalRelay = true;
+// Build aef never reached either source-capture or target-relay marker despite
+// both combined READY markers.  Its pixels therefore cannot test the formula.
+// Keep the package disabled while the runtime-confirmed two-hand baseline from
+// 82e7b9e/adr is restored without discarding later static findings.
+constexpr bool kEnableLegacyNadineWeaponIkTerminalGoalRelay = false;
 // Build acg proved that the two P99 WeaponIK paths share the same lifecycle and
 // scalar controls, but composing the interleaved arm hierarchy reveals a
 // residual 6.7 mm hand-endpoint split. Distinguish that upstream pose delta
@@ -62760,8 +62758,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20aef "
-        "(exact terminal left-arm target from same-process Chloe)");
+        "TLL co-op runtime init 2026-08-20aeg-safe "
+        "(aef terminal-target relay disabled after zero-marker exam)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

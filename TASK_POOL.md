@@ -5158,11 +5158,17 @@ Keep the postblend preservation boundary; replace only its steady content.
       `H-terminal-target`; markers plus the same pose select chain/proportion or
       a later writer; an initial fix followed by break selects lifetime/cadence.
 
-- [ ] Run the single written `aef` terminal-target exam.  Require both READY
-      boots and, on role B, both exact terminal CAPTURE/RELAY markers with
-      `sourceAgeMs<=100` before judging the pose.  Do not control either game
-      window.  After the user reports the steady hold, stop both processes and
-      classify the result against the written `H-terminal-target` falsifier.
+- [x] Run the single written `aef` terminal-target exam.  Both PIDs reached the
+      combined READY marker and stayed responsive, but role B emitted zero
+      terminal CAPTURE and zero RELAY rows.  The observed immediate break is
+      therefore admission/packaging, not a semantic target falsifier.  Disable
+      `aef` in `aeg-safe`.
+
+- [ ] Restore the exact runtime-confirmed `82e7b9e` / `adr` steady two-hand
+      implementation as the active working baseline without reverting later
+      static findings.  Its known residual is precise: stable low diagonal carry
+      rather than Chloe's high horizontal chest/shoulder hold.  Keep all later
+      rejected high-pair/stock-pose/whole-Feather mutations disabled.
 
 ## Rule
 
