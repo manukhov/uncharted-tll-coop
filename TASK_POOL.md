@@ -5284,6 +5284,21 @@ Keep the postblend preservation boundary; replace only its steady content.
       role-B owner0 Mazur/WeaponOut/idle admission, postblend retention, three
       evidence classes and a one-process written falsifier before launch.
 
+      Build `aep` implements that exact exam. It retains the confirmed
+      `56C57AD2 + 283966ED` base, composes the normalized local-Chloe right
+      hand-prop reference under Nadine's live `spined`, preserves Nadine's own
+      wrist-to-prop relation, runs stock right `SolveArmIk`, then leaves the
+      terminal left-arm solve and commits enabled. A TLS pass key is armed only
+      by the exact successful authored-pair ticket in the same synchronous
+      Perform-to-`Player+0x408` pass and pins Player/Fg/weapon/skeleton plus
+      generations; a mismatch restores the confirmed baseline. The written
+      discriminator requires the same-pass `injected`,
+      `source=static-Chloe-steady` right-prop and `baselineRestore=0` retained
+      markers. Stable two-hand muzzle-up confirms the anchor; low/wrong with all
+      markers rejects it; raised muzzle plus detached/jittering support hand
+      selects terminal-left ordering. Launch exactly one role-B Nadine process;
+      never control gameplay from automation.
+
   Original `aeh` prediction required the combined READY marker,
       fresh Chloe right-prop CAPTURE, Nadine right-prop RELAY and same-postblend
       `baselineRestore=0`. All markers plus both hands and Chloe's muzzle-up

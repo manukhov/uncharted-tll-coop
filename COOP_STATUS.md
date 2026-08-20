@@ -26538,3 +26538,82 @@ The five newly identified dispatch targets are saved in the single IDB as
 `AnimJointProgramOp15/16/27/29/30`; headless application reported 1769 function
 names / 60 data names and `save_database returned True`, and restarted MCP
 lookups independently resolve all five names.
+
+### 2026-08-20 STATIC IMPLEMENTED (`aep`): anchor the confirmed two-hand Mazur base to a stable Chloe trigger hand
+
+The failed raw-clip and whole-pose experiments leave one narrower spatial
+variable: the trigger-side hand-prop after the common WeaponIK solve.  Build
+`aep` keeps the runtime-confirmed `82e7b9e/adr` authored-pair baseline and uses
+no second process.  It applies a fixed semantic Chloe reference only in the
+same Perform-to-postblend pass in which that exact baseline was injected.
+
+The evidence quota is satisfied by four independent classes.
+
+1. Two independent local-Chloe owner-0 steady Mazur captures reached the exact
+   `WeaponIKFeather_SolveWeaponFeatherIk 0x1418F2E50` boundary with
+   `selector=1`, `strength=0.5`, and the same right-hand chain.  Their
+   post-common-Solve right hand-prop Locators relative to live `spined` were
+   `P=(-0.0117344,-0.353171,-0.0104378)`,
+   `Q=(0.384924,0.406331,0.152164,0.814601)` and
+   `P=(-0.00558245,-0.357043,-0.0176287)`,
+   `Q=(0.395121,0.410824,0.160518,0.805814)`.  They differ by only
+   `0.0102249` position units / `1.88968` degrees.  Their normalized midpoint
+   is therefore a stable single-process reference:
+   `P=(-0.008658425,-0.355107,-0.01403325)`,
+   `Q=(0.390035796,0.408591428,0.156346330,0.810235119)`.
+2. The exact call/dataflow identifies that value as the weapon anchor rather
+   than an arbitrary wrist row.  The common Solve returns through callsite
+   `0x1418F29D0`; terminal `WeaponIK_Apply 0x1418F1780` anchors the weapon to
+   the selected/right hand-prop and derives the left support target as
+   `Compose(rightHandProp, Relative(leftHandProp,leftWrist))`.  The weapon
+   attachment path subsequently consumes the right hand-prop.  Thus changing
+   the right anchor changes both rifle orientation and the stock terminal
+   left-arm target while leaving the terminal solver active.
+3. Runtime `adr/adm` independently proves the baseline and overwrite order.
+   `56C57AD2 + 283966ED` creates a stable two-hand, low-muzzle pose; the exact
+   stock Feather boundary then changes C39 rows `19..26`, while the authored
+   pair owns the full C39 arm/prop chain `19..30`.  The user's observed
+   one-hand/outstretched-arm result after an incomplete combination matches a
+   trigger-side correction being applied without preserving the paired base,
+   so `aep` binds both operations to one pass.
+4. The existing `aeh` helper is not a row or palette transplant.  It composes
+   the Chloe-relative prop under Nadine's current `spined`, preserves Nadine's
+   own wrist-to-prop relation, calls stock `SolveArmIk 0x1418F0B60` on the
+   right JointSet, applies the residual wrist rotation through the stock
+   JointSet operator, and then lets the unmodified terminal left-arm solve and
+   both stock commits run.  The old two-process `aeh` package never produced a
+   source marker, so this already-reviewed operation was not semantically
+   rejected.
+
+Competing hypotheses remain explicit. `H-right-anchor` predicts that the
+stable Chloe reference raises the muzzle and keeps both hands attached.
+`H-terminal-left-order` predicts the muzzle moves but the support hand detaches
+or jitters. `H-baseline-content` predicts both markers but the old low/wrong
+hold remains. `H-later-writer-or-binding` predicts the corrected Locator is
+reported with small residual error but the visible rifle still points down or
+snaps back later.
+
+The implementation is fail-closed. The static target requires role B,
+retained owner 0, exact legacy Nadine/Mazur/WeaponOut/neutral-idle scope,
+`selector==1`, a 350-ms dwell, and the combined authored-pair/WeaponIK READY
+gate. The postblend wrapper publishes a thread-local pass key only from the
+exact successful authored-pair ticket and pins Player, Fg, weapon, target
+skeleton and both runtime generations. The Solve wrapper must match every key
+in that same synchronous `Player+0x408` invocation; otherwise it calls stock
+and the wrapper restores the confirmed baseline. P99, role A, Draw, ADS,
+movement, cover, grenade and any mismatched pass stay stock.
+
+The written one-process prediction precedes runtime. A valid package must print
+build `2026-08-20aep`, authored-pair READY, WeaponIK right-hand-prop correction
+READY, and static Chloe-reference READY. After the user draws Mazur and stands
+still, the same pass must emit
+`NADINE-MAZUR-AUTHORED-PAIR injected ... source=steady-overlay`,
+`NADINE-WEAPON-IK-RIGHT-PROP-RELAY owner=0 source=static-Chloe-steady` and
+`NADINE-MAZUR-RIGHT-PROP retained ... source=static-Chloe-steady ... baselineRestore=0`.
+All three plus a stable two-hand Chloe-like muzzle-up hold confirm
+`H-right-anchor`. All three plus the old low/wrong hold reject its sufficiency.
+A raised muzzle with a detached or oscillating support hand selects
+`H-terminal-left-order`. Injection without the right-prop/retained pair is
+scope or helper failure, and missing READY is packaging; neither has a visual
+interpretation. Exactly one role-B Nadine process is allowed, and the agent
+must not send gameplay input.

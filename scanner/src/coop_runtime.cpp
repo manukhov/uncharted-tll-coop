@@ -2464,6 +2464,11 @@ constexpr bool kEnableLegacyNadineWeaponIkGoalRelay = false;
 // stock SolveArmIk/JointSet rotation operators.  The stock terminal pass then
 // solves the left support arm from that corrected trigger-side anchor.
 constexpr bool kEnableLegacyNadineMazurRightHandPropRelay = false;
+// Two independent local-Chloe steady samples place the post-common-Solve right
+// hand-prop only 10.2 mm / 1.89 degrees apart. Use their normalized midpoint
+// as a one-process semantic reference, then preserve Nadine's own wrist-to-prop
+// relation and the stock SolveArmIk/terminal left-arm solve.
+constexpr bool kEnableLegacyNadineMazurChloeRightHandPropReference = true;
 // REJECTED in build aea: installing the internal 0x1418F2E0B observer crashed
 // role B after READY and before its first sample.  The writer hypothesis remains
 // STATIC, but this callsite is not an admissible runtime boundary.
@@ -2501,10 +2506,9 @@ static_assert(
        kEnableLegacyNadineWeaponIkFeatherSuppression)),
     "terminal target relay must be the only grip/arm-pose mutation");
 constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
-// Build 82e7b9e/adr remains a stable two-hand fallback, but the user proved
-// that its low diagonal hold is not Chloe's steady pose. Keep it disabled in
-// the next exam so it cannot contaminate the source sample below.
-constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = false;
+// Runtime-confirmed 82e7b9e/adr two-hand baseline. Build aep retains it as the
+// exact fail-closed pose under the one-process semantic right-hand reference.
+constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = true;
 // Build aej installed the exact one-process postblend seam but produced no
 // capture/replay marker: the visual result was just the stock broken pose. Keep
 // the unexecuted mutation disabled. The next bounded pass observes the first
@@ -2542,6 +2546,10 @@ static_assert(
     !kEnableLegacyNadineMazurRightHandPropRelay ||
         kEnableLegacyNadineMazurAuthoredPairRepair,
     "right-hand-prop relay requires the confirmed authored-pair baseline");
+static_assert(
+    !kEnableLegacyNadineMazurChloeRightHandPropReference ||
+        kEnableLegacyNadineMazurAuthoredPairRepair,
+    "right-hand-prop reference requires the confirmed authored-pair baseline");
 // Build ada proved a repeatable first-Draw-good -> steady-broken transition,
 // followed by immediately broken later Draws. The animation layer has exact
 // create-new and loop-current paths while consuming its bounded transition
@@ -44979,6 +44987,12 @@ struct WeaponIkGoalLocator {
     std::array<float, 8> value{};
 };
 
+// Normalized midpoint of two independent local-Chloe owner-0 steady Mazur
+// samples (adx/aed), expressed as right hand-prop relative to live `spined`.
+constexpr WeaponIkGoalLocator kChloeSteadyMazurRightHandPropReference{{
+    -0.008658425F, -0.355107F, -0.01403325F, 0.0F,
+    0.390035796F, 0.408591428F, 0.156346330F, 0.810235119F}};
+
 struct WeaponIkGoalChainSample {
     std::array<WeaponIkGoalLocator, kWeaponIkGoalChainJointCount> left{};
     std::array<WeaponIkGoalLocator, kWeaponIkGoalChainJointCount> right{};
@@ -45095,6 +45109,19 @@ struct WeaponIkRightPropAppliedTls {
 
 thread_local WeaponIkRightPropAppliedTls
     g_weapon_ik_right_prop_applied_tls{};
+
+struct WeaponIkRightPropBaselinePassTls {
+    bool valid = false;
+    void* player = nullptr;
+    void* fg_anim_data = nullptr;
+    void* weapon = nullptr;
+    void* target_skeleton = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+};
+
+thread_local WeaponIkRightPropBaselinePassTls
+    g_weapon_ik_right_prop_baseline_pass_tls{};
 
 bool weapon_ik_goal_locator_valid(const WeaponIkGoalLocator& locator) {
     for (const float value : locator.value) {
@@ -46289,7 +46316,8 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
     const bool selected =
         (kEnablePlayerWeaponIkFeatherGoalCensus ||
          kEnableLegacyNadineWeaponIkGoalRelay ||
-         kEnableLegacyNadineMazurRightHandPropRelay) &&
+         kEnableLegacyNadineMazurRightHandPropRelay ||
+         kEnableLegacyNadineMazurChloeRightHandPropReference) &&
         seh_select_weapon_ik_goal_census_scope(
             joint_sets, jacobian_maps, &scope);
     const std::uint32_t scope_bit = selected
@@ -46312,7 +46340,8 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
     }
     const bool relay_dwell =
         (kEnableLegacyNadineWeaponIkGoalRelay ||
-         kEnableLegacyNadineMazurRightHandPropRelay) &&
+         kEnableLegacyNadineMazurRightHandPropRelay ||
+         kEnableLegacyNadineMazurChloeRightHandPropReference) &&
         g_net_role_b && selected &&
         weapon_ik_goal_relay_dwell_ready(scope);
     const bool relay_source = relay_dwell && scope.owner_index == 1 &&
@@ -46331,13 +46360,38 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
         g_legacy_nadine_mazur_right_prop_relay_ready.load(
             std::memory_order_acquire);
     WeaponIkGoalRelaySnapshot right_prop_snapshot{};
-    const bool right_prop_target =
+    const bool live_right_prop_target =
         kEnableLegacyNadineMazurRightHandPropRelay && relay_dwell &&
         scope.owner_index == 0 &&
         scope.look == kLegacyNadineAttachTargetLookId &&
         g_legacy_nadine_mazur_right_prop_relay_ready.load(
             std::memory_order_acquire) &&
         copy_fresh_weapon_ik_goal_relay_snapshot(&right_prop_snapshot);
+    const WeaponIkRightPropBaselinePassTls& baseline_pass =
+        g_weapon_ik_right_prop_baseline_pass_tls;
+    const bool exact_baseline_pass = baseline_pass.valid &&
+        baseline_pass.player == scope.player &&
+        baseline_pass.fg_anim_data == scope.fg_anim_data &&
+        baseline_pass.weapon == scope.weapon &&
+        baseline_pass.target_skeleton == scope.target_skeleton &&
+        baseline_pass.player_runtime_id == scope.player_runtime_id &&
+        baseline_pass.weapon_runtime_id == scope.weapon_runtime_id;
+    const bool static_right_prop_target =
+        kEnableLegacyNadineMazurChloeRightHandPropReference && relay_dwell &&
+        selector == 1 && exact_baseline_pass &&
+        scope.owner_index == 0 &&
+        scope.look == kLegacyNadineAttachTargetLookId &&
+        g_legacy_nadine_mazur_right_prop_relay_ready.load(
+            std::memory_order_acquire) &&
+        weapon_ik_goal_locator_valid(
+            kChloeSteadyMazurRightHandPropReference);
+    if (static_right_prop_target) {
+        right_prop_snapshot.valid = true;
+        right_prop_snapshot.relative =
+            kChloeSteadyMazurRightHandPropReference;
+    }
+    const bool right_prop_target =
+        live_right_prop_target || static_right_prop_target;
     const bool claimed = scoped && weapon_ik_goal_census_ready(scope);
 
     const WeaponIkGoalGetterCaptureTls previous_capture =
@@ -46436,12 +46490,17 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
                     1, std::memory_order_relaxed) < 16) {
                 const ULONGLONG now = GetTickCount64();
                 std::ostringstream line;
-                line << "NADINE-WEAPON-IK-RIGHT-PROP-RELAY owner=0"
-                     << " sourceOwner=1 sourceSeq="
-                     << right_prop_snapshot.sequence
-                     << " sourceAgeMs="
-                     << (now >= right_prop_snapshot.captured_ms
-                             ? now - right_prop_snapshot.captured_ms : 0)
+                line << "NADINE-WEAPON-IK-RIGHT-PROP-RELAY owner=0";
+                if (static_right_prop_target) {
+                    line << " source=static-Chloe-steady";
+                } else {
+                    line << " sourceOwner=1 sourceSeq="
+                         << right_prop_snapshot.sequence
+                         << " sourceAgeMs="
+                         << (now >= right_prop_snapshot.captured_ms
+                                 ? now - right_prop_snapshot.captured_ms : 0);
+                }
+                line
                      << " positionError=" << position_error
                      << " angleErrorDeg=" << angle_error;
                 log_weapon_ik_goal_locator(
@@ -46659,8 +46718,9 @@ bool install_player_weapon_ik_feather_goal_census() {
     }
     boot_log_line(
         protection_restored
-            ? (kEnableLegacyNadineMazurRightHandPropRelay
-                   ? "Player WeaponIK right-hand-prop relay boundary READY (Solve + two stock getter callsites)"
+            ? ((kEnableLegacyNadineMazurRightHandPropRelay ||
+                kEnableLegacyNadineMazurChloeRightHandPropReference)
+                   ? "Player WeaponIK right-hand-prop correction boundary READY (Solve + two stock getter callsites)"
                    : (kEnableLegacyNadineWeaponIkGoalRelay
                           ? "Player WeaponIK same-process goal relay READY (Solve + two stock getter callsites)"
                           : "Player WeaponIK goal census READY (Solve + two stock getter callsites; read-only)"))
@@ -50796,7 +50856,20 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
         g_legacy_nadine_mazur_authored_pair_postblend_ticket;
     g_legacy_nadine_mazur_authored_pair_postblend_ticket = {};
     g_weapon_ik_right_prop_applied_tls = {};
+    const WeaponIkRightPropBaselinePassTls previous_baseline_pass =
+        g_weapon_ik_right_prop_baseline_pass_tls;
+    g_weapon_ik_right_prop_baseline_pass_tls = ticket.valid
+        ? WeaponIkRightPropBaselinePassTls{
+              true,
+              ticket.player,
+              ticket.fg_anim_data,
+              ticket.weapon,
+              ticket.target_skeleton,
+              ticket.player_runtime_id,
+              ticket.weapon_runtime_id}
+        : WeaponIkRightPropBaselinePassTls{};
     const std::int64_t result = original(player);
+    g_weapon_ik_right_prop_baseline_pass_tls = previous_baseline_pass;
     const WeaponIkRightPropAppliedTls right_prop_applied =
         g_weapon_ik_right_prop_applied_tls;
     g_weapon_ik_right_prop_applied_tls = {};
@@ -50812,7 +50885,7 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
         if (!corrected_logged.exchange(true, std::memory_order_relaxed)) {
             boot_log_line(
                 "NADINE-MAZUR-RIGHT-PROP retained stage=postblend"
-                " source=Chloe-relative stockIK=1 baselineRestore=0");
+                " source=static-Chloe-steady stockIK=1 baselineRestore=0");
         }
     } else if (ticket.valid &&
         seh_restore_legacy_nadine_mazur_authored_pair_after_postblend(
@@ -64623,8 +64696,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20aen-safe "
-        "(rejected virtual Chloe source census disabled)");
+        "TLL co-op runtime init 2026-08-20aep "
+        "(single-process steady Chloe right-hand-prop reference)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -65059,7 +65132,8 @@ DWORD WINAPI install_hook(void*) {
     bool weapon_ik_goal_package_ready = false;
     if constexpr ((kEnablePlayerWeaponIkFeatherGoalCensus ||
                    kEnableLegacyNadineWeaponIkGoalRelay ||
-                   kEnableLegacyNadineMazurRightHandPropRelay) &&
+                   kEnableLegacyNadineMazurRightHandPropRelay ||
+                   kEnableLegacyNadineMazurChloeRightHandPropReference) &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         if (state_net_started) {
             weapon_ik_goal_package_ready =
@@ -65106,7 +65180,8 @@ DWORD WINAPI install_hook(void*) {
             boot_log_line(
                 "legacy-Nadine Mazur authored-pair repair SKIPPED (state net)");
         }
-        if constexpr (kEnableLegacyNadineMazurRightHandPropRelay) {
+        if constexpr (kEnableLegacyNadineMazurRightHandPropRelay ||
+                      kEnableLegacyNadineMazurChloeRightHandPropReference) {
             const bool combined_ready = authored_pair_ready &&
                 weapon_ik_goal_package_ready &&
                 g_solve_arm_ik != nullptr &&
@@ -65117,7 +65192,9 @@ DWORD WINAPI install_hook(void*) {
                 combined_ready, std::memory_order_release);
             boot_log_line(
                 combined_ready
-                    ? "legacy-Nadine Mazur Chloe right-hand-prop relay READY (authored pair + stock arm IK)"
+                    ? (kEnableLegacyNadineMazurChloeRightHandPropReference
+                           ? "legacy-Nadine Mazur static Chloe right-hand-prop reference READY (authored pair + stock arm IK)"
+                           : "legacy-Nadine Mazur Chloe right-hand-prop relay READY (authored pair + stock arm IK)")
                     : "legacy-Nadine Mazur Chloe right-hand-prop relay SKIPPED (combined package)");
         }
     }
