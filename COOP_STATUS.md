@@ -25895,3 +25895,43 @@ rejected live-goal relay, and this terminal observer.  A replacement census
 must correlate the already runtime-safe outer `PlayerWeaponIKAction` Apply
 callsite with the already runtime-safe Solve wrapper; do not re-enable the
 internal terminal detour.
+
+### 2026-08-20 STATIC IMPLEMENTED (`aec`): observe terminal wrist/prop inputs without detouring `WeaponIK_Apply`
+
+The safe replacement boundary is narrower than the rejected function hook.
+`WeaponIK_Apply 0x1418F1780` reads exactly four live WS Locators through
+`JointSet_GetJointLocWs 0x14181DA50`: selected right wrist at callsite
+`0x1418F1872`, opposite left wrist at `0x1418F1896`, selected right hand-prop at
+`0x1418F18A6`, and opposite left hand-prop at `0x1418F18B5`.  It consumes those
+four values synchronously to build its terminal transform, calls the second
+`SolveArmIk` at `0x1418F1C43`, and commits both embedded JointSets at
+`0x1418F1DEE/0x1418F1DF9`.
+
+Three independent evidence classes authorize one read-only exam.  First, the
+disassembly gives the exact getter/callee/order and the finite-value assertion
+strings identify the four wrist/prop roles.  Second, the two-argument getter
+ABI and copy-after-stock-return scheme already ran safely at the first Solve
+boundary in `adx` through `adz`; the outer nine-argument Apply callsite
+`0x1410959AC` independently ran safely in the earlier `ace` census.  Third,
+`adz` proved a fresh Chloe first-stage goal reaches Nadine, while the user saw
+the correction immediately lost, making these last spatial inputs before the
+second arm solve a discriminating boundary rather than an arbitrary probe.
+
+Build `aec` leaves the rejected live-goal relay and internal `0x1418F2E0B`
+observer disabled.  The proven outer Apply wrapper supplies a same-thread TLS
+lifetime only for exact role-B retained owner 0/1, Mazur, WeaponOut, zero-motion
+scope.  Four minimal callsite wrappers call stock once, copy the returned
+32-byte Locator, and normalize it to that JointSet's live `spined`; they never
+substitute a pointer or write pose state.  Installation is fail-closed: the
+outer wrapper cannot arm until all four getter relays pass suspended-thread
+write/readback/protection checks.
+
+The falsifiable prediction is: both processes load `aec`; role B reports the
+outer Apply boundary and `WeaponIK terminal getter census READY`, then emits
+one `PLAYER-WEAPON-IK-TERMINAL-INPUT` plus four LOCATOR rows for owner 1 Chloe
+and owner 0 Nadine after each remains steady for 350 ms.  A material normalized
+Chloe/Nadine delta selects `H-terminal-input`; near-equal inputs reject it and
+select chain/Jacobian/commit or a later writer.  Missing either owner is
+packaging/admission and has no pose interpretation.  Because this exam is
+read-only, it predicts no visible grip change.  The agent may launch/inject;
+only the user controls gameplay.

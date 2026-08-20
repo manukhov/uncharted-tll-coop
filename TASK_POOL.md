@@ -5115,6 +5115,16 @@ Keep the postblend preservation boundary; replace only its steady content.
       internal `0x1418F2E0B` detour and replace it with correlated midpoint/final
       observation at the already-safe outer Apply and Solve callsites.
 
+- [ ] Run the bounded read-only `aec` terminal-input discriminator.  Do not
+      detour `WeaponIK_Apply`.  Scope TLS at the already-proven outer Apply
+      callsite `0x1410959AC`, then wrap only the four stock
+      `JointSet_GetJointLocWs` calls at `0x1418F1872/1896/18A6/18B5`.  Require
+      role-B owner-1 Chloe and owner-0 Nadine summaries plus four normalized
+      wrist/hand-prop rows each.  A material delta selects the terminal target
+      construction; near-equality selects chain/Jacobian/commit or later
+      processing.  The live-goal relay and rejected `0x1418F2E0B` hook remain
+      disabled; this exam makes no pose writes and predicts no visual change.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.
