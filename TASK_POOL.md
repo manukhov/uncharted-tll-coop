@@ -5022,14 +5022,23 @@ Keep the postblend preservation boundary; replace only its steady content.
       19--30 preservation and proves that stock postblend contributes required
       arm/IK state.  `adu-safe` disables the package.
 
-- [ ] Run the bounded read-only `adv` Chloe/Nadine WeaponIK goal census.  Static
+- [x] Run the bounded read-only `adv` Chloe/Nadine WeaponIK goal census.  Static
       closure now proves that `WeaponIKFeather_SolveWeaponFeatherIk
       0x1418F2E50`, reached at the exact Apply callsite `0x1418F29D0`, builds one
       common goal only from the live left/right hand-prop world locators.  It
       does not consume a weapon attachment transform.  Build `adv` calls stock
       once, reads the already seeded JointSet cache directly before/after it,
       and normalizes spined/shoulder/elbow/wrist/hand-prop to the same spined
-      frame.  Require READY, entry, exact admission, one GOAL row and ten CHAIN
+      frame.  Both PIDs reached READY, entry and exact role-specific admission,
+      but every attempt failed at `pre-capture`: the WS cache is refreshed only
+      by the first stock `JointSet_GetJointLocWs` inside Solve.  This result is
+      instrumentation-inconclusive and selects no pose hypothesis.
+
+- [ ] Run corrected read-only `adw`.  It keeps the exact Solve relay and wraps
+      only Solve's two existing WS getter calls at `0x1418F31D4/0x1418F31DF`.
+      The wrappers copy after the stock refresh and return the original pointer;
+      the post-Solve cache remains a passive direct read.  Require the new
+      three-callsite READY marker, entry, admission, one GOAL row and ten CHAIN
       rows in both processes.  Different normalized goals select target
       construction; equal goals with different post chains select Jacobian/rest
       geometry; equal results select a later writer/weapon placement.  This exam

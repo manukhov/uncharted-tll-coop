@@ -18731,7 +18731,12 @@ constexpr std::uintptr_t kPlayerWeaponIkFeatherApplyCallsiteRva = 0x10959ACu;
 constexpr std::uintptr_t kWeaponIkFeatherApplyRva = 0x18F2700u;
 constexpr std::uintptr_t kWeaponIkFeatherSolveCallsiteRva = 0x18F29D0u;
 constexpr std::uintptr_t kWeaponIkFeatherSolveRva = 0x18F2E50u;
+constexpr std::uintptr_t kWeaponIkFeatherLeftGoalGetterCallsiteRva =
+    0x18F31D4u;
+constexpr std::uintptr_t kWeaponIkFeatherRightGoalGetterCallsiteRva =
+    0x18F31DFu;
 constexpr std::uintptr_t kJointChainFindNamedJointOffsetRva = 0x181D750u;
+constexpr std::uintptr_t kJointSetGetJointLocWsRva = 0x181DA50u;
 constexpr std::uintptr_t kTransformMakeRelativeRva = 0x1990F0u;
 constexpr std::uintptr_t kPlayerWeaponIkActionVtableRva = 0x2A483A0u;
 constexpr std::uintptr_t kWeaponIkFeatherVtableRva = 0x2B0FFD8u;
@@ -44880,12 +44885,16 @@ using WeaponIkFeatherSolveFunction = void(__fastcall*)(
     void**, void**, std::uint32_t, float, float, int, float, int);
 using JointChainFindNamedJointOffsetFunction =
     std::int32_t(__fastcall*)(void*, std::uint32_t);
+using JointSetGetJointLocWsFunction = const float*(__fastcall*)(
+    void*, std::int32_t);
 using TransformMakeRelativeFunction = void*(__fastcall*)(
     const float*, float*, const float*);
 
 WeaponIkFeatherSolveFunction g_original_weapon_ik_feather_solve = nullptr;
 JointChainFindNamedJointOffsetFunction
     g_joint_chain_find_named_joint_offset = nullptr;
+JointSetGetJointLocWsFunction g_original_weapon_ik_goal_get_joint_loc_ws =
+    nullptr;
 TransformMakeRelativeFunction g_transform_make_relative = nullptr;
 
 constexpr std::size_t kWeaponIkGoalChainJointCount = 5;
@@ -44899,6 +44908,17 @@ struct WeaponIkGoalChainSample {
     std::array<WeaponIkGoalLocator, kWeaponIkGoalChainJointCount> left{};
     std::array<WeaponIkGoalLocator, kWeaponIkGoalChainJointCount> right{};
 };
+
+struct WeaponIkGoalGetterCaptureTls {
+    bool active = false;
+    void* expected_left_set = nullptr;
+    void* expected_right_set = nullptr;
+    bool left_captured = false;
+    bool right_captured = false;
+    WeaponIkGoalChainSample before{};
+};
+
+thread_local WeaponIkGoalGetterCaptureTls g_weapon_ik_goal_getter_capture_tls{};
 
 struct WeaponIkGoalCensusScope {
     void* player = nullptr;
@@ -45182,66 +45202,76 @@ void finish_weapon_ik_goal_census_claim(
     ReleaseSRWLockExclusive(&g_weapon_ik_goal_census_lock);
 }
 
-bool seh_capture_weapon_ik_goal_chain(
-    void** joint_sets, WeaponIkGoalChainSample* sample) {
-    if (joint_sets == nullptr || sample == nullptr ||
+bool seh_capture_weapon_ik_goal_chain_side(
+    void* joint_set, bool left_side,
+    std::array<WeaponIkGoalLocator,
+               kWeaponIkGoalChainJointCount>* locators) {
+    if (joint_set == nullptr || locators == nullptr ||
         g_joint_chain_find_named_joint_offset == nullptr) {
         return false;
     }
-    *sample = {};
+    *locators = {};
     __try {
-        for (std::size_t side = 0; side < 2; ++side) {
-            void* const joint_set = joint_sets[side];
-            if (joint_set == nullptr || readable_bytes(joint_set) < 0x50) {
+        if (readable_bytes(joint_set) < 0x50) {
+            return false;
+        }
+        auto* const joint_set_bytes = static_cast<std::byte*>(joint_set);
+        const std::int16_t chain_joint_count =
+            *reinterpret_cast<const std::int16_t*>(joint_set_bytes + 0x12);
+        auto* const cache_owner = *reinterpret_cast<std::byte**>(
+            joint_set_bytes + 0x20);
+        if (chain_joint_count <
+                static_cast<std::int16_t>(kWeaponIkGoalChainJointCount) ||
+            chain_joint_count > 64 || cache_owner == nullptr ||
+            readable_bytes(cache_owner) < 0x10) {
+            return false;
+        }
+        auto* const cached_locators = *reinterpret_cast<std::byte**>(
+            cache_owner + 0x08);
+        if (cached_locators == nullptr ||
+            readable_bytes(cached_locators) <
+                static_cast<std::size_t>(chain_joint_count) * 0x20) {
+            return false;
+        }
+        const auto& ids = left_side
+            ? g_weapon_ik_goal_left_joint_ids
+            : g_weapon_ik_goal_right_joint_ids;
+        for (std::size_t index = 0;
+             index < kWeaponIkGoalChainJointCount; ++index) {
+            // JointChain_FindNamedJointOffset deliberately starts at one;
+            // the chain root is the semantic spined locator at ordinal 0.
+            const std::int32_t offset = index == 0
+                ? 0
+                : g_joint_chain_find_named_joint_offset(
+                      joint_set, ids[index]);
+            if (offset < 0 || offset >= chain_joint_count) {
                 return false;
             }
-            auto* const joint_set_bytes = static_cast<std::byte*>(joint_set);
-            const std::int16_t chain_joint_count =
-                *reinterpret_cast<const std::int16_t*>(joint_set_bytes + 0x12);
-            auto* const cache_owner = *reinterpret_cast<std::byte**>(
-                joint_set_bytes + 0x20);
-            if (chain_joint_count <
-                    static_cast<std::int16_t>(kWeaponIkGoalChainJointCount) ||
-                chain_joint_count > 64 || cache_owner == nullptr ||
-                readable_bytes(cache_owner) < 0x10) {
+            std::memcpy(
+                (*locators)[index].value.data(),
+                cached_locators + static_cast<std::size_t>(offset) * 0x20,
+                sizeof((*locators)[index].value));
+            if (!weapon_ik_goal_locator_valid((*locators)[index])) {
                 return false;
-            }
-            auto* const cached_locators = *reinterpret_cast<std::byte**>(
-                cache_owner + 0x08);
-            if (cached_locators == nullptr ||
-                readable_bytes(cached_locators) <
-                    static_cast<std::size_t>(chain_joint_count) * 0x20) {
-                return false;
-            }
-            const auto& ids = side == 0
-                ? g_weapon_ik_goal_left_joint_ids
-                : g_weapon_ik_goal_right_joint_ids;
-            auto& locators = side == 0 ? sample->left : sample->right;
-            for (std::size_t index = 0;
-                 index < kWeaponIkGoalChainJointCount; ++index) {
-                // JointChain_FindNamedJointOffset deliberately starts at one;
-                // the chain root is the semantic spined locator at ordinal 0.
-                const std::int32_t offset = index == 0
-                    ? 0
-                    : g_joint_chain_find_named_joint_offset(
-                          joint_set, ids[index]);
-                if (offset < 0 || offset >= chain_joint_count) {
-                    return false;
-                }
-                std::memcpy(
-                    locators[index].value.data(),
-                    cached_locators + static_cast<std::size_t>(offset) * 0x20,
-                    sizeof(locators[index].value));
-                if (!weapon_ik_goal_locator_valid(locators[index])) {
-                    return false;
-                }
             }
         }
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        *sample = {};
+        *locators = {};
         return false;
     }
+}
+
+bool seh_capture_weapon_ik_goal_chain(
+    void** joint_sets, WeaponIkGoalChainSample* sample) {
+    if (joint_sets == nullptr || sample == nullptr) {
+        return false;
+    }
+    *sample = {};
+    return seh_capture_weapon_ik_goal_chain_side(
+               joint_sets[0], true, &sample->left) &&
+        seh_capture_weapon_ik_goal_chain_side(
+               joint_sets[1], false, &sample->right);
 }
 
 bool weapon_ik_goal_make_relative(
@@ -45408,6 +45438,42 @@ bool finish_weapon_ik_goal_census(
     return true;
 }
 
+const float* capture_weapon_ik_goal_getter_result(
+    void* joint_set, std::int32_t joint_offset, bool left_side) {
+    const auto original = g_original_weapon_ik_goal_get_joint_loc_ws;
+    const float* const result = original != nullptr
+        ? original(joint_set, joint_offset)
+        : nullptr;
+    auto& capture = g_weapon_ik_goal_getter_capture_tls;
+    void* const expected_set = left_side
+        ? capture.expected_left_set
+        : capture.expected_right_set;
+    bool& captured = left_side
+        ? capture.left_captured
+        : capture.right_captured;
+    if (result != nullptr && capture.active && !captured &&
+        joint_set == expected_set) {
+        auto* const locators = left_side
+            ? &capture.before.left
+            : &capture.before.right;
+        captured = seh_capture_weapon_ik_goal_chain_side(
+            joint_set, left_side, locators);
+    }
+    return result;
+}
+
+const float* __fastcall hooked_weapon_ik_goal_left_get_joint_loc_ws(
+    void* joint_set, std::int32_t joint_offset) {
+    return capture_weapon_ik_goal_getter_result(
+        joint_set, joint_offset, true);
+}
+
+const float* __fastcall hooked_weapon_ik_goal_right_get_joint_loc_ws(
+    void* joint_set, std::int32_t joint_offset) {
+    return capture_weapon_ik_goal_getter_result(
+        joint_set, joint_offset, false);
+}
+
 void __fastcall hooked_weapon_ik_feather_solve_goal_census(
     void** joint_sets, void** jacobian_maps, std::uint32_t selector,
     float strength, float tolerance, int iterations, float solve_weight,
@@ -45441,9 +45507,16 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
         write_log_line(line.str().c_str());
     }
     const bool claimed = scoped && weapon_ik_goal_census_ready(scope);
-    WeaponIkGoalChainSample before{};
-    const bool sampled_before = claimed &&
-        seh_capture_weapon_ik_goal_chain(joint_sets, &before);
+
+    const WeaponIkGoalGetterCaptureTls previous_capture =
+        g_weapon_ik_goal_getter_capture_tls;
+    if (claimed) {
+        auto& capture = g_weapon_ik_goal_getter_capture_tls;
+        capture = {};
+        capture.active = true;
+        capture.expected_left_set = joint_sets[0];
+        capture.expected_right_set = joint_sets[1];
+    }
 
     const auto original = g_original_weapon_ik_feather_solve;
     if (original != nullptr) {
@@ -45452,29 +45525,39 @@ void __fastcall hooked_weapon_ik_feather_solve_goal_census(
             iterations, solve_weight, minimum_iterations);
     }
 
+    const WeaponIkGoalGetterCaptureTls captured =
+        g_weapon_ik_goal_getter_capture_tls;
+    g_weapon_ik_goal_getter_capture_tls = previous_capture;
+
     if (!claimed) {
         return;
     }
+    const bool sampled_before = captured.left_captured &&
+        captured.right_captured;
     if (!sampled_before) {
-        write_log_line("PLAYER-WEAPON-IK-GOAL rejected stage=pre-capture");
+        write_log_line(
+            "PLAYER-WEAPON-IK-GOAL rejected stage=stock-getter-capture");
+        g_weapon_ik_goal_census_complete.store(
+            true, std::memory_order_release);
         finish_weapon_ik_goal_census_claim(scope, false);
         return;
     }
     WeaponIkGoalChainSample after{};
     if (!seh_capture_weapon_ik_goal_chain(joint_sets, &after)) {
         write_log_line("PLAYER-WEAPON-IK-GOAL rejected stage=post-capture");
+        g_weapon_ik_goal_census_complete.store(
+            true, std::memory_order_release);
         finish_weapon_ik_goal_census_claim(scope, false);
         return;
     }
     const bool emitted = finish_weapon_ik_goal_census(
-        scope, before, after, selector, strength, tolerance, iterations,
-        solve_weight, minimum_iterations);
+        scope, captured.before, after, selector, strength, tolerance,
+        iterations, solve_weight, minimum_iterations);
     if (!emitted) {
         write_log_line("PLAYER-WEAPON-IK-GOAL rejected stage=relative-transform");
-    } else {
-        g_weapon_ik_goal_census_complete.store(
-            true, std::memory_order_release);
     }
+    g_weapon_ik_goal_census_complete.store(
+        true, std::memory_order_release);
     finish_weapon_ik_goal_census_claim(scope, emitted);
 }
 
@@ -45506,82 +45589,137 @@ bool install_player_weapon_ik_feather_goal_census() {
         }
     }
 
-    std::uint8_t* callsite = nullptr;
-    std::uint8_t* relay = nullptr;
-    std::int32_t new_displacement = 0;
-    if (!prepare_plain_callsite_relay(
+    struct PreparedCallsite {
+        std::uint8_t* address = nullptr;
+        std::uint8_t* relay = nullptr;
+        std::int32_t new_displacement = 0;
+        std::array<std::uint8_t, 5> stock{};
+        std::array<std::uint8_t, 5> patch{};
+    };
+    std::array<PreparedCallsite, 3> sites{};
+    const bool preflight =
+        prepare_plain_callsite_relay(
             kWeaponIkFeatherSolveCallsiteRva,
             kWeaponIkFeatherSolveRva,
             reinterpret_cast<const void*>(
                 &hooked_weapon_ik_feather_solve_goal_census),
-            callsite, relay, new_displacement)) {
+            sites[0].address, sites[0].relay,
+            sites[0].new_displacement) &&
+        prepare_plain_callsite_relay(
+            kWeaponIkFeatherLeftGoalGetterCallsiteRva,
+            kJointSetGetJointLocWsRva,
+            reinterpret_cast<const void*>(
+                &hooked_weapon_ik_goal_left_get_joint_loc_ws),
+            sites[1].address, sites[1].relay,
+            sites[1].new_displacement) &&
+        prepare_plain_callsite_relay(
+            kWeaponIkFeatherRightGoalGetterCallsiteRva,
+            kJointSetGetJointLocWsRva,
+            reinterpret_cast<const void*>(
+                &hooked_weapon_ik_goal_right_get_joint_loc_ws),
+            sites[2].address, sites[2].relay,
+            sites[2].new_displacement);
+    const auto free_relays = [&]() {
+        for (auto& site : sites) {
+            if (site.relay != nullptr) {
+                VirtualFree(site.relay, 0, MEM_RELEASE);
+                site.relay = nullptr;
+            }
+        }
+    };
+    if (!preflight) {
+        free_relays();
         boot_log_line(
-            "Player WeaponIK goal census SKIPPED (callsite preflight)");
+            "Player WeaponIK goal census SKIPPED (three-callsite preflight)");
         return false;
     }
-    std::int32_t old_displacement = 0;
-    std::memcpy(
-        &old_displacement, callsite + 1, sizeof(old_displacement));
+    for (auto& site : sites) {
+        std::memcpy(site.stock.data(), site.address, site.stock.size());
+        site.patch = site.stock;
+        site.patch[0] = 0xE8;
+        std::memcpy(
+            site.patch.data() + 1, &site.new_displacement,
+            sizeof(site.new_displacement));
+    }
     g_original_weapon_ik_feather_solve =
         reinterpret_cast<WeaponIkFeatherSolveFunction>(
             g_module + kWeaponIkFeatherSolveRva);
+    g_original_weapon_ik_goal_get_joint_loc_ws =
+        reinterpret_cast<JointSetGetJointLocWsFunction>(
+            g_module + kJointSetGetJointLocWsRva);
 
     SuspendedProcessThreads suspended_threads{};
     if (!suspend_other_process_threads(suspended_threads)) {
-        VirtualFree(relay, 0, MEM_RELEASE);
+        free_relays();
         g_original_weapon_ik_feather_solve = nullptr;
+        g_original_weapon_ik_goal_get_joint_loc_ws = nullptr;
         boot_log_line(
             "Player WeaponIK goal census SKIPPED (thread suspend)");
         return false;
     }
+    std::uint8_t* const patch_begin = sites.front().address;
+    const std::size_t patch_span = static_cast<std::size_t>(
+        (sites.back().address + sites.back().patch.size()) - patch_begin);
     DWORD old_protection = 0;
     if (VirtualProtect(
-            callsite, 5, PAGE_EXECUTE_READWRITE, &old_protection) == 0) {
+            patch_begin, patch_span, PAGE_EXECUTE_READWRITE,
+            &old_protection) == 0) {
         resume_suspended_process_threads(suspended_threads);
-        VirtualFree(relay, 0, MEM_RELEASE);
+        free_relays();
         g_original_weapon_ik_feather_solve = nullptr;
+        g_original_weapon_ik_goal_get_joint_loc_ws = nullptr;
         boot_log_line("Player WeaponIK goal census SKIPPED (protect)");
         return false;
     }
-    std::memcpy(
-        callsite + 1, &new_displacement, sizeof(new_displacement));
-    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
-    std::int32_t readback = 0;
-    std::memcpy(&readback, callsite + 1, sizeof(readback));
-    bool installed = callsite[0] == 0xE8 &&
-        readback == new_displacement;
+    for (const auto& site : sites) {
+        std::memcpy(site.address, site.patch.data(), site.patch.size());
+        FlushInstructionCache(
+            GetCurrentProcess(), site.address, site.patch.size());
+    }
+    const auto all_match = [&](bool patched) {
+        for (const auto& site : sites) {
+            const auto& expected = patched ? site.patch : site.stock;
+            if (std::memcmp(
+                    site.address, expected.data(), expected.size()) != 0) {
+                return false;
+            }
+        }
+        return true;
+    };
+    const auto restore_stock = [&]() {
+        for (const auto& site : sites) {
+            std::memcpy(site.address, site.stock.data(), site.stock.size());
+            FlushInstructionCache(
+                GetCurrentProcess(), site.address, site.stock.size());
+        }
+    };
+    bool installed = all_match(true);
     bool rollback_verified = false;
     if (!installed) {
-        std::memcpy(
-            callsite + 1, &old_displacement, sizeof(old_displacement));
-        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
-        std::int32_t rollback_readback = 0;
-        std::memcpy(
-            &rollback_readback, callsite + 1, sizeof(rollback_readback));
-        rollback_verified = callsite[0] == 0xE8 &&
-            rollback_readback == old_displacement;
+        restore_stock();
+        rollback_verified = all_match(false);
     }
     DWORD ignored = 0;
     bool protection_restored =
-        VirtualProtect(callsite, 5, old_protection, &ignored) != 0;
+        VirtualProtect(
+            patch_begin, patch_span, old_protection, &ignored) != 0;
     if (installed && !protection_restored) {
-        std::memcpy(
-            callsite + 1, &old_displacement, sizeof(old_displacement));
-        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
-        std::int32_t rollback_readback = 0;
-        std::memcpy(
-            &rollback_readback, callsite + 1, sizeof(rollback_readback));
-        rollback_verified = callsite[0] == 0xE8 &&
-            rollback_readback == old_displacement;
-        installed = !rollback_verified;
+        // The page is still writable on the ordinary failure path. Roll all
+        // three calls back while every other process thread remains suspended,
+        // then verify before any relay can be released.
+        restore_stock();
+        rollback_verified = all_match(false);
+        installed = false;
         protection_restored =
-            VirtualProtect(callsite, 5, old_protection, &ignored) != 0;
+            VirtualProtect(
+                patch_begin, patch_span, old_protection, &ignored) != 0;
     }
     resume_suspended_process_threads(suspended_threads);
     if (!installed) {
         if (rollback_verified) {
-            VirtualFree(relay, 0, MEM_RELEASE);
+            free_relays();
             g_original_weapon_ik_feather_solve = nullptr;
+            g_original_weapon_ik_goal_get_joint_loc_ws = nullptr;
         }
         boot_log_line(
             rollback_verified && protection_restored
@@ -45591,7 +45729,7 @@ bool install_player_weapon_ik_feather_goal_census() {
     }
     boot_log_line(
         protection_restored
-            ? "Player WeaponIK goal census READY (Solve callsite 0x1418F29D0; read-only)"
+            ? "Player WeaponIK goal census READY (Solve + two stock getter callsites; read-only)"
             : "Player WeaponIK goal census READY (protection WARNING; relay retained)");
     return true;
 }
@@ -61491,8 +61629,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20adv "
-        "(read-only Chloe/Nadine WeaponIK goal census)");
+        "TLL co-op runtime init 2026-08-20adw "
+        "(read-only post-refresh Chloe/Nadine WeaponIK goal census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

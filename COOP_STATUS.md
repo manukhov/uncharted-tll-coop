@@ -25636,3 +25636,49 @@ input; the user alone draws the Mazur and holds each local player still.
 The canonical `ida/tll.i64` is saved with the additional STATIC label
 `JointSet_GetJointLocLs 0x14181D8E0`; `reports/apply_status_adv.txt` records
 `save_database returned True`.
+
+### 2026-08-20 RUNTIME INCONCLUSIVE (`adv`) / STATIC IMPLEMENTED (`adw`): sample after the stock WS refresh
+
+The first read-only goal census proved its callsite and semantic admission but
+did not produce a pose sample.  PID `12192` (role A/Chloe) and PID `9448`
+(role B/legacy Nadine) both loaded `2026-08-20adv` and logged
+`Player WeaponIK goal census READY`.  Role A then emitted `entry`, exact
+`admission ... body=Chloe runtime=0x4a8 weapon=0x4af`, and only
+`rejected stage=pre-capture`; role B independently emitted `entry`, exact
+`admission ... body=Nadine runtime=0x4aa weapon=0x4af`, and the same rejection.
+Both processes remained responsive.  Consequently this run selects none of
+`H-target`, `H-chain/map`, `H-lifecycle` or `H-later-writer`: it is a rejected
+observation boundary, not evidence about the Chloe/Nadine numerical goal.
+
+The failure is statically exact.  `JointSet_GetJointLocWs 0x14181DA50`
+validates the requested chain offset, invokes the JointSet vtable `+0x38`
+refresh, then returns the refreshed locator from the cache behind set `+0x20`.
+Before the first such call in Solve, the direct WS cache used by `adv` is not
+yet guaranteed valid.  Apply had only updated local chain data through
+`JointSet_GetJointLocLs 0x14181D8E0` and JointSet vtable `+0x30`; Solve's own
+iteration also invokes `+0x30`, which makes the direct post-Solve read valid.
+This independently explains the symmetric pre-capture failure without changing
+any earlier scope, ABI or target-construction conclusion.
+
+Build `adw` therefore keeps the exact Solve relay at `0x1418F29D0` and adds
+read-only relays at the two existing getter calls `0x1418F31D4` and
+`0x1418F31DF`.  Each getter wrapper calls stock exactly once, copies the
+semantic chain only after stock has refreshed it, and returns the exact stock
+pointer.  A same-thread TLS scope binds those two samples to the admitted Solve
+invocation; the Solve wrapper calls stock once and reads the post-Solve cache
+directly.  All three E8 sites are preflighted and installed in one
+suspended-thread transaction over one protection span, with full readback and
+verified all-site rollback.  A failed sample is now terminal and bounded rather
+than retried every 350 ms.  No pose, transform, cache, scalar, weapon field or
+animation command is written by the census.
+
+The falsifiable prediction is unchanged, but the packaging markers are now
+stricter.  Each process must log `Player WeaponIK goal census READY (Solve + two
+stock getter callsites; read-only)`, followed by one `entry`, one exact
+`admission`, one `PLAYER-WEAPON-IK-GOAL` summary and ten semantic
+`PLAYER-WEAPON-IK-CHAIN` rows.  A single
+`rejected stage=stock-getter-capture`, `post-capture` or
+`relative-transform` is a bounded instrumentation failure.  Only complete
+samples may compare normalized goals, chains and solver scalars.  No visual
+change is predicted.  The agent may launch/inject both copies, but only the user
+controls gameplay.
