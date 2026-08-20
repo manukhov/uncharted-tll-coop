@@ -5064,7 +5064,7 @@ Keep the postblend preservation boundary; replace only its steady content.
       Solve consumer.  Keep stock Jacobian maps, Solve, commits and postblend.
       A single hard-coded `adx` sample is forbidden.
 
-- [ ] Run the bounded read-only `ady` donor-location discriminator.  The exact
+- [x] Run the bounded read-only `ady` donor-location discriminator.  The exact
       Solve/getter package now records owner 0 and owner 1 separately.  In the
       role-B process, require both entry markers and then either a complete
       `owner=1 body=Chloe look=0x3F334972 joints=651` Mazur/WeaponOut goal or a
@@ -5073,6 +5073,23 @@ Keep the postblend preservation boundary; replace only its steady content.
       selects the endpoint-authenticated role-A packet; no owner-1 entry rejects
       that local donor entirely.  Stock Solve/getters remain unchanged and the
       exam predicts no visual difference.
+      Role-B owner 1 produced a complete Chloe/651/Mazur goal.  It is within
+      `0.00853095` units / `1.22331` degrees of independently sampled local
+      Chloe, while the same-process Nadine goal is `0.300613` units /
+      `75.9353` degrees away.  Same-process donation is CONFIRMED and the UDP
+      alternative is rejected.
+
+- [ ] Implement and run one same-process live-goal relay exam.  Role B only:
+      publish owner-1 Chloe's post-getter/pre-Solve common target relative to
+      `spined`; after 350 ms exact steady Mazur scope on both owners and with a
+      source age no greater than 100 ms, reconstruct it under owner-0 Nadine
+      `spined` and return the same TLS world Locator from both exact getter
+      wrappers.  Revalidate Player/Fg/skeleton/weapon identity and generations.
+      Keep stock getters, JointSets, maps, Solve and commits.  Require both
+      bounded CAPTURE and RELAY markers.  Two-hand Chloe-like hold confirms the
+      target boundary; markers plus malformed hold select chain/proportion or a
+      later writer; delayed failure selects lifetime/cadence; jitter rejects the
+      unsmoothed live source.  No hard-coded target and no pose-row copy.
 
 ## Rule
 

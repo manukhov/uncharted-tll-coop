@@ -25770,3 +25770,47 @@ remain materially separated from role-B owner-0 Nadine.  Entry without that
 admission selects `H-roleA-packet`; no owner-1 entry selects
 `H-no-Chloe-solve`.  No visual change is predicted and no gameplay input is
 sent by the agent.
+
+### 2026-08-20 RUNTIME CONFIRMED (`ady`): role-B owner 1 is the exact same-process Chloe goal donor
+
+The written same-process discriminator passed completely.  PID `18496`
+(role B) emitted both retained-owner entries, then admitted and sampled
+`owner=1 body=Chloe look=0x3F334972 joints=651` and
+`owner=0 body=Nadine look=0xD27C074F joints=580`, both with exact Mazur,
+WeaponOut and zero-motion scope.  PID `18492` independently sampled local
+owner-0 Chloe.  Both processes remained responsive and no exception/fatal row
+was emitted.
+
+The role-B owner-1 Chloe goal is
+`P=(-0.0223439,-0.359875,-0.0296439)`,
+`Q=(0.389769,0.39832,0.16581,0.81359)`.  The independently sampled role-A
+local Chloe goal differs by only `0.00853095` position units and `1.22331`
+degrees.  In contrast, the same role-B frame's local Nadine goal
+`P=(-0.0416166,-0.144622,-0.2386)`,
+`Q=(0.861368,0.107118,0.0467953,0.494349)` is `0.300613` units and
+`75.9353` degrees away.  Solver scalars at the two role-B steady samples remain
+ordinary, and stock Solve reduces Nadine's unusually large `0.171208` endpoint
+gap to `0.0231578`.  `H-same-process` is therefore CONFIRMED;
+`H-roleA-packet` and `H-no-Chloe-solve` are REJECTED for this boundary.
+
+These data earn one narrow mutation exam.  In role B only, capture the live
+owner-1 Chloe common target after the two stock getter refreshes, normalize it
+to Chloe `spined`, and publish it in a same-process locked snapshot.  For exact
+owner-0 legacy Nadine/Mazur/WeaponOut/idle only, after both owners have remained
+stable for 350 ms and the donor is at most 100 ms old, compose that relative
+target under Nadine `spined`.  The two exact getter wrappers may then return the
+same TLS 32-byte world Locator to Solve.  The disassembly proves both results
+are read-only and fully consumed before the call returns; algebraically
+`R + w*(L-R) == G` and `slerp(G,G,w) == G`, independent of selector.  Stock
+JointSets, Jacobian maps, Solve iterations, commits and all later postblend stay
+enabled.  Source and target Player/Fg/skeleton/weapon pointers and runtime ids
+must be revalidated; P99, role A, owner 1, Draw, ADS, movement, cover and
+grenade remain stock.
+
+Competing outcomes remain explicit.  `H-target-relay` predicts bounded source
+and target markers followed by a stable Chloe-like two-hand hold.  Markers plus
+a still-wrong pose select `H-chain/proportion` or a later writer.  A correct
+initial correction that later breaks selects stale lifetime/cadence.  Any
+jitter selects source phase/freshness rather than permission to smooth or
+hard-code the sample.  Missing either marker is packaging/admission and carries
+no visual conclusion.
