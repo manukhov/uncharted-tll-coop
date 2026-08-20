@@ -2471,7 +2471,7 @@ constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
 // preserve the stock pose already blended with its published +0x158 weight;
 // only the later steady topology receives the full command overlay. Draw state
 // 1, P99, role A and ADS remain stock.
-constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = true;
+constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 static_assert(
@@ -60759,8 +60759,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20adu "
-        "(Mazur stock pre-postblend pose preservation enabled)");
+        "TLL co-op runtime init 2026-08-20adu-safe "
+        "(rejected Mazur stock pre-postblend preservation disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

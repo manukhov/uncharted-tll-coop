@@ -5009,7 +5009,7 @@ Keep the postblend preservation boundary; replace only its steady content.
       that the resulting hold was entirely unlike Chloe.  There were zero
       transition markers.  Do not try another named clip.
 
-- [ ] Runtime-confirm `adu`, the no-clip stock-pose preservation exam.  The
+- [x] Runtime-reject `adu`, the no-clip stock-pose preservation exam.  The
       steady tree already produces a Chloe-authored Base `5F913F74` plus Hands
       `7D11D4FD` bundle and stock retargets it into C39 before Player postblend.
       Re-resolve and require that exact live `7D11D4FD` Hands tuple at
@@ -5017,13 +5017,19 @@ Keep the postblend preservation boundary; replace only its steady content.
       remains entirely stock.
       Snapshot C39 local rows 19--30 only after Perform returns, run stock
       `Player +0x408`, then restore the same rows before Async cmd14 imports
-      them.  Require READY plus paired `NADINE-MAZUR-STOCK-POSE captured
-      stage=perform-return source=stock-steady` and `restored ...
-      source=stock-steady`.  Success requires the same horizontal shoulder-height
-      rifle and left fore-end support as Chloe.  Both markers plus another pose
-      reject pre-postblend sufficiency; missing markers are packaging.  The
-      agent launches/injects immediately after a fresh successful build but
-      never sends gameplay input; the user performs the visual test.
+      them.  Both required markers appeared on role-B PID 12656, but the user
+      observed a one-hand hold.  This rejects wholesale pre-postblend C39
+      19--30 preservation and proves that stock postblend contributes required
+      arm/IK state.  `adu-safe` disables the package.
+
+- [ ] Resolve the exact Chloe final Mazur postblend target before another
+      runtime exam.  Trace PlayerWeaponIKAction/WeaponIKFeather target
+      construction, hand-prop attachment locators and the final palette path
+      for Chloe versus legacy Nadine.  Keep stock postblend; do not guess
+      another clip, suppress Feather wholesale, or choose a row subset from the
+      visual result alone.  A new mutation requires three independent static
+      evidence types and a prediction distinguishing target-input correction
+      from a later writer.
 
 ## Rule
 

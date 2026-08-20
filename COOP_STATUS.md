@@ -25542,3 +25542,33 @@ Missing READY/capture/restore is packaging or scope, not a visual result.
 Transition quality is not part of this test because transition admission is
 compile-time fail-closed.  The agent may launch and inject this completed exam
 but sends no gameplay input; the user alone controls both game instances.
+
+### 2026-08-20 RUNTIME REJECTED (`adu` -> safe disabled): stock pre-postblend is one-handed
+
+The fresh two-copy exam reached every written discriminator on role-B PID
+`12656`.  Both processes loaded `2026-08-20adu` and installed the exact
+three-relay package.  Role B then logged
+`NADINE-MAZUR-STOCK-POSE captured stage=perform-return source=stock-steady
+hands=0x7D11D4FD rows=19..30` followed immediately by
+`restored stage=postblend source=stock-steady hands=0x7D11D4FD rows=19..30`.
+Both processes remained responsive and no exception/fatal row appeared.  The
+user observed that Nadine now held the rifle with only one hand.
+
+This is a semantic rejection, not packaging.  It proves that the exact stock
+pre-postblend ensemble, despite its canonical Chloe Hands root, is not Chloe's
+final two-hand Mazur pose when preserved wholesale on legacy Nadine.  Stock
+Player postblend is therefore not merely corrupting an otherwise complete
+Chloe hold: at least part of its arm/IK result is required.  The result also
+rejects another full-range C39 `19..30` preservation policy.  Together with the
+earlier low/high clip failures, it forbids another named clip substitution,
+full Feather suppression, or wholesale pre/postblend copy.
+
+The remaining frontier is narrower and must be solved statically: identify the
+exact Chloe postblend/WeaponIK target construction and determine which input or
+subchain differs for legacy Nadine.  A future repair must keep stock postblend
+and correct that semantic target, or prove a mixed-row policy from exact
+per-chain writers; the visual one-hand result alone does not authorize guessing
+which rows to keep.  Build `adu-safe` disables the stock-pose preservation flag
+and installs none of its three relays.  No further game launch is earned until
+the Chloe final-pose writer/target has three independent evidence classes and a
+new falsifiable prediction.
