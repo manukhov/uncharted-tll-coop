@@ -60697,7 +60697,7 @@ DWORD WINAPI install_hook(void*) {
     }
     boot_log_line(
         "TLL co-op runtime init 2026-08-20adr "
-        "(runtime-rejected Mazur grip experiments disabled)");
+        "(Mazur authored-pair preservation enabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

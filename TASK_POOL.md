@@ -4996,6 +4996,23 @@ stable two-hand hold confirms the postblend-overwrite repair.  All three plus
 the arm still away selects authored-content/omitted-helper or a later Async
 writer.  Any missing marker is packaging; any crash rejects the package.
 
+`adr` is runtime-confirmed for the steady hold.  Role-B PID 13736 emitted the
+exact Perform injection and postblend restore markers, stayed responsive, and
+the user confirmed that local legacy Nadine now keeps the Mazur in the correct
+two-hand pose.  Keep this postblend preservation enabled.  The remaining defect
+is draw-transition quality: Draw state 1 is still stock and the repair enters at
+WeaponOut state 2 with literal command weights 1.0, producing an abrupt visible
+handoff.
+
+- [ ] Close the native Draw fade before changing the confirmed steady repair.
+      Bind exact channel-1 `PlayerGetWeaponInHandAction` weak weapon identity to
+      the same Player/Fg/Mazur epoch, resolve WeaponPartial through
+      `AnimControl_FindActiveType2LayerById`, and prove current layer weight
+      `+0x28` from target/duration/start/curve fields `+0x2C..+0x3C` updated by
+      `AnimSimpleLayer_UpdateFade 0x141896950`.  Only then may the authored pair
+      be preserved during Draw state 1 using the native weight.  Do not use a
+      timer, hand-written transform interpolation or a broad state-1 gate.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

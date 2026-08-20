@@ -25345,3 +25345,35 @@ twitch despite the exact cmd14 handoff.  Missing READY/injection/restore is a
 packaging or scope failure and must not be judged visually.  A crash rejects the
 three-relay/memmove package immediately.  No other grip/arm-pose mutation is
 enabled in this exam.
+
+### 2026-08-20 RUNTIME CONFIRMED (`adr`): the postblend-preserved pair fixes the steady Mazur hold
+
+The user-controlled two-copy exam reached the complete written boundary on
+role-B PID 13736.  Both processes stayed responsive; role B logged
+`NADINE-MAZUR-AUTHORED-PAIR injected stage=perform hands=0x56c57ad2
+arms=0x283966ed group=0 lane=4 weights=1/1` followed by
+`NADINE-MAZUR-AUTHORED-PAIR restored stage=postblend rows=19..30`.  The user
+then confirmed that local legacy Nadine kept the Mazur in the correct stable
+two-hand hold instead of returning to the former one-hand/arm-away pose.  This
+confirms `H-postblend-overwrite`: the authored complementary pair is sufficient,
+and preserving its engine-retargeted C39 rows across Player `+0x408` is the
+missing steady-state boundary.
+
+One residual is now separated rather than hidden.  The draw/equip intermediate
+motion looks abrupt, as if transition frames are missing.  That observation is
+consistent with the exact current scope: `seh_resolve_idle_arm_pose_owner_scope`
+admits only controller `WeaponOut=2`, while the injected command-7 overlays use
+literal weight `1.0`.  Thus Draw state 1 remains stock and the repair begins in
+one pass at the `1 -> 2` boundary.  This is a new transition-quality problem,
+not a failure of the confirmed steady repair.
+
+The next static frontier is the stock transition fade, not manual bone
+interpolation.  `PlayerGetWeaponInHandAction` owns Draw state 1 and exact weapon
+weak identity.  `PlayerWeaponAnimControl_RequestCustomWeaponPart 0x14108B940`
+passes the authored first scalar into WeaponPartial layer fields: target weight
+`+0x2C=1`, remaining/full fade `+0x30/+0x34`, start weight `+0x38`, and curve
+`+0x3C`; `AnimSimpleLayer_UpdateFade 0x141896950` advances current weight
+`+0x28`.  A follow-up may extend the same pair preservation into exact Get/Draw
+only if it reads that native current weight and proves the same action/weapon/Fg
+identity.  Do not introduce a wall-clock ramp, quaternion interpolation or a
+broad state-1 admission.
