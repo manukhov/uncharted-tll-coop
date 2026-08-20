@@ -25955,3 +25955,35 @@ hook or capture operation: it only permits the identical read-only outer scope
 on role A and prints the real process role.  The new falsifier requires a full
 role-A local-Chloe sample and a full role-B local-Nadine sample; only then may
 their four normalized terminal inputs be compared.
+
+### 2026-08-20 CONFIRMED (`aed`): Chloe and legacy Nadine enter terminal WeaponIK with materially different wrist/prop Locators
+
+Both processes loaded `aed`, installed the proven outer Apply boundary and all
+four read-only getter relays, remained responsive, and emitted complete samples.
+Role-A owner-0 local Chloe and role-B owner-0 local Nadine used the same
+`selector=1`, `weight=1`, and `strength=0.5`; their `animScale` differed
+(`0.918` versus `1.0`).  Comparing each stock `JointSet_GetJointLocWs` result
+after normalization to that JointSet's live `spined` gives:
+
+- right wrist: `0.085187` position units / `50.511` degrees;
+- left wrist: `0.232679` position units / `99.078` degrees;
+- right hand-prop: `0.045186` position units / `53.607` degrees;
+- left hand-prop: `0.151592` position units / `68.523` degrees.
+
+The two independent view controls are much tighter.  Local Chloe versus retained
+Chloe is `0.007660..0.009004` units / `2.913..3.068` degrees; local Nadine versus
+retained Nadine is `0.018523..0.020096` units / `6.353..6.807` degrees.  Thus
+instrumentation/view noise cannot explain the Chloe/Nadine deltas.  The
+near-equal-input hypothesis is RUNTIME REJECTED and terminal-input divergence is
+CONFIRMED.  This result does **not** yet identify one field as causal: the four
+live Locators and `animScale` differ together, while chain/Jacobian proportions
+or a still-later writer remain competitors.
+
+No substitution is earned yet.  The next static frontier is the exact
+`WeaponIK_Apply 0x1418F1780` transform construction between getter callsites
+`0x1418F1872/1896/18A6/18B5` and the second `SolveArmIk 0x1418F1C43`: reconstruct
+which combination becomes the final arm goal, in which coordinate space, and
+where `animScale` participates.  Only that derived goal may be considered for a
+future normalized Chloe-to-Nadine correction; blindly copying four Locators is
+explicitly forbidden.  Build `aee` disables the completed getter census and
+leaves all rejected pose mutations off.

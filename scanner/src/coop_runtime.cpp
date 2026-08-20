@@ -2460,10 +2460,10 @@ constexpr bool kEnableLegacyNadineWeaponIkGoalRelay = false;
 // role B after READY and before its first sample.  The writer hypothesis remains
 // STATIC, but this callsite is not an admissible runtime boundary.
 constexpr bool kEnableWeaponIkTerminalApplyCensus = false;
-// Build aec observes the four stock JointSet_GetJointLocWs results consumed by
-// terminal WeaponIK::Apply.  It uses the already-proven outer Apply callsite as
-// a TLS lifetime and never detours the rejected 0x1418F2E0B boundary itself.
-constexpr bool kEnableWeaponIkTerminalGetterCensus = true;
+// Builds aec/aed observed the four stock JointSet_GetJointLocWs results consumed
+// by terminal WeaponIK::Apply.  The bounded census is complete and remains off
+// in the production-safe package; 0x1418F2E0B remains rejected.
+constexpr bool kEnableWeaponIkTerminalGetterCensus = false;
 // Build acg proved that the two P99 WeaponIK paths share the same lifecycle and
 // scalar controls, but composing the interleaved arm hierarchy reveals a
 // residual 6.7 mm hand-endpoint split. Distinguish that upstream pose delta
@@ -62613,8 +62613,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20aed "
-        "(read-only local Chloe versus Nadine terminal WeaponIK inputs)");
+        "TLL co-op runtime init 2026-08-20aee "
+        "(safe rollback after terminal WeaponIK input census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

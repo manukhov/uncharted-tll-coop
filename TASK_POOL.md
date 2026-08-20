@@ -5129,12 +5129,23 @@ Keep the postblend preservation boundary; replace only its steady content.
       boundary.  This confirms safe packaging only; the comparison is
       instrumentation-inconclusive.
 
-- [ ] Run corrected read-only `aed`.  Keep the same outer Apply plus four
+- [x] Run corrected read-only `aed`.  Keep the same outer Apply plus four
       getter relays, but admit the identical exact scope on role-A owner-0 local
       Chloe as the comparator to role-B owner-0 local Nadine.  `ady` already
       bounds local-versus-retained Chloe to 0.00853 units / 1.22 degrees.  A
       complete four-row sample from each process is required before comparing
       terminal wrist/hand-prop inputs; either missing sample remains packaging.
+      Both complete samples arrived.  Chloe/Nadine deltas are respectively
+      `0.085187/50.511 deg`, `0.232679/99.078 deg`, `0.045186/53.607 deg`, and
+      `0.151592/68.523 deg`; same-character view controls remain below 0.021
+      units / 6.81 degrees.  Terminal-input divergence is CONFIRMED.
+
+- [ ] Reconstruct the exact final goal built by `WeaponIK_Apply 0x1418F1780`
+      from the four getter results before `SolveArmIk 0x1418F1C43`.  Trace all
+      transform helpers, coordinate spaces and `animScale`; reject each
+      competing combination.  Do not relay or copy the four raw Locators.  A
+      future mutation requires a single derived, normalized goal plus three
+      independent static evidence types and a written falsifier.
 
 ## Rule
 
