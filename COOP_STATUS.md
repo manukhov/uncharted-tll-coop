@@ -26245,3 +26245,47 @@ not Chloe-like. **H-rows-insufficient-or-later-owner** predicts a correct
 captured interval followed by a wrong pose despite continuous replay. Missing
 READY/capture/replay is packaging or lifecycle and has no visual meaning. This
 is one bounded one-copy exam, not authorization to tune individual arm rows.
+
+### 2026-08-20 RUNTIME INCONCLUSIVE (`aej`) / IMPLEMENTED read-only (`aek`): the transient sample never published
+
+The exact one-process packaging succeeded but the proposed mutation never ran.
+Role-B/local-Nadine PID `4844` loaded build `2026-08-20aej`, published
+`legacy-Nadine Mazur transient-pose replay READY`, and remained responsive.
+The complete post-launch log contains zero
+`NADINE-MAZUR-TRANSIENT-POSE captured` and zero `... replayed` rows. The user's
+report that the hold was completely broken therefore describes the unchanged
+stock pose after the known low two-hand baseline had been disabled; it is not a
+semantic rejection of the unseen sample. `H-transient-postblend-owner` remains
+untested, while the `aej` admission/lifecycle packaging is rejected.
+
+The zero-marker fork has two concrete live-state competitors. Historical
+`ade/adh` rows prove one normal lifecycle where `s_weapon-draw 1313FB4E`
+overlaps the initial `WeaponOut=2` publication before `s_weapon-out 7405AACB`
+and the terminal empty `s_no-weapon 3889CC0E`. Independent custom-Mazur rows,
+however, show `custom-weapon-part-with-feather 11EE475B` during the authored
+fade; this is the unique `56C57AD2 + 283966ED` root and need not expose `1313`
+at the postblend sample. The current wrapper adds a third possible failure:
+`seh_resolve_idle_arm_pose_owner_scope` requires exact controller state 2 and
+the neutral movement/input predicates before it even inspects WeaponPartial.
+Consequently zero capture cannot distinguish missing wrapper reach, state-1
+timing, idle rejection, `11EE` topology, or an already-cleared `3889` topology.
+
+Build `aek` is a bounded read-only discriminator at the same already-installed
+six-byte Player `+0x408` callsite. All grip/arm-pose mutations remain disabled;
+the wrapper calls stock exactly once and never copies a pose row. At most once
+per 100 ms it records retained-Player equality, the exact first failed
+owner/controller/idle stage, and the complete bounded WeaponPartial inventory
+with track/instance indices, state ids and phases. The inventory explicitly
+classifies `1313FB4E`, `11EE475B`, `7405AACB`, and newest-track `3889CC0E`.
+Logging is capped at 64 distinct semantic rows and announces saturation.
+
+The written prediction separates every remaining candidate. READY plus no
+`NADINE-MAZUR-TRANSIENT-CENSUS-ENTRY` means the patched postblend callsite is
+not live. ENTRY with `retained=0` but no `retained=1` means that it never owns
+the current local Player. A row ending at `scopeStage=5` with state 1
+selects the controller-overlap failure while still exposing the live topology.
+State 2 plus `draw=1,empty=0` would prove the old source exists and move the
+failure to idle or pose validation. State 2 with `custom=1` but `draw=0`
+selects the exact custom-Mazur source mismatch. State 2 with only `7405` or
+`3889` proves the sample point is already too late. This single role-B process
+exam predicts no visual improvement; only the user controls gameplay.

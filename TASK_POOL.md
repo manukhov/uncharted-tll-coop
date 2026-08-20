@@ -5185,7 +5185,7 @@ Keep the postblend preservation boundary; replace only its steady content.
       relay in `aei-safe`; do not repeat its live-owner-1 admission. While
       appearance 1 is the active task, launch exactly one game copy.
 
-- [~] Run the statically closed one-process `aej` transient-postblend exam for
+- [x] Run the statically closed one-process `aej` transient-postblend exam for
       appearance 1. Disable the low `82e7b9e` authored-pair baseline. After
       stock Player `+0x408`, capture the last exact local-Nadine C39 rows 19--30
       while full-arm `s_weapon-draw 1313FB4E` is live and `s_no-weapon` is
@@ -5195,6 +5195,24 @@ Keep the postblend preservation boundary; replace only its steady content.
       hold persisting confirms H-transient-postblend-owner; all markers plus a
       wrong hold rejects it; missing a marker is packaging/lifecycle. Launch
       exactly one role-B `tll.exe`; the user alone controls gameplay.
+
+      Runtime result: role-B PID `4844` loaded `aej`, reached READY and stayed
+      responsive, but emitted zero capture and zero replay rows. The user's
+      completely broken hold was the untouched stock pose because the fallback
+      baseline was disabled. This is admission/lifecycle-inconclusive and does
+      not test the source content.
+
+- [~] Run one read-only `aek` first-fail census at the same Player `+0x408`
+      callsite. Keep every grip/arm-pose mutation disabled. Once per 100 ms,
+      log exact retained equality, owner/controller/idle admission and the
+      bounded WeaponPartial track inventory including `1313FB4E`, `11EE475B`,
+      `7405AACB` and `3889CC0E`; cap output at 64 distinct rows. READY without
+      any ENTRY rejects callsite reach; ENTRY only with `retained=0` rejects
+      exact local-Player ownership. Controller state 1 plus a live
+      source selects the state-overlap gate; state 2 with `11EE` but no `1313`
+      selects the custom-Mazur source mismatch; state 2 with only `7405/3889`
+      proves the postblend sample is late. This exam predicts no pose change.
+      Launch exactly one role-B/Nadine process; the user alone controls gameplay.
 
   Original `aeh` prediction required the combined READY marker,
       fresh Chloe right-prop CAPTURE, Nadine right-prop RELAY and same-postblend

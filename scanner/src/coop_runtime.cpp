@@ -2505,12 +2505,13 @@ constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
 // that its low diagonal hold is not Chloe's steady pose. Keep it disabled in
 // the next exam so it cannot contaminate the source sample below.
 constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = false;
-// The stock first Draw already produces a short visually-correct two-hand pose.
-// Capture the exact local C39 rows 19..30 after stock Player postblend while
-// WeaponPartial still owns the full-arm s_weapon-draw state, then preserve its
-// last postblend sample after that state disappears. This is same-process and
-// same-skeleton: no second game copy, clip substitution or Chloe packet relay.
-constexpr bool kEnableLegacyNadineMazurTransientPostblendReplay = true;
+// Build aej installed the exact one-process postblend seam but produced no
+// capture/replay marker: the visual result was just the stock broken pose. Keep
+// the unexecuted mutation disabled. The next bounded pass observes the first
+// failed owner/idle/topology condition and the complete live WeaponPartial
+// state inventory at this same seam; it never writes a pose or animation field.
+constexpr bool kEnableLegacyNadineMazurTransientPostblendReplay = false;
+constexpr bool kEnableLegacyNadineMazurTransientPostblendCensus = true;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 static_assert(
@@ -2523,6 +2524,10 @@ static_assert(
     !(kEnableLegacyNadineMazurAuthoredPairRepair &&
       kEnableLegacyNadineMazurTransientPostblendReplay),
     "only one Mazur postblend pose source may be active");
+static_assert(
+    !(kEnableLegacyNadineMazurTransientPostblendReplay &&
+      kEnableLegacyNadineMazurTransientPostblendCensus),
+    "transient-pose mutation and first-fail census are separate exams");
 static_assert(
     !kEnableLegacyNadineMazurRightHandPropRelay ||
         kEnableLegacyNadineMazurAuthoredPairRepair,
@@ -51069,9 +51074,20 @@ struct LegacyNadineMazurWeaponPartialTopology {
     bool valid = false;
     bool draw_live = false;
     bool no_weapon_live = false;
+    bool weapon_out_live = false;
+    bool custom_pair_live = false;
     void* layer = nullptr;
     void* draw_instance = nullptr;
     std::uint32_t draw_phase_bits = 0;
+    std::uint32_t stage = 0;
+    std::uint32_t track_count = 0;
+    std::uint32_t observed_instance_count = 0;
+    bool inventory_truncated = false;
+    static constexpr std::size_t kMaximumObservedInstances = 16;
+    std::array<std::uint32_t, kMaximumObservedInstances> state_ids{};
+    std::array<std::uint32_t, kMaximumObservedInstances> phase_bits{};
+    std::array<std::uint16_t, kMaximumObservedInstances> track_indices{};
+    std::array<std::uint16_t, kMaximumObservedInstances> instance_indices{};
 };
 
 SRWLOCK g_legacy_nadine_mazur_transient_pose_lock = SRWLOCK_INIT;
@@ -51104,8 +51120,12 @@ bool seh_resolve_legacy_nadine_mazur_weapon_partial_topology(
     }
     *output = {};
     __try {
+        output->stage = 1;
         auto* const player_bytes = static_cast<std::byte*>(player);
-        if (readable_bytes(player_bytes) < 0x1DF8) {
+        if (!player_object_stable(player) || g_module == 0 ||
+            readable_bytes(player_bytes) < 0x1DF8 ||
+            *reinterpret_cast<const std::uintptr_t*>(player) !=
+                g_module + kPlayerVtableRva) {
             return false;
         }
         auto* const weapon_anim_control =
@@ -51118,6 +51138,7 @@ bool seh_resolve_legacy_nadine_mazur_weapon_partial_topology(
                 player) {
             return false;
         }
+        output->stage = 2;
         void* const anim_control = *reinterpret_cast<void* const*>(
             weapon_anim_control + 0x08);
         auto* const layer = static_cast<std::byte*>(
@@ -51133,8 +51154,11 @@ bool seh_resolve_legacy_nadine_mazur_weapon_partial_topology(
             return false;
         }
 
+        output->layer = layer;
+        output->stage = 3;
         const std::uint32_t track_count =
             *reinterpret_cast<const std::uint32_t*>(layer + 0x500);
+        output->track_count = track_count;
         auto* const tracks = *reinterpret_cast<void* const* const*>(
             layer + 0x4F8);
         if (track_count == 0 || track_count > kMaxLiveWeaponPartialTracks ||
@@ -51144,6 +51168,7 @@ bool seh_resolve_legacy_nadine_mazur_weapon_partial_topology(
             return false;
         }
 
+        output->stage = 4;
         std::uint32_t draw_count = 0;
         for (std::uint32_t track_index = 0;
              track_index < track_count; ++track_index) {
@@ -51180,9 +51205,33 @@ bool seh_resolve_legacy_nadine_mazur_weapon_partial_topology(
                 }
                 const std::uint32_t state =
                     *reinterpret_cast<const std::uint32_t*>(instance + 0x98);
+                float phase = 0.0F;
+                std::memcpy(&phase, instance + 0x168, sizeof(phase));
+                std::uint32_t phase_bits = 0;
+                std::memcpy(&phase_bits, &phase, sizeof(phase_bits));
+                if (output->observed_instance_count <
+                    LegacyNadineMazurWeaponPartialTopology::
+                        kMaximumObservedInstances) {
+                    const std::size_t observed =
+                        output->observed_instance_count++;
+                    output->state_ids[observed] = state;
+                    output->phase_bits[observed] = phase_bits;
+                    output->track_indices[observed] =
+                        static_cast<std::uint16_t>(track_index);
+                    output->instance_indices[observed] =
+                        static_cast<std::uint16_t>(instance_index);
+                } else {
+                    output->inventory_truncated = true;
+                }
                 if (state == kWeaponPartialNoWeaponStateId &&
                     track_index == 0) {
                     output->no_weapon_live = true;
+                }
+                if (state == kWeaponPartialWeaponOutStateId) {
+                    output->weapon_out_live = true;
+                }
+                if (state == kMazurAuthoredPairStateId) {
+                    output->custom_pair_live = true;
                 }
                 if (state != kWeaponPartialDrawStateId) {
                     continue;
@@ -51191,23 +51240,19 @@ bool seh_resolve_legacy_nadine_mazur_weapon_partial_topology(
                 if (draw_count != 1) {
                     return false;
                 }
-                float phase = 0.0F;
-                std::memcpy(&phase, instance + 0x168, sizeof(phase));
                 if (!std::isfinite(phase) || phase < 0.0F || phase > 1.01F) {
                     return false;
                 }
                 output->draw_live = true;
                 output->draw_instance = instance;
-                std::memcpy(
-                    &output->draw_phase_bits, &phase,
-                    sizeof(output->draw_phase_bits));
+                output->draw_phase_bits = phase_bits;
             }
         }
-        output->layer = layer;
+        output->stage = 5;
         output->valid = true;
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        *output = {};
+        output->valid = false;
         return false;
     }
 }
@@ -51232,6 +51277,177 @@ bool legacy_nadine_mazur_transient_pose_key_matches(
     }
 }
 
+void log_legacy_nadine_mazur_transient_postblend_entry(
+    void* player, void* retained_player) {
+    if constexpr (!kEnableLegacyNadineMazurTransientPostblendCensus) {
+        return;
+    }
+    const unsigned category =
+        (g_net_role_b ? 2u : 0u) |
+        (player != nullptr && player == retained_player ? 1u : 0u);
+    static std::atomic<unsigned> logged_categories{0};
+    const unsigned bit = 1u << category;
+    unsigned observed = logged_categories.load(std::memory_order_relaxed);
+    while ((observed & bit) == 0) {
+        if (logged_categories.compare_exchange_weak(
+                observed, observed | bit, std::memory_order_relaxed,
+                std::memory_order_relaxed)) {
+            char line[128]{};
+            std::snprintf(
+                line, sizeof(line),
+                "NADINE-MAZUR-TRANSIENT-CENSUS-ENTRY roleB=%u retained=%u",
+                g_net_role_b ? 1u : 0u,
+                player != nullptr && player == retained_player ? 1u : 0u);
+            boot_log_line(line);
+            return;
+        }
+    }
+}
+
+bool legacy_nadine_mazur_transient_postblend_census_sample_due() {
+    if constexpr (!kEnableLegacyNadineMazurTransientPostblendCensus) {
+        return false;
+    }
+    static std::atomic<ULONGLONG> last_sample_ms{0};
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG last = last_sample_ms.load(std::memory_order_relaxed);
+    if (last != 0 && now >= last && now - last < 100) {
+        return false;
+    }
+    return last_sample_ms.compare_exchange_strong(
+        last, now, std::memory_order_relaxed,
+        std::memory_order_relaxed);
+}
+
+void log_legacy_nadine_mazur_transient_postblend_census(
+    void* player, void* retained_player, bool scope_ok,
+    const IdleArmPoseAdmissionDiagnostic& diagnostic,
+    const IdleArmPoseOwnerScope& owner, bool idle_ok,
+    bool topology_ok,
+    const LegacyNadineMazurWeaponPartialTopology& topology) {
+    if constexpr (!kEnableLegacyNadineMazurTransientPostblendCensus) {
+        return;
+    }
+
+    const std::uint64_t action_bits =
+        g_cached_local_input_buttons.load(std::memory_order_acquire) &
+        ~kInputBlockButtonBaseMask;
+    const bool movement_ok = scope_ok && idle_arm_pose_movement_is_zero(
+        owner.move_stick, owner.move_world, owner.move_magnitude);
+    const bool cover = scope_ok && player_cover_state_field(owner.player);
+    std::uint64_t signature = 1469598103934665603ull;
+    const auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ull;
+    };
+    mix(player != nullptr && player == retained_player ? 1u : 0u);
+    mix(g_net_role_b ? 1u : 0u);
+    mix(static_cast<std::uint32_t>(diagnostic.stage));
+    mix(diagnostic.screen);
+    mix(diagnostic.look);
+    mix(diagnostic.weapon_state);
+    mix(static_cast<std::uint32_t>(diagnostic.weapon_slot));
+    mix(diagnostic.weapon_art_id);
+    mix(scope_ok ? 1u : 0u);
+    mix(idle_ok ? 1u : 0u);
+    mix(action_bits);
+    mix(movement_ok ? 1u : 0u);
+    mix(cover ? 1u : 0u);
+    mix(topology_ok ? 1u : 0u);
+    mix(topology.stage);
+    mix(topology.track_count);
+    mix(topology.observed_instance_count);
+    mix(topology.inventory_truncated ? 1u : 0u);
+    mix(topology.draw_live ? 1u : 0u);
+    mix(topology.weapon_out_live ? 1u : 0u);
+    mix(topology.no_weapon_live ? 1u : 0u);
+    mix(topology.custom_pair_live ? 1u : 0u);
+    for (std::size_t index = 0;
+         index < topology.observed_instance_count; ++index) {
+        mix(topology.state_ids[index]);
+        mix(topology.track_indices[index]);
+        mix(topology.instance_indices[index]);
+    }
+
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static std::uint64_t last_signature = 0;
+    static unsigned log_count = 0;
+    static bool saturation_logged = false;
+    bool should_log = false;
+    bool log_saturation = false;
+    AcquireSRWLockExclusive(&lock);
+    if (signature != last_signature) {
+        last_signature = signature;
+        if (log_count < 64) {
+            ++log_count;
+            should_log = true;
+        } else if (!saturation_logged) {
+            saturation_logged = true;
+            log_saturation = true;
+        }
+    }
+    ReleaseSRWLockExclusive(&lock);
+    if (log_saturation) {
+        boot_log_line(
+            "NADINE-MAZUR-TRANSIENT-CENSUS SATURATED rows=64");
+    }
+    if (!should_log) {
+        return;
+    }
+
+    std::ostringstream line;
+    line << "NADINE-MAZUR-TRANSIENT-CENSUS"
+         << " retained="
+         << (player != nullptr && player == retained_player ? 1 : 0)
+         << " roleB=" << (g_net_role_b ? 1 : 0)
+         << " scope=" << (scope_ok ? 1 : 0)
+         << " scopeStage="
+         << static_cast<std::uint32_t>(diagnostic.stage) << ":"
+         << idle_arm_pose_admission_stage_name(diagnostic.stage)
+         << " stable/vt=" << (diagnostic.player_stable ? 1 : 0) << "/"
+         << (diagnostic.player_vtable_match ? 1 : 0)
+         << " screen=" << diagnostic.screen << "/"
+         << diagnostic.expected_screen
+         << " look=0x" << std::hex << diagnostic.look
+         << " wc=0x" << diagnostic.weapon_controller_vtable_rva
+         << "/" << std::dec
+         << (diagnostic.weapon_controller_owner_match ? 1 : 0)
+         << " slot/state=" << diagnostic.weapon_slot << "/"
+         << diagnostic.weapon_state
+         << " art=0x" << std::hex << diagnostic.weapon_art_id
+         << " idle=" << std::dec << (idle_ok ? 1 : 0)
+         << " action=0x" << std::hex << action_bits
+         << " movement/cover=" << std::dec
+         << (movement_ok ? 1 : 0) << "/" << (cover ? 1 : 0)
+         << " topology=" << std::dec << (topology_ok ? 1 : 0)
+         << " topologyStage=" << topology.stage
+         << " tracks=" << topology.track_count
+         << " instances=" << topology.observed_instance_count
+         << " truncated=" << (topology.inventory_truncated ? 1 : 0)
+         << " draw/out/empty/custom="
+         << (topology.draw_live ? 1 : 0) << "/"
+         << (topology.weapon_out_live ? 1 : 0) << "/"
+         << (topology.no_weapon_live ? 1 : 0) << "/"
+         << (topology.custom_pair_live ? 1 : 0)
+         << " states=";
+    for (std::size_t index = 0;
+         index < topology.observed_instance_count; ++index) {
+        if (index != 0) {
+            line << ",";
+        }
+        float phase = 0.0F;
+        std::memcpy(
+            &phase, &topology.phase_bits[index], sizeof(phase));
+        line << "t" << topology.track_indices[index]
+             << "i" << topology.instance_indices[index]
+             << ":0x" << std::hex << topology.state_ids[index]
+             << std::dec << "@" << phase;
+    }
+    line << " move=" << owner.move_magnitude << "/"
+         << owner.move_stick[0] << "/" << owner.move_stick[1];
+    boot_log_line(line.str().c_str());
+}
+
 std::int64_t __fastcall
 hooked_player_postblend_for_legacy_nadine_mazur_transient_pose(void* player) {
     LegacyNadineMazurAuthoredPairPostBlendFunction original = nullptr;
@@ -51253,19 +51469,49 @@ hooked_player_postblend_for_legacy_nadine_mazur_transient_pose(void* player) {
 
     const std::int64_t result = original(player);
     if (!g_legacy_nadine_mazur_transient_postblend_ready.load(
-            std::memory_order_acquire) ||
-        !g_net_role_b || player == nullptr ||
-        player != retained_player_object(0)) {
+            std::memory_order_acquire)) {
         return result;
+    }
+    void* const retained_player = retained_player_object(0);
+    const bool retained_match = g_net_role_b && player != nullptr &&
+        player == retained_player;
+    if constexpr (kEnableLegacyNadineMazurTransientPostblendCensus) {
+        log_legacy_nadine_mazur_transient_postblend_entry(
+            player, retained_player);
+        // A global Player call order cannot spend the exact-owner cadence.
+        // The entry marker above remains sufficient to distinguish no wrapper
+        // reach from a retained-identity mismatch.
+        if (!retained_match) {
+            return result;
+        }
+        // Bound every readable_bytes/registry walk before it begins. The
+        // wrapper still calls stock on every pass; only this read-only sample
+        // is throttled.
+        if (!legacy_nadine_mazur_transient_postblend_census_sample_due()) {
+            return result;
+        }
     }
 
     IdleArmPoseOwnerScope owner{};
+    IdleArmPoseAdmissionDiagnostic diagnostic{};
     LegacyNadineMazurWeaponPartialTopology topology{};
-    if (!seh_resolve_idle_arm_pose_owner_scope(player, 0, &owner) ||
-        owner.weapon_art_id != kCoopRifleArtId ||
-        !local_player_is_steady_drawn_idle(owner) ||
-        !seh_resolve_legacy_nadine_mazur_weapon_partial_topology(
-            player, &topology)) {
+    const bool scope_ok = retained_match &&
+        seh_resolve_idle_arm_pose_owner_scope(
+            player, 0, &owner, &diagnostic);
+    const bool idle_ok = scope_ok && owner.weapon_art_id == kCoopRifleArtId &&
+        local_player_is_steady_drawn_idle(owner);
+    const bool topology_ok = retained_match &&
+        seh_resolve_legacy_nadine_mazur_weapon_partial_topology(
+            player, &topology);
+    log_legacy_nadine_mazur_transient_postblend_census(
+        player, retained_player, scope_ok, diagnostic, owner, idle_ok,
+        topology_ok, topology);
+
+    if constexpr (!kEnableLegacyNadineMazurTransientPostblendReplay) {
+        return result;
+    }
+    if (!scope_ok || owner.weapon_art_id != kCoopRifleArtId || !idle_ok ||
+        !topology_ok) {
         return result;
     }
 
@@ -51402,7 +51648,7 @@ bool install_legacy_nadine_mazur_transient_postblend_replay() {
             VirtualFree(relay, 0, MEM_RELEASE);
         }
         boot_log_line(
-            "legacy-Nadine Mazur transient-pose replay SKIPPED (callsite preflight)");
+            "legacy-Nadine Mazur transient postblend hook SKIPPED (callsite preflight)");
         return false;
     }
 
@@ -51410,7 +51656,7 @@ bool install_legacy_nadine_mazur_transient_postblend_replay() {
     if (!suspend_other_process_threads(suspended_threads)) {
         VirtualFree(relay, 0, MEM_RELEASE);
         boot_log_line(
-            "legacy-Nadine Mazur transient-pose replay SKIPPED (thread suspend)");
+            "legacy-Nadine Mazur transient postblend hook SKIPPED (thread suspend)");
         return false;
     }
 
@@ -51423,7 +51669,7 @@ bool install_legacy_nadine_mazur_transient_postblend_replay() {
         resume_suspended_process_threads(suspended_threads);
         VirtualFree(relay, 0, MEM_RELEASE);
         boot_log_line(
-            "legacy-Nadine Mazur transient-pose replay SKIPPED (protect)");
+            "legacy-Nadine Mazur transient postblend hook SKIPPED (protect)");
         return false;
     }
 
@@ -51468,10 +51714,12 @@ bool install_legacy_nadine_mazur_transient_postblend_replay() {
     }
     boot_log_line(
         ready
-            ? "legacy-Nadine Mazur transient-pose replay READY (one exact postblend callsite; one-process source)"
+            ? (kEnableLegacyNadineMazurTransientPostblendReplay
+                   ? "legacy-Nadine Mazur transient-pose replay READY (one exact postblend callsite; one-process source)"
+                   : "legacy-Nadine Mazur transient-pose census READY (read-only; one exact postblend callsite)")
             : (rollback_verified
-                   ? "legacy-Nadine Mazur transient-pose replay SKIPPED (verified rollback)"
-                   : "legacy-Nadine Mazur transient-pose replay PARTIAL (pass-through; relay retained)"));
+                   ? "legacy-Nadine Mazur transient postblend hook SKIPPED (verified rollback)"
+                   : "legacy-Nadine Mazur transient postblend hook PARTIAL (pass-through; relay retained)"));
     return ready;
 }
 
@@ -63672,8 +63920,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20aej "
-        "(one-process first-Draw postblend endpoint replay; low baseline disabled)");
+        "TLL co-op runtime init 2026-08-20aek "
+        "(one-process first-fail postblend census; all grip pose mutations disabled)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -64170,13 +64418,14 @@ DWORD WINAPI install_hook(void*) {
                     : "legacy-Nadine Mazur Chloe right-hand-prop relay SKIPPED (combined package)");
         }
     }
-    if constexpr (kEnableLegacyNadineMazurTransientPostblendReplay &&
+    if constexpr ((kEnableLegacyNadineMazurTransientPostblendReplay ||
+                   kEnableLegacyNadineMazurTransientPostblendCensus) &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         if (state_net_started) {
             install_legacy_nadine_mazur_transient_postblend_replay();
         } else {
             boot_log_line(
-                "legacy-Nadine Mazur transient-pose replay SKIPPED (state net)");
+                "legacy-Nadine Mazur transient postblend hook SKIPPED (state net)");
         }
     }
     if constexpr ((kEnableLegacyNadineIdleArmPoseRoundTrip ||
