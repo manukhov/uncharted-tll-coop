@@ -2447,6 +2447,14 @@ constexpr bool kEnableLegacyNadineGripSnapshotCensus = false;
 // lifecycle/scalars and near-identical arm rows, so this hot census has answered
 // its question and stays out of production.
 constexpr bool kEnableLegacyNadineWeaponIkFeatherInputCensus = false;
+// Build adu proved that the stock pre-postblend pose is only the one-handed
+// input to Player WeaponIK, while stock postblend is required to create the
+// second-hand closure.  The next discriminator is therefore read-only: at the
+// sole WeaponIKFeather::Apply -> SolveWeaponFeatherIk callsite, compare the
+// initial common hand-prop goal and the solved arm chains for local Chloe and
+// local legacy Nadine.  No pose, JointSet, map, weight or weapon field is
+// changed by this census.
+constexpr bool kEnablePlayerWeaponIkFeatherGoalCensus = true;
 // Build acg proved that the two P99 WeaponIK paths share the same lifecycle and
 // scalar controls, but composing the interleaved arm hierarchy reveals a
 // residual 6.7 mm hand-endpoint split. Distinguish that upstream pose delta
@@ -18721,6 +18729,10 @@ constexpr std::uintptr_t kProcessWeaponStrapCustomUpdateTailJmpRva =
 constexpr std::uintptr_t kNdGameObjectCustomUpdateTailRva = 0x1F19070u;
 constexpr std::uintptr_t kPlayerWeaponIkFeatherApplyCallsiteRva = 0x10959ACu;
 constexpr std::uintptr_t kWeaponIkFeatherApplyRva = 0x18F2700u;
+constexpr std::uintptr_t kWeaponIkFeatherSolveCallsiteRva = 0x18F29D0u;
+constexpr std::uintptr_t kWeaponIkFeatherSolveRva = 0x18F2E50u;
+constexpr std::uintptr_t kJointChainFindNamedJointOffsetRva = 0x181D750u;
+constexpr std::uintptr_t kTransformMakeRelativeRva = 0x1990F0u;
 constexpr std::uintptr_t kPlayerWeaponIkActionVtableRva = 0x2A483A0u;
 constexpr std::uintptr_t kWeaponIkFeatherVtableRva = 0x2B0FFD8u;
 
@@ -44864,6 +44876,726 @@ void census_legacy_nadine_grip_layer(
     }
 }
 
+using WeaponIkFeatherSolveFunction = void(__fastcall*)(
+    void**, void**, std::uint32_t, float, float, int, float, int);
+using JointChainFindNamedJointOffsetFunction =
+    std::int32_t(__fastcall*)(void*, std::uint32_t);
+using TransformMakeRelativeFunction = void*(__fastcall*)(
+    const float*, float*, const float*);
+
+WeaponIkFeatherSolveFunction g_original_weapon_ik_feather_solve = nullptr;
+JointChainFindNamedJointOffsetFunction
+    g_joint_chain_find_named_joint_offset = nullptr;
+TransformMakeRelativeFunction g_transform_make_relative = nullptr;
+
+constexpr std::size_t kWeaponIkGoalChainJointCount = 5;
+constexpr ULONGLONG kWeaponIkGoalCensusDwellMs = 350;
+
+struct WeaponIkGoalLocator {
+    std::array<float, 8> value{};
+};
+
+struct WeaponIkGoalChainSample {
+    std::array<WeaponIkGoalLocator, kWeaponIkGoalChainJointCount> left{};
+    std::array<WeaponIkGoalLocator, kWeaponIkGoalChainJointCount> right{};
+};
+
+struct WeaponIkGoalCensusScope {
+    void* player = nullptr;
+    void* feather_info = nullptr;
+    void* weapon = nullptr;
+    std::byte* fg_anim_data = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    std::uint32_t look = 0;
+    std::uint32_t joint_count = 0;
+};
+
+struct WeaponIkGoalCensusMemo {
+    void* player = nullptr;
+    std::uint32_t runtime_id = 0;
+    ULONGLONG stable_since_ms = 0;
+    ULONGLONG last_seen_ms = 0;
+    bool claimed = false;
+    bool emitted = false;
+};
+
+SRWLOCK g_weapon_ik_goal_census_lock = SRWLOCK_INIT;
+WeaponIkGoalCensusMemo g_weapon_ik_goal_census_memo{};
+std::atomic<bool> g_weapon_ik_goal_census_entry_logged{false};
+std::atomic<bool> g_weapon_ik_goal_census_admission_logged{false};
+std::atomic<bool> g_weapon_ik_goal_census_complete{false};
+std::array<std::uint32_t, kWeaponIkGoalChainJointCount>
+    g_weapon_ik_goal_left_joint_ids{};
+std::array<std::uint32_t, kWeaponIkGoalChainJointCount>
+    g_weapon_ik_goal_right_joint_ids{};
+
+bool weapon_ik_goal_locator_valid(const WeaponIkGoalLocator& locator) {
+    for (const float value : locator.value) {
+        if (!std::isfinite(value)) {
+            return false;
+        }
+    }
+    const float* const q = locator.value.data() + 4;
+    const float norm_sq = q[0] * q[0] + q[1] * q[1] +
+        q[2] * q[2] + q[3] * q[3];
+    return std::isfinite(norm_sq) && norm_sq >= 0.80F && norm_sq <= 1.20F;
+}
+
+bool weapon_ik_goal_quaternion_slerp(
+    const float from[4], const float to[4], float weight, float out[4]) {
+    if (!std::isfinite(weight)) {
+        return false;
+    }
+    float a[4]{from[0], from[1], from[2], from[3]};
+    float b[4]{to[0], to[1], to[2], to[3]};
+    float dot = a[0] * b[0] + a[1] * b[1] +
+        a[2] * b[2] + a[3] * b[3];
+    if (!std::isfinite(dot)) {
+        return false;
+    }
+    if (dot < 0.0F) {
+        dot = -dot;
+        for (float& value : b) {
+            value = -value;
+        }
+    }
+    dot = dot > 1.0F ? 1.0F : dot;
+    if (dot > 0.9995F) {
+        for (std::size_t i = 0; i < 4; ++i) {
+            out[i] = a[i] + weight * (b[i] - a[i]);
+        }
+    } else {
+        const float angle = std::acos(dot);
+        const float sine = std::sin(angle);
+        if (!std::isfinite(angle) || !std::isfinite(sine) ||
+            std::abs(sine) < 0.00001F) {
+            return false;
+        }
+        const float from_weight = std::sin((1.0F - weight) * angle) / sine;
+        const float to_weight = std::sin(weight * angle) / sine;
+        for (std::size_t i = 0; i < 4; ++i) {
+            out[i] = from_weight * a[i] + to_weight * b[i];
+        }
+    }
+    const float norm_sq = out[0] * out[0] + out[1] * out[1] +
+        out[2] * out[2] + out[3] * out[3];
+    if (!std::isfinite(norm_sq) || norm_sq < 0.001F) {
+        return false;
+    }
+    const float inverse_norm = 1.0F / std::sqrt(norm_sq);
+    for (std::size_t i = 0; i < 4; ++i) {
+        out[i] *= inverse_norm;
+    }
+    return true;
+}
+
+bool seh_select_weapon_ik_goal_census_scope(
+    void** joint_sets, void** jacobian_maps,
+    WeaponIkGoalCensusScope* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (!g_state_net.enabled || g_module == 0 || joint_sets == nullptr ||
+            jacobian_maps == nullptr) {
+            return false;
+        }
+        void* const player = retained_player_object(0);
+        if (player == nullptr || !player_object_stable(player) ||
+            !player_screen_index_is(player, 0)) {
+            return false;
+        }
+        auto* const player_bytes = static_cast<std::byte*>(player);
+        const std::uint32_t player_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                player_bytes + kGameObjectRuntimeIdOffset);
+        void* const feather_info = *reinterpret_cast<void* const*>(
+            player_bytes + 0x4308);
+        if (player_runtime_id == 0 || feather_info == nullptr ||
+            joint_sets[0] != feather_info ||
+            joint_sets[1] != static_cast<std::byte*>(feather_info) + 0x50 ||
+            jacobian_maps[0] !=
+                static_cast<std::byte*>(feather_info) + 0xA0 ||
+            jacobian_maps[1] !=
+                static_cast<std::byte*>(feather_info) + 0xF8) {
+            return false;
+        }
+        std::uint32_t look = 0;
+        const std::uint32_t expected_look = g_net_role_b
+            ? kLegacyNadineAttachTargetLookId
+            : kChloeAttachDonorLookId;
+        if (!seh_read_player_look(player, &look) || look != expected_look) {
+            return false;
+        }
+        auto* const fg = *reinterpret_cast<std::byte**>(
+            player_bytes + kPlayerFgAnimDataOffset);
+        if (fg == nullptr || readable_bytes(fg) <
+                kFgAnimDataRetainedIdOffset + sizeof(std::uint32_t)) {
+            return false;
+        }
+        auto* const owner_cell = *reinterpret_cast<std::byte* const*>(
+            fg + kFgAnimDataRetainedHandleOffset);
+        auto* const target_skeleton = *reinterpret_cast<std::byte**>(
+            fg + kFgAnimDataSkeletonOffset);
+        if (owner_cell == nullptr || readable_bytes(owner_cell) < 0x10 ||
+            *reinterpret_cast<void* const*>(owner_cell + 0x8) != player ||
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRetainedIdOffset) != player_runtime_id ||
+            target_skeleton == nullptr ||
+            readable_bytes(target_skeleton) < 0x48) {
+            return false;
+        }
+        const std::uint32_t joint_count =
+            *reinterpret_cast<const std::uint32_t*>(
+                target_skeleton + kSkeletonJointCountOffset);
+        auto* const underlying_skeleton =
+            *reinterpret_cast<std::byte**>(target_skeleton + 0x40);
+        const std::uint32_t expected_underlying_id = g_net_role_b
+            ? kLegacyNadineUnderlyingSkeletonId
+            : 0x4B0F5DE3u;
+        const std::uint32_t expected_joint_count = g_net_role_b ? 580u : 651u;
+        if (joint_count != expected_joint_count ||
+            underlying_skeleton == nullptr ||
+            readable_bytes(underlying_skeleton) < 0x12 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                underlying_skeleton + 0x04) != expected_underlying_id ||
+            *reinterpret_cast<const std::uint16_t*>(
+                underlying_skeleton + 0x10) != expected_joint_count) {
+            return false;
+        }
+        int current_slot = -1;
+        std::uint32_t draw_state = 0;
+        if (!read_weapon_draw_state(player, current_slot, draw_state) ||
+            draw_state != 2 || current_slot < 0 || current_slot >= 18) {
+            return false;
+        }
+        void* const weapon = get_weapon_from_slot(player, current_slot);
+        if (weapon == nullptr || readable_bytes(weapon) < 0x864 ||
+            *reinterpret_cast<const std::uintptr_t*>(weapon) !=
+                g_module + kProcessWeaponVtableRva ||
+            weapon_art_id_from_object(weapon) != kCoopRifleArtId ||
+            !seh_weapon_parent_resolves_to_owner(weapon, player)) {
+            return false;
+        }
+        const std::uint32_t weapon_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(weapon) +
+                kGameObjectRuntimeIdOffset);
+        auto* const grenade_controller = *reinterpret_cast<std::byte**>(
+            player_bytes + kPlayerFastGrenadeControllerOffset);
+        if (weapon_runtime_id == 0 || grenade_controller == nullptr ||
+            readable_bytes(grenade_controller) < 0x124 ||
+            *reinterpret_cast<const std::uintptr_t*>(grenade_controller) !=
+                g_module + kFastGrenadeControllerVtableRva ||
+            *reinterpret_cast<void* const*>(grenade_controller + 0x108) !=
+                player ||
+            *reinterpret_cast<const std::uint32_t*>(
+                grenade_controller + 0x120) != 0 ||
+            player_cover_state_field(player)) {
+            return false;
+        }
+        const float move_stick[2]{
+            *reinterpret_cast<const float*>(player_bytes + 0x39C8),
+            *reinterpret_cast<const float*>(player_bytes + 0x39CC)};
+        float move_world[4]{};
+        std::memcpy(move_world, player_bytes + 0x3A30, sizeof(move_world));
+        const float move_magnitude = *reinterpret_cast<const float*>(
+            player_bytes + 0x3A1C);
+        const auto near_zero = [](float value, float limit) {
+            return std::isfinite(value) && std::abs(value) <= limit;
+        };
+        if (!near_zero(move_stick[0], 0.025F) ||
+            !near_zero(move_stick[1], 0.025F) ||
+            !near_zero(move_magnitude, 0.025F)) {
+            return false;
+        }
+        for (const float value : move_world) {
+            if (!near_zero(value, 0.025F)) {
+                return false;
+            }
+        }
+        const std::uint64_t action_bits =
+            g_cached_local_input_buttons.load(std::memory_order_acquire) &
+            ~kInputBlockButtonBaseMask;
+        if (action_bits != 0 && action_bits != 0x9ull) {
+            return false;
+        }
+        output->player = player;
+        output->feather_info = feather_info;
+        output->weapon = weapon;
+        output->fg_anim_data = fg;
+        output->player_runtime_id = player_runtime_id;
+        output->weapon_runtime_id = weapon_runtime_id;
+        output->look = look;
+        output->joint_count = joint_count;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+bool weapon_ik_goal_census_ready(const WeaponIkGoalCensusScope& scope) {
+    const ULONGLONG now = GetTickCount64();
+    bool ready = false;
+    AcquireSRWLockExclusive(&g_weapon_ik_goal_census_lock);
+    auto& memo = g_weapon_ik_goal_census_memo;
+    const bool reset = memo.player != scope.player ||
+        memo.runtime_id != scope.player_runtime_id ||
+        memo.stable_since_ms == 0 || memo.last_seen_ms == 0 ||
+        now < memo.last_seen_ms || now - memo.last_seen_ms > 100;
+    if (reset) {
+        const bool emitted = memo.emitted;
+        memo = {};
+        memo.emitted = emitted;
+        memo.player = scope.player;
+        memo.runtime_id = scope.player_runtime_id;
+        memo.stable_since_ms = now;
+    }
+    memo.last_seen_ms = now;
+    ready = !memo.claimed && !memo.emitted &&
+        now >= memo.stable_since_ms &&
+        now - memo.stable_since_ms >= kWeaponIkGoalCensusDwellMs;
+    if (ready) {
+        memo.claimed = true;
+    }
+    ReleaseSRWLockExclusive(&g_weapon_ik_goal_census_lock);
+    return ready;
+}
+
+void finish_weapon_ik_goal_census_claim(
+    const WeaponIkGoalCensusScope& scope, bool emitted) {
+    const ULONGLONG now = GetTickCount64();
+    AcquireSRWLockExclusive(&g_weapon_ik_goal_census_lock);
+    auto& memo = g_weapon_ik_goal_census_memo;
+    if (memo.player == scope.player &&
+        memo.runtime_id == scope.player_runtime_id && memo.claimed) {
+        memo.claimed = false;
+        memo.emitted = emitted;
+        if (!emitted) {
+            memo.stable_since_ms = now;
+            memo.last_seen_ms = now;
+        }
+    }
+    ReleaseSRWLockExclusive(&g_weapon_ik_goal_census_lock);
+}
+
+bool seh_capture_weapon_ik_goal_chain(
+    void** joint_sets, WeaponIkGoalChainSample* sample) {
+    if (joint_sets == nullptr || sample == nullptr ||
+        g_joint_chain_find_named_joint_offset == nullptr) {
+        return false;
+    }
+    *sample = {};
+    __try {
+        for (std::size_t side = 0; side < 2; ++side) {
+            void* const joint_set = joint_sets[side];
+            if (joint_set == nullptr || readable_bytes(joint_set) < 0x50) {
+                return false;
+            }
+            auto* const joint_set_bytes = static_cast<std::byte*>(joint_set);
+            const std::int16_t chain_joint_count =
+                *reinterpret_cast<const std::int16_t*>(joint_set_bytes + 0x12);
+            auto* const cache_owner = *reinterpret_cast<std::byte**>(
+                joint_set_bytes + 0x20);
+            if (chain_joint_count <
+                    static_cast<std::int16_t>(kWeaponIkGoalChainJointCount) ||
+                chain_joint_count > 64 || cache_owner == nullptr ||
+                readable_bytes(cache_owner) < 0x10) {
+                return false;
+            }
+            auto* const cached_locators = *reinterpret_cast<std::byte**>(
+                cache_owner + 0x08);
+            if (cached_locators == nullptr ||
+                readable_bytes(cached_locators) <
+                    static_cast<std::size_t>(chain_joint_count) * 0x20) {
+                return false;
+            }
+            const auto& ids = side == 0
+                ? g_weapon_ik_goal_left_joint_ids
+                : g_weapon_ik_goal_right_joint_ids;
+            auto& locators = side == 0 ? sample->left : sample->right;
+            for (std::size_t index = 0;
+                 index < kWeaponIkGoalChainJointCount; ++index) {
+                // JointChain_FindNamedJointOffset deliberately starts at one;
+                // the chain root is the semantic spined locator at ordinal 0.
+                const std::int32_t offset = index == 0
+                    ? 0
+                    : g_joint_chain_find_named_joint_offset(
+                          joint_set, ids[index]);
+                if (offset < 0 || offset >= chain_joint_count) {
+                    return false;
+                }
+                std::memcpy(
+                    locators[index].value.data(),
+                    cached_locators + static_cast<std::size_t>(offset) * 0x20,
+                    sizeof(locators[index].value));
+                if (!weapon_ik_goal_locator_valid(locators[index])) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *sample = {};
+        return false;
+    }
+}
+
+bool weapon_ik_goal_make_relative(
+    const WeaponIkGoalLocator& parent,
+    const WeaponIkGoalLocator& child,
+    WeaponIkGoalLocator* relative) {
+    if (relative == nullptr || g_transform_make_relative == nullptr ||
+        !weapon_ik_goal_locator_valid(parent) ||
+        !weapon_ik_goal_locator_valid(child)) {
+        return false;
+    }
+    *relative = {};
+    __try {
+        g_transform_make_relative(
+            parent.value.data(), relative->value.data(), child.value.data());
+        return weapon_ik_goal_locator_valid(*relative);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *relative = {};
+        return false;
+    }
+}
+
+bool weapon_ik_goal_build_initial_common_target(
+    const WeaponIkGoalChainSample& sample, std::uint32_t selector,
+    float strength, WeaponIkGoalLocator* target) {
+    if (target == nullptr || !std::isfinite(strength)) {
+        return false;
+    }
+    const auto& left = sample.left.back().value;
+    const auto& right = sample.right.back().value;
+    const float weight = selector != 0 ? 1.0F - strength : strength;
+    if (!std::isfinite(weight)) {
+        return false;
+    }
+    *target = {};
+    for (std::size_t i = 0; i < 4; ++i) {
+        target->value[i] =
+            right[i] + weight * (left[i] - right[i]);
+    }
+    if (!weapon_ik_goal_quaternion_slerp(
+            right.data() + 4, left.data() + 4, weight,
+            target->value.data() + 4)) {
+        *target = {};
+        return false;
+    }
+    return weapon_ik_goal_locator_valid(*target);
+}
+
+bool weapon_ik_goal_same_spine_frame(
+    const WeaponIkGoalLocator& left,
+    const WeaponIkGoalLocator& right) {
+    const float dx = left.value[0] - right.value[0];
+    const float dy = left.value[1] - right.value[1];
+    const float dz = left.value[2] - right.value[2];
+    const float position_delta_sq = dx * dx + dy * dy + dz * dz;
+    const float quaternion_dot =
+        left.value[4] * right.value[4] +
+        left.value[5] * right.value[5] +
+        left.value[6] * right.value[6] +
+        left.value[7] * right.value[7];
+    return std::isfinite(position_delta_sq) &&
+        position_delta_sq <= 0.000001F &&
+        std::isfinite(quaternion_dot) &&
+        std::abs(quaternion_dot) >= 0.999F;
+}
+
+void log_weapon_ik_goal_locator(
+    std::ostringstream& line, const char* prefix,
+    const WeaponIkGoalLocator& locator) {
+    line << ' ' << prefix << "P="
+         << locator.value[0] << ',' << locator.value[1] << ','
+         << locator.value[2]
+         << ' ' << prefix << "Q="
+         << locator.value[4] << ',' << locator.value[5] << ','
+         << locator.value[6] << ',' << locator.value[7];
+}
+
+bool finish_weapon_ik_goal_census(
+    const WeaponIkGoalCensusScope& scope,
+    const WeaponIkGoalChainSample& before,
+    const WeaponIkGoalChainSample& after,
+    std::uint32_t selector, float strength, float tolerance,
+    int iterations, float solve_weight, int minimum_iterations) {
+    WeaponIkGoalLocator goal{};
+    WeaponIkGoalLocator goal_relative{};
+    if (!weapon_ik_goal_same_spine_frame(
+            before.left.front(), before.right.front()) ||
+        !weapon_ik_goal_same_spine_frame(
+            after.left.front(), after.right.front()) ||
+        !weapon_ik_goal_build_initial_common_target(
+            before, selector, strength, &goal) ||
+        !weapon_ik_goal_make_relative(
+            before.left.front(), goal, &goal_relative)) {
+        return false;
+    }
+    std::array<std::array<WeaponIkGoalLocator,
+                          kWeaponIkGoalChainJointCount>, 2> pre_relative{};
+    std::array<std::array<WeaponIkGoalLocator,
+                          kWeaponIkGoalChainJointCount>, 2> post_relative{};
+    for (std::size_t side = 0; side < 2; ++side) {
+        const auto& pre = side == 0 ? before.left : before.right;
+        const auto& post = side == 0 ? after.left : after.right;
+        for (std::size_t index = 0;
+             index < kWeaponIkGoalChainJointCount; ++index) {
+            if (!weapon_ik_goal_make_relative(
+                    pre.front(), pre[index],
+                    &pre_relative[side][index]) ||
+                !weapon_ik_goal_make_relative(
+                    post.front(), post[index],
+                    &post_relative[side][index])) {
+                return false;
+            }
+        }
+    }
+    const float dx = before.left.back().value[0] -
+        before.right.back().value[0];
+    const float dy = before.left.back().value[1] -
+        before.right.back().value[1];
+    const float dz = before.left.back().value[2] -
+        before.right.back().value[2];
+    const float post_dx = after.left.back().value[0] -
+        after.right.back().value[0];
+    const float post_dy = after.left.back().value[1] -
+        after.right.back().value[1];
+    const float post_dz = after.left.back().value[2] -
+        after.right.back().value[2];
+    std::ostringstream summary;
+    summary << "PLAYER-WEAPON-IK-GOAL role="
+            << (g_net_role_b ? 'B' : 'A')
+            << " body=" << (g_net_role_b ? "Nadine" : "Chloe")
+            << " runtime=0x" << std::hex << scope.player_runtime_id
+            << " look=0x" << scope.look << std::dec
+            << " joints=" << scope.joint_count
+            << " selector=" << selector
+            << " strength=" << strength
+            << " tolerance=" << tolerance
+            << " iterations=" << iterations
+            << " solveWeight=" << solve_weight
+            << " minimumIterations=" << minimum_iterations
+            << " preGap=" << std::sqrt(dx * dx + dy * dy + dz * dz)
+            << " postGap=" << std::sqrt(
+                   post_dx * post_dx + post_dy * post_dy + post_dz * post_dz);
+    log_weapon_ik_goal_locator(summary, "goalRel", goal_relative);
+    write_log_line(summary.str().c_str());
+
+    constexpr std::array<const char*, kWeaponIkGoalChainJointCount> kNames{
+        "spined", "shoulder", "elbow", "wrist", "handProp"};
+    for (std::size_t side = 0; side < 2; ++side) {
+        for (std::size_t index = 0;
+             index < kWeaponIkGoalChainJointCount; ++index) {
+            std::ostringstream row;
+            row << "PLAYER-WEAPON-IK-CHAIN role="
+                << (g_net_role_b ? 'B' : 'A')
+                << " body=" << (g_net_role_b ? "Nadine" : "Chloe")
+                << " side=" << (side == 0 ? 'L' : 'R')
+                << " joint=" << kNames[index];
+            log_weapon_ik_goal_locator(
+                row, "preRel", pre_relative[side][index]);
+            log_weapon_ik_goal_locator(
+                row, "postRel", post_relative[side][index]);
+            write_log_line(row.str().c_str());
+        }
+    }
+    return true;
+}
+
+void __fastcall hooked_weapon_ik_feather_solve_goal_census(
+    void** joint_sets, void** jacobian_maps, std::uint32_t selector,
+    float strength, float tolerance, int iterations, float solve_weight,
+    int minimum_iterations) {
+    if (!g_weapon_ik_goal_census_entry_logged.exchange(
+            true, std::memory_order_acq_rel)) {
+        std::ostringstream line;
+        line << "PLAYER-WEAPON-IK-GOAL entry role="
+             << (g_net_role_b ? 'B' : 'A')
+             << " selector=" << selector
+             << " strength=" << strength
+             << " tolerance=" << tolerance
+             << " iterations=" << iterations
+             << " solveWeight=" << solve_weight
+             << " minimumIterations=" << minimum_iterations;
+        write_log_line(line.str().c_str());
+    }
+    WeaponIkGoalCensusScope scope{};
+    const bool scoped = kEnablePlayerWeaponIkFeatherGoalCensus &&
+        !g_weapon_ik_goal_census_complete.load(std::memory_order_acquire) &&
+        seh_select_weapon_ik_goal_census_scope(
+            joint_sets, jacobian_maps, &scope);
+    if (scoped && !g_weapon_ik_goal_census_admission_logged.exchange(
+            true, std::memory_order_acq_rel)) {
+        std::ostringstream line;
+        line << "PLAYER-WEAPON-IK-GOAL admission role="
+             << (g_net_role_b ? 'B' : 'A')
+             << " body=" << (g_net_role_b ? "Nadine" : "Chloe")
+             << " runtime=0x" << std::hex << scope.player_runtime_id
+             << " weapon=0x" << scope.weapon_runtime_id << std::dec;
+        write_log_line(line.str().c_str());
+    }
+    const bool claimed = scoped && weapon_ik_goal_census_ready(scope);
+    WeaponIkGoalChainSample before{};
+    const bool sampled_before = claimed &&
+        seh_capture_weapon_ik_goal_chain(joint_sets, &before);
+
+    const auto original = g_original_weapon_ik_feather_solve;
+    if (original != nullptr) {
+        original(
+            joint_sets, jacobian_maps, selector, strength, tolerance,
+            iterations, solve_weight, minimum_iterations);
+    }
+
+    if (!claimed) {
+        return;
+    }
+    if (!sampled_before) {
+        write_log_line("PLAYER-WEAPON-IK-GOAL rejected stage=pre-capture");
+        finish_weapon_ik_goal_census_claim(scope, false);
+        return;
+    }
+    WeaponIkGoalChainSample after{};
+    if (!seh_capture_weapon_ik_goal_chain(joint_sets, &after)) {
+        write_log_line("PLAYER-WEAPON-IK-GOAL rejected stage=post-capture");
+        finish_weapon_ik_goal_census_claim(scope, false);
+        return;
+    }
+    const bool emitted = finish_weapon_ik_goal_census(
+        scope, before, after, selector, strength, tolerance, iterations,
+        solve_weight, minimum_iterations);
+    if (!emitted) {
+        write_log_line("PLAYER-WEAPON-IK-GOAL rejected stage=relative-transform");
+    } else {
+        g_weapon_ik_goal_census_complete.store(
+            true, std::memory_order_release);
+    }
+    finish_weapon_ik_goal_census_claim(scope, emitted);
+}
+
+bool install_player_weapon_ik_feather_goal_census() {
+    g_joint_chain_find_named_joint_offset =
+        reinterpret_cast<JointChainFindNamedJointOffsetFunction>(
+            g_module + kJointChainFindNamedJointOffsetRva);
+    g_transform_make_relative = reinterpret_cast<TransformMakeRelativeFunction>(
+        g_module + kTransformMakeRelativeRva);
+    g_weapon_ik_goal_left_joint_ids = {
+        kSpinedJointNameId,
+        safe_string_id_hash("l_shoulder", 10),
+        safe_string_id_hash("l_elbow", 7),
+        safe_string_id_hash("l_wrist", 7),
+        safe_string_id_hash("l_hand_prop_attachment", 22)};
+    g_weapon_ik_goal_right_joint_ids = {
+        kSpinedJointNameId,
+        safe_string_id_hash("r_shoulder", 10),
+        safe_string_id_hash("r_elbow", 7),
+        safe_string_id_hash("r_wrist", 7),
+        safe_string_id_hash("r_hand_prop_attachment", 22)};
+    for (std::size_t index = 0;
+         index < kWeaponIkGoalChainJointCount; ++index) {
+        if (g_weapon_ik_goal_left_joint_ids[index] == 0 ||
+            g_weapon_ik_goal_right_joint_ids[index] == 0) {
+            boot_log_line(
+                "Player WeaponIK goal census SKIPPED (joint-name hash)");
+            return false;
+        }
+    }
+
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t new_displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kWeaponIkFeatherSolveCallsiteRva,
+            kWeaponIkFeatherSolveRva,
+            reinterpret_cast<const void*>(
+                &hooked_weapon_ik_feather_solve_goal_census),
+            callsite, relay, new_displacement)) {
+        boot_log_line(
+            "Player WeaponIK goal census SKIPPED (callsite preflight)");
+        return false;
+    }
+    std::int32_t old_displacement = 0;
+    std::memcpy(
+        &old_displacement, callsite + 1, sizeof(old_displacement));
+    g_original_weapon_ik_feather_solve =
+        reinterpret_cast<WeaponIkFeatherSolveFunction>(
+            g_module + kWeaponIkFeatherSolveRva);
+
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_weapon_ik_feather_solve = nullptr;
+        boot_log_line(
+            "Player WeaponIK goal census SKIPPED (thread suspend)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (VirtualProtect(
+            callsite, 5, PAGE_EXECUTE_READWRITE, &old_protection) == 0) {
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_weapon_ik_feather_solve = nullptr;
+        boot_log_line("Player WeaponIK goal census SKIPPED (protect)");
+        return false;
+    }
+    std::memcpy(
+        callsite + 1, &new_displacement, sizeof(new_displacement));
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    std::int32_t readback = 0;
+    std::memcpy(&readback, callsite + 1, sizeof(readback));
+    bool installed = callsite[0] == 0xE8 &&
+        readback == new_displacement;
+    bool rollback_verified = false;
+    if (!installed) {
+        std::memcpy(
+            callsite + 1, &old_displacement, sizeof(old_displacement));
+        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+        std::int32_t rollback_readback = 0;
+        std::memcpy(
+            &rollback_readback, callsite + 1, sizeof(rollback_readback));
+        rollback_verified = callsite[0] == 0xE8 &&
+            rollback_readback == old_displacement;
+    }
+    DWORD ignored = 0;
+    bool protection_restored =
+        VirtualProtect(callsite, 5, old_protection, &ignored) != 0;
+    if (installed && !protection_restored) {
+        std::memcpy(
+            callsite + 1, &old_displacement, sizeof(old_displacement));
+        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+        std::int32_t rollback_readback = 0;
+        std::memcpy(
+            &rollback_readback, callsite + 1, sizeof(rollback_readback));
+        rollback_verified = callsite[0] == 0xE8 &&
+            rollback_readback == old_displacement;
+        installed = !rollback_verified;
+        protection_restored =
+            VirtualProtect(callsite, 5, old_protection, &ignored) != 0;
+    }
+    resume_suspended_process_threads(suspended_threads);
+    if (!installed) {
+        if (rollback_verified) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+            g_original_weapon_ik_feather_solve = nullptr;
+        }
+        boot_log_line(
+            rollback_verified && protection_restored
+                ? "Player WeaponIK goal census SKIPPED (verified rollback)"
+                : "Player WeaponIK goal census SKIPPED (rollback/protection WARNING; relay retained)");
+        return false;
+    }
+    boot_log_line(
+        protection_restored
+            ? "Player WeaponIK goal census READY (Solve callsite 0x1418F29D0; read-only)"
+            : "Player WeaponIK goal census READY (protection WARNING; relay retained)");
+    return true;
+}
+
 using WeaponIkFeatherApplyFunction = std::uint8_t(__fastcall*)(
     void*, void*, float, void*, float, std::uint32_t, float,
     std::uint8_t, float);
@@ -60759,8 +61491,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20adu-safe "
-        "(rejected Mazur stock pre-postblend preservation disabled)");
+        "TLL co-op runtime init 2026-08-20adv "
+        "(read-only Chloe/Nadine WeaponIK goal census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
@@ -61180,6 +61912,15 @@ DWORD WINAPI install_hook(void*) {
     log_line("local-player-1 -> Nadine bind hook ENABLED");
     log_line("one-shot split render activation ENABLED after login_state==3");
     const bool state_net_started = start_state_net();
+    if constexpr (kEnablePlayerWeaponIkFeatherGoalCensus &&
+                  !kEnableRejectedNadineWeaponRuntimeProbes) {
+        if (state_net_started) {
+            install_player_weapon_ik_feather_goal_census();
+        } else {
+            boot_log_line(
+                "Player WeaponIK goal census SKIPPED (state net)");
+        }
+    }
     // Install only after role, peer endpoint and the ARMP session epoch are
     // immutable.  The vtable CAS is the publication barrier seen by animation
     // workers, so the hook never races partially initialized network state.

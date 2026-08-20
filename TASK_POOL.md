@@ -5022,14 +5022,19 @@ Keep the postblend preservation boundary; replace only its steady content.
       19--30 preservation and proves that stock postblend contributes required
       arm/IK state.  `adu-safe` disables the package.
 
-- [ ] Resolve the exact Chloe final Mazur postblend target before another
-      runtime exam.  Trace PlayerWeaponIKAction/WeaponIKFeather target
-      construction, hand-prop attachment locators and the final palette path
-      for Chloe versus legacy Nadine.  Keep stock postblend; do not guess
-      another clip, suppress Feather wholesale, or choose a row subset from the
-      visual result alone.  A new mutation requires three independent static
-      evidence types and a prediction distinguishing target-input correction
-      from a later writer.
+- [ ] Run the bounded read-only `adv` Chloe/Nadine WeaponIK goal census.  Static
+      closure now proves that `WeaponIKFeather_SolveWeaponFeatherIk
+      0x1418F2E50`, reached at the exact Apply callsite `0x1418F29D0`, builds one
+      common goal only from the live left/right hand-prop world locators.  It
+      does not consume a weapon attachment transform.  Build `adv` calls stock
+      once, reads the already seeded JointSet cache directly before/after it,
+      and normalizes spined/shoulder/elbow/wrist/hand-prop to the same spined
+      frame.  Require READY, entry, exact admission, one GOAL row and ten CHAIN
+      rows in both processes.  Different normalized goals select target
+      construction; equal goals with different post chains select Jacobian/rest
+      geometry; equal results select a later writer/weapon placement.  This exam
+      makes no visual change and authorizes no mutation.  Keep stock postblend;
+      do not guess another clip, suppress Feather, or splice C39 rows.
 
 ## Rule
 

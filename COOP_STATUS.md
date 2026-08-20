@@ -25572,3 +25572,67 @@ which rows to keep.  Build `adu-safe` disables the stock-pose preservation flag
 and installs none of its three relays.  No further game launch is earned until
 the Chloe final-pose writer/target has three independent evidence classes and a
 new falsifiable prediction.
+
+### 2026-08-20 STATIC IMPLEMENTED (`adv`): compare the live Chloe/Nadine WeaponIK common goal
+
+The one-hand `adu` result rules out another local-pose row splice and selects a
+smaller read-only boundary.  Three independent evidence classes close this
+exam before runtime.  First, the exact ordinary call graph is
+`PlayerWeaponIKAction_Update 0x1410950E0 -> WeaponIKFeather_Apply
+0x1418F2700 -> WeaponIKFeather_SolveWeaponFeatherIk 0x1418F2E50` at the unique
+Apply callsite `0x1418F29D0`; Apply commits both JointSets immediately after the
+solve and finishes through `WeaponIK_Apply 0x1418F1780`.  The second caller of
+Solve is outside Apply, so `adv` patches the exact `0x1418F29D0` E8 rather than
+the shared function entry.
+
+Second, instruction-level dataflow proves the spatial input.  Solve reads the
+current left and right `*_hand_prop_attachment` world locators at
+`0x1418F31D4/0x1418F31DF`, flips the shared blend as `1-strength` when the arm
+selector is nonzero, constructs one common position `R + w*(L-R)` plus a
+shortest-path quaternion slerp, and supplies that same goal to both Jacobian
+maps.  No ProcessWeapon locator, attachment transform or art-specific spatial
+target enters this function; the weapon contributes only a scalar upstream.
+Third, independently audited semantic initialization rebuilds the two
+`Player+0x4308` JointSets and maps for the current look/skeleton.  Their exact
+layout is left set `+0`, right set `+0x50`, maps `+0xA0/+0xF8`; the chain paths
+are resolved by name and include the Nadine palm.  Thus stale Chloe ordinals,
+an omitted palm and an internal weapon locator are rejected alternatives.
+The repeated initial-good/steady-broken visual lifecycle and the measured
+stock Feather writes to C39 19--26 provide independent behavioural support,
+without being promoted to a numerical target claim.
+
+Build `adv` is pass-through only.  The wrapper preserves the exact Win64
+eight-argument Solve ABI (RCX/RDX/R8D/XMM3 plus four stack values), calls stock
+exactly once and returns no synthetic value.  Admission requires local Player0,
+the exact campaign Chloe tuple on role A or exact legacy-Nadine tuple on role B,
+Mazur, WeaponOut, current weapon, idle grenade/no cover/no movement and 350 ms
+stability.  It samples the already seeded JointSet cache directly before and
+after stock Solve.  It deliberately does **not** call
+`JointSet_GetJointLocWs 0x14181DA50`, because that getter refreshes the cache
+through vtable `+0x38` and would cease to be a passive observation.  Ordinal
+zero is the `spined` frame; shoulder, elbow, wrist and hand-prop offsets are
+resolved by the read-only `JointChain_FindNamedJointOffset 0x14181D750`.
+All locators are normalized to that same spine with
+`Transform_MakeRelative 0x1401990F0`.  One bounded sample is emitted per
+process; no pose, JointSet, map, scalar, weapon field or animation command is
+changed.  Installation happens only after state-net role publication, with
+suspended threads, E8 target preflight/readback and verified rollback.
+
+The competing hypotheses and written prediction are exact.  `H-target` predicts
+different normalized `goalRel` values for role-A Chloe and role-B Nadine; that
+would earn a later goal-transfer design but does not by itself prove the repair.
+`H-chain/map` predicts equal initial goals with different post-solve semantic
+chains or residual hand-prop gap.  `H-lifecycle` predicts a selector, strength,
+tolerance, iteration or solve-weight split.  Equal scalars, goals and semantic
+post chains select `H-later-writer/weapon-placement`.  Each process must first
+log `Player WeaponIK goal census READY`, then one `entry`, one exact
+`admission`, one `PLAYER-WEAPON-IK-GOAL` summary and ten
+`PLAYER-WEAPON-IK-CHAIN` rows.  Missing READY is packaging; entry without
+admission is scope; admission without the complete sample is cache/name or
+relative-transform rejection.  No visual change is predicted because `adv`
+contains no mutation.  The agent may launch both copies but sends no gameplay
+input; the user alone draws the Mazur and holds each local player still.
+
+The canonical `ida/tll.i64` is saved with the additional STATIC label
+`JointSet_GetJointLocLs 0x14181D8E0`; `reports/apply_status_adv.txt` records
+`save_database returned True`.

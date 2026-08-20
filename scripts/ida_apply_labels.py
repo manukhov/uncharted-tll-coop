@@ -280,6 +280,12 @@ FUNCTIONS = {
         "offset, dispatches JointSet vtable +0x38 to refresh it and returns the "
         "32-byte world transform at the selected cache slot.",
     ),
+    0x14181D8E0: (
+        "JointSet_GetJointLocLs",
+        "Exact JointSet::GetJointLocLs source assertion. Validates the chain "
+        "offset and local-valid byte, then returns the selected 32-byte local "
+        "transform without dispatching the world-cache refresh vslot.",
+    ),
     0x142103CE0: (
         "MoveLegIkNew_GetPredictedFootPointsWs",
         "MoveLegIkNew vtable +0x88. Ensures the two foot contact offsets, rotates "
