@@ -25935,3 +25935,23 @@ select chain/Jacobian/commit or a later writer.  Missing either owner is
 packaging/admission and has no pose interpretation.  Because this exam is
 read-only, it predicts no visible grip change.  The agent may launch/inject;
 only the user controls gameplay.
+
+### 2026-08-20 RUNTIME INCONCLUSIVE (`aec`): safe Nadine capture, no role-B owner-1 terminal sample
+
+Both processes loaded `aec`, installed the proven outer Apply boundary and all
+four getter relays, remained responsive, and emitted no new exception/fatal
+row.  Role-B PID `4464` produced one complete owner-0 Nadine sample at ordinary
+steady values (`selector=1`, `weight=1`, `strength=0.5`, `animScale=1`) plus all
+four normalized wrist/hand-prop Locators.  No owner-1 Chloe terminal sample
+appeared after an additional four seconds.  Therefore the safe boundary and
+Nadine capture are CONFIRMED, but the written two-owner comparison did not run;
+the result selects admission/reachability and has no target-delta meaning.
+
+The corrected comparator is role-A owner-0 local Chloe.  `ady` independently
+proved that this local Chloe goal and role-B retained Chloe differ by only
+`0.00853095` position units / `1.22331` degrees, while both use the same
+PlayerWeaponIKAction/terminal getter code.  Build `aed` therefore changes no
+hook or capture operation: it only permits the identical read-only outer scope
+on role A and prints the real process role.  The new falsifier requires a full
+role-A local-Chloe sample and a full role-B local-Nadine sample; only then may
+their four normalized terminal inputs be compared.

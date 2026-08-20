@@ -5115,7 +5115,7 @@ Keep the postblend preservation boundary; replace only its steady content.
       internal `0x1418F2E0B` detour and replace it with correlated midpoint/final
       observation at the already-safe outer Apply and Solve callsites.
 
-- [ ] Run the bounded read-only `aec` terminal-input discriminator.  Do not
+- [x] Run the bounded read-only `aec` terminal-input discriminator.  Do not
       detour `WeaponIK_Apply`.  Scope TLS at the already-proven outer Apply
       callsite `0x1410959AC`, then wrap only the four stock
       `JointSet_GetJointLocWs` calls at `0x1418F1872/1896/18A6/18B5`.  Require
@@ -5124,6 +5124,17 @@ Keep the postblend preservation boundary; replace only its steady content.
       construction; near-equality selects chain/Jacobian/commit or later
       processing.  The live-goal relay and rejected `0x1418F2E0B` hook remain
       disabled; this exam makes no pose writes and predicts no visual change.
+      Both processes remained responsive and role B produced the complete
+      owner-0 Nadine sample, but owner-1 Chloe never reached this terminal
+      boundary.  This confirms safe packaging only; the comparison is
+      instrumentation-inconclusive.
+
+- [ ] Run corrected read-only `aed`.  Keep the same outer Apply plus four
+      getter relays, but admit the identical exact scope on role-A owner-0 local
+      Chloe as the comparator to role-B owner-0 local Nadine.  `ady` already
+      bounds local-versus-retained Chloe to 0.00853 units / 1.22 degrees.  A
+      complete four-row sample from each process is required before comparing
+      terminal wrist/hand-prop inputs; either missing sample remains packaging.
 
 ## Rule
 

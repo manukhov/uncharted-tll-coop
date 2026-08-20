@@ -45715,7 +45715,8 @@ bool finish_weapon_ik_terminal_getter_census(
         }
     }
     std::ostringstream summary;
-    summary << "PLAYER-WEAPON-IK-TERMINAL-INPUT role=B"
+    summary << "PLAYER-WEAPON-IK-TERMINAL-INPUT role="
+            << (g_net_role_b ? 'B' : 'A')
             << " owner=" << capture.scope.owner_index
             << " body="
             << (capture.scope.look == kChloeAttachDonorLookId
@@ -45731,7 +45732,8 @@ bool finish_weapon_ik_terminal_getter_census(
     for (std::size_t index = 0;
          index < kWeaponIkTerminalGetterCount; ++index) {
         std::ostringstream row;
-        row << "PLAYER-WEAPON-IK-TERMINAL-LOCATOR role=B"
+        row << "PLAYER-WEAPON-IK-TERMINAL-LOCATOR role="
+            << (g_net_role_b ? 'B' : 'A')
             << " owner=" << capture.scope.owner_index
             << " body="
             << (capture.scope.look == kChloeAttachDonorLookId
@@ -46991,7 +46993,7 @@ std::uint8_t __fastcall hooked_weapon_ik_feather_apply(
     log_weapon_ik_feather_census_entry(feather_info);
     WeaponIkGoalCensusScope terminal_scope{};
     bool terminal_claimed = false;
-    if (kEnableWeaponIkTerminalGetterCensus && g_net_role_b &&
+    if (kEnableWeaponIkTerminalGetterCensus &&
         g_weapon_ik_terminal_getter_census_ready.load(
             std::memory_order_acquire) && feather_info != nullptr &&
         hand_side_selector <= 1) {
@@ -62611,8 +62613,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20aec "
-        "(read-only terminal WeaponIK wrist/prop getter census)");
+        "TLL co-op runtime init 2026-08-20aed "
+        "(read-only local Chloe versus Nadine terminal WeaponIK inputs)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");
