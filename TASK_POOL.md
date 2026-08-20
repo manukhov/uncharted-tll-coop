@@ -5079,7 +5079,7 @@ Keep the postblend preservation boundary; replace only its steady content.
       `75.9353` degrees away.  Same-process donation is CONFIRMED and the UDP
       alternative is rejected.
 
-- [ ] Implement and run one same-process live-goal relay exam.  Role B only:
+- [x] Implement and run one same-process live-goal relay exam.  Role B only:
       publish owner-1 Chloe's post-getter/pre-Solve common target relative to
       `spined`; after 350 ms exact steady Mazur scope on both owners and with a
       source age no greater than 100 ms, reconstruct it under owner-0 Nadine
@@ -5090,6 +5090,15 @@ Keep the postblend preservation boundary; replace only its steady content.
       target boundary; markers plus malformed hold select chain/proportion or a
       later writer; delayed failure selects lifetime/cadence; jitter rejects the
       unsmoothed live source.  No hard-coded target and no pose-row copy.
+      Build `adz` reached the full boundary in role B: repeated Chloe capture
+      and sixteen Nadine relay markers used source ages `0..32 ms`, with both
+      processes responsive and no new exception/fatal row.  Nadine visibly
+      started toward the correct hold and immediately broke again.  Thus the
+      live target is a contributor but is REJECTED as a sufficient repair;
+      cadence/packaging did not cause this failure.  Next close the first exact
+      writer after the substituted getter/Solve result (remaining WeaponIK
+      commit, later Player postblend, or final Async JointBlend/plugin) before
+      any further runtime mutation.
 
 ## Rule
 

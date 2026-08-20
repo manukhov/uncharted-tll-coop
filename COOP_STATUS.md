@@ -25814,3 +25814,27 @@ initial correction that later breaks selects stale lifetime/cadence.  Any
 jitter selects source phase/freshness rather than permission to smooth or
 hard-code the sample.  Missing either marker is packaging/admission and carries
 no visual conclusion.
+
+### 2026-08-20 RUNTIME REJECTED (`adz`): the live Chloe goal is not sufficient to preserve the final Nadine hold
+
+The written relay boundary executed completely, so this result is semantic and
+not a packaging failure.  PID `17488` (role B) first admitted retained owner 1
+as Chloe/Mazur/WeaponOut, published repeated
+`CHLOE-WEAPON-IK-GOAL-CAPTURE` snapshots, then admitted owner 0 as legacy
+Nadine/Mazur/WeaponOut and emitted sixteen bounded
+`NADINE-WEAPON-IK-GOAL-RELAY` markers.  The target consumed fresh same-process
+snapshots with observed ages `0..32 ms`; both PID `16728` and PID `17488`
+remained responsive and no new exception/fatal row followed the `adz` boot.
+
+The visual prediction failed.  The user observed that Nadine briefly tried to
+take the correct hold and then immediately broke again, with the appearance of
+two animation owners fighting.  Therefore the exact normalized Chloe common
+goal at the two stock getter returns is a live contributor but is REJECTED as a
+complete repair.  The observed continuous fresh relay rejects missing cadence
+as the explanation for this run.  The surviving competitors are (1) stock
+Solve/WeaponIK commit semantics on the different C39 chain, and (2) a concrete
+writer after the getter/Solve boundary in the remainder of
+`WeaponIKFeather_Apply`, Player postblend, or the final Async JointBlend/plugin
+stream.  Do not smooth, hard-code, copy another clip, or launch another
+mutation until the first post-relay writer that destroys the corrected hold is
+closed statically.
