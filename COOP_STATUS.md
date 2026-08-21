@@ -26761,3 +26761,33 @@ hold support `H-late-anchor`; both markers plus no improvement reject its
 sufficiency and move the frontier to target content or a later writer. The
 exam uses exactly one role-B Nadine process; the agent launches it but never
 sends gameplay input.
+
+### 2026-08-21 RUNTIME INCONCLUSIVE (`aes`) / DIAGNOSTIC (`aet`): seed rejection survives the corrected state word
+
+The one-process `aes` exam again reached the exact steady pair in PID `8912`
+(`injected ... hands=56C57AD2 arms=283966ED`), then logged
+`NADINE-MAZUR-LATE-IK rejected stage=3` and `lateIk=0`. The user's unchanged
+pose therefore still does not test the Chloe target or either arm solve.
+
+Three independent observations narrow the remaining packaging fork. First,
+read-only `ReadProcessMemory` of the exact retained Player
+`0x10e0a21b80 -> Player+0x4308 = 0x10e0a34a20` found both persistent JointTrees
+intact: left/right owner equals that Player, state `+0x10=1`, chain count
+`+0x12=8`, and work-table pointer `+0x20=null`. Second, the constructor and
+named-chain builder independently establish those same state/count fields.
+Third, `JointSet_AllocateAndSeedBuffers 0x14181E780` allocates an `0x50`-byte
+table at `+0x20`, fills its five work-array pointers, and stock reset
+`0x141821500 -> 0x14181F330` later clears it. Thus the sampled persistent
+layout satisfies every pre-allocation guard; the unresolved alternatives are
+an exact-pass busy table, a native allocation/result validation failure, or an
+exception while seeding one side.
+
+Build `aet` does not relax a guard or alter the pose. It splits stage 3 into a
+bounded one-line diagnostic for each side:
+`failure/state/count/buffersBefore/buffersAfter/readableAfter`. Failure `3`
+selects an exact-pass lifetime conflict; `6/7` selects the allocator-result
+contract; `8` selects a native seed exception; a left success followed by a
+right failure isolates the second JointTree. The written prediction is that
+the same single role-B Nadine/Mazur/WeaponOut pass will print the exact pair and
+one detailed stage-3 row. No visual result is interpreted and the agent does
+not send gameplay input.

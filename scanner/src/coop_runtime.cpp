@@ -50521,6 +50521,28 @@ enum class LegacyNadineMazurLateSteadyIkResult : std::uint8_t {
     kApplied = 7,
 };
 
+enum class WeaponIkJointSetSeedFailure : std::uint8_t {
+    kNone = 0,
+    kJointSet = 1,
+    kAllocator = 2,
+    kBuffersBusy = 3,
+    kState = 4,
+    kCount = 5,
+    kAllocatedNull = 6,
+    kAllocatedUnreadable = 7,
+    kException = 8,
+};
+
+struct WeaponIkJointSetSeedDiagnostic {
+    WeaponIkJointSetSeedFailure failure =
+        WeaponIkJointSetSeedFailure::kNone;
+    std::uint16_t state = 0;
+    std::int16_t count = 0;
+    void* buffers_before = nullptr;
+    void* buffers_after = nullptr;
+    std::size_t readable_after = 0;
+};
+
 bool seh_reset_weapon_ik_joint_set(void* joint_set) {
     __try {
         if (joint_set == nullptr || readable_bytes(joint_set) < 0x28) {
@@ -50580,35 +50602,89 @@ bool seh_recompute_legacy_nadine_mazur_primary_arm_world_locators(
 }
 
 bool seh_allocate_and_validate_weapon_ik_joint_set(
-    void* joint_set, bool* allocated_out) {
+    void* joint_set, bool* allocated_out,
+    WeaponIkJointSetSeedDiagnostic* diagnostic) {
     if (allocated_out != nullptr) {
         *allocated_out = false;
     }
+    if (diagnostic != nullptr) {
+        *diagnostic = {};
+    }
     __try {
-        if (joint_set == nullptr || readable_bytes(joint_set) < 0x50 ||
-            g_joint_set_allocate_and_seed_buffers == nullptr ||
-            *reinterpret_cast<void* const*>(
-                static_cast<const std::byte*>(joint_set) + 0x20) != nullptr ||
-            // JointTree's constructor writes 1 at +0x10.  The named-chain
-            // builder stores the independently computed chain count at +0x12
-            // and does not change this state word.
-            *reinterpret_cast<const std::uint16_t*>(
-                static_cast<const std::byte*>(joint_set) + 0x10) != 1) {
+        if (joint_set == nullptr || readable_bytes(joint_set) < 0x50) {
+            if (diagnostic != nullptr) {
+                diagnostic->failure = WeaponIkJointSetSeedFailure::kJointSet;
+            }
             return false;
         }
+        if (g_joint_set_allocate_and_seed_buffers == nullptr) {
+            if (diagnostic != nullptr) {
+                diagnostic->failure = WeaponIkJointSetSeedFailure::kAllocator;
+            }
+            return false;
+        }
+        auto* const bytes = static_cast<std::byte*>(joint_set);
+        void* const buffers_before =
+            *reinterpret_cast<void* const*>(bytes + 0x20);
+        const std::uint16_t state =
+            *reinterpret_cast<const std::uint16_t*>(bytes + 0x10);
         const std::int16_t count = *reinterpret_cast<const std::int16_t*>(
-            static_cast<const std::byte*>(joint_set) + 0x12);
+            bytes + 0x12);
+        if (diagnostic != nullptr) {
+            diagnostic->buffers_before = buffers_before;
+            diagnostic->state = state;
+            diagnostic->count = count;
+        }
+        if (buffers_before != nullptr) {
+            if (diagnostic != nullptr) {
+                diagnostic->failure = WeaponIkJointSetSeedFailure::kBuffersBusy;
+            }
+            return false;
+        }
+        // JointTree's constructor writes 1 at +0x10.  The named-chain builder
+        // stores the independently computed chain count at +0x12.
+        if (state != 1) {
+            if (diagnostic != nullptr) {
+                diagnostic->failure = WeaponIkJointSetSeedFailure::kState;
+            }
+            return false;
+        }
         if (count < 5 || count > 64) {
+            if (diagnostic != nullptr) {
+                diagnostic->failure = WeaponIkJointSetSeedFailure::kCount;
+            }
             return false;
         }
         g_joint_set_allocate_and_seed_buffers(joint_set);
         if (allocated_out != nullptr) {
             *allocated_out = true;
         }
-        auto* const buffers = *reinterpret_cast<void* const*>(
-            static_cast<const std::byte*>(joint_set) + 0x20);
-        return buffers != nullptr && readable_bytes(buffers) >= 5 * sizeof(void*);
+        auto* const buffers =
+            *reinterpret_cast<void* const*>(bytes + 0x20);
+        const std::size_t readable = readable_bytes(buffers);
+        if (diagnostic != nullptr) {
+            diagnostic->buffers_after = buffers;
+            diagnostic->readable_after = readable;
+        }
+        if (buffers == nullptr) {
+            if (diagnostic != nullptr) {
+                diagnostic->failure =
+                    WeaponIkJointSetSeedFailure::kAllocatedNull;
+            }
+            return false;
+        }
+        if (readable < 5 * sizeof(void*)) {
+            if (diagnostic != nullptr) {
+                diagnostic->failure =
+                    WeaponIkJointSetSeedFailure::kAllocatedUnreadable;
+            }
+            return false;
+        }
+        return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
+        if (diagnostic != nullptr) {
+            diagnostic->failure = WeaponIkJointSetSeedFailure::kException;
+        }
         return false;
     }
 }
@@ -50733,7 +50809,15 @@ LegacyNadineMazurLateSteadyIkResult
 seh_apply_legacy_nadine_mazur_late_steady_ik(
     const LegacyNadineMazurAuthoredPairPostBlendTicket& ticket,
     float* right_position_error_out, float* right_angle_error_out,
-    float* left_prop_gap_out, float* left_angle_gap_out) {
+    float* left_prop_gap_out, float* left_angle_gap_out,
+    WeaponIkJointSetSeedDiagnostic* left_seed_diagnostic,
+    WeaponIkJointSetSeedDiagnostic* right_seed_diagnostic) {
+    if (left_seed_diagnostic != nullptr) {
+        *left_seed_diagnostic = {};
+    }
+    if (right_seed_diagnostic != nullptr) {
+        *right_seed_diagnostic = {};
+    }
     if (!kEnableLegacyNadineMazurLateSteadyIkRepair || !ticket.valid ||
         ticket.custom_pair_instance != nullptr || ticket.transition_weighted ||
         !weapon_ik_goal_locator_valid(
@@ -50784,10 +50868,10 @@ seh_apply_legacy_nadine_mazur_late_steady_ik(
     bool right_seeded = false;
     const bool left_seed_valid =
         seh_allocate_and_validate_weapon_ik_joint_set(
-            joint_sets[0], &left_seeded);
+            joint_sets[0], &left_seeded, left_seed_diagnostic);
     const bool right_seed_valid = left_seed_valid &&
         seh_allocate_and_validate_weapon_ik_joint_set(
-            joint_sets[1], &right_seeded);
+            joint_sets[1], &right_seeded, right_seed_diagnostic);
     if (!left_seed_valid || !right_seed_valid) {
         if (right_seeded) {
             seh_reset_weapon_ik_joint_set(joint_sets[1]);
@@ -51290,10 +51374,13 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
         float right_angle_error = 0.0F;
         float left_prop_gap = 0.0F;
         float left_angle_gap = 0.0F;
+        WeaponIkJointSetSeedDiagnostic left_seed_diagnostic{};
+        WeaponIkJointSetSeedDiagnostic right_seed_diagnostic{};
         if constexpr (kEnableLegacyNadineMazurLateSteadyIkRepair) {
             late_ik_result = seh_apply_legacy_nadine_mazur_late_steady_ik(
                 ticket, &right_position_error, &right_angle_error,
-                &left_prop_gap, &left_angle_gap);
+                &left_prop_gap, &left_angle_gap,
+                &left_seed_diagnostic, &right_seed_diagnostic);
             if (late_ik_result ==
                 LegacyNadineMazurLateSteadyIkResult::kApplied) {
                 static std::atomic<bool> late_ik_applied_logged{false};
@@ -51319,11 +51406,25 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
                 if (reason < rejected_logged.size() &&
                     !rejected_logged[reason].exchange(
                         true, std::memory_order_relaxed)) {
-                    char line[160]{};
+                    char line[320]{};
                     std::snprintf(
                         line, sizeof(line),
-                        "NADINE-MAZUR-LATE-IK rejected stage=%zu",
-                        reason);
+                        "NADINE-MAZUR-LATE-IK rejected stage=%zu"
+                        " left=%u/%u/%d/%p/%p/%zu"
+                        " right=%u/%u/%d/%p/%p/%zu",
+                        reason,
+                        static_cast<unsigned>(left_seed_diagnostic.failure),
+                        static_cast<unsigned>(left_seed_diagnostic.state),
+                        static_cast<int>(left_seed_diagnostic.count),
+                        left_seed_diagnostic.buffers_before,
+                        left_seed_diagnostic.buffers_after,
+                        left_seed_diagnostic.readable_after,
+                        static_cast<unsigned>(right_seed_diagnostic.failure),
+                        static_cast<unsigned>(right_seed_diagnostic.state),
+                        static_cast<int>(right_seed_diagnostic.count),
+                        right_seed_diagnostic.buffers_before,
+                        right_seed_diagnostic.buffers_after,
+                        right_seed_diagnostic.readable_after);
                     boot_log_line(line);
                 }
             }
@@ -65146,8 +65247,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-21aes "
-        "(late two-arm IK after steady Mazur pose)");
+        "TLL co-op runtime init 2026-08-21aet "
+        "(late two-arm IK JointSet seed census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

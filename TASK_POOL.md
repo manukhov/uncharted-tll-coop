@@ -5338,6 +5338,16 @@ Keep the postblend preservation boundary; replace only its steady content.
       Re-run exactly one role-B Nadine process and require exact pair,
       `LATE-IK applied`, and `lateIk=1` before judging the visual result.
 
+      Runtime `aes` remained packaging-inconclusive: the exact pair ran but
+      late IK again rejected at stage 3. Read-only memory of the live
+      Player+0x4308 object proved both JointTrees have state1/count8/null+0x20,
+      matching constructor/build/reset statics. Build `aet` only makes the
+      existing seed gate observable per side as
+      `failure/state/count/before/after/readable`; it changes no pose rule.
+      Run one role-B Nadine process and use that row to choose busy-lifetime,
+      allocator-result, or exception. Do not interpret visuals and do not
+      send gameplay input.
+
   Original `aeh` prediction required the combined READY marker,
       fresh Chloe right-prop CAPTURE, Nadine right-prop RELAY and same-postblend
       `baselineRestore=0`. All markers plus both hands and Chloe's muzzle-up
