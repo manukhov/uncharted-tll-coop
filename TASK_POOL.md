@@ -5421,16 +5421,23 @@ Keep the postblend preservation boundary; replace only its steady content.
       `ProcessWeaponBase_Update 0x141500A79` consumes that byte before exact
       LongGunJiggle reset vslot `+28`.
 
-  Build `afb` is the corrected single earned cold-start exam. Preserve all exact
-      role-B/Nadine/Mazur/targSpineProp/generation/Fg guards, require the observed
-      missed-finalizer tuple (`+898` bit3, `+8F4=1`, enabled terminal
-      LongGunJiggle), write only the stock final value `+8F4=0`, call
-      `LongGunJiggle_SetEnabledAndReset(false)`, then the scoped selected updater.
-      Require boot `afb`, `weaponJiggleGate=C9/1->0`,
-      `jiggleReset=1/1->0`, changed jiggle hash, `refresh=ok/1/1`, nonzero local
-      change and correct cold back placement. Both execution markers plus the
-      same protruding pose reject the missing-finalizer hypothesis. Launch one
-      role-B Nadine copy and never send gameplay input.
+  Build `afb` is RUNTIME REJECTED as a cold-placement repair. PID 12044 reached
+      exact `rightHand -> targSpineProp`, cleared `weapon+8F4` from one to zero,
+      reset the enabled terminal LongGunJiggle (`jiggleReset=1/1->0`, changed
+      hash), ran the scoped selected updater (`refresh=ok/1/1`, TLS `1/1`) and
+      changed all eight local words (`AFDA050B->81842671`). The user still saw
+      the rifle protruding initially. Do not retry the endpoint, finalizer byte,
+      LongGunJiggle reset or selected updater separately or in combination.
+
+  Current P0 is a static-only closure of the real Put completion through the
+      final visible weapon transform. Trace the `transition-to-spine-anim`
+      event receiver, every ProcessWeapon/attachable state write performed by a
+      real Put, the later async/world/palette publishers, and the exact render
+      consumer. Enumerate and reject competing owners before proposing a seam.
+      Per the user's explicit instruction, do not launch or inject to choose
+      among candidates; another runtime exam is allowed only after the whole
+      visible-transform chain is closed statically and the result is considered
+      confident.
 
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to

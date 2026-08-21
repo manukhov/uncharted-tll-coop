@@ -27214,3 +27214,30 @@ was updated with `PlayerHolsterTransitionToSpine_Finalize 0x141089E70` and
 `PlayerHolsterTransitionToSpine_MarkActive 0x14108A290`
 (`apply_labels OK: 1785 functions, 60 data names`,
 `save_database returned True`); the restarted MCP resolves both names.
+
+### 2026-08-21 CONFIRMED / REJECTED (`afb`): the complete endpoint/jiggle finalizer still leaves the cold Mazur misplaced
+
+The one-copy role-B Nadine run in PID `12044` reached every predicate and write
+of the intended build. Boot reported `2026-08-21afb`; the initial exact Mazur
+row had `rightHand -> targSpineProp`, terminal selected `LongGunJiggle`
+`progress/rate=1/0`, `weapon+898=C9` and `weapon+8F4=1`. Deferred attempt 2
+then reported `weaponJiggleGate=C9/1->0`, `jiggleReset=1/1->0`,
+`jiggleHash=89E57FE8->EF779B68`, `refresh=ok/1/1`, `tls=1/1`,
+`changed=FF`, and `localHash=AFDA050B->81842671`. The process remained
+responsive and no exception/fatal marker appeared. The user nevertheless saw
+the rifle still protruding from Nadine's lower back before any Draw.
+
+Packaging, exact endpoint identity, the transition-finalizer byte, the full
+LongGunJiggle reset, selected-transform recomputation and publication are
+therefore CONFIRMED. The hypothesis that the cold bug was only a skipped
+`transition-to-spine-anim` finalizer is RUNTIME REJECTED. Do not repeat any
+combination of direct `targSpineProp` rebind, `weapon+8F4=0`,
+`LongGunJiggle_SetEnabledAndReset(false)`, or
+`NdAttachableObject_UpdateSelectedAttachmentTransform` as a cold-placement
+repair: all of them executed together and still produced the wrong visible
+pose. The remaining frontier is outside that endpoint-local state. It must be
+closed statically by tracing the real Put completion event and every subsequent
+weapon/world/palette owner to the last transform consumed for rendering. Per
+the user's explicit instruction, no further game launch is allowed merely to
+select among those candidates; the next run requires a statically complete
+visible-transform chain and a confident falsifiable prediction.
