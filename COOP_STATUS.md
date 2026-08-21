@@ -27322,3 +27322,108 @@ The single IDB was updated with the corrected PlayerGrab action names and the
 expanded Player setup-boundary comment (`1785` functions / `60` data names,
 `save_database returned True`); restarted MCP readback resolves all three
 functions.  No game process was started.
+
+### 2026-08-21 RUNTIME REJECTED (`afc`): an early alias does not change the cold right-hand descriptor
+
+The one-copy role-B Nadine run in PID `16728` loaded exact boot `afc` and proved
+that the packaging itself executed.  `NADINE-EARLY-SPINE-ALIAS` reported
+`status=1`, table count `39->40`, `present=0->1`, joint `16` and `exact=1`.
+Nevertheless the complete cold interval contained zero
+`NADINE-MAZUR-NATIVE-BACK scope=initial` and zero
+`NADINE-LOCAL-MAZUR-REBIND` rows.  The first Mazur back-frame row appeared only
+after Draw began, with the already selected `targSpineProp`.  The user still saw
+the rifle protruding from the lower back before any input.
+
+This rejects `Hlate-table` and corrects the previous STATIC narrative.  The
+constructor does not select an attachment by asking whether `targSpineProp`
+exists.  Runtime `gy` had already observed descriptor attachment
+`rightHand 0x61A48E01`, cached index `255`, resolution `255->16`, and identity
+local hash `AE617165`.  Static re-read now closes the same path in
+`NdAttachableObject_Init 0x141ECEFE0`: descriptor `+0x58` is resolved against
+the owner table and the final call at `0x141ECF36E` passes that resolved index
+to `NdAttachableObject_SetParentAndAttachmentIndex 0x141ED0190`.  Adding a new
+table row cannot change the descriptor's different requested id.  Do not retry
+the early alias as a complete repair, and do not interpret its successful
+marker as an initial holster publish.
+
+### 2026-08-21 STATIC / IMPLEMENTED (`afd`): complete the stock holster rebind inside ProcessWeapon factory initialization
+
+The next boundary is earlier than every rejected retained/inventory one-shot
+and now meets the static evidence quota.
+
+1. The exact TypeFactor/factory table at `0x142A4D520` places
+   `ProcessWeapon_FactoryInitialize 0x141103B70` in vslot `+0x58`.  Its only
+   operation of interest is the direct E8 at `0x141103B7E` to
+   `ProcessWeapon_Initialize 0x14150F640`; it then translates the result code
+   and returns.  This is the same ordinary constructor reached by cold runtime
+   `gy`, not an inferred GiveWeapon branch.
+2. The generic materializer
+   `ResolveOrMaterializeRuntimeStateObjectFromSelectorPacket 0x1417C3790`
+   calls that vslot at `0x1417C400B`.  Only after it returns does the
+   materializer call factory vslot `+0x1A8` at `0x1417C411B`.  The concrete
+   target is `NdDrawableObject_AllocateSnapshot 0x141EB9780`, independently
+   identified by its embedded source assertion; it allocates the drawable
+   snapshot and does not write `ProcessWeapon+0x4E0/+0x4E8`, selected byte
+   `+0x688`, or binding `+0x4F0/+0x500`.  The following success vslot `+0x180`
+   is a null method.  Therefore the return from `0x141103B7E` is the last exact
+   pre-snapshot boundary after full weapon initialization.
+3. `ProcessWeapon_Initialize` creates and initializes the
+   `ProcessWeaponStrap` child before returning and stores its generation-valid
+   weak pair at weapon `+0xAE0/+0xAE8`.  At this point the complete stock
+   `PlayerWeaponController_RebindWeaponToHolster 0x1410A9670` can select the
+   already materialized `targSpineProp`, copy the authored primary binding to
+   weapon `+0x4F0`, and publish `player-holstered` to both the ProcessWeapon and
+   its strap child.  The binding bits accepted after a real Put are stable:
+   `3D9BA5E3,BCA3D70A,BD4CCCCD,0,BD6477B3,BDCD7209,3E0A06FB,3F7BF4C4`
+   (FNV `57036E96`), versus the cold identity hash `AE617165`.
+4. `PlayerWeaponController_GiveWeapon 0x1410A4D40` receives the created object
+   only after this generic factory sequence.  Its immediate `+0x3D0` call at
+   `0x1410A5CDF` is guarded by `v218==5`; the net-mode Mazur class remains `16`,
+   and runtime `afc` independently observed no cold rebind.  No later code in
+   the creation branch calls weapon vslot `+0x7A8` or writes `+0x688/+0x4F0`
+   before the object is returned/published to the controller slot.  The Player
+   assembly independently stores the newly constructed controller at
+   `Player+0x1D88` at `0x1410CA926` before invoking its initialization vslot
+   `+0x28` at `0x1410CA93A`, so the exact controller/owner is already available
+   during cold weapon materialization; this is not a null pre-constructor gap.
+
+The implementation patches only the direct E8 `0x141103B7E`, calls stock
+`ProcessWeapon_Initialize` once, then admits only successful role-B screen-0
+legacy Nadine, exact ProcessWeapon/Mazur art and weak-parent generation, exact
+PlayerWeaponController owner, `current<0/state=0`, canonical `rightHand` and
+early `targSpineProp` table records, and a generation-valid completed strap
+child.  It calls the concrete stock rebind once and verifies the same record
+generation, `rightHand -> targSpineProp`, the exact accepted binding bits, and
+the same strap child.  P99, role A, remote Player, drawn/transition states and
+all non-Mazur factories remain stock.  The old late Mazur rebind, jiggle reset
+and selected-updater experiments remain disabled.
+
+Competing explanations are now separable.  `Halias-suffices` is RUNTIME
+REJECTED by `afc`.  `Hendpoint-only` and `Hlate-refresh` remain RUNTIME REJECTED
+by `afb`; `afd` instead executes the whole stock endpoint/binding/event sequence
+before snapshot allocation.  `Hpost-factory-overwrite` is STATIC REJECTED by
+the concrete materializer vslots and the long-gun GiveWeapon class branch.
+The surviving hypothesis is `Hmissing-cold-stock-rebind`: the correct post-Put
+state is absent only because class-16 cold GiveWeapon never invokes it.
+
+No game is launched for this build.  The eventual single-copy discriminator is
+strict: boot must report `2026-08-21afd`, the early alias must remain exact, and
+before any Draw there must be exactly one
+`NADINE-MAZUR-FACTORY-HOLSTER stage=11 verified=1` with result `0`,
+`id=61A48E01->AD047A`, `index=16->39`,
+`binding=AE617165->57036E96`, the same strap child and `call=1`.  Only with those
+markers may the cold rifle be visually compared with the accepted post-Put
+upper-back placement.  Any lower protrusion after exact markers rejects
+`Hmissing-cold-stock-rebind`; a missing/stage<11 row is packaging/admission and
+must not be judged visually.  The strap guide/physics defect is still separate:
+this restores the stock holster event but does not invent Nadine's missing
+`strap2..strap14` guide subtree.
+
+Release `afd` compiles successfully (`tll_coop_runtime.dll`, `778240` bytes;
+the release object is newer than the source).  The single IDB was updated with
+`ProcessWeapon_FactoryInitialize 0x141103B70`,
+`ProcessWeapon_CreateFromWeaponInfo 0x1414F9BA0` and
+`NdDrawableObject_AllocateSnapshot 0x141EB9780`
+(`apply_labels OK: 1788 functions, 60 data names`,
+`save_database returned True`); restarted MCP readback resolves all three.
+No game process was started or controlled.

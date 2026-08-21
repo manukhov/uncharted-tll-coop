@@ -2399,15 +2399,22 @@ static_assert(
 // retained Player-Nadine/P99 scope and persist that endpoint at pistolHolster.
 // Builds aaj..afb proved that a late cold Mazur rebind can select the exact
 // targSpineProp endpoint yet still miss the initialization-time publish path.
-// The compatibility alias is now installed inside Player::SetupAttachSystem,
-// before PlayerWeaponController/GiveWeapon can perform the stock initial
-// holster rebind. Do not repeat the rejected retained-Player one-shot.
+// Runtime afc then proved that merely adding the alias early is insufficient:
+// the cold descriptor still explicitly selects rightHand and GiveWeapon does
+// not invoke the long-gun holster rebind. Do not repeat either late one-shot or
+// the rejected assumption that table presence changes descriptor selection.
 constexpr bool kEnableInitialLocalNadineRifleRebind = false;
 // Player::SetupAttachSystem is the last stock boundary after the AttachSystem
 // table exists and before GiveWeapon can perform its initial holster rebind.
 // Materialize only Nadine's self-derived targSpineProp alias there so the stock
 // initialization path owns selection, binding, animation and first publish.
 constexpr bool kEnableEarlyLegacyNadineSpinePropAlias = true;
+// Wrap the exact ProcessWeapon_Initialize call made by the ProcessWeapon
+// factory callback. Stock runs first so the weapon and strap child are fully
+// initialized; only exact role-B local legacy-Nadine cold Mazur/rightHand then
+// enters the stock PlayerWeaponController holster rebind before the generic
+// materializer allocates the first drawable snapshot.
+constexpr bool kEnableColdLegacyNadineMazurFactoryHolsterRebind = true;
 // Native NPC Nadine's targSpineProp and legacy Player-Nadine's targSpine are
 // both canonical identity records on spineb/joint16. The attach-table repair
 // now creates targSpineProp as an exact id alias of that existing Nadine frame,
@@ -56375,6 +56382,364 @@ MazurStrapSnapshot capture_mazur_strap(
     return snapshot;
 }
 
+using ProcessWeaponInitializeFunction =
+    std::uint64_t*(__fastcall*)(void*, std::uint64_t*, void*);
+ProcessWeaponInitializeFunction
+    g_original_process_weapon_initialize_for_cold_holster = nullptr;
+
+struct ColdMazurFactoryHolsterResult {
+    std::uint32_t stage = 0;
+    std::uint32_t result_code = 0xFFFFFFFFu;
+    void* player = nullptr;
+    void* controller = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    std::uint32_t look = 0;
+    std::uint32_t screen = 0xFFFFFFFFu;
+    int current_slot = -99;
+    std::uint32_t draw_state = 0xFFFFFFFFu;
+    int right_hand_index = -1;
+    int spine_prop_index = -1;
+    std::uint8_t selected_before = 0xFF;
+    std::uint8_t selected_after = 0xFF;
+    std::uint32_t attach_before = 0;
+    std::uint32_t attach_after = 0;
+    std::uintptr_t records_before = 0;
+    std::uintptr_t records_after = 0;
+    std::uint32_t binding_before_hash = 0;
+    std::uint32_t binding_after_hash = 0;
+    void* strap_child = nullptr;
+    std::uint32_t strap_generation = 0;
+    std::uint8_t strap_state_before = 0xFF;
+    std::uint8_t strap_state_after = 0xFF;
+    bool call_completed = false;
+    bool verified = false;
+};
+
+constexpr std::array<std::uint32_t, 8>
+    kAcceptedLegacyNadineMazurBackBindingBits{
+        0x3D9BA5E3u, 0xBCA3D70Au, 0xBD4CCCCDu, 0x00000000u,
+        0xBD6477B3u, 0xBDCD7209u, 0x3E0A06FBu, 0x3F7BF4C4u,
+    };
+
+bool seh_rebind_cold_legacy_nadine_mazur_before_snapshot(
+    void* weapon, const std::uint64_t* result_out,
+    ColdMazurFactoryHolsterResult* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    output->stage = 1;
+    __try {
+        if (g_module == 0 || weapon == nullptr || result_out == nullptr ||
+            readable_bytes(result_out) < sizeof(std::uint32_t)) {
+            return false;
+        }
+        output->result_code =
+            *reinterpret_cast<const std::uint32_t*>(result_out);
+        if (output->result_code != 0 || !g_state_net.enabled ||
+            !g_net_role_b) {
+            return false;
+        }
+        output->stage = 2;
+
+        if (readable_bytes(weapon) < 0xAEC ||
+            *reinterpret_cast<const std::uintptr_t*>(weapon) !=
+                g_module + kProcessWeaponVtableRva ||
+            weapon_art_id_from_object(weapon) != kCoopRifleArtId) {
+            return false;
+        }
+        auto* const weapon_bytes = static_cast<std::byte*>(weapon);
+        output->weapon_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                weapon_bytes + kGameObjectRuntimeIdOffset);
+        output->binding_before_hash = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x4F0),
+            8);
+        output->stage = 3;
+
+        auto* const parent_handle =
+            *reinterpret_cast<std::byte* const*>(weapon_bytes + 0x4E0);
+        const std::uint32_t parent_id =
+            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x4E8);
+        if (parent_handle == nullptr || parent_id == 0 ||
+            readable_bytes(parent_handle) < 0x10) {
+            return false;
+        }
+        output->player =
+            *reinterpret_cast<void* const*>(parent_handle + 0x8);
+        if (output->player == nullptr ||
+            readable_bytes(output->player) < 0x4014 ||
+            *reinterpret_cast<const std::uintptr_t*>(output->player) !=
+                g_module + kPlayerVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(output->player) +
+                kGameObjectRuntimeIdOffset) != parent_id ||
+            !seh_weapon_parent_resolves_to_owner(weapon, output->player)) {
+            return false;
+        }
+        output->player_runtime_id = parent_id;
+        output->stage = 4;
+
+        if (!seh_read_player_look(output->player, &output->look) ||
+            output->look != kLegacyNadineAttachTargetLookId) {
+            return false;
+        }
+        output->screen = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(output->player) + 0x4010);
+        if (output->screen != 0) {
+            return false;
+        }
+        output->stage = 5;
+
+        if (!seh_read_exact_player_weapon_controller(
+                output->player, &output->controller) ||
+            !read_weapon_draw_state(
+                output->player, output->current_slot, output->draw_state) ||
+            output->current_slot >= 0 || output->draw_state != 0) {
+            return false;
+        }
+        output->stage = 6;
+
+        if (!seh_find_owner_attach_point(
+                output->player, 0x61A48E01u,
+                &output->right_hand_index) ||
+            !seh_find_owner_attach_point(
+                output->player, kTargSpinePropAttachId,
+                &output->spine_prop_index) ||
+            output->right_hand_index < 0 ||
+            output->right_hand_index > 0xFE ||
+            output->spine_prop_index < 0 ||
+            output->spine_prop_index > 0xFE) {
+            return false;
+        }
+        output->stage = 7;
+
+        std::uint32_t parent_before = 0;
+        if (!seh_read_weapon_attachment_state(
+                weapon, &parent_before, &output->selected_before) ||
+            !seh_read_owner_attach_record_id(
+                output->player, output->selected_before,
+                &output->attach_before, &output->records_before) ||
+            parent_before != parent_id || output->records_before == 0 ||
+            output->selected_before !=
+                static_cast<std::uint8_t>(output->right_hand_index) ||
+            output->attach_before != 0x61A48E01u) {
+            return false;
+        }
+        output->stage = 8;
+
+        const MazurStrapSnapshot strap_before =
+            capture_mazur_strap(weapon);
+        if (!strap_before.valid || strap_before.parent_weapon != weapon) {
+            return false;
+        }
+        output->strap_child = strap_before.child;
+        output->strap_generation = strap_before.generation;
+        output->strap_state_before = strap_before.holster_state;
+        output->stage = 9;
+
+        output->call_completed =
+            seh_call_player_weapon_controller_rebind_to_holster(
+                output->controller, weapon);
+        output->stage = 10;
+
+        std::uint32_t parent_after = 0;
+        const bool attachment_after_ok = output->call_completed &&
+            seh_read_weapon_attachment_state(
+                weapon, &parent_after, &output->selected_after) &&
+            seh_read_owner_attach_record_id(
+                output->player, output->selected_after,
+                &output->attach_after, &output->records_after);
+        output->binding_after_hash = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x4F0),
+            8);
+        const MazurStrapSnapshot strap_after =
+            capture_mazur_strap(weapon);
+        output->strap_state_after = strap_after.holster_state;
+        const bool exact_binding = std::memcmp(
+            weapon_bytes + 0x4F0,
+            kAcceptedLegacyNadineMazurBackBindingBits.data(),
+            sizeof(kAcceptedLegacyNadineMazurBackBindingBits)) == 0;
+        output->verified = attachment_after_ok &&
+            parent_after == parent_id &&
+            output->records_after == output->records_before &&
+            output->selected_after ==
+                static_cast<std::uint8_t>(output->spine_prop_index) &&
+            output->attach_after == kTargSpinePropAttachId &&
+            exact_binding && strap_after.valid &&
+            strap_after.child == strap_before.child &&
+            strap_after.generation == strap_before.generation &&
+            strap_after.parent_weapon == weapon;
+        if (output->verified) {
+            output->stage = 11;
+        }
+        return output->verified;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+std::uint64_t* __fastcall hooked_process_weapon_initialize_cold_holster(
+    void* weapon, std::uint64_t* result_out, void* context) {
+    const auto original =
+        g_original_process_weapon_initialize_for_cold_holster;
+    std::uint64_t* const result = original != nullptr
+        ? original(weapon, result_out, context)
+        : result_out;
+
+    if constexpr (!kEnableColdLegacyNadineMazurFactoryHolsterRebind) {
+        return result;
+    }
+    ColdMazurFactoryHolsterResult repair{};
+    const bool verified =
+        seh_rebind_cold_legacy_nadine_mazur_before_snapshot(
+            weapon, result_out, &repair);
+    if (weapon == nullptr || readable_bytes(weapon) < 0x864 ||
+        weapon_art_id_from_object(weapon) != kCoopRifleArtId ||
+        !g_state_net.enabled || !g_net_role_b) {
+        return result;
+    }
+
+    static std::atomic<std::uint32_t> rows{0};
+    const std::uint32_t row = rows.fetch_add(1, std::memory_order_relaxed);
+    if (row < 8) {
+        std::ostringstream line;
+        line << "NADINE-MAZUR-FACTORY-HOLSTER row=" << row
+             << " stage=" << repair.stage
+             << " verified=" << (verified ? 1 : 0)
+             << " result=0x" << std::hex << repair.result_code
+             << " player=0x"
+             << reinterpret_cast<std::uintptr_t>(repair.player)
+             << ":" << repair.player_runtime_id
+             << " controller=0x"
+             << reinterpret_cast<std::uintptr_t>(repair.controller)
+             << " weapon=0x" << reinterpret_cast<std::uintptr_t>(weapon)
+             << ":" << repair.weapon_runtime_id
+             << " look=0x" << repair.look
+             << " records=0x" << repair.records_before
+             << "->0x" << repair.records_after
+             << " id=0x" << repair.attach_before
+             << "->0x" << repair.attach_after
+             << " binding=0x" << repair.binding_before_hash
+             << "->0x" << repair.binding_after_hash
+             << " strap=0x"
+             << reinterpret_cast<std::uintptr_t>(repair.strap_child)
+             << ":" << repair.strap_generation
+             << std::dec << " screen=" << repair.screen
+             << " current=" << repair.current_slot
+             << " draw=" << repair.draw_state
+             << " index="
+             << static_cast<unsigned>(repair.selected_before)
+             << "->" << static_cast<unsigned>(repair.selected_after)
+             << " expected=" << repair.right_hand_index
+             << "->" << repair.spine_prop_index
+             << " strapState="
+             << static_cast<unsigned>(repair.strap_state_before)
+             << "->"
+             << static_cast<unsigned>(repair.strap_state_after)
+             << " call=" << (repair.call_completed ? 1 : 0);
+        boot_log_line(line.str().c_str());
+    }
+    return result;
+}
+
+bool install_cold_legacy_nadine_mazur_factory_holster_rebind() {
+    std::uint8_t* callsite = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t new_displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kProcessWeaponFactoryInitializeCallsiteRva,
+            kProcessWeaponInitializeRva,
+            reinterpret_cast<const void*>(
+                &hooked_process_weapon_initialize_cold_holster),
+            callsite, relay, new_displacement)) {
+        boot_log_line(
+            "cold legacy-Nadine Mazur factory holster rebind SKIPPED (preflight)");
+        return false;
+    }
+    std::int32_t old_displacement = 0;
+    std::memcpy(
+        &old_displacement, callsite + 1, sizeof(old_displacement));
+    g_original_process_weapon_initialize_for_cold_holster =
+        reinterpret_cast<ProcessWeaponInitializeFunction>(
+            g_module + kProcessWeaponInitializeRva);
+
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_process_weapon_initialize_for_cold_holster = nullptr;
+        boot_log_line(
+            "cold legacy-Nadine Mazur factory holster rebind SKIPPED (thread suspend)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            callsite, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        resume_suspended_process_threads(suspended_threads);
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_process_weapon_initialize_for_cold_holster = nullptr;
+        boot_log_line(
+            "cold legacy-Nadine Mazur factory holster rebind SKIPPED (protect)");
+        return false;
+    }
+    std::memcpy(
+        callsite + 1, &new_displacement, sizeof(new_displacement));
+    FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+
+    std::int32_t readback = 0;
+    std::memcpy(&readback, callsite + 1, sizeof(readback));
+    bool installed = callsite[0] == 0xE8 &&
+        readback == new_displacement;
+    bool rollback_verified = false;
+    if (!installed) {
+        std::memcpy(
+            callsite + 1, &old_displacement, sizeof(old_displacement));
+        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+        std::int32_t rollback_readback = 0;
+        std::memcpy(
+            &rollback_readback, callsite + 1,
+            sizeof(rollback_readback));
+        rollback_verified = callsite[0] == 0xE8 &&
+            rollback_readback == old_displacement;
+    }
+    DWORD ignored = 0;
+    bool protection_restored = VirtualProtect(
+        callsite, 5, old_protection, &ignored) != 0;
+    if (installed && !protection_restored) {
+        std::memcpy(
+            callsite + 1, &old_displacement, sizeof(old_displacement));
+        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+        std::int32_t rollback_readback = 0;
+        std::memcpy(
+            &rollback_readback, callsite + 1,
+            sizeof(rollback_readback));
+        rollback_verified = callsite[0] == 0xE8 &&
+            rollback_readback == old_displacement;
+        installed = !rollback_verified;
+        protection_restored = VirtualProtect(
+            callsite, 5, old_protection, &ignored) != 0;
+    }
+    resume_suspended_process_threads(suspended_threads);
+
+    if (!installed) {
+        if (rollback_verified) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+            g_original_process_weapon_initialize_for_cold_holster = nullptr;
+        }
+        boot_log_line(
+            protection_restored
+                ? "cold legacy-Nadine Mazur factory holster rebind SKIPPED (verified rollback)"
+                : "cold legacy-Nadine Mazur factory holster rebind SKIPPED (rollback/protection WARNING)");
+        return false;
+    }
+    boot_log_line(
+        protection_restored
+            ? "cold legacy-Nadine Mazur factory holster rebind installed at 0x141103B7E"
+            : "cold legacy-Nadine Mazur factory holster rebind installed PARTIAL (protection WARNING)");
+    return true;
+}
+
 enum class MazurStrapVisibilityGate : std::uint8_t {
     kNone = 0,
     kClosed = 1,
@@ -66167,10 +66532,13 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-21afc "
-        "(materialize Nadine spine alias before stock GiveWeapon holster path)");
+        "TLL co-op runtime init 2026-08-21afd "
+        "(stock cold Mazur holster rebind before first drawable snapshot)");
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
+    }
+    if constexpr (kEnableColdLegacyNadineMazurFactoryHolsterRebind) {
+        install_cold_legacy_nadine_mazur_factory_holster_rebind();
     }
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

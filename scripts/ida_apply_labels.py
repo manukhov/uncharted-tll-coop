@@ -8,6 +8,29 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-08-21: cold ProcessWeapon factory lifecycle ---
+    0x141103B70: (
+        "ProcessWeapon_FactoryInitialize",
+        "ProcessWeapon TypeFactor/factory vtable +0x58 callback. Calls the "
+        "complete ProcessWeapon_Initialize at 0x141103B7E, translates its "
+        "result code for the generic materializer, and returns without any "
+        "other ProcessWeapon mutation.",
+    ),
+    0x1414F9BA0: (
+        "ProcessWeapon_CreateFromWeaponInfo",
+        "Builds the ProcessSpawnInfo packet from WeaponInfo, resolves the "
+        "WeaponArtDef selector and materializes the ProcessWeapon through "
+        "ResolveOrMaterializeRuntimeStateObjectFromSelectorPacket. The caller "
+        "does not receive the weapon until the factory init/post-init sequence "
+        "has completed.",
+    ),
+    0x141EB9780: (
+        "NdDrawableObject_AllocateSnapshot",
+        "NdDrawableObject factory vtable +0x1A8 post-init callback, identified "
+        "by the embedded NdDrawableObject::AllocateSnapshot source assertion. "
+        "It runs only after ProcessWeapon_FactoryInitialize returns and does "
+        "not rewrite attachment selection or binding fields.",
+    ),
     # --- 2026-08-21: cold ProcessWeapon LongGunJiggle lifecycle ---
     0x141500880: (
         "ProcessWeaponBase_Update",

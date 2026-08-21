@@ -925,6 +925,14 @@ constexpr std::uintptr_t kProcessWeaponInitializeAmmoFromTotalRva = 0x1517C90;
 // descriptor (context+0x28) before later draw/put actions can rewrite it.
 constexpr std::uintptr_t kProcessWeaponBaseInitRva = 0x14FAF40;
 constexpr std::uintptr_t kProcessWeaponBaseInitCallsiteRva = 0x150F6AF;
+// ProcessWeapon's TypeFactor/factory vtable +0x58 callback at 0x141103B70
+// calls the complete ProcessWeapon_Initialize exactly once here.  Returning
+// from this E8 means the strap child has already been materialized, while the
+// generic materializer has not yet called NdDrawableObject::AllocateSnapshot
+// through factory vtable +0x1A8.
+constexpr std::uintptr_t kProcessWeaponInitializeRva = 0x150F640;
+constexpr std::uintptr_t kProcessWeaponFactoryInitializeCallsiteRva =
+    0x1103B7E;
 // PlayerWeaponController vtable +0x3D0. The stock Player holster AnimAction
 // calls this with its current ProcessWeapon; it builds the authored holster
 // binding, selects the existing owner point and copies the binding-local

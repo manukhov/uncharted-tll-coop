@@ -5429,30 +5429,39 @@ Keep the postblend preservation boundary; replace only its steady content.
       the rifle protruding initially. Do not retry the endpoint, finalizer byte,
       LongGunJiggle reset or selected updater separately or in combination.
 
-  Current P0 static closure is complete in build `afc`; runtime remains
-      deliberately deferred. The former `0x141089E70/0x14108A290` labels were
-      corrected to `PlayerGrabWeaponAnimAction` methods, so the rejected `afb`
-      finalizer theory must not be repeated. The actual ordering is:
-      `NdGameObject_Init -> Player vtable +0x448/SetupAttachSystem -> alias table`
-      before `Player+0x1D88` construction, then stock `GiveWeapon -> +0x3D0 ->`
-      authored holster rebind/publish. Build `afc` appends only the canonical
-      Nadine `targSpineProp` alias at that pre-controller boundary, disables the
-      late local Mazur rebind, and lets stock initialization own the first
-      selection/binding/event. The authored Mazur back-frame correction now
-      admits this first publish by exact ProcessWeapon/Mazur, weak-parent
-      generation, Player RTTI/look, canonical selected spineb alias and spined
-      donor; it no longer requires retained-player/inventory state that cannot
-      exist yet. Final output remains the proven selected-transform correction
-      at `0x141ED19BB` followed by stock final compose `0x141ED287B` and Fg
-      publish `0x141ED288F`.
+  Build `afc` is RUNTIME REJECTED. PID 16728 created the exact early
+      `targSpineProp` alias (`39->40`, joint16, exact1), but emitted no initial
+      Mazur back-frame/rebind row and the user still saw the rifle protruding.
+      The cold descriptor explicitly requests `rightHand 0x61A48E01`; table
+      presence cannot change that id. Correct the old `GiveWeapon -> +0x3D0`
+      claim too: the call at `0x1410A5CDF` is guarded by `v218==5`, while the
+      net-mode Mazur class remains 16. Do not retry `Hlate-table`.
 
-      Do not launch yet. The written eventual discriminator requires boot
-      `2026-08-21afc`, early alias `status=1/count39->40/joint16/exact1`, first
-      Mazur back-frame row `scope=initial` on exact `targSpineProp`, and zero
-      late `NADINE-LOCAL-MAZUR-REBIND` rows. Only then may the cold pre-Draw
-      placement be compared with the already accepted post-Put upper-back
-      placement. Exact execution plus the same lower protrusion rejects the
-      now-complete early-table hypothesis; missing markers are packaging only.
+  Current P0 is STATIC / IMPLEMENTED as build `afd`, with runtime deliberately
+      deferred. Exact factory table `0x142A4D520` vslot `+0x58` reaches
+      `ProcessWeapon_FactoryInitialize 0x141103B70` and its direct complete-init
+      E8 `0x141103B7E`. After that call returns, the strap child already exists;
+      only then does generic materializer `0x1417C3790` call
+      `NdDrawableObject_AllocateSnapshot 0x141EB9780` through vslot `+0x1A8`.
+      Neither post-init slot rewrites attachment/binding. The new exact E8 relay
+      therefore calls the complete stock
+      `PlayerWeaponController_RebindWeaponToHolster 0x1410A9670` before the first
+      drawable snapshot, restricted to role-B screen-0 cold legacy Nadine,
+      ProcessWeapon/Mazur, valid owner/controller generations, state0/current<0,
+      exact `rightHand`, canonical early `targSpineProp`, and a completed exact
+      strap child. It verifies `rightHand->targSpineProp` and the already accepted
+      post-Put binding before reporting success. Late rebind/finalizer/jiggle/
+      selected-updater experiments stay disabled.
+
+      Do not launch yet. The eventual one-copy exam requires boot
+      `2026-08-21afd`, exact early alias, and before Draw exactly one
+      `NADINE-MAZUR-FACTORY-HOLSTER stage=11 verified=1 result=0`
+      with `id=61A48E01->AD047A`, `index=16->39`,
+      `binding=AE617165->57036E96`, stable strap child and `call=1`. Only then is
+      cold placement compared with accepted post-Put placement. Exact marker plus
+      lower protrusion rejects the complete pre-snapshot stock-rebind hypothesis;
+      absent/stage<11 marker is packaging only. This does not solve the missing
+      strap guide/physics subtree.
 
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
