@@ -50589,8 +50589,11 @@ bool seh_allocate_and_validate_weapon_ik_joint_set(
             g_joint_set_allocate_and_seed_buffers == nullptr ||
             *reinterpret_cast<void* const*>(
                 static_cast<const std::byte*>(joint_set) + 0x20) != nullptr ||
+            // JointTree's constructor writes 1 at +0x10.  The named-chain
+            // builder stores the independently computed chain count at +0x12
+            // and does not change this state word.
             *reinterpret_cast<const std::uint16_t*>(
-                static_cast<const std::byte*>(joint_set) + 0x10) != 3) {
+                static_cast<const std::byte*>(joint_set) + 0x10) != 1) {
             return false;
         }
         const std::int16_t count = *reinterpret_cast<const std::int16_t*>(
@@ -65143,7 +65146,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-20aer "
+        "TLL co-op runtime init 2026-08-21aes "
         "(late two-arm IK after steady Mazur pose)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);

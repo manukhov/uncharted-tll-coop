@@ -128,6 +128,18 @@ FUNCTIONS = {
         "two 32-byte locator arrays, one 16-byte companion array, scalars and "
         "per-joint validity bytes; seeds them from the current JointCache pose.",
     ),
+    0x14181F330: (
+        "JointSet_FreeWorkBuffersAndClear",
+        "Frees the five transient arrays and their 0x50-byte table stored at "
+        "JointSet+0x20, then explicitly clears JointSet+0x20. This is the "
+        "buffer-lifetime half of the JointTree reset vtable slot.",
+    ),
+    0x141821500: (
+        "JointTree_ResetTransientBuffers",
+        "JointTree vtable slot +0x20. Calls JointSet_FreeWorkBuffersAndClear "
+        "and frees the auxiliary allocation at JointTree+0x48; dispatched by "
+        "JointSet_CommitJointTransformsAndReset after every stock commit.",
+    ),
     0x141986C60: (
         "LegIkChain_ResetAndSeedFromJointCache",
         "Concrete LegIkChain vtable slot +0x78. Called once per leg by "

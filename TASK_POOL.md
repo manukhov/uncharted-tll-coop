@@ -5326,6 +5326,18 @@ Keep the postblend preservation boundary; replace only its steady content.
       `lateIk=1`; only then interpret the visual pose. The agent launches but
       never supplies gameplay input.
 
+      Runtime `aer` was packaging-inconclusive: the exact pair marker was
+      followed by `NADINE-MAZUR-LATE-IK rejected stage=3` and `lateIk=0`, so
+      the user's unchanged pose did not test the anchor. Static closure found
+      a deterministic guard bug: the exact JointTree constructor
+      `sub_141820AF0` writes state `1` at `+0x10`, whereas `aer` required `3`;
+      `JointTree_BuildFromRootToNamedLeaves 0x141820E80` writes the chain count
+      independently at `+0x12`. Keep the null `+0x20` lifetime guard because
+      vtable slot `+0x20 -> 0x141821500 -> 0x14181F330` frees the work arrays
+      and explicitly clears the pointer. Build `aes` changes only `3 -> 1`.
+      Re-run exactly one role-B Nadine process and require exact pair,
+      `LATE-IK applied`, and `lateIk=1` before judging the visual result.
+
   Original `aeh` prediction required the combined READY marker,
       fresh Chloe right-prop CAPTURE, Nadine right-prop RELAY and same-postblend
       `baselineRestore=0`. All markers plus both hands and Chloe's muzzle-up

@@ -26726,3 +26726,38 @@ native-helper failure and has no visual interpretation. A raised rifle with a
 detached/jittering support hand selects H-chain/proportion; small logged errors
 with a later visual snap select H-later-writer/binding. Exactly one role-B
 Nadine process is allowed, and the agent must not send gameplay input.
+
+### 2026-08-21 RUNTIME INCONCLUSIVE (`aer`) / STATIC CORRECTION (`aes`): late IK was rejected by a wrong JointTree state invariant
+
+The one-process role-B Nadine exam did not test the late Chloe anchor. Build
+`2026-08-20aer` loaded and the exact steady authored pair ran, but the same
+pass logged `NADINE-MAZUR-LATE-IK rejected stage=3` followed by
+`restored ... lateIk=0`. The user consequently observed no visual change.
+This is a seed/admission failure before either arm solve, not a semantic
+rejection of the target or paired-solve construction.
+
+The cause is now STATIC from three independent boundaries. First,
+`sub_141820AF0`, the exact constructor used twice by
+`WeaponIKFeatherInfo_ConstructForPlayerLook 0x1418F1E60`, writes DWORD `1` at
+each JointTree `+0x10`; the old `aer` guard incorrectly required the low word
+to equal `3`. Second, `JointTree_BuildFromRootToNamedLeaves 0x141820E80`
+stores the computed chain count separately at `+0x12` and never changes
+`+0x10`, while the resulting WeaponIK chains satisfy the existing count and
+owner checks. Third, the independent reset path validates the other lifetime
+guard: JointTree vtable `0x142AFC890` slot `+0x20` is `0x141821500`, which calls
+`JointSet_FreeWorkBuffersAndClear 0x14181F330`; that helper frees the five
+work arrays/table and explicitly zeros `JointSet+0x20`. Therefore requiring a
+null work-buffer pointer is correct, while requiring state `3` made seed
+deterministically unreachable.
+
+Build `aes` changes only that false invariant to the constructor-authored
+value `1`; no scope, pose target, allocation, solve or commit rule is relaxed.
+The competing predictions remain distinct. If the corrected layout gate was
+the sole packaging failure, one steady pass must emit the existing exact pair
+marker, `NADINE-MAZUR-LATE-IK applied stage=postblend`, and restore
+`lateIk=1`. A new rejection stage is another native-helper boundary and has no
+visual interpretation. Both applied markers plus a stable muzzle-up two-hand
+hold support `H-late-anchor`; both markers plus no improvement reject its
+sufficiency and move the frontier to target content or a later writer. The
+exam uses exactly one role-B Nadine process; the agent launches it but never
+sends gameplay input.
