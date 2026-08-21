@@ -26905,6 +26905,56 @@ back correction.  No corresponding rows is packaging/admission failure and no
 visual conclusion is allowed.  The agent launches the single Nadine copy but
 does not provide gameplay input.
 
+### 2026-08-21 CONFIRMED / REJECTED (`aew`): stock Mazur handoff is complete; the fixed back correction conflicts with it
+
+The single role-B Nadine run in PID `4344` closed the former handoff fork.  The
+package was exact (`2026-08-21aew`, census active), remained alive, and emitted a
+complete draw and put sequence at the final local-transform boundary.  During
+draw, controller state `1`, selected `targSpineProp 00AD047A` and handoff byte
+`0` covered progress `0.0757 .. 0.9301`, then the stock updater published
+duration/progress `0/1`; the selector subsequently changed to `rightHand
+61A48E01`.  During put, state `5` selected rightHand before changing to
+targSpineProp; handoff byte `1` then covered `0.0713 .. 0.9264` and completed at
+`0/1`, even as the controller rolled from state `5` to `0`.  Source/current/target
+transforms changed at every sampled bucket.  `Hhandoff` is therefore REJECTED:
+the request, endpoints, 0.1-second duration and updater all run in both
+directions.  The absent stricter `BACK-ACTION` row is not packaging evidence;
+the exact live ProcessWeapon fields directly prove the action's handoff.
+
+At every selected-back sample, including all active progress buckets, the
+existing authored-frame repair remained `authored=1` and replaced the changing
+stock input with its full spined-derived frame.  This CONFIRMS `Hframe`: the
+repair itself imposes the endpoint at full weight while stock is trying to
+blend away from or toward it.  Disabling it only while duration is positive is
+not sufficient, because duration is cleared one callback before draw changes
+the selected attachment and would create a terminal snap.
+
+### 2026-08-21 STATIC / MUTATION (`aex`): smoothstep the authored back correction through the stock handoff
+
+Three independent evidence classes earn one narrow correction.  Runtime `aew`
+proves the direction byte and the complete progress sequence (`0` for draw, `1`
+for put).  `NdAttachableObject_UpdateLocalAttachmentBlend 0x141ED4390` proves
+that stock uses mode-2 `t*t*(3-2*t)` and clears duration only after progress
+reaches one.  `Transform_InterpolateTranslationAndRotation 0x140221550`
+independently proves the compatible 32-byte operation: linear translation and
+shortest-path quaternion slerp.  Build `aex` therefore changes no clip, action,
+attachment selector, grip or strap.  At the existing exact callsite
+`0x141ED19BB` it blends the stock input toward the same authored back frame with
+correction weight `1-smoothstep(progress)` on draw and
+`smoothstep(progress)` on put; the five-centimetre body-back offset is scaled by
+the same weight.  The terminal draw callback (`duration=0`, progress=1,
+handoff=0) stays at weight zero, while stable holstered state remains at full
+weight.
+
+Competing predictions are explicit.  **Hweighted-frame** predicts a monotonic
+`correctionWeight` from approximately `1 -> 0` during draw and `0 -> 1` during
+put, no end snap, and unchanged stable placement behind Nadine.  **Harm-clip**
+predicts both correct weight traces but a remaining sharp arm/backflip motion;
+that would move the frontier to the authored arm transition rather than weapon
+placement.  A missing monotonic trace is packaging/ABI failure, and any grip,
+P99, strap or crash regression rejects the scope.  The agent launches exactly
+one role-B Nadine copy and never supplies gameplay input.
+
 The strap remains separately parked and hidden.  Forced `ShowMesh` is already
 RUNTIME REJECTED: it produces a delayed floating mesh, because legacy/native
 Nadine lacks the authored `strap2..strap14` guide subtree and the five mandatory

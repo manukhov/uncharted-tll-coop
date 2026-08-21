@@ -899,6 +899,10 @@ constexpr std::uintptr_t kAttachSystemAppendRecordRva = 0x18B6E50;
 constexpr std::uintptr_t kRigGetJointTransformRva = 0x1687C90;
 constexpr std::uintptr_t kTransformMakeRelativeRva = 0x01990F0;
 constexpr std::uintptr_t kTransformComposeRva = 0x01998F0;
+// Stock 32-byte transform interpolation used by the weapon attachment handoff:
+// linear translation plus shortest-path quaternion slerp.
+constexpr std::uintptr_t kTransformInterpolateTranslationAndRotationRva =
+    0x0221550;
 // RTTI-backed ProcessWeapon vtable. Runtime exact-parent census identifies
 // pistol/rifle/grenade children by this class and authored art at +0x860.
 constexpr std::uintptr_t kProcessWeaponVtableRva = 0x2A9BF48;

@@ -2412,12 +2412,12 @@ constexpr bool kEnableLegacyNadineMazurNativeBackFrame = false;
 // authored spined-relative marker only for local legacy-Nadine Mazur output.
 constexpr bool kEnableLegacyNadineMazurAuthoredBackFrame = true;
 constexpr float kLegacyNadineMazurBackDepthMeters = 0.05F;
-// Build aew: the shipped Chloe player-mesh table intentionally chains the
-// ordinary chest family through back and then backflip, so clip substitution is
-// not an earned explanation for Nadine's sharp rifle handoff.  Observe the
-// exact local role-B Mazur attachment endpoint and its stock +0x640/+0x644
-// handoff blend at the already-installed final-transform/action seams.  This is
-// a bounded read-only census; it does not change the authored back correction.
+// Build aex: aew proved that the stock 0.1-second local-attachment blend reaches
+// every progress bucket in both directions while the authored back correction
+// remains fully active. Blend only that correction with the same stock
+// smoothstep: 1 -> 0 while drawing and 0 -> 1 while putting the rifle away.
+constexpr bool kEnableLegacyNadineMazurWeightedBackHandoff = true;
+// Retain the bounded transition census for the single falsifiable aex exam.
 constexpr bool kEnableLegacyNadineMazurBackTransitionCensus = true;
 // The suppressed P99 body shares the native Nadine Glock origin to within a
 // few millimetres, while its suppressor alone extends the mesh by 16.9 cm along
@@ -59213,6 +59213,10 @@ struct NadineMazurBackFrameCorrection {
     std::uint8_t donor_index = 0xFF;
     std::int16_t selected_joint = -1;
     std::int16_t donor_joint = -1;
+    bool handoff_weighted = false;
+    std::uint8_t handoff_to_back = 0;
+    float handoff_progress = 1.0F;
+    float correction_weight = 1.0F;
     bool depth_applied = false;
     std::array<float, 3> body_back_delta{};
     std::array<std::uint32_t, 8> input_bits{};
@@ -59355,7 +59359,7 @@ bool seh_capture_legacy_nadine_mazur_back_transition(
 
 void log_legacy_nadine_mazur_back_transition(
     const NadineMazurBackTransitionSample& sample, const void* effective_input,
-    const void* output, bool authored_correction) {
+    const void* output, bool authored_correction, float correction_weight) {
     if (!sample.valid || effective_input == nullptr || output == nullptr) {
         return;
     }
@@ -59387,6 +59391,8 @@ void log_legacy_nadine_mazur_back_transition(
     mix(sample.handoff_finished);
     mix(progress_bucket);
     mix(authored_correction ? 1u : 0u);
+    mix(static_cast<std::uint32_t>(std::clamp(
+        correction_weight * 10.0F, 0.0F, 10.0F)));
     static std::array<std::atomic<std::uint64_t>, 192> seen{};
     if (!claim_holster_probe_signature(seen, signature)) {
         return;
@@ -59413,6 +59419,7 @@ void log_legacy_nadine_mazur_back_transition(
          << " blend=" << duration << "/" << progress
          << " bucket=" << progress_bucket
          << " authored=" << (authored_correction ? 1 : 0)
+         << " correctionWeight=" << correction_weight
          << std::hex << " input=";
     for (const std::uint32_t bits : sample.input_bits) line << bits << ",";
     line << " effective=";
@@ -59426,6 +59433,78 @@ void log_legacy_nadine_mazur_back_transition(
     line << " output=";
     for (const std::uint32_t bits : output_bits) line << bits << ",";
     boot_log_line(line.str().c_str());
+}
+
+bool seh_weight_legacy_nadine_mazur_back_frame(
+    void* weapon, const void* stock_input,
+    const NadineAttachTransform32* authored_frame,
+    NadineAttachTransform32* weighted_frame,
+    NadineMazurBackFrameCorrection* capture) {
+    if (weapon == nullptr || stock_input == nullptr || authored_frame == nullptr ||
+        weighted_frame == nullptr || capture == nullptr) {
+        return false;
+    }
+    __try {
+        if (readable_bytes(weapon) < 0x8F5 ||
+            !raw_attach_transform_valid(
+                static_cast<const NadineAttachTransform32*>(stock_input)) ||
+            !raw_attach_transform_valid(authored_frame)) {
+            return false;
+        }
+        auto* const weapon_bytes = static_cast<const std::byte*>(weapon);
+        float duration = 0.0F;
+        float progress = 0.0F;
+        std::memcpy(&duration, weapon_bytes + 0x640, sizeof(duration));
+        std::memcpy(&progress, weapon_bytes + 0x644, sizeof(progress));
+        if (!std::isfinite(duration) || duration < 0.0F ||
+            !std::isfinite(progress) || progress < 0.0F || progress > 1.01F) {
+            return false;
+        }
+        progress = std::clamp(progress, 0.0F, 1.0F);
+        const bool to_back =
+            *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x8F4) != 0;
+        float correction_weight = 1.0F;
+        bool weighted = false;
+        if (duration > 0.0F) {
+            const float smoothstep =
+                progress * progress * (3.0F - 2.0F * progress);
+            correction_weight = to_back ? smoothstep : 1.0F - smoothstep;
+            weighted = true;
+        } else if (!to_back && progress >= 0.999F) {
+            // UpdateLocalAttachmentBlend clears duration at t=1 one callback
+            // before the selector changes to rightHand. Preserve continuity in
+            // that terminal draw callback instead of snapping back to full.
+            correction_weight = 0.0F;
+            weighted = true;
+        }
+        correction_weight = std::clamp(correction_weight, 0.0F, 1.0F);
+
+        using InterpolateFunction = NadineAttachTransform32*(__fastcall*)(
+            NadineAttachTransform32*, const NadineAttachTransform32*,
+            const NadineAttachTransform32*, float);
+        const auto interpolate = reinterpret_cast<InterpolateFunction>(
+            g_module + kTransformInterpolateTranslationAndRotationRva);
+        if (correction_weight <= 0.0001F) {
+            std::memcpy(weighted_frame, stock_input, sizeof(*weighted_frame));
+        } else if (correction_weight >= 0.9999F) {
+            std::memcpy(weighted_frame, authored_frame, sizeof(*weighted_frame));
+        } else if (interpolate(
+                       weighted_frame,
+                       static_cast<const NadineAttachTransform32*>(stock_input),
+                       authored_frame, correction_weight) != weighted_frame) {
+            return false;
+        }
+        if (!raw_attach_transform_valid(weighted_frame)) {
+            return false;
+        }
+        capture->handoff_weighted = weighted;
+        capture->handoff_to_back = to_back ? 1 : 0;
+        capture->handoff_progress = progress;
+        capture->correction_weight = correction_weight;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
 }
 
 bool seh_resolve_legacy_nadine_mazur_back_frame(
@@ -59610,9 +59689,11 @@ bool seh_apply_legacy_nadine_mazur_back_depth(
         forward_x /= horizontal_length;
         forward_z /= horizontal_length;
         capture->body_back_delta = {
-            -forward_x * kLegacyNadineMazurBackDepthMeters,
+            -forward_x * kLegacyNadineMazurBackDepthMeters *
+                capture->correction_weight,
             0.0F,
-            -forward_z * kLegacyNadineMazurBackDepthMeters,
+            -forward_z * kLegacyNadineMazurBackDepthMeters *
+                capture->correction_weight,
         };
         auto* const values = reinterpret_cast<float*>(adjusted);
         values[0] += capture->body_back_delta[0];
@@ -59679,6 +59760,10 @@ void log_nadine_mazur_back_frame_once(
          << ":" << capture.donor_joint
          << "/0x" << std::hex << kLegacyNadineSpinedIdentityAttachId
          << std::dec
+         << " handoff=" << (capture.handoff_weighted ? 1 : 0)
+         << "/" << static_cast<unsigned>(capture.handoff_to_back)
+         << " progress=" << capture.handoff_progress
+         << " correctionWeight=" << capture.correction_weight
          << " depth=" << (capture.depth_applied ? 1 : 0)
          << ":" << kLegacyNadineMazurBackDepthMeters
          << " bodyBack=" << capture.body_back_delta[0] << ","
@@ -59716,14 +59801,23 @@ std::int64_t __fastcall hooked_nd_attachable_apply_local_transform(
         seh_capture_legacy_nadine_mazur_back_transition(
             weapon, input, &mazur_transition);
     NadineAttachTransform32 mazur_back_frame{};
+    NadineAttachTransform32 mazur_weighted_back_frame{};
     NadineMazurBackFrameCorrection mazur_correction{};
-    const bool mazur_corrected =
+    const bool mazur_frame_resolved =
         (kEnableLegacyNadineMazurNativeBackFrame ||
          kEnableLegacyNadineMazurAuthoredBackFrame) &&
         seh_resolve_legacy_nadine_mazur_back_frame(
             weapon, input, &mazur_back_frame, &mazur_correction);
+    const bool mazur_corrected = mazur_frame_resolved &&
+        (!kEnableLegacyNadineMazurWeightedBackHandoff ||
+         seh_weight_legacy_nadine_mazur_back_frame(
+             weapon, input, &mazur_back_frame,
+             &mazur_weighted_back_frame, &mazur_correction));
     const void* const effective_input = mazur_corrected
-        ? static_cast<const void*>(&mazur_back_frame)
+        ? static_cast<const void*>(
+              kEnableLegacyNadineMazurWeightedBackHandoff
+                  ? &mazur_weighted_back_frame
+                  : &mazur_back_frame)
         : input;
     const std::int64_t result =
         g_original_nd_attachable_apply_local_transform != nullptr
@@ -59736,7 +59830,8 @@ std::int64_t __fastcall hooked_nd_attachable_apply_local_transform(
     }
     if (mazur_transition_captured && result != 0) {
         log_legacy_nadine_mazur_back_transition(
-            mazur_transition, effective_input, output, mazur_corrected);
+            mazur_transition, effective_input, output, mazur_corrected,
+            mazur_corrected ? mazur_correction.correction_weight : 0.0F);
     }
     NadineP99HipAxisLiftCapture p99_lift{};
     const bool p99_lifted =
@@ -59785,7 +59880,9 @@ bool install_nadine_local_transform_probe() {
     DWORD ignored = 0;
     VirtualProtect(callsite, 5, old, &ignored);
     boot_log_line(kEnableLegacyNadineMazurAuthoredBackFrame
-        ? "legacy-Nadine Mazur authored spined back-frame correction installed at 0x141ED19BB"
+        ? (kEnableLegacyNadineMazurWeightedBackHandoff
+            ? "legacy-Nadine Mazur smooth weighted authored back-frame correction installed at 0x141ED19BB"
+            : "legacy-Nadine Mazur authored spined back-frame correction installed at 0x141ED19BB")
         : (kEnableLegacyNadineMazurNativeBackFrame
         ? "legacy-Nadine Mazur native back-frame correction installed at 0x141ED19BB"
         : (kEnableLegacyNadineP99HipAxisLift
@@ -65764,8 +65861,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-21aew "
-        "(bounded legacy-Nadine Mazur back-transition census)");
+        "TLL co-op runtime init 2026-08-21aex "
+        "(smooth weighted legacy-Nadine Mazur back handoff)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

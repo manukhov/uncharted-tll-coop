@@ -5375,20 +5375,17 @@ Keep the postblend preservation boundary; replace only its steady content.
       it; a raised muzzle with a detached support hand selects terminal-left
       ordering. The agent may launch both copies but must not control gameplay.
 
-  Current P0 is no longer the frozen grip.  Build `aew` is a read-only
-      one-copy role-B census for the Mazur draw/put handoff.  The shipped Chloe
-      table itself selects the backflip family, so do not replace those clips.
-      The exact alternative is the stock 0.1-second ProcessWeapon local blend
-      (`+0x620 -> +0x600`, duration/progress `+0x640/+0x644`) versus the current
-      fixed authored back-frame substitution at `0x141ED19BB`.  Require boot
-      `2026-08-21aew`, `NADINE-MAZUR-BACK-ACTION`, and
-      `NADINE-MAZUR-BACK-TRANSITION` coverage across controller state 1 and 5,
-      rightHand and targSpineProp.  If stock input/progress changes while
-      `authored=1` keeps the effective frame fixed, gate the correction out only
-      during the active handoff; if the action never seeds or advances the
-      blend, stay in the action lifecycle; if the handoff is complete and
-      smooth, return to the authored arm-pose retarget.  The agent launches the
-      single Nadine copy and never sends gameplay input.
+  Build `aew` CONFIRMED the exact stock 0.1-second Mazur handoff in both
+      directions and REJECTED the missing-action/updater hypothesis. PID 4344
+      covered draw handoff0 progress 0.0757..1 and put handoff1 progress
+      0.0713..1, while the fixed authored frame remained active at full weight
+      in every selected-back row. Build `aex` applies the exact stock smoothstep
+      only to that correction at `0x141ED19BB`: draw weight 1->0, put weight
+      0->1, with the 5 cm back offset scaled identically. Require boot aex and
+      monotonic `correctionWeight` in both directions. Smooth visuals confirm
+      Hweighted-frame; correct markers with a remaining arm snap select the
+      authored arm/backflip transition. Grip, P99 and strap remain untouched.
+      The agent launches one role-B Nadine copy and never sends gameplay input.
 
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
