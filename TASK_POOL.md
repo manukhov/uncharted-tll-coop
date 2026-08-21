@@ -5446,16 +5446,22 @@ Keep the postblend preservation boundary; replace only its steady content.
       while the user still saw the cold rifle protruding. That independently
       rejects `Hmissing-cold-stock-rebind`; do not retry the factory relay.
 
-  Current P0 is STATIC-only in build `afe`, with the rejected factory relay
-      disabled and no game launch authorized yet. The first authored local
-      correction appears only when Draw re-enters the attachment pipeline;
-      `aez/afb` already proved that an updater-only local `+130/+140` change does
-      not move the cold drawable. Trace the exact current-live retained
-      `FgAnimData` phase-`0x40` publication into renderer-owned `+0x1C0`, keyed
-      through the Fg weak handle/generation rather than a relocating raw weapon
-      pointer. Before any new runtime, close three evidence classes, competing
-      drawable-owner hypotheses and a prediction that distinguishes a changed
-      published Fg transform from a different visible instance.
+  Build `aff` closes that STATIC frontier and is implemented, but has not been
+      launched. Three independent evidence classes now converge: rejected
+      local-only updater/runtime (`aez/afb`), exact phase-`0x40` compose and E8
+      publish chain (`141A8F9D0 -> 141A8FC00 -> 1418C55D0 -> 1418C54D0`), and
+      renderer consumption of `Fg+1C0` into all driven instances. The one-shot
+      bridge keys the stable Fg and generations, re-resolves the live weapon on
+      the phase worker, repeats the authored local correction, composes current
+      parent+local, and substitutes only that exact stock publish argument.
+      No game launch is authorized until the Release artifact, IDB and commit
+      are complete. Eventual single-copy prediction: exact READY plus
+      `NADINE-LOCAL-MAZUR-REBIND verified=1 strapVerified=1
+      phasePublishArmed=1`, then one `NADINE-COLD-MAZUR-PHASE40
+      status=published refresh=ok/1/1` with a changed world hash. Those markers
+      plus unchanged lower protrusion reject the phase-publication hypothesis
+      and select a different visible drawable; missing markers are only
+      packaging/admission. Draw/Put motion and the sling remain separate.
 
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to

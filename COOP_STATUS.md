@@ -27464,3 +27464,81 @@ the retained Fg handle (not from a relocating raw ProcessWeapon address), run
 the already-proven authored local correction, and prove the stock publication
 that updates the renderer-owned `FgAnimData+0x1C0`.  No further endpoint,
 binding, jiggle or updater-only runtime is justified.
+
+### 2026-08-21 STATIC / IMPLEMENTED (`aff`): bridge the cold Mazur correction into the exact phase-`0x40` world publication
+
+The phase-publication frontier is now closed statically and implemented without
+launching the game.  The hypothesis is narrow: the cold object already has the
+right endpoint and binding, but its corrected local transform never reaches the
+renderer-owned world matrix until the ordinary Draw/Put attachment pipeline is
+entered.  `aff` therefore does not add another endpoint, binding or drawable;
+it republishes the existing live weapon `FgAnimData` once at the exact stock
+world-publication boundary.
+
+Three independent evidence classes support this boundary.
+
+1. Runtime `aez/afb` proved that the exact selected-attachment updater reaches
+   `targSpineProp`, resets the completed `LongGunJiggle`, changes all eight
+   `ProcessWeapon+0x130/+0x140` local-transform words, and still does not move
+   the cold visible rifle.  Runtime `afd` independently proved that the stock
+   endpoint, selected index and accepted post-Put binding are already correct.
+   This rejects another local-only updater or binding retry.
+2. `AnimManager_DispatchRetainedOwnerPhase 0x141A8F9D0`, phase `0x40`, resolves
+   the retained owner from `FgAnimData+0x1A8/+0x1B0`, refreshes its parent at
+   `+0x110/+0x120`, composes that parent with local `+0x130/+0x140`, and calls
+   `FgAnimData_PublishWorldTransform 0x1418C55D0` at the exact direct E8
+   `0x141A8FC00`.  The publisher converts the transform to a matrix and
+   `FgAnimData_PublishWorldMatrix 0x1418C54D0` unconditionally writes the
+   renderer-owned 64-byte matrix at `FgAnimData+0x1C0`.
+3. `FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` later reads that
+   matrix through `FgAnimData_GetRenderWorldMatrix 0x1403014F0` and copies it
+   to every driven `FgInstance+0x140`.  Historical exact Mazur census observed
+   all three weapon instances and equality between the Fg world hash and every
+   instance world hash.  Conversely,
+   `NdAttachableObject_UpdateSelectedAttachmentTransform 0x141ED1380` ends by
+   calling ProcessWeapon vtable `+0x208`, whose concrete target
+   `0x1401D4E10` is a three-byte no-op.  That explains why the earlier local
+   correction alone could not publish anything visible.
+
+Competing hypotheses are now explicit.  `Hendpoint-or-binding-missing` is
+RUNTIME REJECTED by `afb/afd`; `Hlocal-updater-is-visible-owner` is RUNTIME
+REJECTED by `aez/afb`; `Hphase40-publication-is-missing` is the leading STATIC
+hypothesis.  `Hdifferent-drawable-is-visible` remains the falsifier if an exact
+new world publication still leaves the cold rifle unchanged.  The missing
+strap guide/physics subtree is independent and is not addressed here.
+
+Implementation scope is exact and one-shot.  The existing role-B initial Mazur
+rebind remains only a producer: after it verifies canonical `targSpineProp`,
+the accepted binding and the generation-valid strap child, it stores the
+stable weapon Fg identity plus Player/weapon generations and attachment-table
+generation.  The phase worker first filters by that Fg pointer, then re-resolves
+the live ProcessWeapon through `Fg+0x1A8/+0x1B0`, revalidates role B, retained
+owner 0, screen 0, legacy-Nadine look, Mazur art, `current<0/state=0`, parent,
+selected endpoint and generations.  It runs the already-proven authored local
+correction, composes current parent `+0x110` with corrected local `+0x130` in
+the same order as stock, and substitutes the result only into the exact
+`0x141A8FC00` publisher.  Raw ProcessWeapon addresses are not retained across
+threads; failures clear or boundedly retry the target and remain stock.
+
+No game is launched for `aff`.  Its eventual single-copy prediction is written
+before runtime: boot must report `2026-08-21aff`, the phase-`0x40` publish relay,
+the local-transform relay and `cold legacy-Nadine Mazur phase-0x40 publish
+repair READY`.  Before any Draw, the rebind row must show `verified=1`,
+`strapVerified=1`, `phasePublishArmed=1`; the same object must then produce one
+`NADINE-COLD-MAZUR-PHASE40 status=published`, `refresh=ok/1/1`, nonzero changed
+mask and the stock-to-corrected world hashes.  Only after all those markers may
+the initial placement be compared with the accepted post-Put upper-back
+placement.  Exact markers plus the same lower protrusion reject
+`Hphase40-publication-is-missing` and select a different visible drawable;
+missing markers are packaging/admission, not a visual result.  Draw/Put
+transition motion and the sling remain untouched.
+
+Release `aff` compiles successfully (`tll_coop_runtime.dll`, `781312` bytes;
+the release object is newer than the source).  The single IDB was refreshed
+with the expanded exact phase-`0x40` publication comment
+(`apply_labels OK: 1788 functions, 60 data names`,
+`save_database returned True`); restarted MCP readback resolves
+`AnimManager_DispatchRetainedOwnerPhase 0x141A8F9D0`,
+`FgAnimData_PublishWorldTransform 0x1418C55D0` and
+`NdAttachableObject_UpdateSelectedAttachmentTransform 0x141ED1380` by name.
+No game process was started or controlled.

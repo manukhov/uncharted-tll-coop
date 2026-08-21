@@ -4551,7 +4551,12 @@ FUNCTIONS = {
     0x141A8F9D0: (
         "AnimManager_DispatchRetainedOwnerPhase",
         "Resolves the animation job's retained owner and dispatches vtable phases "
-        "+0x400/+0x408/+0x410/+0x418 according to phase bits 8/0x10/0x20.",
+        "+0x400/+0x408/+0x410/+0x418 according to phase bits 8/0x10/0x20. "
+        "For phase 0x40 it refreshes the owner's parent transform at +0x110/+0x120, "
+        "composes parent +0x110 with local +0x130, and calls "
+        "FgAnimData_PublishWorldTransform at 0x141A8FC00. ProcessWeapon's later "
+        "vtable+0x208 callback is nullsub_385, so this E8 is the exact visible "
+        "world-publication boundary for the cold retained weapon.",
     ),
     0x1403E3E30: (
         "NpcManager_UpdateSpotActors",
