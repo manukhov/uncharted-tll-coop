@@ -26810,3 +26810,45 @@ Build `aeu` adds only the exception code, faulting instruction RVA, access kind
 and fault address to that already-bounded row. An access violation inside a
 specific seed load/store selects the missing context/input; an engine allocator
 exception selects invalid late allocation timing. No pose guard is relaxed.
+
+### 2026-08-21 CONFIRMED (`aeu`) / STATIC (`aev`): late JointSet seeding requires the native transient allocator scope
+
+The single role-B Nadine run reached the exact steady authored-pair path in PID
+`19232`, then emitted
+`left=8/1/8/null/null/0/xc0000005@15A0EE8/read/null`; the right seed was never
+entered and restore reported `lateIk=0`.  `0x1415A0EE8` is the dereference of
+FLS slot 7 in `Memory_AllocateFromCurrentAllocator 0x1415A0E90`.  The zero fault
+address therefore identifies a null `Memory::CurrentAllocator`, not a malformed
+JointTree, invalid chain count or post-allocation buffer.  The visible pose was
+the old authored-pair baseline and is not evidence about either late arm solve.
+
+Three independent static paths close the allocator contract.  First,
+`JointSet_AllocateAndSeedBuffers 0x14181E780` allocates the table and all five
+arrays exclusively through `0x1415A0E90`.  Second,
+`JointSet_FreeWorkBuffersAndClear 0x14181F330` resolves allocator ID `14` through
+`0x1415A1D70` and deliberately treats that allocator (or the thread allocator)
+as the native transient-owner case; only foreign allocators receive individual
+free calls.  Third, source-asserted `Memory::PushAllocator 0x1415A15F0` writes
+the resolved allocator to FLS slot 7 and `Memory::PopAllocator 0x1415A1B80`
+restores the previous stack top.  `AnimManager_PerformBlendAndDispatchPostBlendJob
+0x141A928F0` itself sets only `ContextProcess`; it does not provide an allocator
+after Player `+0x408` returns.  This rejects a random/global allocator and
+explains the exact `aeu` fault.
+
+Build `aev` wraps only the already-admitted late two-arm seed/solve/commit in a
+native allocator-ID-14 push/pop.  It resolves the expected allocator, requires
+the pushed current allocator to match it, performs both JointSet resets/commits
+before pop, requires the popped allocator to be the same object, and requires
+the previous FLS current value to be restored.  Any mismatch is fail-closed as
+late-IK stage `3`; seed is now stage `4`.  P99, role A, transitions, ADS and all
+non-Mazur poses remain stock.
+
+The falsifiable one-copy prediction is: boot tag `2026-08-21aev`, the combined
+READY line and one exact steady authored-pair injection must be followed in the
+same role-B Nadine test by `NADINE-MAZUR-LATE-IK applied ...
+allocator=14/1/1/1` and restore `lateIk=1`; stage `3`/`4` must not appear.  Both
+markers plus a stable Chloe-like two-hand hold support the combined
+authored-pair-plus-late-IK hypothesis.  Both markers plus the old one-hand or
+wrong-angle pose reject solver sufficiency and select donor/target or a later
+writer.  A missing marker is packaging only.  The agent may launch the one
+Nadine copy but never supplies gameplay input.

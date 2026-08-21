@@ -131,8 +131,46 @@ FUNCTIONS = {
     0x14181F330: (
         "JointSet_FreeWorkBuffersAndClear",
         "Frees the five transient arrays and their 0x50-byte table stored at "
-        "JointSet+0x20, then explicitly clears JointSet+0x20. This is the "
-        "buffer-lifetime half of the JointTree reset vtable slot.",
+        "JointSet+0x20, then explicitly clears JointSet+0x20. Allocator ID 14 "
+        "and the current thread allocator are treated as native transient "
+        "owners and skip individual frees. This is the buffer-lifetime half "
+        "of the JointTree reset vtable slot.",
+    ),
+    0x1415A0E90: (
+        "Memory_AllocateFromCurrentAllocator",
+        "Allocates through Memory::CurrentAllocator. Low-index workers load the "
+        "allocator from FLS slot 7; a null slot faults at 0x1415A0EE8 before "
+        "the allocator vtable dispatch.",
+    ),
+    0x1415A15F0: (
+        "Memory_PushAllocatorById",
+        "Source-asserted Memory::PushAllocator overload. Resolves the allocator "
+        "ID through Memory_ResolveAllocatorById, pushes a 40-byte allocator "
+        "stack record and publishes the resolved pointer to FLS slot 7.",
+    ),
+    0x1415A17E0: (
+        "Memory_PushAllocatorDirect",
+        "Source-asserted Memory::PushAllocator overload for a direct allocator "
+        "pointer. Pushes the allocator stack record and publishes the pointer "
+        "to FLS slot 7.",
+    ),
+    0x1415A1B80: (
+        "Memory_PopAllocator",
+        "Source-asserted Memory::PopAllocator. Removes the current 40-byte "
+        "allocator stack record, restores FLS slot 7 to the new top or null, "
+        "and returns the allocator that was popped.",
+    ),
+    0x1415A1D70: (
+        "Memory_ResolveAllocatorById",
+        "Resolves the compact allocator ID used by Memory_PushAllocatorById. "
+        "Ordinary IDs index the global allocator table; dynamic IDs 113..118 "
+        "select their context-specific allocator variants.",
+    ),
+    0x1415A1EB0: (
+        "Memory_GetCurrentAllocator",
+        "Returns FLS slot 7 for low-index workers, or the top allocator-stack "
+        "record for other threads; falls back to the default allocator only "
+        "when the non-FLS stack is empty.",
     ),
     0x141821500: (
         "JointTree_ResetTransientBuffers",

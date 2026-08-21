@@ -5355,6 +5355,19 @@ Keep the postblend preservation boundary; replace only its steady content.
       address around the same native call. Use that one row to identify the
       missing seed context; no visual judgment or gameplay input.
 
+      `aeu` closed that context: PID `19232` faulted at `0x1415A0EE8` while
+      dereferencing null FLS slot 7, the exact `Memory::CurrentAllocator` used by
+      `Memory_AllocateFromCurrentAllocator 0x1415A0E90`.  JointSet reset
+      independently resolves allocator ID `14` as its native transient-owner
+      case, while source-asserted Push/Pop `0x1415A15F0/0x1415A1B80` write and
+      restore that same FLS slot.  Build `aev` therefore scopes only the late
+      seed/solve/commit under allocator ID 14 and validates
+      expected/current/popped/restored identity.  Run one role-B Nadine copy;
+      require build/READY, exact pair, `LATE-IK applied allocator=14/1/1/1`, and
+      restore `lateIk=1`, with no stage3 allocator or stage4 seed reject.  Only
+      then judge whether both hands and the muzzle match Chloe.  The agent may
+      launch but must not control gameplay.
+
   Original `aeh` prediction required the combined READY marker,
       fresh Chloe right-prop CAPTURE, Nadine right-prop RELAY and same-postblend
       `baselineRestore=0`. All markers plus both hands and Chloe's muzzle-up

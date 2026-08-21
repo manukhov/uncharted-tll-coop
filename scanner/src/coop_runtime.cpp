@@ -18822,6 +18822,11 @@ constexpr std::uintptr_t kJointChainFindNamedJointOffsetRva = 0x181D750u;
 constexpr std::uintptr_t kJointSetGetJointLocWsRva = 0x181DA50u;
 constexpr std::uintptr_t kJointSetAllocateAndSeedBuffersRva = 0x181E780u;
 constexpr std::uintptr_t kJointSetCommitJointTransformsRva = 0x181ECD0u;
+constexpr std::uintptr_t kMemoryPushAllocatorByIdRva = 0x15A15F0u;
+constexpr std::uintptr_t kMemoryPopAllocatorRva = 0x15A1B80u;
+constexpr std::uintptr_t kMemoryResolveAllocatorByIdRva = 0x15A1D70u;
+constexpr std::uintptr_t kMemoryGetCurrentAllocatorRva = 0x15A1EB0u;
+constexpr std::uint32_t kWeaponIkJointSetTransientAllocatorId = 14u;
 constexpr std::uintptr_t kJointSetMultiplyJointRotationRva = 0x181F710u;
 constexpr std::uintptr_t kSolveArmIkRva = 0x18F0B60u;
 constexpr std::uintptr_t kTransformMakeRelativeRva = 0x1990F0u;
@@ -44979,6 +44984,12 @@ using JointSetGetJointLocWsFunction = const float*(__fastcall*)(
 using JointSetAllocateAndSeedBuffersFunction = std::int64_t(__fastcall*)(void*);
 using JointSetCommitJointTransformsFunction = std::int64_t(__fastcall*)(
     void*, std::uint8_t);
+using MemoryPushAllocatorByIdFunction = std::uint64_t(__fastcall*)(
+    const std::uint32_t*, const char*, std::int32_t, const char*);
+using MemoryPopAllocatorFunction = void*(__fastcall*)();
+using MemoryResolveAllocatorByIdFunction = void*(__fastcall*)(
+    const std::uint32_t*);
+using MemoryGetCurrentAllocatorFunction = void*(__fastcall*)();
 using JointCacheRecomputeWorldLocatorFunction = void(__fastcall*)(
     void*, std::uint32_t);
 using TransformMakeRelativeFunction = void*(__fastcall*)(
@@ -44998,6 +45009,10 @@ JointSetAllocateAndSeedBuffersFunction g_joint_set_allocate_and_seed_buffers =
     nullptr;
 JointSetCommitJointTransformsFunction
     g_joint_set_commit_joint_transforms = nullptr;
+MemoryPushAllocatorByIdFunction g_memory_push_allocator_by_id = nullptr;
+MemoryPopAllocatorFunction g_memory_pop_allocator = nullptr;
+MemoryResolveAllocatorByIdFunction g_memory_resolve_allocator_by_id = nullptr;
+MemoryGetCurrentAllocatorFunction g_memory_get_current_allocator = nullptr;
 JointCacheRecomputeWorldLocatorFunction
     g_joint_cache_recompute_world_locator = nullptr;
 TransformMakeRelativeFunction g_transform_make_relative = nullptr;
@@ -46586,6 +46601,17 @@ bool initialize_weapon_ik_native_helpers() {
     g_joint_set_commit_joint_transforms =
         reinterpret_cast<JointSetCommitJointTransformsFunction>(
             g_module + kJointSetCommitJointTransformsRva);
+    g_memory_push_allocator_by_id =
+        reinterpret_cast<MemoryPushAllocatorByIdFunction>(
+            g_module + kMemoryPushAllocatorByIdRva);
+    g_memory_pop_allocator = reinterpret_cast<MemoryPopAllocatorFunction>(
+        g_module + kMemoryPopAllocatorRva);
+    g_memory_resolve_allocator_by_id =
+        reinterpret_cast<MemoryResolveAllocatorByIdFunction>(
+            g_module + kMemoryResolveAllocatorByIdRva);
+    g_memory_get_current_allocator =
+        reinterpret_cast<MemoryGetCurrentAllocatorFunction>(
+            g_module + kMemoryGetCurrentAllocatorRva);
     g_joint_cache_recompute_world_locator =
         reinterpret_cast<JointCacheRecomputeWorldLocatorFunction>(
             g_module + kJointCacheRecomputeWorldLocatorRva);
@@ -46622,6 +46648,10 @@ bool initialize_weapon_ik_native_helpers() {
         g_original_weapon_ik_goal_get_joint_loc_ws != nullptr &&
         g_joint_set_allocate_and_seed_buffers != nullptr &&
         g_joint_set_commit_joint_transforms != nullptr &&
+        g_memory_push_allocator_by_id != nullptr &&
+        g_memory_pop_allocator != nullptr &&
+        g_memory_resolve_allocator_by_id != nullptr &&
+        g_memory_get_current_allocator != nullptr &&
         g_joint_cache_recompute_world_locator != nullptr &&
         g_transform_make_relative != nullptr &&
         g_weapon_ik_transform_compose != nullptr &&
@@ -50514,11 +50544,25 @@ enum class LegacyNadineMazurLateSteadyIkResult : std::uint8_t {
     kPrerequisite = 0,
     kFeatherInfo = 1,
     kJointCache = 2,
-    kSeed = 3,
-    kRightArm = 4,
-    kLeftArm = 5,
-    kCommit = 6,
-    kApplied = 7,
+    kAllocator = 3,
+    kSeed = 4,
+    kRightArm = 5,
+    kLeftArm = 6,
+    kCommit = 7,
+    kApplied = 8,
+};
+
+struct WeaponIkTransientAllocatorDiagnostic {
+    bool expected_resolved = false;
+    bool pushed = false;
+    bool current_match = false;
+    bool popped_match = false;
+    bool restored = false;
+    void* before = nullptr;
+    void* expected = nullptr;
+    void* during = nullptr;
+    void* popped = nullptr;
+    void* after = nullptr;
 };
 
 enum class WeaponIkJointSetSeedFailure : std::uint8_t {
@@ -50569,6 +50613,89 @@ int capture_weapon_ik_joint_set_seed_exception(
         }
     }
     return EXCEPTION_EXECUTE_HANDLER;
+}
+
+bool seh_enter_weapon_ik_transient_allocator_scope(
+    WeaponIkTransientAllocatorDiagnostic* diagnostic) {
+    if (diagnostic != nullptr) {
+        *diagnostic = {};
+    }
+    bool pushed = false;
+    void* expected = nullptr;
+    void* before = nullptr;
+    void* during = nullptr;
+    __try {
+        if (g_memory_push_allocator_by_id == nullptr ||
+            g_memory_pop_allocator == nullptr ||
+            g_memory_resolve_allocator_by_id == nullptr ||
+            g_memory_get_current_allocator == nullptr) {
+            return false;
+        }
+        const std::uint32_t allocator_id =
+            kWeaponIkJointSetTransientAllocatorId;
+        before = g_memory_get_current_allocator();
+        expected = g_memory_resolve_allocator_by_id(&allocator_id);
+        if (diagnostic != nullptr) {
+            diagnostic->before = before;
+            diagnostic->expected = expected;
+            diagnostic->expected_resolved = expected != nullptr;
+        }
+        if (expected == nullptr) {
+            return false;
+        }
+        g_memory_push_allocator_by_id(
+            &allocator_id, __FILE__, __LINE__,
+            "legacy-Nadine Mazur late steady WeaponIK");
+        pushed = true;
+        during = g_memory_get_current_allocator();
+        if (diagnostic != nullptr) {
+            diagnostic->pushed = true;
+            diagnostic->during = during;
+            diagnostic->current_match = during == expected;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        if (pushed) {
+            __try {
+                g_memory_pop_allocator();
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
+            }
+        }
+        return false;
+    }
+    if (during != expected) {
+        __try {
+            void* const popped = g_memory_pop_allocator();
+            void* const after = g_memory_get_current_allocator();
+            if (diagnostic != nullptr) {
+                diagnostic->popped = popped;
+                diagnostic->after = after;
+                diagnostic->popped_match = popped == expected;
+                diagnostic->restored = after == before;
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+        }
+        return false;
+    }
+    return true;
+}
+
+bool seh_leave_weapon_ik_transient_allocator_scope(
+    WeaponIkTransientAllocatorDiagnostic* diagnostic) {
+    __try {
+        if (diagnostic == nullptr || !diagnostic->pushed ||
+            g_memory_pop_allocator == nullptr ||
+            g_memory_get_current_allocator == nullptr) {
+            return false;
+        }
+        diagnostic->popped = g_memory_pop_allocator();
+        diagnostic->after = g_memory_get_current_allocator();
+        diagnostic->popped_match =
+            diagnostic->popped == diagnostic->expected;
+        diagnostic->restored = diagnostic->after == diagnostic->before;
+        return diagnostic->popped_match && diagnostic->restored;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
 }
 
 bool seh_reset_weapon_ik_joint_set(void* joint_set) {
@@ -51400,13 +51527,34 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
         float right_angle_error = 0.0F;
         float left_prop_gap = 0.0F;
         float left_angle_gap = 0.0F;
+        WeaponIkTransientAllocatorDiagnostic allocator_diagnostic{};
         WeaponIkJointSetSeedDiagnostic left_seed_diagnostic{};
         WeaponIkJointSetSeedDiagnostic right_seed_diagnostic{};
         if constexpr (kEnableLegacyNadineMazurLateSteadyIkRepair) {
-            late_ik_result = seh_apply_legacy_nadine_mazur_late_steady_ik(
-                ticket, &right_position_error, &right_angle_error,
-                &left_prop_gap, &left_angle_gap,
-                &left_seed_diagnostic, &right_seed_diagnostic);
+            const bool allocator_entered =
+                seh_enter_weapon_ik_transient_allocator_scope(
+                    &allocator_diagnostic);
+            if (allocator_entered) {
+                late_ik_result = seh_apply_legacy_nadine_mazur_late_steady_ik(
+                    ticket, &right_position_error, &right_angle_error,
+                    &left_prop_gap, &left_angle_gap,
+                    &left_seed_diagnostic, &right_seed_diagnostic);
+            } else {
+                late_ik_result =
+                    LegacyNadineMazurLateSteadyIkResult::kAllocator;
+            }
+            const bool allocator_left = allocator_entered &&
+                seh_leave_weapon_ik_transient_allocator_scope(
+                    &allocator_diagnostic);
+            if (allocator_entered && !allocator_left) {
+                if (late_ik_result ==
+                    LegacyNadineMazurLateSteadyIkResult::kApplied) {
+                    seh_recompute_legacy_nadine_mazur_primary_arm_world_locators(
+                        ticket, true);
+                }
+                late_ik_result =
+                    LegacyNadineMazurLateSteadyIkResult::kAllocator;
+            }
             if (late_ik_result ==
                 LegacyNadineMazurLateSteadyIkResult::kApplied) {
                 static std::atomic<bool> late_ik_applied_logged{false};
@@ -51418,15 +51566,19 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
                         "NADINE-MAZUR-LATE-IK applied stage=postblend"
                         " source=static-Chloe-steady rightPosError=%.6f"
                         " rightAngleErrorDeg=%.6f leftPropGap=%.6f"
-                        " leftAngleGapDeg=%.6f rows=19..30",
+                        " leftAngleGapDeg=%.6f rows=19..30"
+                        " allocator=14/%u/%u/%u",
                         static_cast<double>(right_position_error),
                         static_cast<double>(right_angle_error),
                         static_cast<double>(left_prop_gap),
-                        static_cast<double>(left_angle_gap));
+                        static_cast<double>(left_angle_gap),
+                        allocator_diagnostic.current_match ? 1u : 0u,
+                        allocator_diagnostic.popped_match ? 1u : 0u,
+                        allocator_diagnostic.restored ? 1u : 0u);
                     boot_log_line(line);
                 }
             } else {
-                static std::array<std::atomic<bool>, 8> rejected_logged{};
+                static std::array<std::atomic<bool>, 9> rejected_logged{};
                 const std::size_t reason =
                     static_cast<std::size_t>(late_ik_result);
                 if (reason < rejected_logged.size() &&
@@ -51436,9 +51588,15 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
                     std::snprintf(
                         line, sizeof(line),
                         "NADINE-MAZUR-LATE-IK rejected stage=%zu"
+                        " allocator=14/%u/%u/%u/%u/%u"
                         " left=%u/%u/%d/%p/%p/%zu/x%08x@%llx/%llu/%p"
                         " right=%u/%u/%d/%p/%p/%zu/x%08x@%llx/%llu/%p",
                         reason,
+                        allocator_diagnostic.expected_resolved ? 1u : 0u,
+                        allocator_diagnostic.pushed ? 1u : 0u,
+                        allocator_diagnostic.current_match ? 1u : 0u,
+                        allocator_diagnostic.popped_match ? 1u : 0u,
+                        allocator_diagnostic.restored ? 1u : 0u,
                         static_cast<unsigned>(left_seed_diagnostic.failure),
                         static_cast<unsigned>(left_seed_diagnostic.state),
                         static_cast<int>(left_seed_diagnostic.count),
@@ -51717,7 +51875,7 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     boot_log_line(
         ready
             ? (kEnableLegacyNadineMazurLateSteadyIkRepair
-                   ? "legacy-Nadine Mazur authored-pair + late steady IK READY (persistent Player+0x4308 JointSets; three exact callsite relays)"
+                   ? "legacy-Nadine Mazur authored-pair + late steady IK READY (Player+0x4308 JointSets; allocator 14 scope; three exact callsite relays)"
                    : "legacy-Nadine Mazur authored-pair preservation READY (native state fade; three exact callsite relays)")
             : (rollback_verified
                    ? "legacy-Nadine Mazur authored-pair preservation SKIPPED (verified rollback)"
@@ -65285,7 +65443,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-21aeu "
+        "TLL co-op runtime init 2026-08-21aev "
         "(late two-arm IK JointSet exception census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
