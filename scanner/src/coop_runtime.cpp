@@ -55320,6 +55320,7 @@ struct NadineColdHolsterRefreshResult {
     std::uint32_t jiggle_after_hash = 0;
     std::uint8_t weapon_update_flags = 0;
     std::uint8_t weapon_jiggle_request = 0;
+    std::uint8_t weapon_jiggle_request_after = 0;
 };
 
 NadineColdHolsterRefreshResult
@@ -55436,6 +55437,7 @@ seh_refresh_initial_local_nadine_holster_transform(
             *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x898);
         result.weapon_jiggle_request =
             *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x8F4);
+        result.weapon_jiggle_request_after = result.weapon_jiggle_request;
         std::memcpy(
             &result.selected_blend_progress_bits,
             weapon_bytes + 0x848,
@@ -55451,10 +55453,12 @@ seh_refresh_initial_local_nadine_holster_transform(
                         result.selected_blend);
             }
             // This is RTTI LongGunJiggle, not an attachment interpolation
-            // object.  A cold legacy-Nadine Mazur skips the normal
-            // ProcessWeaponBase_Update prefix that disables/resets it before
-            // the inactive attachment update.  Reproduce only that exact
-            // stock prefix; every other object/art remains fail-closed.
+            // object.  The stock transition-to-spine finalizer at 0x141089E70
+            // writes weapon+0x8F4=0 before ProcessWeaponBase_Update evaluates
+            // its three-part jiggle predicate.  A cold legacy-Nadine rebind
+            // skips that finalizer and retains the constructor's value 1.
+            // Reproduce only the missing final state and its stock reset;
+            // every other object/art remains fail-closed.
             if (expected_art != kCoopRifleArtId ||
                 result.selected_blend_vtable !=
                     g_module + kLongGunJiggleVtableRva) {
@@ -55486,11 +55490,14 @@ seh_refresh_initial_local_nadine_holster_transform(
                 result.status = "long-gun-jiggle-not-enabled";
                 return result;
             }
-            // ProcessWeaponBase_Update short-circuits to false at its first
-            // predicate when bit 3 of weapon+0x898 is clear. Match that exact
-            // inactive stock decision instead of inferring it from visuals.
-            if ((result.weapon_update_flags & 0x08) != 0) {
-                result.status = "long-gun-jiggle-active";
+            // Runtime afa proved the cold Mazur has flags bit 3 set and
+            // weapon+0x8F4=1, so ProcessWeaponBase_Update correctly chooses
+            // the active branch.  Admission requires that exact missed-finalizer
+            // state; do not clear an already-finalized or differently-scoped
+            // weapon.
+            if ((result.weapon_update_flags & 0x08) == 0 ||
+                result.weapon_jiggle_request != 1) {
+                result.status = "long-gun-jiggle-state";
                 return result;
             }
             reset_long_gun_jiggle =
@@ -55563,6 +55570,11 @@ seh_refresh_initial_local_nadine_holster_transform(
             result.jiggle_before_hash = hash_probe_words(
                 jiggle_before.data(), jiggle_before.size());
             jiggle_reset_started = true;
+            // Exact stock transition-to-spine completion state.  A later real
+            // Draw/Put action owns this byte again and may set it back to 1.
+            *reinterpret_cast<std::uint8_t*>(weapon_bytes + 0x8F4) = 0;
+            result.weapon_jiggle_request_after =
+                *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x8F4);
             reset_long_gun_jiggle(result.selected_blend, false);
             result.jiggle_reset_called = true;
             result.jiggle_enabled_after =
@@ -55575,7 +55587,8 @@ seh_refresh_initial_local_nadine_holster_transform(
                 sizeof(jiggle_after));
             result.jiggle_after_hash = hash_probe_words(
                 jiggle_after.data(), jiggle_after.size());
-            if (result.jiggle_enabled_after != 0) {
+            if (result.weapon_jiggle_request_after != 0 ||
+                result.jiggle_enabled_after != 0) {
                 result.status = "long-gun-jiggle-reset-verify";
                 return result;
             }
@@ -55750,7 +55763,8 @@ void log_deferred_initial_local_nadine_holster_refresh(
          << "->0x" << result.jiggle_after_hash
          << " weaponJiggleGate=0x"
          << static_cast<unsigned>(result.weapon_update_flags) << "/0x"
-         << static_cast<unsigned>(result.weapon_jiggle_request)
+         << static_cast<unsigned>(result.weapon_jiggle_request) << "->"
+         << static_cast<unsigned>(result.weapon_jiggle_request_after)
          << " saved=0x" << result.saved_process;
     boot_log_line(line.str().c_str());
 }
@@ -55989,7 +56003,8 @@ void rebind_initial_local_nadine_p99_to_hip_game_thread() {
          << "->0x" << refresh.jiggle_after_hash
          << " weaponJiggleGate=0x"
          << static_cast<unsigned>(refresh.weapon_update_flags) << "/0x"
-         << static_cast<unsigned>(refresh.weapon_jiggle_request)
+         << static_cast<unsigned>(refresh.weapon_jiggle_request) << "->"
+         << static_cast<unsigned>(refresh.weapon_jiggle_request_after)
          << " saved=0x" << refresh.saved_process;
     write_log_line(line.str().c_str());
 }
@@ -57138,7 +57153,8 @@ void rebind_initial_local_nadine_rifle_game_thread() {
          << "->0x" << refresh.jiggle_after_hash
          << " weaponJiggleGate=0x"
          << static_cast<unsigned>(refresh.weapon_update_flags) << "/0x"
-         << static_cast<unsigned>(refresh.weapon_jiggle_request);
+         << static_cast<unsigned>(refresh.weapon_jiggle_request) << "->"
+         << static_cast<unsigned>(refresh.weapon_jiggle_request_after);
     boot_log_line(line.str().c_str());
 }
 
@@ -66011,8 +66027,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-21afa "
-        "(reset cold Mazur LongGunJiggle before stock refresh)");
+        "TLL co-op runtime init 2026-08-21afb "
+        "(complete cold transition-to-spine jiggle state before stock refresh)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

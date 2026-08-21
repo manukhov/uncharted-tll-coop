@@ -27150,3 +27150,67 @@ Nadine lacks the authored `strap2..strap14` guide subtree and the five mandatory
 owner-guide lookups fail before Rope2 physics.  A correct repair requires a
 complete thirteen-guide provider (or an explicitly approved synthetic art
 policy), not another visibility override.
+
+### 2026-08-21 RUNTIME INCONCLUSIVE (`afa`): the cold weapon is still in the active jiggle state
+
+The single role-B Nadine process `4692` loaded the intended `afa` build and
+remained responsive, but the written mutation never ran.  The exact cold Mazur
+row reported `refresh=long-gun-jiggle-active/0/0`, `jiggleReset=0`, exact
+`LongGunJiggle` vtable/progress `module+2A9AF48/1.0`, and the decisive live
+fields `weapon+898=C9`, `weapon+8F4=1`.  The user still saw the rifle protruding
+from the lower back.  This visual result is packaging-inconclusive: `afa`
+expected bit 3 clear and rejected before changing either the jiggle object or
+the selected transform.  Do not label the reset hypothesis RUNTIME REJECTED.
+
+The runtime row corrects the former static model.  In
+`ProcessWeaponBase_Update 0x141500880`, bit 3 of `weapon+898`, the live draw
+child byte `+243`, and `weapon+8F4` jointly select the true argument to
+`LongGunJiggle_SetEnabledAndReset`; the cold object is genuinely on that active
+branch.  A complete displacement-reference census independently finds the
+relevant `+8F4` lifecycle writers: initialization `0x1414FADE6` writes one,
+`PlayerHolsterWeaponAnimAction_Execute 0x14108ADC8` writes one, the adjacent
+transition entry `0x14108A29E` writes one, and the exact
+`transition-to-spine-anim` finalizer `0x141089E70` writes zero at
+`0x14108A259`.  The finalizer first verifies the current weapon is attached to
+literal `targSpineProp`, publishes the transition event, and only then clears
+the byte.  Thus the cold logical `rightHand -> targSpineProp` rebind reproduced
+the endpoint but skipped the stock finalizer state that makes the subsequent
+per-frame jiggle update inactive.
+
+### 2026-08-21 STATIC / MUTATION (`afb`): complete the missing cold transition-to-spine state
+
+Three independent evidence classes earn one corrected cold-start exam.  First,
+the `afa` runtime tuple proves the exact local Nadine/Mazur is at verified
+`targSpineProp` while `+8F4` remains one and the jiggle is enabled.  Second, the
+writer census and decompilation prove that the stock transition-to-spine
+finalizer clears exactly `weapon+8F4` only after it recognizes that same
+endpoint; Draw/Put entry paths set it back to one.  Third, the per-frame reader
+at `0x141500A79` feeds that byte into the exact LongGunJiggle vslot `+28`, whose
+false branch resets live displacement/angular state and velocities before the
+selected-attachment update.  This also matches the independent user control:
+a real Draw followed by Put fixes the cold placement, whereas a bare completed
+selected update (`aez`) does not.
+
+Build `afb` keeps every former identity/generation/endpoint/Fg/TLS guard.  It
+admits only the exact missed-finalizer tuple: local role-B legacy Nadine, Mazur,
+verified `targSpineProp`, exact enabled `LongGunJiggle`, terminal selected state,
+`weapon+898` bit 3 set, and `weapon+8F4=1`.  After all read-only guards pass it
+writes only the stock final value `weapon+8F4=0`, calls the exact
+`LongGunJiggle_SetEnabledAndReset(false)`, then invokes the already bounded
+selected-attachment updater.  A later real Draw/Put action remains authoritative
+and may set the byte to one again.  P99, grip, transition animation content and
+strap are untouched.
+
+The falsifiable one-copy prediction is: boot reports `2026-08-21afb`; the cold
+Mazur deferred row reports `weaponJiggleGate=C9/1->0`, `jiggleReset=1/1->0`, a
+changed jiggle hash, `refresh=ok/1/1`, and nonzero local change.  Before any
+Draw the rifle must occupy the same correct back placement produced by a real
+Draw/Put.  Both execution markers plus the same protruding pose reject the
+missing-finalizer hypothesis and move the boundary past LongGunJiggle; a missing
+marker is still packaging/admission, not a visual result.  Exactly one role-B
+Nadine copy is allowed and the agent supplies no gameplay input.  Release `afb`
+compiled successfully (`tll_coop_runtime.dll`, `775680` bytes).  The single IDB
+was updated with `PlayerHolsterTransitionToSpine_Finalize 0x141089E70` and
+`PlayerHolsterTransitionToSpine_MarkActive 0x14108A290`
+(`apply_labels OK: 1785 functions, 60 data names`,
+`save_database returned True`); the restarted MCP resolves both names.

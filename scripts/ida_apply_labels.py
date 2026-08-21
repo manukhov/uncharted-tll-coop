@@ -34,6 +34,18 @@ FUNCTIONS = {
         "copies authored/default displacement and angle into the live state and "
         "clears their velocities.",
     ),
+    0x141089E70: (
+        "PlayerHolsterTransitionToSpine_Finalize",
+        "Resolves the current weapon, verifies its selected owner point is the "
+        "literal targSpineProp, publishes transition-to-spine-anim, then clears "
+        "weapon+0x8F4. This is the missing cold-holster final state consumed by "
+        "ProcessWeaponBase_Update's LongGunJiggle predicate.",
+    ),
+    0x14108A290: (
+        "PlayerHolsterTransitionToSpine_MarkActive",
+        "Companion transition action vtable method. Resolves the current weapon "
+        "and sets weapon+0x8F4 to one; the exact spine finalizer later clears it.",
+    ),
     # --- 2026-08-15: one-shot Player NewIkWeapon parameter mailbox ---
     0x142052250: (
         "StringIdPayloadMap_SetOrRemove",

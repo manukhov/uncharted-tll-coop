@@ -5410,16 +5410,27 @@ Keep the postblend preservation boundary; replace only its steady content.
       still saw the rifle protruding. The object is exact `LongGunJiggle`
       (vtable RVA `2A9AF48`), so do not repeat the completed-updater call alone.
 
-  Build `afa` is the next single earned cold-start exam. Exact stock
-      `ProcessWeaponBase_Update 0x141500880` calls LongGunJiggle vslot `+28`
-      (`LongGunJiggle_SetEnabledAndReset 0x141F7EA80`) with false in the inactive
-      path before the selected-attachment update. Reproduce only that prefix for
-      exact local role-B legacy-Nadine Mazur/targSpineProp and exact jiggle
-      vtable, then call the already scoped updater. Require boot `afa`,
-      `jiggleReset=1` with changed state hash, `refresh=ok/1/1`, nonzero local
-      change and correct back placement before any Draw. Both execution markers
-      plus the same pose reject reset sufficiency. Launch one role-B Nadine copy
-      and never send gameplay input.
+  Build `afa` was admission-inconclusive, not a visual rejection. PID 4692
+      reached exact cold Nadine/Mazur/targSpineProp but reported
+      `weapon+898=C9`, `weapon+8F4=1`, `refresh=long-gun-jiggle-active` and
+      `jiggleReset=0`; the implementation had incorrectly expected the inactive
+      predicate before reproducing its finalizer. Static writer census now
+      closes the missing state: constructor/holster entry write `+8F4=1`, while
+      exact `transition-to-spine-anim` finalizer `0x141089E70` clears `+8F4` at
+      `0x14108A259` after verifying `targSpineProp`. Per-frame
+      `ProcessWeaponBase_Update 0x141500A79` consumes that byte before exact
+      LongGunJiggle reset vslot `+28`.
+
+  Build `afb` is the corrected single earned cold-start exam. Preserve all exact
+      role-B/Nadine/Mazur/targSpineProp/generation/Fg guards, require the observed
+      missed-finalizer tuple (`+898` bit3, `+8F4=1`, enabled terminal
+      LongGunJiggle), write only the stock final value `+8F4=0`, call
+      `LongGunJiggle_SetEnabledAndReset(false)`, then the scoped selected updater.
+      Require boot `afb`, `weaponJiggleGate=C9/1->0`,
+      `jiggleReset=1/1->0`, changed jiggle hash, `refresh=ok/1/1`, nonzero local
+      change and correct cold back placement. Both execution markers plus the
+      same protruding pose reject the missing-finalizer hypothesis. Launch one
+      role-B Nadine copy and never send gameplay input.
 
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
