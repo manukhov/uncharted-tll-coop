@@ -5348,6 +5348,13 @@ Keep the postblend preservation boundary; replace only its steady content.
       allocator-result, or exception. Do not interpret visuals and do not
       send gameplay input.
 
+      `aet` selected the exception branch exactly:
+      `left=8/state1/count8/null/null/0`, while right was never called. The live
+      index arrays and Fg pose/world/ValidBits pointers are coherent. Build
+      `aeu` logs only exception code, instruction RVA, access kind and fault
+      address around the same native call. Use that one row to identify the
+      missing seed context; no visual judgment or gameplay input.
+
   Original `aeh` prediction required the combined READY marker,
       fresh Chloe right-prop CAPTURE, Nadine right-prop RELAY and same-postblend
       `baselineRestore=0`. All markers plus both hands and Chloe's muzzle-up

@@ -50541,7 +50541,35 @@ struct WeaponIkJointSetSeedDiagnostic {
     void* buffers_before = nullptr;
     void* buffers_after = nullptr;
     std::size_t readable_after = 0;
+    std::uint32_t exception_code = 0;
+    std::uintptr_t exception_rva = 0;
+    std::uintptr_t exception_access = 0;
+    void* exception_fault_address = nullptr;
 };
+
+int capture_weapon_ik_joint_set_seed_exception(
+    EXCEPTION_POINTERS* exception,
+    WeaponIkJointSetSeedDiagnostic* diagnostic) noexcept {
+    if (diagnostic != nullptr) {
+        diagnostic->failure = WeaponIkJointSetSeedFailure::kException;
+        if (exception != nullptr && exception->ExceptionRecord != nullptr) {
+            const EXCEPTION_RECORD* const record = exception->ExceptionRecord;
+            diagnostic->exception_code = record->ExceptionCode;
+            const std::uintptr_t address = reinterpret_cast<std::uintptr_t>(
+                record->ExceptionAddress);
+            diagnostic->exception_rva =
+                g_module != 0 && address >= g_module ? address - g_module : address;
+            if (record->ExceptionCode == EXCEPTION_ACCESS_VIOLATION &&
+                record->NumberParameters >= 2) {
+                diagnostic->exception_access =
+                    static_cast<std::uintptr_t>(record->ExceptionInformation[0]);
+                diagnostic->exception_fault_address = reinterpret_cast<void*>(
+                    record->ExceptionInformation[1]);
+            }
+        }
+    }
+    return EXCEPTION_EXECUTE_HANDLER;
+}
 
 bool seh_reset_weapon_ik_joint_set(void* joint_set) {
     __try {
@@ -50681,10 +50709,8 @@ bool seh_allocate_and_validate_weapon_ik_joint_set(
             return false;
         }
         return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        if (diagnostic != nullptr) {
-            diagnostic->failure = WeaponIkJointSetSeedFailure::kException;
-        }
+    } __except (capture_weapon_ik_joint_set_seed_exception(
+        GetExceptionInformation(), diagnostic)) {
         return false;
     }
 }
@@ -51406,12 +51432,12 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
                 if (reason < rejected_logged.size() &&
                     !rejected_logged[reason].exchange(
                         true, std::memory_order_relaxed)) {
-                    char line[320]{};
+                    char line[512]{};
                     std::snprintf(
                         line, sizeof(line),
                         "NADINE-MAZUR-LATE-IK rejected stage=%zu"
-                        " left=%u/%u/%d/%p/%p/%zu"
-                        " right=%u/%u/%d/%p/%p/%zu",
+                        " left=%u/%u/%d/%p/%p/%zu/x%08x@%llx/%llu/%p"
+                        " right=%u/%u/%d/%p/%p/%zu/x%08x@%llx/%llu/%p",
                         reason,
                         static_cast<unsigned>(left_seed_diagnostic.failure),
                         static_cast<unsigned>(left_seed_diagnostic.state),
@@ -51419,12 +51445,24 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
                         left_seed_diagnostic.buffers_before,
                         left_seed_diagnostic.buffers_after,
                         left_seed_diagnostic.readable_after,
+                        left_seed_diagnostic.exception_code,
+                        static_cast<unsigned long long>(
+                            left_seed_diagnostic.exception_rva),
+                        static_cast<unsigned long long>(
+                            left_seed_diagnostic.exception_access),
+                        left_seed_diagnostic.exception_fault_address,
                         static_cast<unsigned>(right_seed_diagnostic.failure),
                         static_cast<unsigned>(right_seed_diagnostic.state),
                         static_cast<int>(right_seed_diagnostic.count),
                         right_seed_diagnostic.buffers_before,
                         right_seed_diagnostic.buffers_after,
-                        right_seed_diagnostic.readable_after);
+                        right_seed_diagnostic.readable_after,
+                        right_seed_diagnostic.exception_code,
+                        static_cast<unsigned long long>(
+                            right_seed_diagnostic.exception_rva),
+                        static_cast<unsigned long long>(
+                            right_seed_diagnostic.exception_access),
+                        right_seed_diagnostic.exception_fault_address);
                     boot_log_line(line);
                 }
             }
@@ -65247,8 +65285,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-21aet "
-        "(late two-arm IK JointSet seed census)");
+        "TLL co-op runtime init 2026-08-21aeu "
+        "(late two-arm IK JointSet exception census)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

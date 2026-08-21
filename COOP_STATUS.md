@@ -26791,3 +26791,22 @@ right failure isolates the second JointTree. The written prediction is that
 the same single role-B Nadine/Mazur/WeaponOut pass will print the exact pair and
 one detailed stage-3 row. No visual result is interpreted and the agent does
 not send gameplay input.
+
+### 2026-08-21 CONFIRMED (`aet`) / DIAGNOSTIC (`aeu`): the left native seed raises before publishing its table
+
+Build `aet` reached the written boundary in PID `4740`. The exact pair ran,
+and the detailed row was
+`stage=3 left=8/1/8/null/null/0 right=0/0/0/null/null/0`. Thus the left
+JointTree passed state/count/null-table admission, entered the native seed,
+raised an SEH exception before `JointSet+0x20` became observable, and prevented
+the right call. This rejects the busy-buffer and post-allocation readability
+alternatives; no arm solve or visible target was tested.
+
+The retained runtime structure independently remains coherent after the
+failure: the left/right index arrays are the exact eight-joint chains
+`17,18,19,21,23,25,27,29` and `17,18,20,22,24,26,28,30`; Player+0x1A8 points
+to readable Fg data with local pose, world locators and ValidBits populated.
+Build `aeu` adds only the exception code, faulting instruction RVA, access kind
+and fault address to that already-bounded row. An access violation inside a
+specific seed load/store selects the missing context/input; an engine allocator
+exception selects invalid late allocation timing. No pose guard is relaxed.
