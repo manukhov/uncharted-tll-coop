@@ -2409,12 +2409,12 @@ constexpr bool kEnableInitialLocalNadineRifleRebind = false;
 // Materialize only Nadine's self-derived targSpineProp alias there so the stock
 // initialization path owns selection, binding, animation and first publish.
 constexpr bool kEnableEarlyLegacyNadineSpinePropAlias = true;
-// Wrap the exact ProcessWeapon_Initialize call made by the ProcessWeapon
-// factory callback. Stock runs first so the weapon and strap child are fully
-// initialized; only exact role-B local legacy-Nadine cold Mazur/rightHand then
-// enters the stock PlayerWeaponController holster rebind before the generic
-// materializer allocates the first drawable snapshot.
-constexpr bool kEnableColdLegacyNadineMazurFactoryHolsterRebind = true;
+// Build afd did not reach this post-Initialize relay for the already existing
+// campaign Mazur.  Independently, the stock cold object later reached exact
+// targSpineProp/state-0/accepted back binding while its visible drawable still
+// remained at the bad cold placement.  The missing owner is therefore the
+// already-published drawable/Fg transform, not another attachment rebind.
+constexpr bool kEnableColdLegacyNadineMazurFactoryHolsterRebind = false;
 // Native NPC Nadine's targSpineProp and legacy Player-Nadine's targSpine are
 // both canonical identity records on spineb/joint16. The attach-table repair
 // now creates targSpineProp as an exact id alias of that existing Nadine frame,
@@ -66532,8 +66532,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-21afd "
-        "(stock cold Mazur holster rebind before first drawable snapshot)");
+        "TLL co-op runtime init 2026-08-21afe "
+        "(park rejected cold Mazur factory rebind; retain back-transition census)");
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
     }

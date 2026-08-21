@@ -5437,31 +5437,25 @@ Keep the postblend preservation boundary; replace only its steady content.
       claim too: the call at `0x1410A5CDF` is guarded by `v218==5`, while the
       net-mode Mazur class remains 16. Do not retry `Hlate-table`.
 
-  Current P0 is STATIC / IMPLEMENTED as build `afd`, with runtime deliberately
-      deferred. Exact factory table `0x142A4D520` vslot `+0x58` reaches
-      `ProcessWeapon_FactoryInitialize 0x141103B70` and its direct complete-init
-      E8 `0x141103B7E`. After that call returns, the strap child already exists;
-      only then does generic materializer `0x1417C3790` call
-      `NdDrawableObject_AllocateSnapshot 0x141EB9780` through vslot `+0x1A8`.
-      Neither post-init slot rewrites attachment/binding. The new exact E8 relay
-      therefore calls the complete stock
-      `PlayerWeaponController_RebindWeaponToHolster 0x1410A9670` before the first
-      drawable snapshot, restricted to role-B screen-0 cold legacy Nadine,
-      ProcessWeapon/Mazur, valid owner/controller generations, state0/current<0,
-      exact `rightHand`, canonical early `targSpineProp`, and a completed exact
-      strap child. It verifies `rightHand->targSpineProp` and the already accepted
-      post-Put binding before reporting success. Late rebind/finalizer/jiggle/
-      selected-updater experiments stay disabled.
+  Build `afd` is RUNTIME REJECTED / admission-inconclusive. PID 9068 loaded the
+      exact build, installed `0x141103B7E` and created the exact early spine
+      alias, but emitted zero `NADINE-MAZUR-FACTORY-HOLSTER` rows: the campaign
+      Mazur existed before injection or bypassed that factory seam. More
+      importantly, the untouched stock object later reached selected index39,
+      `targSpineProp`, handoff1, state0 and exact accepted binding `57036E96`,
+      while the user still saw the cold rifle protruding. That independently
+      rejects `Hmissing-cold-stock-rebind`; do not retry the factory relay.
 
-      Do not launch yet. The eventual one-copy exam requires boot
-      `2026-08-21afd`, exact early alias, and before Draw exactly one
-      `NADINE-MAZUR-FACTORY-HOLSTER stage=11 verified=1 result=0`
-      with `id=61A48E01->AD047A`, `index=16->39`,
-      `binding=AE617165->57036E96`, stable strap child and `call=1`. Only then is
-      cold placement compared with accepted post-Put placement. Exact marker plus
-      lower protrusion rejects the complete pre-snapshot stock-rebind hypothesis;
-      absent/stage<11 marker is packaging only. This does not solve the missing
-      strap guide/physics subtree.
+  Current P0 is STATIC-only in build `afe`, with the rejected factory relay
+      disabled and no game launch authorized yet. The first authored local
+      correction appears only when Draw re-enters the attachment pipeline;
+      `aez/afb` already proved that an updater-only local `+130/+140` change does
+      not move the cold drawable. Trace the exact current-live retained
+      `FgAnimData` phase-`0x40` publication into renderer-owned `+0x1C0`, keyed
+      through the Fg weak handle/generation rather than a relocating raw weapon
+      pointer. Before any new runtime, close three evidence classes, competing
+      drawable-owner hypotheses and a prediction that distinguishes a changed
+      published Fg transform from a different visible instance.
 
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to

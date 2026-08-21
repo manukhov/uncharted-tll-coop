@@ -27427,3 +27427,40 @@ the release object is newer than the source).  The single IDB was updated with
 (`apply_labels OK: 1788 functions, 60 data names`,
 `save_database returned True`); restarted MCP readback resolves all three.
 No game process was started or controlled.
+
+### 2026-08-21 RUNTIME REJECTED / ADMISSION-INCONCLUSIVE (`afd`): cold factory rebind is not the visible placement owner
+
+The single-copy role-B run loaded exact build `2026-08-21afd`, installed the
+direct `0x141103B7E` relay and materialized the early Nadine spine alias exactly
+(`39->40`, joint `16`, `exact=1`).  The complete log contains zero
+`NADINE-MAZUR-FACTORY-HOLSTER` rows.  The campaign Mazur therefore already
+existed before this DLL injection (or otherwise bypassed this factory call), so
+the new relay never mutated that cold object.  Its own callsite admission is
+inconclusive and must not be retried as a visual experiment.
+
+The same run independently rejects the underlying
+`Hmissing-cold-stock-rebind` theory.  Without the factory relay firing, the
+stock Draw/Put lifecycle reached selected attachment index `39`, canonical
+`targSpineProp 0x00AD047A`, `handoff=1`, controller `state=0`, and the exact
+accepted post-Put binding
+`3D9BA5E3,BCA3D70A,BD4CCCCD,0,BD6477B3,BDCD7209,3E0A06FB,3F7BF4C4`
+(FNV `57036E96`).  The user still saw the initial rifle protrude from the lower
+back, while a real Draw/Put made the later placement correct.  Thus endpoint,
+binding and transition final state are not the missing visible state.
+
+The temporal split is exact: before the first Draw there is no
+`NADINE-MAZUR-NATIVE-BACK scope=initial`; the first authored local-transform
+correction appears only after Draw activates the attachment pipeline.  Earlier
+`aez/afb` already proved that calling the selected-attachment updater, resetting
+LongGunJiggle and changing all eight `ProcessWeapon+0x130/+0x140` local words do
+not move the cold visible rifle.  These results converge on a stale drawable /
+`FgAnimData` world publication created before injection, not another local
+attachment calculation.
+
+Build `afe` parks the factory rebind and keeps the non-mutating transition
+census.  No game is launched for it.  The next static frontier is the exact
+current-live `FgAnimData` phase-`0x40` publication path: resolve the weapon from
+the retained Fg handle (not from a relocating raw ProcessWeapon address), run
+the already-proven authored local correction, and prove the stock publication
+that updates the renderer-owned `FgAnimData+0x1C0`.  No further endpoint,
+binding, jiggle or updater-only runtime is justified.
