@@ -5375,6 +5375,27 @@ Keep the postblend preservation boundary; replace only its steady content.
       it; a raised muzzle with a detached support hand selects terminal-left
       ordering. The agent may launch both copies but must not control gameplay.
 
+  Current P0 is no longer the frozen grip.  Build `aew` is a read-only
+      one-copy role-B census for the Mazur draw/put handoff.  The shipped Chloe
+      table itself selects the backflip family, so do not replace those clips.
+      The exact alternative is the stock 0.1-second ProcessWeapon local blend
+      (`+0x620 -> +0x600`, duration/progress `+0x640/+0x644`) versus the current
+      fixed authored back-frame substitution at `0x141ED19BB`.  Require boot
+      `2026-08-21aew`, `NADINE-MAZUR-BACK-ACTION`, and
+      `NADINE-MAZUR-BACK-TRANSITION` coverage across controller state 1 and 5,
+      rightHand and targSpineProp.  If stock input/progress changes while
+      `authored=1` keeps the effective frame fixed, gate the correction out only
+      during the active handoff; if the action never seeds or advances the
+      blend, stay in the action lifecycle; if the handoff is complete and
+      smooth, return to the authored arm-pose retarget.  The agent launches the
+      single Nadine copy and never sends gameplay input.
+
+  Strap is next after transition classification.  Do not re-enable the rejected
+      ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
+      resolve a complete `strap2..strap14` owner locator set; Nadine has no such
+      authored subtree.  The next admissible work is a Chloe guide-locator
+      capture/provider audit, not visibility forcing.
+
 ## Rule
 
 If a task does not directly move the project toward **полноценный кооп**, it should stay parked.

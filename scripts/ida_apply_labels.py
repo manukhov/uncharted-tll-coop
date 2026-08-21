@@ -1119,6 +1119,19 @@ FUNCTIONS = {
         "calls vtable +0x7B8 at 0x141ED4487 only when AnimControl async-update "
         "phase 0x10 is not enabled.",
     ),
+    0x140221550: (
+        "Transform_InterpolateTranslationAndRotation",
+        "Interpolates the first transform vector linearly and the second "
+        "quaternion by the shortest-path spherical interpolation using the "
+        "supplied weight. NdAttachableObject_UpdateLocalAttachmentBlend calls "
+        "it for the authored +0x620-to-+0x600 weapon handoff.",
+    ),
+    0x1418A9F00: (
+        "Anim_EvaluateBlendCurve",
+        "Evaluates the selected animation blend curve for a normalized scalar. "
+        "NdAttachableObject_UpdateLocalAttachmentBlend uses mode 2, whose "
+        "branch computes smoothstep t*t*(3-2*t) before transform interpolation.",
+    ),
     0x14108B120: (
         "WeaponHolsterIkBlender_ExtractData",
         "WeaponHolsterIkBlender vtable +0x10. Extracts a 0x38-byte "

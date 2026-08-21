@@ -26852,3 +26852,62 @@ authored-pair-plus-late-IK hypothesis.  Both markers plus the old one-hand or
 wrong-angle pose reject solver sufficiency and select donor/target or a later
 writer.  A missing marker is packaging only.  The agent may launch the one
 Nadine copy but never supplies gameplay input.
+
+### 2026-08-21 STATIC / DIAGNOSTIC (`aew`): distinguish Mazur attachment handoff from the authored backflip pose
+
+The rifle grip is frozen at the user-accepted current baseline while the next
+P0 is draw-from-back / put-on-back continuity.  The missing-request hypothesis
+is rejected: the Player action lifecycle reaches `s_weapon-grab 28B0F93B`,
+`s_weapon-draw 1313FB4E`, `s_weapon-holster DF5B68FC` and the one-shot
+`PlayerHolsterWeaponAnimAction_Execute 0x14108A640`.  The shipped Chloe
+player-mesh table itself deliberately cascades the generic chest family through
+back and then backflip (`AFB364A4 -> 30AD2EF7 -> 78EF2142`, `66846123 ->
+C5F79FA2 -> 9C2B594D`, and `8DCA21F2 -> 11438F72 -> F5765D3B`).  Therefore the
+observed final backflip ids are stock Chloe content, not a Nadine-only resolver
+mistake, and another clip substitution is not earned.
+
+Three independent evidence types instead expose an exact transform-boundary
+competitor.  First, the one-shot holster executor writes the handoff transform
+to `ProcessWeapon+0x4F0/+0x500`, copies its endpoints to `+0x620/+0x630` and
+`+0x600/+0x610`, and seeds duration/progress `+0x640/+0x644 = 0.1/0` before
+setting `+0x8F4`.  Second,
+`NdAttachableObject_UpdateLocalAttachmentBlend 0x141ED4390` advances that
+progress with process delta, applies mode-2 smoothstep through
+`Anim_EvaluateBlendCurve 0x1418A9F00`, then calls
+`Transform_InterpolateTranslationAndRotation 0x140221550` and republishes the
+result at `+0x4F0/+0x500`.  Third, the current authored-back correction runs at
+the later exact callsite `0x141ED19BB` whenever `targSpineProp` is selected and
+substitutes a fixed Chloe-authored spined-relative frame without any explicit
+controller-state or active-handoff condition.  It can therefore be the sharp
+discontinuity even though both the action and clips are present.
+
+Competing hypotheses are now falsifiable.  **Hframe** predicts that during
+controller state 1 or 5 the stock `input` / `current` / `source` / `target`
+transforms and `+0x644` progress change, while `effective` is replaced by the
+fixed authored frame (`authored=1`).  **Hhandoff** predicts that the exact Mazur
+action fails to seed `0x3DCCCCCD/0`, or the blend never advances before the
+attachment changes.  **Hclip** predicts a complete smooth physical handoff;
+the remaining discontinuity then belongs to the authored backflip arm pose or
+its retarget, not weapon placement.
+
+Build `aew` adds only a bounded read-only census to the already-installed action
+and local-transform relays.  It emits one `NADINE-MAZUR-BACK-ACTION` for the
+exact role-B local-Nadine Mazur action and deduplicated
+`NADINE-MAZUR-BACK-TRANSITION` rows by controller state, selected attachment and
+tenth-of-blend progress.  It adds no new detour and changes no grip, animation,
+attachment, transform or strap state.  The one-copy prediction is: boot tag
+`2026-08-21aew` plus the census-active line; one manual draw and one manual put
+must cover controller states 1/5 and `rightHand 0x61A48E01` /
+`targSpineProp 0x00AD047A`.  A Put action must either show the exact
+`0.1/0` seed or reject Hhandoff.  A changing stock input with fixed authored
+effective frames confirms Hframe and earns an active-handoff bypass for the
+back correction.  No corresponding rows is packaging/admission failure and no
+visual conclusion is allowed.  The agent launches the single Nadine copy but
+does not provide gameplay input.
+
+The strap remains separately parked and hidden.  Forced `ShowMesh` is already
+RUNTIME REJECTED: it produces a delayed floating mesh, because legacy/native
+Nadine lacks the authored `strap2..strap14` guide subtree and the five mandatory
+owner-guide lookups fail before Rope2 physics.  A correct repair requires a
+complete thirteen-guide provider (or an explicitly approved synthetic art
+policy), not another visibility override.
