@@ -27542,3 +27542,52 @@ with the expanded exact phase-`0x40` publication comment
 `FgAnimData_PublishWorldTransform 0x1418C55D0` and
 `NdAttachableObject_UpdateSelectedAttachmentTransform 0x141ED1380` by name.
 No game process was started or controlled.
+
+### 2026-08-21 RUNTIME ADMISSION-INCONCLUSIVE (`aff`): phase publisher was ready but the cold target was never armed
+
+The single-copy role-B Nadine run in PID `16904` loaded exact boot `aff`, stayed
+responsive, installed the phase-`0x40` relay and reported the combined cold
+repair `READY`.  The early spine alias was also exact.  However, the complete
+run contains zero `NADINE-LOCAL-MAZUR-REBIND` and zero
+`NADINE-COLD-MAZUR-PHASE40` rows.  The user still saw the initial rifle
+protruding, but the written prediction explicitly classifies missing arm/publish
+markers as admission, so this is not a visual rejection of the phase-publication
+hypothesis.
+
+The failed gate is deterministic in the implementation.  `aff` admitted the
+producer only when the cold weapon still selected `rightHand`; the live object
+was already logically on canonical `targSpineProp` before Draw.  Later exact
+transition rows for the same retained owner show selected index `39`, joint
+`16`, id `0x00AD047A`, while no producer row could be emitted.  This is the same
+logical/visual split already established by `afd`: the endpoint may be correct
+while the cold rendered matrix remains stale.
+
+### 2026-08-22 STATIC / IMPLEMENTED (`afg`): admit an already-selected cold back endpoint before phase publication
+
+`afg` changes only that proven admission mismatch.  The initial service now
+accepts either canonical `rightHand` or canonical `targSpineProp`.  In both
+cases it calls the same complete stock
+`PlayerWeaponController_RebindWeaponToHolster 0x1410A9670` once, then requires
+the generation-stable selected `targSpineProp`, exact accepted binding hash
+`57036E96`, the same Player parent and generation-valid strap child before it
+arms the phase worker.  Static decompilation independently shows that this
+stock function does not skip work when the selected id already equals the
+holster endpoint: it always builds the authored binding, calls weapon vtable
+`+0x7A8`, copies the primary binding to weapon `+0x4F0`, and publishes the
+`player-holstered` event.  Thus this is not a guessed new transform or endpoint;
+it reaches the previously implemented publisher from the live cold state that
+`aff` accidentally excluded.
+
+The next prediction remains strict and names the corrected admission: boot
+`2026-08-22afg`, both relays and combined `READY`, followed before any Draw by
+`NADINE-LOCAL-MAZUR-REBIND mode=existing-spine-prop call=1 verified=1
+binding=...->57036e96 exactBinding=1 strapVerified=1 phasePublishArmed=1`, then
+one `NADINE-COLD-MAZUR-PHASE40 status=published refresh=ok/1/1` with changed
+local/world hashes.  Only those exact markers plus unchanged protrusion reject
+the phase-publication hypothesis.  Missing either marker remains an admission
+failure.  No transition or sling behavior is changed.
+
+Release `afg` compiles successfully (`tll_coop_runtime.dll`, `781824` bytes;
+the release object is newer than the source).  No new IDB label was needed: the
+change is an admission correction at already-labeled stock boundaries.  No new
+game process was launched or controlled.

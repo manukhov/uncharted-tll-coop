@@ -5446,17 +5446,28 @@ Keep the postblend preservation boundary; replace only its steady content.
       while the user still saw the cold rifle protruding. That independently
       rejects `Hmissing-cold-stock-rebind`; do not retry the factory relay.
 
-  Build `aff` closes that STATIC frontier and is implemented, but has not been
-      launched. Three independent evidence classes now converge: rejected
+  Build `aff` reached combined phase-publisher READY in PID16904, but emitted
+      zero local-Mazur rebind and zero phase40 publication markers. The user's
+      unchanged initial protrusion is therefore admission-inconclusive, not a
+      visual rejection. The exact code mismatch was `rightHand`-only producer
+      admission while the live cold object was already logically selected on
+      canonical index39/targSpineProp.
+
+  Build `afg` corrects only that admission and is STATIC/IMPLEMENTED, not yet
+      launched. Three independent evidence classes still converge: rejected
       local-only updater/runtime (`aez/afb`), exact phase-`0x40` compose and E8
       publish chain (`141A8F9D0 -> 141A8FC00 -> 1418C55D0 -> 1418C54D0`), and
       renderer consumption of `Fg+1C0` into all driven instances. The one-shot
-      bridge keys the stable Fg and generations, re-resolves the live weapon on
-      the phase worker, repeats the authored local correction, composes current
-      parent+local, and substitutes only that exact stock publish argument.
+      producer now admits canonical rightHand OR an already-selected canonical
+      targSpineProp, calls the same stock holster rebind, and requires exact
+      accepted binding `57036E96` before arming. The bridge then keys stable Fg
+      and generations, re-resolves the live weapon on the phase worker, repeats
+      the authored local correction, composes current parent+local, and
+      substitutes only that exact stock publish argument.
       No game launch is authorized until the Release artifact, IDB and commit
       are complete. Eventual single-copy prediction: exact READY plus
-      `NADINE-LOCAL-MAZUR-REBIND verified=1 strapVerified=1
+      `NADINE-LOCAL-MAZUR-REBIND mode=existing-spine-prop call=1 verified=1
+      exactBinding=1 strapVerified=1
       phasePublishArmed=1`, then one `NADINE-COLD-MAZUR-PHASE40
       status=published refresh=ok/1/1` with a changed world hash. Those markers
       plus unchanged lower protrusion reject the phase-publication hypothesis

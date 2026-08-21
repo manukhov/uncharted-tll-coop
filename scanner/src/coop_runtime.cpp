@@ -57899,11 +57899,22 @@ void rebind_initial_local_nadine_rifle_game_thread() {
     std::uintptr_t records_generation = 0;
     if (!seh_read_owner_attach_record_id(
             player, pre_index, &pre_attach_id, &records_generation) ||
-        records_generation == 0 ||
-        pre_index != static_cast<std::uint8_t>(right_hand_index) ||
-        pre_attach_id != 0x61A48E01u) {
+        records_generation == 0) {
         return;
     }
+    const bool starts_on_right_hand =
+        pre_index == static_cast<std::uint8_t>(right_hand_index) &&
+        pre_attach_id == 0x61A48E01u;
+    const bool starts_on_spine_prop =
+        pre_index == static_cast<std::uint8_t>(back_holster_index) &&
+        pre_attach_id == kTargSpinePropAttachId;
+    if (!starts_on_right_hand && !starts_on_spine_prop) {
+        return;
+    }
+    const std::uint32_t binding_before_hash = hash_probe_words(
+        reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(weapon) + 0x4F0),
+        kAcceptedLegacyNadineMazurBackBindingBits.size());
     const MazurStrapSnapshot strap_before = capture_mazur_strap(weapon);
     if (!strap_before.valid) {
         log_mazur_strap_wait_once(weapon, strap_before);
@@ -57930,6 +57941,14 @@ void rebind_initial_local_nadine_rifle_game_thread() {
             player, post_index, &post_attach_id, &post_generation);
     const bool parent_is_owner =
         seh_weapon_parent_resolves_to_owner(weapon, player);
+    const std::uint32_t binding_after_hash = hash_probe_words(
+        reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(weapon) + 0x4F0),
+        kAcceptedLegacyNadineMazurBackBindingBits.size());
+    const bool exact_binding = std::memcmp(
+        static_cast<const std::byte*>(weapon) + 0x4F0,
+        kAcceptedLegacyNadineMazurBackBindingBits.data(),
+        sizeof(kAcceptedLegacyNadineMazurBackBindingBits)) == 0;
     const MazurStrapSnapshot strap_after = capture_mazur_strap(weapon);
     const bool strap_verified = strap_after.valid &&
         strap_after.weak_handle == strap_before.weak_handle &&
@@ -57939,7 +57958,7 @@ void rebind_initial_local_nadine_rifle_game_thread() {
     const bool verified = call_completed && post_id_readable &&
         parent_is_owner && post_generation == records_generation &&
         post_index == static_cast<std::uint8_t>(back_holster_index) &&
-        post_attach_id == kTargSpinePropAttachId;
+        post_attach_id == kTargSpinePropAttachId && exact_binding;
     const bool phase_publish_armed = verified && strap_verified &&
         arm_cold_nadine_mazur_phase_publish(
             player, weapon, records_generation);
@@ -57958,6 +57977,9 @@ void rebind_initial_local_nadine_rifle_game_thread() {
          << " index=" << static_cast<unsigned>(pre_index) << "->"
          << static_cast<unsigned>(post_index)
          << " expected=" << back_holster_index
+         << " mode=" << (starts_on_right_hand
+                 ? "right-hand"
+                 : "existing-spine-prop")
          << " current=" << current_slot << " draw=" << draw_state
          << " handSlot=" << hand_slot
          << " call=" << (call_completed ? 1 : 0)
@@ -57965,6 +57987,9 @@ void rebind_initial_local_nadine_rifle_game_thread() {
          << (post_id_readable ? 1 : 0)
          << " parentOwner=" << (parent_is_owner ? 1 : 0)
          << " verified=" << (verified ? 1 : 0)
+         << std::hex << " binding=0x" << binding_before_hash
+         << "->0x" << binding_after_hash
+         << std::dec << " exactBinding=" << (exact_binding ? 1 : 0)
          << " strap=0x" << std::hex
          << reinterpret_cast<std::uintptr_t>(strap_before.child)
          << ":" << strap_before.generation
@@ -66857,8 +66882,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-21aff "
-        "(cold Mazur exact phase-0x40 publish bridge; no runtime exam yet)");
+        "TLL co-op runtime init 2026-08-22afg "
+        "(admit already-selected cold Mazur into phase-0x40 publish bridge)");
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
     }
