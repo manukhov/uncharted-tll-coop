@@ -2397,10 +2397,17 @@ static_assert(
 // PlayerHolsterWeaponAnimAction bridge is already a holster endpoint, including
 // switch/finalize/give and Player-death inventory reset paths. Keep the exact
 // retained Player-Nadine/P99 scope and persist that endpoint at pistolHolster.
-// Builds gz/ha safely exercised the full stock rebind but targeted 0x8075397D,
-// the P99 rather than the visible Mazur. Retarget the one-shot boundary to the
-// actual rifle and resolve its inventory slot by art instead of assuming slot 0.
-constexpr bool kEnableInitialLocalNadineRifleRebind = true;
+// Builds aaj..afb proved that a late cold Mazur rebind can select the exact
+// targSpineProp endpoint yet still miss the initialization-time publish path.
+// The compatibility alias is now installed inside Player::SetupAttachSystem,
+// before PlayerWeaponController/GiveWeapon can perform the stock initial
+// holster rebind. Do not repeat the rejected retained-Player one-shot.
+constexpr bool kEnableInitialLocalNadineRifleRebind = false;
+// Player::SetupAttachSystem is the last stock boundary after the AttachSystem
+// table exists and before GiveWeapon can perform its initial holster rebind.
+// Materialize only Nadine's self-derived targSpineProp alias there so the stock
+// initialization path owns selection, binding, animation and first publish.
+constexpr bool kEnableEarlyLegacyNadineSpinePropAlias = true;
 // Native NPC Nadine's targSpineProp and legacy Player-Nadine's targSpine are
 // both canonical identity records on spineb/joint16. The attach-table repair
 // now creates targSpineProp as an exact id alias of that existing Nadine frame,
@@ -19174,6 +19181,131 @@ bool seh_ensure_legacy_nadine_spine_prop_alias(
         result->expected_joint = -1;
         return false;
     }
+}
+
+using PlayerSetupAttachSystemFunction = std::int64_t(__fastcall*)(void*);
+PlayerSetupAttachSystemFunction g_original_player_setup_attach_system = nullptr;
+
+bool seh_is_early_legacy_nadine_attach_owner(void* player) {
+    __try {
+        return
+            player != nullptr &&
+            readable_bytes(player) >= 0x1D90 &&
+            *reinterpret_cast<const std::uintptr_t*>(player) ==
+                g_module + kPlayerVtableRva &&
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(player) + 0x170) ==
+                kLegacyNadineAttachTargetLookId &&
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(player) + 0x1D88) == nullptr;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+std::int64_t __fastcall hooked_player_setup_attach_system(void* player) {
+    const auto original = g_original_player_setup_attach_system;
+    if (original == nullptr) {
+        return 0;
+    }
+    const std::int64_t result = original(player);
+    if (!seh_is_early_legacy_nadine_attach_owner(player)) {
+        return result;
+    }
+
+    NadineSpinePropAliasResult alias{};
+    const bool installed =
+        seh_ensure_legacy_nadine_spine_prop_alias(player, &alias);
+    static std::atomic<unsigned> row_count{0};
+    const unsigned row = row_count.fetch_add(1, std::memory_order_relaxed);
+    if (row < 8) {
+        std::ostringstream line;
+        line << "NADINE-EARLY-SPINE-ALIAS player=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(player)
+             << " table=0x" << alias.target_table
+             << " records=0x" << alias.target_records << std::dec
+             << " status=" << alias.status
+             << " count=" << alias.before_count << "->" << alias.after_count
+             << " present=" << static_cast<unsigned>(alias.before_present)
+             << "->" << static_cast<unsigned>(alias.after_present)
+             << " joint=" << alias.source_joint << "->" << alias.target_joint
+             << "/" << alias.expected_joint
+             << " exact="
+             << static_cast<unsigned>(alias.transform_matches)
+             << " installed=" << (installed ? 1 : 0);
+        boot_log_line(line.str().c_str());
+    }
+    return result;
+}
+
+bool install_early_legacy_nadine_spine_prop_alias() {
+    auto* const slot = reinterpret_cast<void**>(
+        g_module + kPlayerSetupAttachSystemVtableSlotRva);
+    void* const expected = reinterpret_cast<void*>(
+        g_module + kPlayerSetupAttachSystemRva);
+    if (slot == nullptr || *slot != expected) {
+        boot_log_line(
+            "legacy-Nadine early spine alias SKIPPED (Player +0x448 mismatch)");
+        return false;
+    }
+
+    g_original_player_setup_attach_system =
+        reinterpret_cast<PlayerSetupAttachSystemFunction>(expected);
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            slot, sizeof(void*), PAGE_READWRITE, &old_protection)) {
+        g_original_player_setup_attach_system = nullptr;
+        boot_log_line(
+            "legacy-Nadine early spine alias SKIPPED (protect)");
+        return false;
+    }
+
+    void* const hook =
+        reinterpret_cast<void*>(&hooked_player_setup_attach_system);
+    void* const previous = InterlockedCompareExchangePointer(
+        reinterpret_cast<PVOID volatile*>(slot), hook, expected);
+    if (previous != expected) {
+        DWORD ignored = 0;
+        VirtualProtect(slot, sizeof(void*), old_protection, &ignored);
+        g_original_player_setup_attach_system = nullptr;
+        boot_log_line(
+            "legacy-Nadine early spine alias SKIPPED (slot race)");
+        return false;
+    }
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+
+    DWORD ignored = 0;
+    if (VirtualProtect(
+            slot, sizeof(void*), old_protection, &ignored)) {
+        boot_log_line(
+            "legacy-Nadine early spine alias installed (Player +0x448 post-stock)");
+        return true;
+    }
+
+    // A published vtable hook may already be fetched by another thread. Roll
+    // the aligned slot back while the page is still writable, but retain the
+    // immutable stock target for any in-flight or chained wrapper.
+    InterlockedCompareExchangePointer(
+        reinterpret_cast<PVOID volatile*>(slot), expected, hook);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+    const bool rollback_verified = *slot == expected;
+    DWORD rollback_ignored = 0;
+    const bool rollback_protection_restored = VirtualProtect(
+        slot, sizeof(void*), old_protection, &rollback_ignored) != 0;
+    if (rollback_verified) {
+        boot_log_line(
+            rollback_protection_restored
+                ? "legacy-Nadine early spine alias SKIPPED (protection rollback)"
+                : "legacy-Nadine early spine alias SKIPPED (rollback verified; protection WARNING)");
+        return false;
+    }
+
+    const bool hook_still_live = *slot == hook;
+    boot_log_line(
+        hook_still_live
+            ? "legacy-Nadine early spine alias installed PARTIAL (rollback race)"
+            : "legacy-Nadine early spine alias SKIPPED (rollback race)");
+    return hook_still_live;
 }
 
 bool raw_repair_legacy_nadine_attach_points(
@@ -59705,29 +59837,28 @@ bool seh_resolve_legacy_nadine_mazur_back_frame(
         capture->owner = *reinterpret_cast<void* const*>(parent_handle + 0x8);
         if (capture->owner == nullptr ||
             readable_bytes(capture->owner) < 0x1E8 ||
+            *reinterpret_cast<const std::uintptr_t*>(capture->owner) !=
+                g_module + kPlayerVtableRva ||
             *reinterpret_cast<const std::uint32_t*>(
                 static_cast<const std::byte*>(capture->owner) +
                 kGameObjectRuntimeIdOffset) != capture->generation) {
             return false;
         }
         capture->owner_index = retained_player_index(capture->owner);
-        const bool local_nadine = g_net_role_b &&
-            capture->owner_index == 0 &&
-            player_screen_index_is(capture->owner, 0);
-        const bool remote_nadine = !g_net_role_b && g_state_net.enabled &&
-            g_state_net.peer_set && capture->owner_index == 1 &&
-            player_screen_index_is(
-                capture->owner, kSlot1ScreenIndex);
-        if ((!local_nadine && !remote_nadine) ||
-            !player_object_stable(capture->owner) ||
-            *reinterpret_cast<const std::uint32_t*>(
+        if (*reinterpret_cast<const std::uint32_t*>(
                 static_cast<const std::byte*>(capture->owner) + 0x170) !=
                 kLegacyNadineAttachTargetLookId ||
-            !seh_weapon_is_player_art(
-                capture->owner, weapon, kCoopRifleArtId)) {
+            !seh_weapon_parent_resolves_to_owner(
+                weapon, capture->owner)) {
             return false;
         }
-        capture->remote = remote_nadine;
+        // The cold GiveWeapon publish precedes retained-player publication and
+        // inventory insertion.  Parent weak identity, exact Player RTTI/look,
+        // Mazur art and the selected owner record are the complete semantic
+        // identity here; retained/inventory gates would deterministically miss
+        // this first stock publish.  Once retained, keep the scope label only
+        // for diagnostics -- it is not part of mutation admission.
+        capture->remote = capture->owner_index == 1;
 
         auto* const table = *reinterpret_cast<std::byte* const*>(
             static_cast<const std::byte*>(capture->owner) + 0x1E0);
@@ -59744,15 +59875,21 @@ bool seh_resolve_legacy_nadine_mazur_back_frame(
         capture->selected_index = *reinterpret_cast<const std::uint8_t*>(
             weapon_bytes + 0x688);
         if (capacity == 0 || capacity > 256 || count > capacity ||
-            records == nullptr || capture->selected_index >= count) {
+            records == nullptr || capture->selected_index >= count ||
+            readable_bytes(records) < static_cast<std::size_t>(count) * 48) {
             return false;
         }
         auto* const selected_record = records +
             static_cast<std::size_t>(capture->selected_index) * 48;
         capture->selected_joint =
             *reinterpret_cast<const std::int16_t*>(selected_record + 0x24);
+        const std::int16_t spineb_joint = raw_resolve_attach_joint(
+            table, kSpinebJointNameId);
         if (*reinterpret_cast<const std::uint32_t*>(selected_record + 0x20) !=
-            kTargSpinePropAttachId) {
+                kTargSpinePropAttachId ||
+            spineb_joint < 0 || capture->selected_joint != spineb_joint ||
+            std::memcmp(
+                selected_record, kCanonicalAttachIdentityBits.data(), 32) != 0) {
             return false;
         }
 
@@ -59917,7 +60054,10 @@ void log_nadine_mazur_back_frame_once(
          << " table=0x" << capture.table
          << " records=0x" << capture.records << std::dec
          << " generation=" << capture.generation
-         << " scope=" << (capture.remote ? "remote" : "local")
+         << " scope="
+         << (capture.owner_index < 0
+                 ? "initial"
+                 : (capture.remote ? "remote" : "local"))
          << " ownerIndex=" << capture.owner_index
          << " selected=" << static_cast<unsigned>(capture.selected_index)
          << ":" << capture.selected_joint
@@ -66027,8 +66167,11 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-21afb "
-        "(complete cold transition-to-spine jiggle state before stock refresh)");
+        "TLL co-op runtime init 2026-08-21afc "
+        "(materialize Nadine spine alias before stock GiveWeapon holster path)");
+    if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
+        install_early_legacy_nadine_spine_prop_alias();
+    }
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

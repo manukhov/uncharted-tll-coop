@@ -27241,3 +27241,84 @@ weapon/world/palette owner to the last transform consumed for rendering. Per
 the user's explicit instruction, no further game launch is allowed merely to
 select among those candidates; the next run requires a statically complete
 visible-transform chain and a confident falsifiable prediction.
+
+### 2026-08-21 STATIC (`afc`): materialize `targSpineProp` before the stock cold-weapon lifecycle
+
+The remaining cold-start path is now closed without another runtime launch.
+The former `afb` interpretation was wrong: `0x141089E70` and `0x14108A290` are
+vtable methods of `PlayerGrabWeaponAnimAction` (`0x142A46630`, authored state
+`weapon-grab`), not a general holster finalizer.  The first verifies
+`targSpineProp`, publishes `transition-to-spine-anim` and clears `weapon+0x8F4`;
+the second sets that byte while the grab action is active.  Their absence during
+cold creation therefore does not describe a missing terminal holster state, and
+the `afb` write/reset/update combination remains REJECTED.
+
+Three independent evidence classes instead converge on an earlier lifecycle
+ordering defect.  First, `NdGameObject_Init 0x141BB4280` allocates Player's
+AttachSystem at `Player+0x1E0` and dispatches exact Player vtable `+0x448` at
+`0x141BB5043`; that slot is `Player_SetupAttachSystemFromLookData
+0x1410CDF90`, whose sole data-producing call initializes the table at
+`0x1410CE226`.  The later Player assembly constructs and stores the
+`PlayerWeaponController` only at `0x1410CA921/0x1410CA926` (`Player+0x1D88`).
+This makes the post-`+0x448` return the last exact boundary where the table
+exists but no weapon controller can yet have selected a cold attachment.
+Second, cold `ProcessWeapon` initialization is independently observed and
+statically initialized at `rightHand`; `PlayerWeaponController_GiveWeapon
+0x1410A4D40` then reaches vtable `+0x3D0` at `0x1410A5CDF` and the stock
+current-weapon holster rebind at `0x1410A6A20`.  The `+0x3D0` implementation
+`PlayerWeaponController_RebindWeaponToHolster 0x1410A9670` builds the authored
+holster binding, asks the weapon to select its attachment and publishes
+`player-holstered`.  A late retained-Player rebind cannot replay this complete
+initial construction/publish sequence.  Third, the final visible owner is
+closed through `NdAttachableObject_ResolveSelectedAttachmentTransform
+0x141ED1780`: the selected record reaches the exact local-correction call at
+`0x141ED19BB`, `NdAttachableObject_UpdateAnimatingLayersAndPublish
+0x141ED2060` calls selected update vslot `+0x7B8`, then composes the final local
+state at `0x141ED287B` and publishes it to Fg at `0x141ED288F`.  The existing
+Mazur authored-back correction is already on that exact path and is visually
+accepted after a real Draw/Put; it previously rejected the first publish only
+because it required retained-player and inventory identity that do not yet
+exist during `GiveWeapon`.
+
+Build `afc` therefore makes no late rebind and does not reproduce any rejected
+jiggle/finalizer mutation.  A vtable wrapper calls stock Player `+0x448` once,
+requires exact Player RTTI, legacy-Nadine look and `Player+0x1D88 == null`, then
+adds only the already proven self-derived canonical alias
+`targSpineProp 0x00AD047A` from Nadine's own `targSpine` identity on `spineb`.
+The existing authored-back callsite now admits the first publish without role,
+retained or inventory state, but still requires exact ProcessWeapon/Mazur art,
+weak-parent pointer and generation, Player RTTI/look, the canonical identity
+`targSpineProp` record on `spineb`, and the canonical `spined` donor.  This is
+the complete semantic owner identity available during construction; P99 and
+non-Nadine/non-Mazur objects cannot enter it.  Once retained, the same local and
+remote scopes continue unchanged.
+
+Competing explanations are explicitly separated.  `Hmissing-finalizer` is
+runtime-rejected by `afb` and class ownership.  `Hbad-record` is rejected by the
+canonical table/asset transforms and by a real Put using the same record
+successfully.  `Hlate-publisher` is rejected for this boundary because the
+correction feeds the selected-transform result before the same stock final
+compose/Fg publisher used by the accepted post-Put state.  `Hwrong-object` is
+rejected by the exact art, weak-parent generation, Player RTTI/look and selected
+record conjunction.  The surviving hypothesis is `Hlate-table`: the alias was
+previously created only after cold GiveWeapon had already selected, bound and
+published its right-hand initialization state.
+
+No game was launched for `afc`.  Its future falsifiable exam is written but
+deferred: boot must report `2026-08-21afc`, then before retained-player/network
+service the Nadine object must report `NADINE-EARLY-SPINE-ALIAS status=1`
+(`39->40`, joint `16`, `exact=1`) and the first Mazur local-correction row must
+report `scope=initial`, selected `targSpineProp`, canonical `spineb/spined`
+joints and full cold correction weight.  There must be no
+`NADINE-LOCAL-MAZUR-REBIND` row.  Before any Draw, the rifle must occupy the
+same upper-back placement reached after a real Draw/Put.  Exact early markers
+with the old lower protrusion reject `Hlate-table` and move the frontier beyond
+the now-complete stock initialization/publish chain; missing markers are only
+packaging/admission failure.  Per the user's instruction, do not run this exam
+until the static package and prediction are considered final.
+
+Release `afc` compiles successfully (`tll_coop_runtime.dll`, `771584` bytes).
+The single IDB was updated with the corrected PlayerGrab action names and the
+expanded Player setup-boundary comment (`1785` functions / `60` data names,
+`save_database returned True`); restarted MCP readback resolves all three
+functions.  No game process was started.

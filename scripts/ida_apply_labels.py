@@ -35,16 +35,17 @@ FUNCTIONS = {
         "clears their velocities.",
     ),
     0x141089E70: (
-        "PlayerHolsterTransitionToSpine_Finalize",
-        "Resolves the current weapon, verifies its selected owner point is the "
-        "literal targSpineProp, publishes transition-to-spine-anim, then clears "
-        "weapon+0x8F4. This is the missing cold-holster final state consumed by "
-        "ProcessWeaponBase_Update's LongGunJiggle predicate.",
+        "PlayerGrabWeaponAnimAction_PublishSpineTransition",
+        "PlayerGrabWeaponAnimAction vtable method. Resolves the current weapon, "
+        "verifies literal targSpineProp, publishes transition-to-spine-anim, "
+        "then clears weapon+0x8F4. This belongs to the authored weapon-grab/draw "
+        "action and is not a cold-holster completion path.",
     ),
     0x14108A290: (
-        "PlayerHolsterTransitionToSpine_MarkActive",
-        "Companion transition action vtable method. Resolves the current weapon "
-        "and sets weapon+0x8F4 to one; the exact spine finalizer later clears it.",
+        "PlayerGrabWeaponAnimAction_MarkSpineTransitionActive",
+        "Companion PlayerGrabWeaponAnimAction vtable method. Resolves the current "
+        "weapon and sets weapon+0x8F4 to one before the grab action's exact spine "
+        "transition method clears it.",
     ),
     # --- 2026-08-15: one-shot Player NewIkWeapon parameter mailbox ---
     0x142052250: (
@@ -10768,7 +10769,11 @@ FUNCTIONS = {
         "Player_SetupAttachSystemFromLookData",
         "Exact Player::SetupAttachSystem source assertion. Selects player, "
         "player-net or player-young-drake from runtime mode/look state and calls "
-        "AttachSystem_InitFromDcData on Player+0x1E0 with reserve count zero.",
+        "AttachSystem_InitFromDcData on Player+0x1E0 with reserve count zero. "
+        "NdGameObject_Init dispatches this through Player vtable +0x448 at "
+        "0x141BB5043; it returns before PlayerWeaponController construction and "
+        "the GiveWeapon holster path, making its post-return the exact early "
+        "compatibility-table boundary.",
     ),
     0x1418B61B0: (
         "AttachSystem_InitFromDcData",

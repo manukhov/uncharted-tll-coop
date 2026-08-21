@@ -54,6 +54,11 @@ constexpr std::uintptr_t kNetLogoutSplitScreenRva = 0xC02420;
 constexpr std::uintptr_t kSpawnFromDescriptorRva = 0x10F1910;
 constexpr std::uintptr_t kRetainedSlotTableRva = 0x3EEBE80;   // g_RetainedPlayerSlotTable {ptr,id}[]
 constexpr std::uintptr_t kPlayerVtableRva = 0x2A4BFE8;        // Player class vtable
+// Player vtable +0x448. NdGameObject::Init calls this after creating
+// Player+0x1E0 and before PlayerWeaponController/GiveWeapon construction.
+constexpr std::uintptr_t kPlayerSetupAttachSystemVtableSlotRva =
+    kPlayerVtableRva + 0x448;
+constexpr std::uintptr_t kPlayerSetupAttachSystemRva = 0x10CDF90;
 constexpr std::size_t kPlayerQuatOffset = 0x140;              // orientation quaternion
 constexpr std::size_t kPlayerLocalPosOffset = 0x130;          // local position vec4
 constexpr std::size_t kPlayerLocalRootMirrorOffset = 0x250;   // local/world mirror

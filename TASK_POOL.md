@@ -5429,15 +5429,30 @@ Keep the postblend preservation boundary; replace only its steady content.
       the rifle protruding initially. Do not retry the endpoint, finalizer byte,
       LongGunJiggle reset or selected updater separately or in combination.
 
-  Current P0 is a static-only closure of the real Put completion through the
-      final visible weapon transform. Trace the `transition-to-spine-anim`
-      event receiver, every ProcessWeapon/attachable state write performed by a
-      real Put, the later async/world/palette publishers, and the exact render
-      consumer. Enumerate and reject competing owners before proposing a seam.
-      Per the user's explicit instruction, do not launch or inject to choose
-      among candidates; another runtime exam is allowed only after the whole
-      visible-transform chain is closed statically and the result is considered
-      confident.
+  Current P0 static closure is complete in build `afc`; runtime remains
+      deliberately deferred. The former `0x141089E70/0x14108A290` labels were
+      corrected to `PlayerGrabWeaponAnimAction` methods, so the rejected `afb`
+      finalizer theory must not be repeated. The actual ordering is:
+      `NdGameObject_Init -> Player vtable +0x448/SetupAttachSystem -> alias table`
+      before `Player+0x1D88` construction, then stock `GiveWeapon -> +0x3D0 ->`
+      authored holster rebind/publish. Build `afc` appends only the canonical
+      Nadine `targSpineProp` alias at that pre-controller boundary, disables the
+      late local Mazur rebind, and lets stock initialization own the first
+      selection/binding/event. The authored Mazur back-frame correction now
+      admits this first publish by exact ProcessWeapon/Mazur, weak-parent
+      generation, Player RTTI/look, canonical selected spineb alias and spined
+      donor; it no longer requires retained-player/inventory state that cannot
+      exist yet. Final output remains the proven selected-transform correction
+      at `0x141ED19BB` followed by stock final compose `0x141ED287B` and Fg
+      publish `0x141ED288F`.
+
+      Do not launch yet. The written eventual discriminator requires boot
+      `2026-08-21afc`, early alias `status=1/count39->40/joint16/exact1`, first
+      Mazur back-frame row `scope=initial` on exact `targSpineProp`, and zero
+      late `NADINE-LOCAL-MAZUR-REBIND` rows. Only then may the cold pre-Draw
+      placement be compared with the already accepted post-Put upper-back
+      placement. Exact execution plus the same lower protrusion rejects the
+      now-complete early-table hypothesis; missing markers are packaging only.
 
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
