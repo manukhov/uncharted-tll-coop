@@ -55313,6 +55313,13 @@ struct NadineColdHolsterRefreshResult {
     std::uintptr_t selected_blend_vtable = 0;
     std::uint32_t selected_blend_progress_bits = 0;
     std::uint32_t selected_blend_rate_bits = 0;
+    bool jiggle_reset_called = false;
+    std::uint8_t jiggle_enabled_before = 0;
+    std::uint8_t jiggle_enabled_after = 0;
+    std::uint32_t jiggle_before_hash = 0;
+    std::uint32_t jiggle_after_hash = 0;
+    std::uint8_t weapon_update_flags = 0;
+    std::uint8_t weapon_jiggle_request = 0;
 };
 
 NadineColdHolsterRefreshResult
@@ -55332,6 +55339,8 @@ seh_refresh_initial_local_nadine_holster_transform(
     using SetContextProcessFunction = void*(__fastcall*)(void*);
     using UpdateSelectedAttachmentFunction =
         std::int64_t(__fastcall*)(void*);
+    using LongGunJiggleSetEnabledAndResetFunction =
+        std::int64_t(__fastcall*)(void*, bool);
     const auto get_context_process =
         reinterpret_cast<GetContextProcessFunction>(
             g_module + kThreadContextGetCurrentRva);
@@ -55339,13 +55348,17 @@ seh_refresh_initial_local_nadine_holster_transform(
         reinterpret_cast<SetContextProcessFunction>(
             g_module + kThreadContextSetCurrentRva);
     UpdateSelectedAttachmentFunction update_selected_attachment = nullptr;
+    LongGunJiggleSetEnabledAndResetFunction reset_long_gun_jiggle = nullptr;
     void* saved_process = nullptr;
     bool tls_scope_entered = false;
+    bool jiggle_reset_started = false;
     std::array<std::uint32_t, 8> local_before{};
+    std::array<std::uint32_t, kLongGunJiggleSize / sizeof(std::uint32_t)>
+        jiggle_before{};
 
     __try {
         auto* const weapon_bytes = static_cast<std::byte*>(weapon);
-        if (readable_bytes(weapon_bytes) < 0x864 ||
+        if (readable_bytes(weapon_bytes) < 0x8F5 ||
             *reinterpret_cast<const std::uintptr_t*>(weapon_bytes) !=
                 g_module + kProcessWeaponVtableRva ||
             *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x860) !=
@@ -55419,6 +55432,10 @@ seh_refresh_initial_local_nadine_holster_transform(
         }
         result.selected_blend =
             *reinterpret_cast<void* const*>(weapon_bytes + 0x838);
+        result.weapon_update_flags =
+            *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x898);
+        result.weapon_jiggle_request =
+            *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x8F4);
         std::memcpy(
             &result.selected_blend_progress_bits,
             weapon_bytes + 0x848,
@@ -55428,21 +55445,33 @@ seh_refresh_initial_local_nadine_holster_transform(
             weapon_bytes + 0x84C,
             sizeof(result.selected_blend_rate_bits));
         if (result.selected_blend != nullptr) {
-            if (readable_bytes(result.selected_blend) >= sizeof(void*)) {
+            if (readable_bytes(result.selected_blend) >= kLongGunJiggleSize) {
                 result.selected_blend_vtable =
                     *reinterpret_cast<const std::uintptr_t*>(
                         result.selected_blend);
             }
-            // Cold legacy-Nadine Mazur retains a completed selected-attachment
-            // blend: progress is exactly 1.0 and its rate is zero.  It is not
-            // an interpolation in flight.  Let the native selected-attachment
-            // updater consume that terminal object and publish +0x130/+0x140;
-            // every other non-null blend remains fail-closed.
-            const std::uint32_t image_size = tll_image_size();
-            if (result.selected_blend_vtable == 0 || image_size == 0 ||
-                result.selected_blend_vtable < g_module ||
-                result.selected_blend_vtable >= g_module + image_size) {
-                result.status = "selected-blend-object";
+            // This is RTTI LongGunJiggle, not an attachment interpolation
+            // object.  A cold legacy-Nadine Mazur skips the normal
+            // ProcessWeaponBase_Update prefix that disables/resets it before
+            // the inactive attachment update.  Reproduce only that exact
+            // stock prefix; every other object/art remains fail-closed.
+            if (expected_art != kCoopRifleArtId ||
+                result.selected_blend_vtable !=
+                    g_module + kLongGunJiggleVtableRva) {
+                result.status = "long-gun-jiggle-object";
+                return result;
+            }
+            auto* const jiggle_vtable =
+                *reinterpret_cast<std::uintptr_t* const*>(
+                    result.selected_blend);
+            constexpr std::size_t kResetVtableIndex =
+                kLongGunJiggleSetEnabledAndResetVtableOffset /
+                sizeof(std::uintptr_t);
+            const std::uintptr_t expected_reset =
+                g_module + kLongGunJiggleSetEnabledAndResetRva;
+            if (jiggle_vtable == nullptr ||
+                jiggle_vtable[kResetVtableIndex] != expected_reset) {
+                result.status = "long-gun-jiggle-vslot";
                 return result;
             }
             if (result.selected_blend_progress_bits != 0x3F800000u ||
@@ -55451,6 +55480,22 @@ seh_refresh_initial_local_nadine_holster_transform(
                 result.retryable = true;
                 return result;
             }
+            result.jiggle_enabled_before =
+                *(static_cast<const std::uint8_t*>(result.selected_blend) + 0x8);
+            if (result.jiggle_enabled_before != 1) {
+                result.status = "long-gun-jiggle-not-enabled";
+                return result;
+            }
+            // ProcessWeaponBase_Update short-circuits to false at its first
+            // predicate when bit 3 of weapon+0x898 is clear. Match that exact
+            // inactive stock decision instead of inferring it from visuals.
+            if ((result.weapon_update_flags & 0x08) != 0) {
+                result.status = "long-gun-jiggle-active";
+                return result;
+            }
+            reset_long_gun_jiggle =
+                reinterpret_cast<LongGunJiggleSetEnabledAndResetFunction>(
+                    expected_reset);
         }
         // Stock clears only the duration DWORD at +0x640 when the interpolation
         // completes; progress at +0x644 remains 1.0 and must not keep this gate
@@ -55511,6 +55556,31 @@ seh_refresh_initial_local_nadine_holster_transform(
             return result;
         }
 
+        if (reset_long_gun_jiggle != nullptr) {
+            std::memcpy(
+                jiggle_before.data(), result.selected_blend,
+                sizeof(jiggle_before));
+            result.jiggle_before_hash = hash_probe_words(
+                jiggle_before.data(), jiggle_before.size());
+            jiggle_reset_started = true;
+            reset_long_gun_jiggle(result.selected_blend, false);
+            result.jiggle_reset_called = true;
+            result.jiggle_enabled_after =
+                *(static_cast<const std::uint8_t*>(result.selected_blend) + 0x8);
+            std::array<
+                std::uint32_t,
+                kLongGunJiggleSize / sizeof(std::uint32_t)> jiggle_after{};
+            std::memcpy(
+                jiggle_after.data(), result.selected_blend,
+                sizeof(jiggle_after));
+            result.jiggle_after_hash = hash_probe_words(
+                jiggle_after.data(), jiggle_after.size());
+            if (result.jiggle_enabled_after != 0) {
+                result.status = "long-gun-jiggle-reset-verify";
+                return result;
+            }
+        }
+
         std::memcpy(
             local_before.data(), weapon_bytes + 0x130,
             sizeof(local_before));
@@ -55530,7 +55600,11 @@ seh_refresh_initial_local_nadine_holster_transform(
             result.status = "called";
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        result.status = result.tls_set ? "update-exception" : "guard-exception";
+        result.status = result.tls_set
+            ? "update-exception"
+            : (jiggle_reset_started && !result.jiggle_reset_called
+                   ? "long-gun-jiggle-reset-exception"
+                   : "guard-exception");
     }
 
     // Restore the stock ContextProcess in a separate protected region even if
@@ -55668,6 +55742,15 @@ void log_deferred_initial_local_nadine_holster_refresh(
          << "/0x" << result.selected_blend_vtable
          << " progress/rate=0x" << result.selected_blend_progress_bits
          << "/0x" << result.selected_blend_rate_bits
+         << std::dec << " jiggleReset="
+         << (result.jiggle_reset_called ? 1 : 0) << "/"
+         << static_cast<unsigned>(result.jiggle_enabled_before) << "->"
+         << static_cast<unsigned>(result.jiggle_enabled_after)
+         << std::hex << " jiggleHash=0x" << result.jiggle_before_hash
+         << "->0x" << result.jiggle_after_hash
+         << " weaponJiggleGate=0x"
+         << static_cast<unsigned>(result.weapon_update_flags) << "/0x"
+         << static_cast<unsigned>(result.weapon_jiggle_request)
          << " saved=0x" << result.saved_process;
     boot_log_line(line.str().c_str());
 }
@@ -55898,6 +55981,15 @@ void rebind_initial_local_nadine_p99_to_hip_game_thread() {
          << "/0x" << refresh.selected_blend_vtable
          << " progress/rate=0x" << refresh.selected_blend_progress_bits
          << "/0x" << refresh.selected_blend_rate_bits
+         << std::dec << " jiggleReset="
+         << (refresh.jiggle_reset_called ? 1 : 0) << "/"
+         << static_cast<unsigned>(refresh.jiggle_enabled_before) << "->"
+         << static_cast<unsigned>(refresh.jiggle_enabled_after)
+         << std::hex << " jiggleHash=0x" << refresh.jiggle_before_hash
+         << "->0x" << refresh.jiggle_after_hash
+         << " weaponJiggleGate=0x"
+         << static_cast<unsigned>(refresh.weapon_update_flags) << "/0x"
+         << static_cast<unsigned>(refresh.weapon_jiggle_request)
          << " saved=0x" << refresh.saved_process;
     write_log_line(line.str().c_str());
 }
@@ -57037,7 +57129,16 @@ void rebind_initial_local_nadine_rifle_game_thread() {
          << reinterpret_cast<std::uintptr_t>(refresh.selected_blend)
          << "/0x" << refresh.selected_blend_vtable
          << " progress/rate=0x" << refresh.selected_blend_progress_bits
-         << "/0x" << refresh.selected_blend_rate_bits;
+         << "/0x" << refresh.selected_blend_rate_bits
+         << std::dec << " jiggleReset="
+         << (refresh.jiggle_reset_called ? 1 : 0) << "/"
+         << static_cast<unsigned>(refresh.jiggle_enabled_before) << "->"
+         << static_cast<unsigned>(refresh.jiggle_enabled_after)
+         << std::hex << " jiggleHash=0x" << refresh.jiggle_before_hash
+         << "->0x" << refresh.jiggle_after_hash
+         << " weaponJiggleGate=0x"
+         << static_cast<unsigned>(refresh.weapon_update_flags) << "/0x"
+         << static_cast<unsigned>(refresh.weapon_jiggle_request);
     boot_log_line(line.str().c_str());
 }
 
@@ -65910,8 +66011,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-21aez "
-        "(completed cold Mazur selected-blend refresh)");
+        "TLL co-op runtime init 2026-08-21afa "
+        "(reset cold Mazur LongGunJiggle before stock refresh)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

@@ -5404,15 +5404,22 @@ Keep the postblend preservation boundary; replace only its steady content.
       unconditional nonnull guard itself prevented the native selected-
       attachment updater from publishing `+130/+140`.
 
-  Build `aez` is the single earned cold-start exam. Permit the already scoped
-      `NdAttachableObject_UpdateSelectedAttachmentTransform 0x141ED1380` call
-      only for a readable selected-blend object with nonzero vtable and exact
-      terminal `progress/rate=3F800000/0`; retain fail-closed behavior for every
-      other nonnull blend. Do not clear/free the object or call the broad blend
-      updater. Require boot `aez`, exact cold rebind, `refresh=ok/1/1`, nonzero
-      changed mask and TLS `1/1`, plus correct back placement before any Draw.
-      Marker plus unchanged/wrong visuals rejects this boundary. Launch one
-      role-B Nadine copy and never send gameplay input.
+  Build `aez` is RUNTIME REJECTED as a cold-placement repair. PID 13388 reached
+      exact `targSpineProp`, terminal `weapon+838` progress/rate `1/0`,
+      `refresh=ok/1/1`, TLS `1/1`, changed all eight local words, yet the user
+      still saw the rifle protruding. The object is exact `LongGunJiggle`
+      (vtable RVA `2A9AF48`), so do not repeat the completed-updater call alone.
+
+  Build `afa` is the next single earned cold-start exam. Exact stock
+      `ProcessWeaponBase_Update 0x141500880` calls LongGunJiggle vslot `+28`
+      (`LongGunJiggle_SetEnabledAndReset 0x141F7EA80`) with false in the inactive
+      path before the selected-attachment update. Reproduce only that prefix for
+      exact local role-B legacy-Nadine Mazur/targSpineProp and exact jiggle
+      vtable, then call the already scoped updater. Require boot `afa`,
+      `jiggleReset=1` with changed state hash, `refresh=ok/1/1`, nonzero local
+      change and correct back placement before any Draw. Both execution markers
+      plus the same pose reject reset sufficiency. Launch one role-B Nadine copy
+      and never send gameplay input.
 
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to

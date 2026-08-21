@@ -27082,6 +27082,68 @@ the rifle still protrudes, the completed-selected-refresh hypothesis is
 rejected and the next boundary is the selected object's terminal endpoint or a
 later publish owner.  No gameplay input is supplied by the agent.
 
+### 2026-08-21 CONFIRMED / REJECTED (`aez`): completed stock update publishes stale `LongGunJiggle`
+
+The one-copy role-B run in PID `13388` reached the exact packaged path.  Boot
+reported `2026-08-21aez`; the cold rebind selected `rightHand -> targSpineProp`
+with owner verification, and deferred attempt 2 reported
+`refresh=ok/1/1`, `tls=1/1`, `changed=FF`, and
+`localHash=AFDA050B->3210629F`.  The retained object was stable at
+`weapon+838=10E0D34C90`, vtable `module+2A9AF48`, with terminal
+`progress/rate=3F800000/0`.  The user still observed the rifle protruding from
+Nadine's lower back.  Packaging, TLS and publication are therefore CONFIRMED;
+the hypothesis that consuming the completed object was sufficient is RUNTIME
+REJECTED.  The wrong value is already the terminal object output, not a missed
+call or unchanged `weapon+130/+140`.
+
+### 2026-08-21 STATIC / MUTATION (`afa`): reset cold `LongGunJiggle` through its exact stock lifecycle
+
+The next boundary is supported by four independent evidence classes.  First,
+the exact runtime vtable `module+2A9AF48` resolves in the image to RTTI
+`LongGunJiggle`; `ProcessWeaponBase_Init 0x1414FAF40` allocates its `E0`-byte
+object and stores it at `ProcessWeapon+838`.  Second,
+`NdAttachableObject_UpdateSelectedAttachmentTransform 0x141ED1380` calls
+LongGunJiggle vslots `+10` and `+20`, then at terminal progress one selects the
+jiggle result in full before publishing `weapon+130/+140`.  Third, the normal
+per-frame `ProcessWeaponBase_Update 0x141500880` calls vslot `+28` on that exact
+object at `0x141500A8E` and only then calls
+`NdAttachableObject_UpdateLocalAttachmentBlend`; when the weapon-active
+predicate is false it passes zero.  `LongGunJiggle_SetEnabledAndReset
+0x141F7EA80` stores that byte and, for false, resets the angular/displacement
+state and velocities.  Fourth, constructor and action dataflow agree with the
+lifecycle: the jiggle begins enabled, while `PlayerHolsterWeaponAnimAction_Execute
+0x14108A640` seeds the authored handoff and writes `weapon+8F4=1`; the separate
+transition-to-spine completion path clears `+8F4`.  A real Draw/Put therefore
+drives the missing lifecycle that the cold logical rebind bypasses.
+
+Competing explanations are now separated.  A bad attachment record is
+disfavoured by exact `targSpineProp` verification and by the fact that a real
+Draw/Put leaves the same weapon correctly attached.  A later publisher is
+rejected in the covered state by `aez` changing all eight local words and the
+earlier `fz` selected-to-final equality.  Repeated free-running integration is
+possible in general, but stock explicitly resets the same object before its
+inactive attachment update, so a manual convergence loop is neither necessary
+nor admitted.
+
+Build `afa` will reproduce only that exact inactive stock prefix inside the
+already bounded cold helper: require local role-B legacy Nadine, Mazur art,
+verified `targSpineProp`, exact `LongGunJiggle` vtable and exact vslot `+28`
+target; call `SetEnabledAndReset(false)` once, then the existing exact selected-
+attachment updater under its stock ContextProcess.  P99, Draw/Put, grip and
+strap remain unchanged.  The falsifiable one-copy prediction is: boot reports
+`2026-08-21afa`; cold refresh reports `jiggleReset=1`, a changed jiggle-state
+hash, `refresh=ok/1/1`, and nonzero local change; before any Draw the rifle is
+on Nadine's authored back position.  Both markers plus the same protruding pose
+reject reset sufficiency and move the frontier to the jiggle reference transform
+or a still-unseen cold owner.  Missing reset or refresh markers is packaging,
+not a visual result.  The agent launches one role-B Nadine copy and supplies no
+gameplay input.  Release `afa` compiled successfully (`tll_coop_runtime.dll`,
+`775680` bytes).  The real single IDB was updated with
+`ProcessWeaponBase_Update` and the three exact `LongGunJiggle` methods
+(`apply_labels OK: 1783 functions, 60 data names`,
+`save_database returned True`); the restarted MCP independently resolves all
+four names.
+
 The strap remains separately parked and hidden.  Forced `ShowMesh` is already
 RUNTIME REJECTED: it produces a delayed floating mesh, because legacy/native
 Nadine lacks the authored `strap2..strap14` guide subtree and the five mandatory

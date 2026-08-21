@@ -8,6 +8,32 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-08-21: cold ProcessWeapon LongGunJiggle lifecycle ---
+    0x141500880: (
+        "ProcessWeaponBase_Update",
+        "Per-frame ProcessWeaponBase update. For weapon+0x838 it computes the "
+        "jiggle-active predicate from weapon+0x898 bit 3, the draw object and "
+        "weapon+0x8F4, calls LongGunJiggle vslot +0x28, then calls the shared "
+        "local/selected attachment updater.",
+    ),
+    0x141F7E370: (
+        "LongGunJiggle_UpdateFromAttachmentTransform",
+        "LongGunJiggle vslot +0x10. Composes the selected attachment transform "
+        "into the jiggle reference and advances displacement/angular state only "
+        "while the object is enabled.",
+    ),
+    0x141F7E9B0: (
+        "LongGunJiggle_GetTransform",
+        "LongGunJiggle vslot +0x20. Builds the transform consumed by "
+        "NdAttachableObject_UpdateSelectedAttachmentTransform from the current "
+        "reference plus jiggle angular/displacement state.",
+    ),
+    0x141F7EA80: (
+        "LongGunJiggle_SetEnabledAndReset",
+        "LongGunJiggle vslot +0x28. Stores the enabled byte at +0x8; when false, "
+        "copies authored/default displacement and angle into the live state and "
+        "clears their velocities.",
+    ),
     # --- 2026-08-15: one-shot Player NewIkWeapon parameter mailbox ---
     0x142052250: (
         "StringIdPayloadMap_SetOrRemove",

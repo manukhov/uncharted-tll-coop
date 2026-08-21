@@ -938,6 +938,14 @@ constexpr std::uintptr_t kProcessWeaponUpdateSelectedAttachmentVtableSlotRva =
     kProcessWeaponVtableRva + 0x7B8;
 constexpr std::uintptr_t kNdAttachableObjectUpdateSelectedAttachmentRva =
     0x1ED1380;
+// ProcessWeaponBase stores an RTTI LongGunJiggle object at weapon+0x838.
+// Its vslot +0x28 is called by ProcessWeaponBase_Update 0x141500880 before
+// the stock local/selected attachment update. Passing false disables physics
+// and resets the jiggle displacement/angular state to its authored defaults.
+constexpr std::uintptr_t kLongGunJiggleVtableRva = 0x2A9AF48;
+constexpr std::uintptr_t kLongGunJiggleSetEnabledAndResetRva = 0x1F7EA80;
+constexpr std::size_t kLongGunJiggleSetEnabledAndResetVtableOffset = 0x28;
+constexpr std::size_t kLongGunJiggleSize = 0xE0;
 // RTTI-backed ProcessCharCloth vtable. At the callsite above RBX still owns the
 // NdAttachableObject, so the relay can distinguish cloth from other attachments.
 constexpr std::uintptr_t kProcessCharClothVtableRva = 0x2BAF780;
