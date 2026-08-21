@@ -26955,6 +26955,82 @@ placement.  A missing monotonic trace is packaging/ABI failure, and any grip,
 P99, strap or crash regression rejects the scope.  The agent launches exactly
 one role-B Nadine copy and never supplies gameplay input.
 
+### 2026-08-21 CONFIRMED / REJECTED (`aex`): weapon-frame interpolation is smooth; the remaining snap is the arm transition
+
+The one-copy role-B run in PID `18256` confirmed the exact weighted-frame
+package.  Draw covered monotonically decreasing correction weights through
+`0.9865 .. 0.02096 -> 0`, and Put covered monotonically increasing weights
+through `0.01310 .. 0.99128 -> 1`.  The stock attachment endpoint changed only
+after the completed draw handoff, exactly as predicted.  `Hweighted-frame` is
+therefore CONFIRMED for weapon placement itself; do not retune the 0.1-second
+transform or the authored back endpoint.
+
+The user nevertheless observed the same magnetic handoff in both directions.
+The exact boundary explains it: after Draw completed at log row `94286`, the
+selector changed to `rightHand` at `94287`, but the next pose command at `94288`
+was the mod's full steady `56C57AD2 + 283966ED` pair with literal weights
+`1/1`; there was no `source=stock-transition` marker.  Thus `aex` is REJECTED as
+a complete draw/put animation fix and selects **Harm-transition**: the rifle
+frame moves continuously, but the arm owner jumps directly to the steady hold.
+Put remains a separate unclosed arm path; no symmetric clip substitution is
+authorized from this result.
+
+Cold startup is also still wrong for an independent reason.  Exact
+`NADINE-LOCAL-MAZUR-REBIND` rows change the logical endpoint from `rightHand` to
+`targSpineProp` and verify the owner record, but every attempt returns
+`refresh=active-blend`; the deferred retry stays there for roughly 100--140
+game-thread passes and is aborted only when manual Draw changes controller
+scope.  A real Draw/Put later advances the missing work and leaves the rifle
+correctly attached.  This selects a frozen selected-attachment blend over a bad
+back record, but its progress/lifetime must be observed before any completion
+or cancellation call is attempted.
+
+### 2026-08-21 STATIC / MUTATION + DIAGNOSTIC (`aey`): classify the native Draw pair after stock Create; expose the frozen cold blend
+
+The draw correction has three independent evidence classes.  First, shipped
+`anim-player.bin` state `11EE475B custom-weapon-part-with-feather` owns the exact
+complementary `56C57AD2` hands and `283966ED` arms leaves and its native
+mode-1/`0.7` root.  Second, the saved `aek` lifecycle observed this exact state
+and its changing track weight after the controller had already entered
+`WeaponOut=2`.  Third, the `aex` runtime boundary proved that the current code
+decided `steady-overlay` before stock `PerformAnimBlend`, then inserted a full
+weight pair at the visible hand switch.  The competing missing-action theory is
+rejected by the live state history; a wrong fixed weapon frame is rejected by
+the monotonic `aex` transform trace; a Put-specific owner remains open and is
+not mutated here.
+
+Build `aey` changes only the already-installed exact Create relay.  After the
+stock `AnimManager_CreateAnimCmdsForObject 0x141A8FCF0` returns for the same
+role-B Player/Fg/C39 group 0, it re-resolves the same WeaponPartial layer.  If
+stock materialized one unique `11EE475B` instance with exact Player/control
+fields `56C57AD2`, `283966ED`, and `0.7`, the wrapper preserves the native list
+and its real track weight, updates the same synchronous epoch, and refuses to
+append the steady `1/1` pair.  The postblend ticket revalidates that exact
+instance; late steady IK is already fail-closed for a transition ticket.  If no
+custom state exists after Create, the confirmed steady baseline is unchanged.
+No timer, new detour, animation id substitution, Put mutation, strap mutation or
+weapon-transform change is introduced.
+
+The written one-copy prediction is precise.  Boot must report
+`2026-08-21aey` and the authored-pair READY line.  On Draw, the former immediate
+`injected ... weights=1/1` row at the hand switch must be replaced by
+`preserved ... source=stock-transition ... materialized=post-create` with a
+native weight below or moving toward one, followed by a matching
+`restored ... source=stock-transition`; the hands must travel with the rifle
+rather than snap to it.  A full-weight injection at the same boundary means the
+state did not materialize there and rejects this packaging hypothesis.  Both
+transition markers plus the same snap reject the native pair's visual
+sufficiency and move the frontier to a later arm writer.  Put remains stock and
+is judged only as an independent observation.
+
+For the cold path `aey` adds no mutation.  It records raw
+`ProcessWeapon+0x838` selected-blend pointer/vtable and the adjacent
+`+0x848/+0x84C` progress/rate bits at initial rebind and deferred termination.
+An identical non-null pointer and unchanged bits until scope drift confirms a
+frozen unscheduled blend; moving bits reject that diagnosis.  No game virtual
+call is added to this diagnostic.  The agent launches exactly one role-B Nadine
+copy and never supplies gameplay input.
+
 The strap remains separately parked and hidden.  Forced `ShowMesh` is already
 RUNTIME REJECTED: it produces a delayed floating mesh, because legacy/native
 Nadine lacks the authored `strap2..strap14` guide subtree and the five mandatory

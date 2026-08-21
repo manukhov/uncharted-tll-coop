@@ -5387,6 +5387,34 @@ Keep the postblend preservation boundary; replace only its steady content.
       authored arm/backflip transition. Grip, P99 and strap remain untouched.
       The agent launches one role-B Nadine copy and never sends gameplay input.
 
+  Build `aex` then CONFIRMED the weapon-frame half and REJECTED it as the full
+      transition repair. PID 18256 produced monotonic Draw correction weight
+      `~1->0` and Put `~0->1`, but the user still saw magnetic hand/arm motion.
+      At the exact Draw hand switch the next command was the mod's steady
+      `56C57AD2+283966ED` pair at literal `1/1`; no stock-transition marker was
+      present. Do not retune the back transform. The remaining Draw defect is
+      the arm owner, while Put stays an independent unresolved arm path.
+
+  Build `aey` is the single earned Draw exam. The existing exact Create relay
+      re-resolves WeaponPartial only after stock Create returns. If stock has
+      just materialized unique `11EE475B` with exact `56C/283/0.7` fields, keep
+      its native list/track weight and do not append the steady `1/1` pair.
+      Require boot `aey`, authored-pair READY,
+      `preserved ... source=stock-transition ... materialized=post-create`, and
+      matching postblend restore. Transition markers plus smooth hands confirm
+      the packaging fix; markers plus a snap reject native-pair sufficiency;
+      another full `1/1` injection at the hand switch rejects post-Create
+      materialization. Put is stock in this exam. Launch one role-B Nadine copy
+      and never send gameplay input.
+
+  Cold initial Mazur remains a separate P0: logical rebind to targSpineProp is
+      verified, but the refresh sits at `active-blend` for roughly 100--140
+      retries and only a later real Draw/Put leaves the back attachment correct.
+      `aey` logs raw `weapon+838` blend identity and `+848/+84C` progress/rate at
+      the initial and terminal observations. Unchanged values prove a frozen
+      unscheduled selected-attachment blend; do not call the broad updater or
+      clear the pointer until its stock completion lifetime is closed.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such
