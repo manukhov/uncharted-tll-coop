@@ -51335,40 +51335,23 @@ hooked_create_anim_cmds_for_legacy_nadine_mazur_authored_pair(
             std::memory_order_acquire)) {
         return result;
     }
-    const LegacyNadineMazurAuthoredPairEpoch selected_epoch =
+    const LegacyNadineMazurAuthoredPairEpoch epoch =
         g_legacy_nadine_mazur_authored_pair_epoch;
-    if (!selected_epoch.valid ||
-        !seh_matches_legacy_nadine_mazur_authored_pair_create_context(
-            create_context, group, selected_epoch)) {
+    if (!epoch.valid) {
         return result;
     }
-
-    // Perform can materialize custom-weapon-part-with-feather while the stock
-    // Create call above builds this very group. Re-read the exact live
-    // WeaponPartial topology after Create before deciding whether to append the
-    // full steady pair. This preserves the native transition and its track
-    // fade instead of laying a weight-one steady pose over it.
-    LegacyNadineMazurAuthoredPairEpoch epoch = selected_epoch;
-    if (!seh_resolve_legacy_nadine_mazur_authored_pair_weight(
-            epoch.player, &epoch) ||
-        epoch.weapon_partial_layer != selected_epoch.weapon_partial_layer) {
-        return result;
-    }
-    const bool transition_materialized_after_create =
-        selected_epoch.custom_pair_instance == nullptr &&
-        epoch.custom_pair_instance != nullptr;
-    g_legacy_nadine_mazur_authored_pair_epoch = epoch;
 
     // During the authored custom-state lifetime, stock has already generated
     // the exact pair and applied its native track fade. Mark that post-Perform
     // pose for preservation without appending a second weighted copy.
     if (epoch.custom_pair_instance != nullptr) {
+        if (!seh_matches_legacy_nadine_mazur_authored_pair_create_context(
+                create_context, group, epoch)) {
+            return result;
+        }
         g_legacy_nadine_mazur_authored_pair_injected = true;
-        static std::array<std::atomic<bool>, 2> transition_logged{};
-        const std::size_t materialization_index =
-            transition_materialized_after_create ? 1 : 0;
-        if (!transition_logged[materialization_index].exchange(
-                true, std::memory_order_relaxed)) {
+        static std::atomic<bool> transition_logged{false};
+        if (!transition_logged.exchange(true, std::memory_order_relaxed)) {
             float blend_weight = 0.0F;
             std::memcpy(
                 &blend_weight, &epoch.blend_weight_bits,
@@ -51380,11 +51363,7 @@ hooked_create_anim_cmds_for_legacy_nadine_mazur_authored_pair(
                  << std::dec << " group=" << group
                  << " nativeWeight=" << blend_weight
                  << " commandWeighted="
-                 << (epoch.transition_weighted ? 1 : 0)
-                 << " materialized="
-                 << (transition_materialized_after_create
-                         ? "post-create"
-                         : "pre-perform");
+                 << (epoch.transition_weighted ? 1 : 0);
             boot_log_line(line.str().c_str());
         }
         return result;
@@ -55454,9 +55433,24 @@ seh_refresh_initial_local_nadine_holster_transform(
                     *reinterpret_cast<const std::uintptr_t*>(
                         result.selected_blend);
             }
-            result.status = "active-blend";
-            result.retryable = true;
-            return result;
+            // Cold legacy-Nadine Mazur retains a completed selected-attachment
+            // blend: progress is exactly 1.0 and its rate is zero.  It is not
+            // an interpolation in flight.  Let the native selected-attachment
+            // updater consume that terminal object and publish +0x130/+0x140;
+            // every other non-null blend remains fail-closed.
+            const std::uint32_t image_size = tll_image_size();
+            if (result.selected_blend_vtable == 0 || image_size == 0 ||
+                result.selected_blend_vtable < g_module ||
+                result.selected_blend_vtable >= g_module + image_size) {
+                result.status = "selected-blend-object";
+                return result;
+            }
+            if (result.selected_blend_progress_bits != 0x3F800000u ||
+                result.selected_blend_rate_bits != 0) {
+                result.status = "active-blend";
+                result.retryable = true;
+                return result;
+            }
         }
         // Stock clears only the duration DWORD at +0x640 when the interpolation
         // completes; progress at +0x644 remains 1.0 and must not keep this gate
@@ -65916,8 +65910,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-21aey "
-        "(post-Create Mazur Draw transition preservation + cold-blend census)");
+        "TLL co-op runtime init 2026-08-21aez "
+        "(completed cold Mazur selected-blend refresh)");
     if constexpr (kEnableCrashObserver) {
         AddVectoredExceptionHandler(0, &crash_observer);
         boot_log_line("crash observer installed (no breakpoints)");

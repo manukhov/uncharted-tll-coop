@@ -5395,25 +5395,24 @@ Keep the postblend preservation boundary; replace only its steady content.
       present. Do not retune the back transform. The remaining Draw defect is
       the arm owner, while Put stays an independent unresolved arm path.
 
-  Build `aey` is the single earned Draw exam. The existing exact Create relay
-      re-resolves WeaponPartial only after stock Create returns. If stock has
-      just materialized unique `11EE475B` with exact `56C/283/0.7` fields, keep
-      its native list/track weight and do not append the steady `1/1` pair.
-      Require boot `aey`, authored-pair READY,
-      `preserved ... source=stock-transition ... materialized=post-create`, and
-      matching postblend restore. Transition markers plus smooth hands confirm
-      the packaging fix; markers plus a snap reject native-pair sufficiency;
-      another full `1/1` injection at the hand switch rejects post-Create
-      materialization. Put is stock in this exam. Launch one role-B Nadine copy
-      and never send gameplay input.
+  Build `aey` rejected both of its proposed classifications. PID 9900 still
+      injected the full `56C57AD2+283966ED` pair at `1/1` after the Draw handoff
+      and emitted no post-Create `stock-transition` marker, so remove that
+      re-resolution hot-path no-op. Cold rebind was more informative: exact
+      targSpineProp/owner verification passed and `weapon+838` was nonnull, but
+      `+848/+84C` was terminal `1.0/0`. The blend is completed, not frozen; the
+      unconditional nonnull guard itself prevented the native selected-
+      attachment updater from publishing `+130/+140`.
 
-  Cold initial Mazur remains a separate P0: logical rebind to targSpineProp is
-      verified, but the refresh sits at `active-blend` for roughly 100--140
-      retries and only a later real Draw/Put leaves the back attachment correct.
-      `aey` logs raw `weapon+838` blend identity and `+848/+84C` progress/rate at
-      the initial and terminal observations. Unchanged values prove a frozen
-      unscheduled selected-attachment blend; do not call the broad updater or
-      clear the pointer until its stock completion lifetime is closed.
+  Build `aez` is the single earned cold-start exam. Permit the already scoped
+      `NdAttachableObject_UpdateSelectedAttachmentTransform 0x141ED1380` call
+      only for a readable selected-blend object with nonzero vtable and exact
+      terminal `progress/rate=3F800000/0`; retain fail-closed behavior for every
+      other nonnull blend. Do not clear/free the object or call the broad blend
+      updater. Require boot `aez`, exact cold rebind, `refresh=ok/1/1`, nonzero
+      changed mask and TLS `1/1`, plus correct back placement before any Draw.
+      Marker plus unchanged/wrong visuals rejects this boundary. Launch one
+      role-B Nadine copy and never send gameplay input.
 
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to

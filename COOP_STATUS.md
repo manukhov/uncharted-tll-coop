@@ -27031,6 +27031,57 @@ frozen unscheduled blend; moving bits reject that diagnosis.  No game virtual
 call is added to this diagnostic.  The agent launches exactly one role-B Nadine
 copy and never supplies gameplay input.
 
+### 2026-08-21 CONFIRMED / REJECTED (`aey`): cold blend is completed, not frozen; post-Create Draw state does not materialize
+
+The one-copy role-B run in PID `9900` cleanly separated both hypotheses.  At
+cold rebind the endpoint changed from `rightHand` to exact `targSpineProp`
+`AD047A`, owner/generation verification passed, and the selected-attachment
+object was non-null at `weapon+838`.  Its raw state was exactly
+`progress=3F800000` (`1.0`) and `rate=0`, while the helper returned
+`refresh=active-blend/0/0`.  The object is therefore a completed retained blend,
+not an interpolation frozen before its endpoint.  The current unconditional
+nonnull guard is REJECTED: it prevents the native selected-attachment updater
+from publishing the already-completed endpoint to `weapon+130/+140`.
+
+The Draw prediction failed independently.  After the real handoff, the log again
+reported `injected ... 56C57AD2 + 283966ED ... weights=1/1
+source=steady-overlay`, followed by the steady restore.  There was no
+`source=stock-transition` row.  Re-resolving WeaponPartial after stock Create
+therefore does not materialize `11EE475B` at this seam; the `aey` post-Create
+classification is RUNTIME REJECTED and removed rather than kept as a hot-path
+no-op.  This result does not resolve the separate Put arm transition.
+
+### 2026-08-21 STATIC / MUTATION (`aez`): let the native updater publish only an exact completed cold blend
+
+Three independent evidence classes earn one narrower cold-start exam.  First,
+the `aey` runtime row proves the exact local role-B Nadine/Mazur object has the
+correct logical `targSpineProp` endpoint and a retained blend at terminal
+`progress=1.0/rate=0`.  Second,
+`NdAttachableObject_UpdateSelectedAttachmentTransform 0x141ED1380` is the exact
+stock vtable target already used by the helper; its blend-object branch selects
+the target, applies progress, and publishes the resulting local attachment
+transform.  Third, the independent P99 cold control reached the same helper with
+no selected blend and produced `refresh=ok/1/1`, while a real Mazur Draw/Put later
+runs the stock lifecycle and leaves the back attachment correct.  These reject a
+bad `targSpineProp` record and a generic TLS/callsite failure.
+
+Build `aez` keeps every nonterminal or unreadable selected blend fail-closed.  It
+allows the existing exact stock updater only when the selected-blend object is
+readable with a nonzero vtable, `+848` is bit-exact `3F800000`, and `+84C` is
+zero.  It does not clear/free the object, call the broad local-blend updater, or
+write an attachment transform manually.  The failed `aey` post-Create Draw
+reclassification is removed; grip, Draw/Put arm paths, P99 and strap otherwise
+remain unchanged.
+
+The falsifiable one-copy prediction is: boot reports `2026-08-21aez`; the cold
+Mazur rebind still reports nonnull selected blend with
+`progress/rate=3F800000/0`, but refresh becomes `ok/1/1`, `changed` is nonzero,
+TLS set/restore is `1/1`, and the rifle is correctly on Nadine's back before any
+Draw.  If the updater runs but `changed=0`, or the exact marker is present while
+the rifle still protrudes, the completed-selected-refresh hypothesis is
+rejected and the next boundary is the selected object's terminal endpoint or a
+later publish owner.  No gameplay input is supplied by the agent.
+
 The strap remains separately parked and hidden.  Forced `ShowMesh` is already
 RUNTIME REJECTED: it produces a delayed floating mesh, because legacy/native
 Nadine lacks the authored `strap2..strap14` guide subtree and the five mandatory
