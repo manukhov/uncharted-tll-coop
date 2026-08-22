@@ -104,7 +104,12 @@ constexpr std::size_t kFgAnimDataUpperStateOwnerOffset = 0x10;
 constexpr std::size_t kFgAnimDataJointCacheLocalPoseOffset = 0x100;
 constexpr std::size_t kFgAnimDataRetainedHandleOffset = 0x1A8;
 constexpr std::size_t kFgAnimDataRetainedIdOffset = 0x1B0;
+// Uniform scalar applied before publishing an owner's BASE world matrix.
+constexpr std::size_t kFgAnimDataWorldScaleOffset = 0x140;
 constexpr std::size_t kFgAnimDataRenderWorldMatrixOffset = 0x1C0;
+// Optional render-only matrix applied by FgAnimData_GetRenderWorldMatrix when
+// FgAnimData flags contain 0x40000.
+constexpr std::size_t kFgAnimDataAuxRenderMatrixOffset = 0x2E0;
 // AnimMgr::AllocateAnimData claims one 0x380-byte slot from this fixed-capacity
 // pool and records every driven global FgInstance index at +0x210. The first
 // 0x600 allocation bits correspond one-to-one with the pool slots.
@@ -160,6 +165,19 @@ constexpr std::uintptr_t kJointCacheRecomputeWorldLocatorRva = 0x1688320;
 // driven 0x280-byte instance owns the current render-world matrix at +0x140.
 constexpr std::uintptr_t kFgDrawManagerPrepareInstanceRva = 0x181A9B0;
 constexpr std::uintptr_t kFgDrawManagerPrepareInstanceCallsiteRva = 0x181B925;
+// All three direct calls to FgAnimData_GetRenderWorldMatrix inside
+// PrepareInstanceForRendering. The first two feed temporal/motion data and the
+// last one writes each driven FgInstance's visible +0x140 matrix.
+constexpr std::uintptr_t kFgAnimDataGetRenderWorldMatrixRva = 0x03014F0;
+constexpr std::array<std::uintptr_t, 3>
+    kFgDrawManagerRenderWorldMatrixCallsiteRvas{
+        0x181AD57, 0x181ADFE, 0x181B3F4};
+constexpr std::uintptr_t kMatrix4x4FromTranslationQuaternionRva = 0x019A270;
+constexpr std::uintptr_t kMatrix4x4MultiplyRva = 0x0301310;
+// Shared authored-transform pointer table used by the stock retained-owner
+// phase-0x40 parent refresh. ProcessWeapon+0x108 is the table index and +0x10C
+// is matched against the selected entry's generation DWORD at +0x50.
+constexpr std::uintptr_t kAuthoredTransformPointerTableRva = 0x386FD00;
 // PrepareInstanceForRendering holds Fg+0x220 and calls the image's memcpy thunk
 // with upload/current/48*jointCount in RCX/RDX/R8. R14 still contains the exact
 // FgAnimData. A three-byte relay surfaces R14 as the fourth Win64 argument.

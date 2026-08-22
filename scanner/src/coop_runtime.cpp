@@ -58,6 +58,12 @@ namespace {
 using UpdateFunction = void(__fastcall*)(void*);
 using FgAnimDataPublishWorldTransformFunction = std::int64_t(__fastcall*)(
     void*, const float*, std::uint8_t);
+using FgAnimDataGetRenderWorldMatrixFunction = float*(__fastcall*)(
+    void*, float*);
+using Matrix4x4FromTranslationQuaternionFunction = float*(__fastcall*)(
+    float*, const float*, const float*);
+using Matrix4x4MultiplyFunction = float*(__fastcall*)(
+    float*, const float*, const float*);
 using CharacterLegIkControllerUpdateFunction = void(__fastcall*)(
     void*, const void*, std::uintptr_t);
 using BuildNavigationFrameFunction =
@@ -138,6 +144,11 @@ AnimJointProgramOperatorFunction g_original_anim_joint_program_op128 = nullptr;
 AnimJointProgramOperatorFunction g_original_anim_joint_program_op129 = nullptr;
 AnimJointProgramOperatorFunction g_original_anim_joint_program_op131 = nullptr;
 FgAnimDataPublishWorldTransformFunction g_fganim_publish_world_transform = nullptr;
+FgAnimDataGetRenderWorldMatrixFunction
+    g_original_fganim_get_render_world_matrix = nullptr;
+Matrix4x4FromTranslationQuaternionFunction
+    g_matrix4x4_from_translation_quaternion = nullptr;
+Matrix4x4MultiplyFunction g_matrix4x4_multiply = nullptr;
 CharacterLegIkControllerUpdateFunction
     g_character_leg_ik_controller_update = nullptr;
 std::atomic<void*> g_local_fganim_data{nullptr};
@@ -424,23 +435,39 @@ std::array<NadineWeaponCandidate, 32> g_nadine_weapon_candidates{};
 std::atomic<std::uintptr_t> g_local_nadine_inactive_rifle_weapon{0};
 std::atomic<std::uint64_t> g_local_nadine_inactive_rifle_generation{0};
 
-// Build aff: the cold Mazur's attachment rebind is authored on the game
-// thread, but the visible weapon world matrix is published later by the exact
-// FgAnimData phase-0x40 worker.  Publish only the stable Fg identity here; the
-// worker resolves the current ProcessWeapon through Fg+0x1A8/+0x1B0 instead of
-// trusting a raw ProcessWeapon address that can relocate.
-struct ColdNadineMazurPhasePublishTarget {
+// Build afh: afb proved the authored local correction completes, while afg
+// produced no target phase-0x40 publication despite exact arming (the old seam
+// remained temporally inconclusive). Keep a fresh
+// game-thread snapshot of the fully scaled BASE world matrix and substitute it
+// only at FgDrawManager's three exact GetRenderWorldMatrix callsites. The
+// renderer matches only Fg+owner generation and never dereferences a retained
+// ProcessWeapon pointer on its worker threads.
+struct ColdNadineMazurRenderMatrixTarget {
     void* fg = nullptr;
+    void* player = nullptr;
+    void* weapon = nullptr;
     std::uint32_t weapon_runtime_id = 0;
     std::uint32_t player_runtime_id = 0;
     std::uintptr_t records_generation = 0;
-    ULONGLONG armed_ms = 0;
+    std::uint64_t generation = 0;
+    std::uint64_t publication = 0;
+    ULONGLONG updated_ms = 0;
+    std::uint32_t applied_hits = 0;
+    std::uint32_t parent_hash = 0;
+    std::uint32_t local_hash = 0;
+    std::array<float, 16> base_world_matrix{};
 };
-SRWLOCK g_cold_nadine_mazur_phase_publish_lock = SRWLOCK_INIT;
-ColdNadineMazurPhasePublishTarget g_cold_nadine_mazur_phase_publish_target{};
-std::atomic<std::uintptr_t> g_cold_nadine_mazur_phase_publish_fg{0};
+struct ColdNadineMazurRenderMatrixApplyDiagnostics {
+    std::uint32_t fg_flags = 0;
+    std::uint64_t auxiliary_hash = 0;
+};
+SRWLOCK g_cold_nadine_mazur_render_matrix_lock = SRWLOCK_INIT;
+ColdNadineMazurRenderMatrixTarget g_cold_nadine_mazur_render_matrix_target{};
+std::atomic<std::uintptr_t> g_cold_nadine_mazur_render_matrix_fg{0};
+std::atomic<std::uint64_t> g_cold_nadine_mazur_render_matrix_generation{0};
+std::atomic<std::uint64_t> g_cold_nadine_mazur_render_matrix_publication{0};
 std::atomic<bool> g_nadine_local_transform_probe_ready{false};
-std::atomic<bool> g_cold_nadine_mazur_phase_publish_ready{false};
+std::atomic<bool> g_cold_nadine_mazur_render_matrix_ready{false};
 
 // Build aab: publish the exact local slot-zero rifle render instances on the
 // game thread, then correlate their shared FgGeometry pointers with the
@@ -2433,11 +2460,13 @@ constexpr bool kEnableEarlyLegacyNadineSpinePropAlias = true;
 // remained at the bad cold placement.  The missing owner is therefore the
 // already-published drawable/Fg transform, not another attachment rebind.
 constexpr bool kEnableColdLegacyNadineMazurFactoryHolsterRebind = false;
-// Build aff bridges the already-proven authored local correction into the exact
-// stock phase-0x40 world publication on the same weapon FgAnimData.  The worker
-// re-resolves all identities and publishes once; no game-thread world matrix is
-// written and no raw ProcessWeapon pointer is retained across threads.
-constexpr bool kEnableColdLegacyNadineMazurPhasePublishRepair = true;
+// Build afh avoids the phase-0x40 worker entirely. The game thread continuously
+// rebuilds the already-proven corrected BASE matrix while the exact cold scope
+// remains valid; FgDrawManager consumes that coherent snapshot at all three
+// GetRenderWorldMatrix callsites. The hook writes only the caller's temporary
+// output; stock consumers then copy it into their normal temporal buffers and
+// FgInstance render matrices.
+constexpr bool kEnableColdLegacyNadineMazurRenderMatrixRepair = true;
 // Native NPC Nadine's targSpineProp and legacy Player-Nadine's targSpine are
 // both canonical identity records on spineb/joint16. The attach-table repair
 // now creates targSpineProp as an exact id alias of that existing Nadine frame,
@@ -13416,9 +13445,6 @@ void* seh_character_leg_ik_owner(void* controller) {
     return nullptr;
 }
 
-bool seh_refresh_cold_local_nadine_mazur_at_phase_publish(
-    void* fg, const float* stock_transform, float corrected_transform[8]);
-
 std::int64_t __fastcall hooked_fganim_publish_world_transform(
     void* fg, const float* transform, std::uint8_t publish_current) {
     const auto native = g_fganim_publish_world_transform;
@@ -13572,13 +13598,6 @@ std::int64_t __fastcall hooked_fganim_publish_world_transform(
             smoothed_yaw_ms = 0;
             g_puppet_render_aim_yaw_ready.store(
                 false, std::memory_order_release);
-        }
-    }
-    alignas(16) float cold_mazur_transform[8]{};
-    if constexpr (kEnableColdLegacyNadineMazurPhasePublishRepair) {
-        if (seh_refresh_cold_local_nadine_mazur_at_phase_publish(
-                fg, transform, cold_mazur_transform)) {
-            selected_transform = cold_mazur_transform;
         }
     }
     return native(fg, selected_transform, publish_current);
@@ -19957,6 +19976,7 @@ void reconcile_legacy_nadine_inactive_rifle_game_thread(
     const coop::StatePacket& peer, void* peer_puppet);
 void process_deferred_initial_local_nadine_holster_refresh_game_thread();
 void rebind_initial_local_nadine_rifle_game_thread();
+void maintain_cold_nadine_mazur_render_matrix_game_thread();
 void census_local_nadine_mazur_strap_game_thread();
 void rebind_initial_local_nadine_p99_to_hip_game_thread();
 void sync_local_nadine_rifle_visibility_game_thread();
@@ -19981,6 +20001,9 @@ void service_initial_local_nadine_weapon_presentation_game_thread() {
     }
     if constexpr (kEnableInitialLocalNadineRifleRebind) {
         rebind_initial_local_nadine_rifle_game_thread();
+    }
+    if constexpr (kEnableColdLegacyNadineMazurRenderMatrixRepair) {
+        maintain_cold_nadine_mazur_render_matrix_game_thread();
     }
 }
 
@@ -55852,317 +55875,927 @@ seh_refresh_initial_local_nadine_holster_transform(
     return result;
 }
 
-struct ColdNadineMazurPhasePublishResult {
+struct ColdNadineMazurRenderMatrixBuildResult {
     const char* status = "not-requested";
-    void* fg = nullptr;
-    void* player = nullptr;
-    void* weapon = nullptr;
-    std::uint32_t player_runtime_id = 0;
-    std::uint32_t weapon_runtime_id = 0;
-    std::uintptr_t records_generation = 0;
-    std::uint32_t fg_flags = 0;
-    std::uint32_t stock_world_hash = 0;
-    std::uint32_t corrected_world_hash = 0;
-    NadineColdHolsterRefreshResult refresh{};
+    ColdNadineMazurRenderMatrixTarget target{};
+    float fg_scale = 0.0F;
+    std::uint32_t matrix_hash = 0;
 };
 
-bool copy_cold_nadine_mazur_phase_publish_target(
-    void* fg, ColdNadineMazurPhasePublishTarget* target) {
+bool finite_matrix4x4(const float* matrix) {
+    if (matrix == nullptr) {
+        return false;
+    }
+    for (std::size_t index = 0; index < 16; ++index) {
+        if (!std::isfinite(matrix[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool copy_cold_nadine_mazur_render_matrix_target(
+    void* fg, ColdNadineMazurRenderMatrixTarget* target) {
     if (target == nullptr || fg == nullptr ||
-        g_cold_nadine_mazur_phase_publish_fg.load(
+        g_cold_nadine_mazur_render_matrix_fg.load(
             std::memory_order_acquire) !=
             reinterpret_cast<std::uintptr_t>(fg)) {
         return false;
     }
-    AcquireSRWLockShared(&g_cold_nadine_mazur_phase_publish_lock);
+    AcquireSRWLockShared(&g_cold_nadine_mazur_render_matrix_lock);
     const bool matches =
-        g_cold_nadine_mazur_phase_publish_target.fg == fg;
+        g_cold_nadine_mazur_render_matrix_target.fg == fg;
     if (matches) {
-        *target = g_cold_nadine_mazur_phase_publish_target;
+        *target = g_cold_nadine_mazur_render_matrix_target;
     }
-    ReleaseSRWLockShared(&g_cold_nadine_mazur_phase_publish_lock);
+    ReleaseSRWLockShared(&g_cold_nadine_mazur_render_matrix_lock);
     return matches;
 }
 
-void clear_cold_nadine_mazur_phase_publish_target(
-    const ColdNadineMazurPhasePublishTarget& expected) {
-    AcquireSRWLockExclusive(&g_cold_nadine_mazur_phase_publish_lock);
-    const ColdNadineMazurPhasePublishTarget& current =
-        g_cold_nadine_mazur_phase_publish_target;
-    if (current.fg == expected.fg &&
-        current.weapon_runtime_id == expected.weapon_runtime_id &&
-        current.player_runtime_id == expected.player_runtime_id &&
-        current.records_generation == expected.records_generation &&
-        current.armed_ms == expected.armed_ms) {
-        g_cold_nadine_mazur_phase_publish_fg.store(
-            0, std::memory_order_release);
-        g_cold_nadine_mazur_phase_publish_target = {};
+bool copy_active_cold_nadine_mazur_render_matrix_target(
+    ColdNadineMazurRenderMatrixTarget* target) {
+    if (target == nullptr) {
+        return false;
     }
-    ReleaseSRWLockExclusive(&g_cold_nadine_mazur_phase_publish_lock);
+    const auto fg = reinterpret_cast<void*>(
+        g_cold_nadine_mazur_render_matrix_fg.load(
+            std::memory_order_acquire));
+    return copy_cold_nadine_mazur_render_matrix_target(fg, target);
 }
 
-void log_cold_nadine_mazur_phase_publish(
-    const ColdNadineMazurPhasePublishResult& result) {
+void log_cold_nadine_mazur_render_reject_once(
+    const ColdNadineMazurRenderMatrixTarget& target,
+    const char* reason, const char* detail = nullptr,
+    std::uintptr_t caller_rva = 0) {
+    if (target.generation == 0 || reason == nullptr) {
+        return;
+    }
+    std::uint64_t signature = 1469598103934665603ULL;
+    const auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(target.generation);
+    mix(reinterpret_cast<std::uintptr_t>(reason));
+    mix(reinterpret_cast<std::uintptr_t>(detail));
+    mix(caller_rva);
+    if (signature == 0) {
+        signature = 1;
+    }
+
+    static SRWLOCK lock = SRWLOCK_INIT;
+    static std::array<std::uint64_t, 64> signatures{};
+    static std::uint32_t log_count = 0;
+    static bool saturation_logged = false;
+    bool should_log = false;
+    bool log_saturation = false;
+    AcquireSRWLockExclusive(&lock);
+    bool duplicate = false;
+    for (const std::uint64_t existing : signatures) {
+        duplicate |= existing == signature;
+    }
+    if (!duplicate && log_count < signatures.size()) {
+        signatures[log_count++] = signature;
+        should_log = true;
+    } else if (!duplicate && !saturation_logged) {
+        saturation_logged = true;
+        log_saturation = true;
+    }
+    ReleaseSRWLockExclusive(&lock);
+    if (log_saturation) {
+        boot_log_line(
+            "NADINE-COLD-MAZUR-RENDER status=reject-log-saturated");
+    }
+    if (!should_log) {
+        return;
+    }
+
+    const ULONGLONG now = GetTickCount64();
     std::ostringstream line;
-    line << "NADINE-COLD-MAZUR-PHASE40 status=" << result.status
-         << " fg=0x" << std::hex
-         << reinterpret_cast<std::uintptr_t>(result.fg)
-         << " player=0x" << reinterpret_cast<std::uintptr_t>(result.player)
-         << ":" << std::dec << result.player_runtime_id
-         << " weapon=0x" << std::hex
-         << reinterpret_cast<std::uintptr_t>(result.weapon)
-         << ":" << std::dec << result.weapon_runtime_id
-         << " records=0x" << std::hex << result.records_generation
-         << " flags=0x" << result.fg_flags
-         << " worldHash=0x" << result.stock_world_hash << "->0x"
-         << result.corrected_world_hash
-         << " refresh=" << result.refresh.status << "/"
-         << std::dec << (result.refresh.called ? 1 : 0) << "/"
-         << (result.refresh.post_verified ? 1 : 0)
-         << " changed=0x" << std::hex << result.refresh.changed_mask
-         << " localHash=0x" << result.refresh.before_hash << "->0x"
-         << result.refresh.after_hash
-         << " jiggleReset=" << std::dec
-         << (result.refresh.jiggle_reset_called ? 1 : 0) << "/"
-         << static_cast<unsigned>(result.refresh.jiggle_enabled_before)
-         << "->"
-         << static_cast<unsigned>(result.refresh.jiggle_enabled_after);
+    line << "NADINE-COLD-MAZUR-RENDER status=rejected"
+         << " reason=" << reason;
+    if (detail != nullptr) {
+        line << "/" << detail;
+    }
+    line << " generation=" << target.generation
+         << " publication=" << target.publication
+         << " caller=0x" << std::hex << caller_rva
+         << " fg=0x" << reinterpret_cast<std::uintptr_t>(target.fg)
+         << ":" << target.weapon_runtime_id
+         << " parentHash=0x" << target.parent_hash
+         << " localHash=0x" << target.local_hash << std::dec
+         << " ageMs="
+         << (target.updated_ms != 0 && now >= target.updated_ms
+                 ? now - target.updated_ms
+                 : 0);
     boot_log_line(line.str().c_str());
 }
 
-bool arm_cold_nadine_mazur_phase_publish(
-    void* player, void* weapon, std::uintptr_t records_generation) {
-    if (!g_cold_nadine_mazur_phase_publish_ready.load(
-            std::memory_order_acquire) ||
-        player == nullptr || weapon == nullptr || records_generation == 0) {
+bool clear_cold_nadine_mazur_render_matrix_target(
+    const ColdNadineMazurRenderMatrixTarget& expected) {
+    bool cleared = false;
+    AcquireSRWLockExclusive(&g_cold_nadine_mazur_render_matrix_lock);
+    const auto& current = g_cold_nadine_mazur_render_matrix_target;
+    if (current.generation == expected.generation &&
+        current.publication == expected.publication &&
+        current.fg == expected.fg &&
+        current.weapon_runtime_id == expected.weapon_runtime_id) {
+        g_cold_nadine_mazur_render_matrix_fg.store(
+            0, std::memory_order_release);
+        g_cold_nadine_mazur_render_matrix_target = {};
+        cleared = true;
+    }
+    ReleaseSRWLockExclusive(&g_cold_nadine_mazur_render_matrix_lock);
+    return cleared;
+}
+
+bool
+seh_snapshot_cold_nadine_mazur_parent_and_local(
+    void* weapon, NadineAttachTransform32* parent_out,
+    NadineAttachTransform32* local_out, const char** status_out) {
+    if (status_out != nullptr) {
+        *status_out = "parent-source";
+    }
+    if (weapon == nullptr || parent_out == nullptr || local_out == nullptr) {
+        if (status_out != nullptr) {
+            *status_out = "parent-args";
+        }
         return false;
     }
-    ColdNadineMazurPhasePublishTarget target{};
+    *parent_out = {};
+    *local_out = {};
+
+    __try {
+        auto* const weapon_bytes = static_cast<std::byte*>(weapon);
+        const std::uint32_t key_before =
+            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x108);
+        const std::uint32_t generation_before =
+            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x10C);
+        const std::uintptr_t entry_slot =
+            g_module + kAuthoredTransformPointerTableRva +
+            static_cast<std::uintptr_t>(key_before) * sizeof(void*);
+        auto* const entry_before = *reinterpret_cast<std::byte* const*>(
+            entry_slot);
+        if (entry_before == nullptr || readable_bytes(entry_before) < 0x54 ||
+            *reinterpret_cast<const std::uint32_t*>(entry_before + 0x50) !=
+                generation_before) {
+            if (status_out != nullptr) {
+                *status_out = "parent-generation";
+            }
+            return false;
+        }
+
+        std::memcpy(parent_out, entry_before, sizeof(*parent_out));
+        std::memcpy(local_out, weapon_bytes + 0x130, sizeof(*local_out));
+
+        const std::uint32_t key_after =
+            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x108);
+        const std::uint32_t generation_after =
+            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x10C);
+        const std::uintptr_t entry_slot_after =
+            g_module + kAuthoredTransformPointerTableRva +
+            static_cast<std::uintptr_t>(key_after) * sizeof(void*);
+        auto* const entry_after = *reinterpret_cast<std::byte* const*>(
+            entry_slot_after);
+        NadineAttachTransform32 local_after{};
+        std::memcpy(
+            &local_after, weapon_bytes + 0x130, sizeof(local_after));
+        if (key_after != key_before ||
+            generation_after != generation_before ||
+            entry_after != entry_before || entry_after == nullptr ||
+            readable_bytes(entry_after) < 0x54 ||
+            *reinterpret_cast<const std::uint32_t*>(entry_after + 0x50) !=
+                generation_before ||
+            std::memcmp(local_out, &local_after, sizeof(local_after)) != 0 ||
+            !raw_attach_transform_valid(parent_out) ||
+            !raw_attach_transform_valid(local_out)) {
+            *parent_out = {};
+            *local_out = {};
+            if (status_out != nullptr) {
+                *status_out = "parent-or-local-drift";
+            }
+            return false;
+        }
+        if (status_out != nullptr) {
+            *status_out = "ok";
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *parent_out = {};
+        *local_out = {};
+        if (status_out != nullptr) {
+            *status_out = "parent-exception";
+        }
+        return false;
+    }
+}
+
+ColdNadineMazurRenderMatrixBuildResult
+seh_build_cold_nadine_mazur_render_matrix_target(
+    void* player, void* weapon,
+    std::uintptr_t expected_records_generation) {
+    ColdNadineMazurRenderMatrixBuildResult result{};
+    if (!g_cold_nadine_mazur_render_matrix_ready.load(
+            std::memory_order_acquire) ||
+        !g_net_role_b || player == nullptr || weapon == nullptr ||
+        expected_records_generation == 0 ||
+        g_matrix4x4_from_translation_quaternion == nullptr ||
+        g_matrix4x4_multiply == nullptr) {
+        result.status = "package-or-args";
+        return result;
+    }
+
     __try {
         auto* const player_bytes = static_cast<std::byte*>(player);
         auto* const weapon_bytes = static_cast<std::byte*>(weapon);
+        std::uint32_t look = 0;
+        int current_slot = -99;
+        std::uint32_t draw_state = 0xFFFFFFFFu;
+        void* controller = nullptr;
+        if (player != retained_player_object(0) ||
+            !player_object_stable(player) ||
+            !player_screen_index_is(player, 0) ||
+            !seh_read_player_look(player, &look) ||
+            look != kLegacyNadineAttachTargetLookId ||
+            !seh_read_exact_player_weapon_controller(
+                player, &controller) ||
+            !read_weapon_draw_state(
+                player, current_slot, draw_state) ||
+            current_slot >= 0 || draw_state != 0) {
+            result.status = "player-scope";
+            return result;
+        }
         if (readable_bytes(player_bytes) <
                 kGameObjectRuntimeIdOffset + sizeof(std::uint32_t) ||
             readable_bytes(weapon_bytes) < 0x864 ||
             *reinterpret_cast<const std::uintptr_t*>(weapon_bytes) !=
                 g_module + kProcessWeaponVtableRva ||
             *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x860) !=
-                kCoopRifleArtId) {
-            return false;
+                kCoopRifleArtId ||
+            !seh_weapon_is_player_art(
+                player, weapon, kCoopRifleArtId) ||
+            !seh_weapon_parent_resolves_to_owner(weapon, player)) {
+            result.status = "weapon-scope";
+            return result;
         }
-        target.player_runtime_id =
+
+        const std::uint32_t player_runtime_id =
             *reinterpret_cast<const std::uint32_t*>(
                 player_bytes + kGameObjectRuntimeIdOffset);
-        target.weapon_runtime_id =
+        const std::uint32_t weapon_runtime_id =
             *reinterpret_cast<const std::uint32_t*>(
                 weapon_bytes + kGameObjectRuntimeIdOffset);
-        target.fg = *reinterpret_cast<void* const*>(weapon_bytes + 0x1A8);
-        if (target.player_runtime_id == 0 || target.weapon_runtime_id == 0 ||
+        if (player_runtime_id == 0 || weapon_runtime_id == 0 ||
             *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x4E8) !=
-                target.player_runtime_id ||
-            target.fg == nullptr || readable_bytes(target.fg) <
-                kFgAnimDataRetainedIdOffset + sizeof(std::uint32_t)) {
-            return false;
+                player_runtime_id) {
+            result.status = "runtime-generation";
+            return result;
         }
-        auto* const fg = static_cast<std::byte*>(target.fg);
-        void* const handle = *reinterpret_cast<void* const*>(
-            fg + kFgAnimDataRetainedHandleOffset);
-        if (handle == nullptr || readable_bytes(handle) < 0x10 ||
-            *reinterpret_cast<void* const*>(
-                static_cast<std::byte*>(handle) + 0x8) != weapon ||
+
+        const std::uint8_t attach_index =
+            *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x688);
+        std::uint32_t attach_id = 0;
+        std::uintptr_t records_generation = 0;
+        if (!seh_read_owner_attach_record_id(
+                player, attach_index, &attach_id, &records_generation) ||
+            attach_id != kTargSpinePropAttachId ||
+            records_generation != expected_records_generation) {
+            result.status = "attachment-scope";
+            return result;
+        }
+
+        auto* const fg =
+            *reinterpret_cast<std::byte* const*>(weapon_bytes + 0x1A8);
+        auto* const draw =
+            *reinterpret_cast<std::byte* const*>(weapon_bytes + 0x198);
+        if (fg == nullptr || draw == nullptr ||
+            readable_bytes(fg) <
+                kFgAnimDataAuxRenderMatrixOffset + 16 * sizeof(float) ||
+            readable_bytes(draw) < sizeof(void*) ||
+            *reinterpret_cast<void* const*>(draw) != fg ||
             *reinterpret_cast<const std::uint32_t*>(
-                fg + kFgAnimDataRetainedIdOffset) !=
-                target.weapon_runtime_id ||
-            (*reinterpret_cast<const std::uint32_t*>(
-                 fg + kFgAnimDataFlagsOffset) & 0x40u) == 0) {
-            return false;
+                fg + kFgAnimDataRetainedIdOffset) != weapon_runtime_id) {
+            result.status = "fganim-scope";
+            return result;
         }
-        target.records_generation = records_generation;
-        target.armed_ms = GetTickCount64();
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
-    }
-
-    AcquireSRWLockExclusive(&g_cold_nadine_mazur_phase_publish_lock);
-    g_cold_nadine_mazur_phase_publish_fg.store(
-        0, std::memory_order_release);
-    g_cold_nadine_mazur_phase_publish_target = target;
-    g_cold_nadine_mazur_phase_publish_fg.store(
-        reinterpret_cast<std::uintptr_t>(target.fg),
-        std::memory_order_release);
-    ReleaseSRWLockExclusive(&g_cold_nadine_mazur_phase_publish_lock);
-    return true;
-}
-
-bool seh_refresh_cold_local_nadine_mazur_at_phase_publish(
-    void* fg, const float* stock_transform, float corrected_transform[8]) {
-    ColdNadineMazurPhasePublishTarget target{};
-    if (!g_cold_nadine_mazur_phase_publish_ready.load(
-            std::memory_order_acquire) ||
-        stock_transform == nullptr || corrected_transform == nullptr ||
-        !copy_cold_nadine_mazur_phase_publish_target(fg, &target)) {
-        return false;
-    }
-
-    ColdNadineMazurPhasePublishResult result{};
-    result.fg = fg;
-    result.player_runtime_id = target.player_runtime_id;
-    result.weapon_runtime_id = target.weapon_runtime_id;
-    result.records_generation = target.records_generation;
-    const ULONGLONG now = GetTickCount64();
-    bool scope_valid = false;
-    int current_slot = -99;
-    std::uint32_t draw_state = 0xFFFFFFFFu;
-    void* controller = nullptr;
-    __try {
-        if (now < target.armed_ms || now - target.armed_ms > 5000) {
-            result.status = "expired";
-        } else if (readable_bytes(fg) <
-                       kFgAnimDataRetainedIdOffset +
-                           sizeof(std::uint32_t)) {
-            result.status = "fg-unreadable";
-        } else {
-            auto* const fg_bytes = static_cast<std::byte*>(fg);
-            result.fg_flags = *reinterpret_cast<const std::uint32_t*>(
-                fg_bytes + kFgAnimDataFlagsOffset);
-            void* const handle = *reinterpret_cast<void* const*>(
-                fg_bytes + kFgAnimDataRetainedHandleOffset);
-            if (handle == nullptr || readable_bytes(handle) < 0x10 ||
-                *reinterpret_cast<const std::uint32_t*>(
-                    fg_bytes + kFgAnimDataRetainedIdOffset) !=
-                    target.weapon_runtime_id) {
-                result.status = "fg-generation";
-            } else {
-                result.weapon = *reinterpret_cast<void* const*>(
-                    static_cast<std::byte*>(handle) + 0x8);
-                if (result.weapon == nullptr ||
-                    readable_bytes(result.weapon) < 0x864) {
-                    result.status = "weapon-unreadable";
-                } else {
-                    auto* const weapon = static_cast<std::byte*>(result.weapon);
-                    void* const parent_handle =
-                        *reinterpret_cast<void* const*>(weapon + 0x4E0);
-                    if (*reinterpret_cast<const std::uintptr_t*>(weapon) !=
-                            g_module + kProcessWeaponVtableRva ||
-                        *reinterpret_cast<const std::uint32_t*>(
-                            weapon + kGameObjectRuntimeIdOffset) !=
-                            target.weapon_runtime_id ||
-                        *reinterpret_cast<const std::uint32_t*>(
-                            weapon + 0x860) != kCoopRifleArtId ||
-                        *reinterpret_cast<void* const*>(weapon + 0x1A8) != fg ||
-                        parent_handle == nullptr ||
-                        readable_bytes(parent_handle) < 0x10) {
-                        result.status = "weapon-identity";
-                    } else {
-                        result.player = *reinterpret_cast<void* const*>(
-                            static_cast<std::byte*>(parent_handle) + 0x8);
-                        std::uint32_t look = 0;
-                        std::uint32_t attach_id = 0;
-                        std::uintptr_t records_generation = 0;
-                        const std::uint8_t selected =
-                            *reinterpret_cast<const std::uint8_t*>(
-                                weapon + 0x688);
-                        if (!g_net_role_b ||
-                            result.player != retained_player_object(0) ||
-                            !player_object_stable(result.player) ||
-                            !player_screen_index_is(result.player, 0) ||
-                            !seh_read_player_look(result.player, &look) ||
-                            look != kLegacyNadineAttachTargetLookId ||
-                            *reinterpret_cast<const std::uint32_t*>(
-                                static_cast<std::byte*>(result.player) +
-                                kGameObjectRuntimeIdOffset) !=
-                                target.player_runtime_id ||
-                            *reinterpret_cast<const std::uint32_t*>(
-                                weapon + 0x4E8) != target.player_runtime_id ||
-                            !seh_weapon_parent_resolves_to_owner(
-                                result.weapon, result.player) ||
-                            !seh_weapon_is_player_art(
-                                result.player, result.weapon,
-                                kCoopRifleArtId) ||
-                            !seh_read_exact_player_weapon_controller(
-                                result.player, &controller) ||
-                            !read_weapon_draw_state(
-                                result.player, current_slot, draw_state) ||
-                            current_slot >= 0 || draw_state != 0 ||
-                            !seh_read_owner_attach_record_id(
-                                result.player, selected, &attach_id,
-                                &records_generation) ||
-                            attach_id != kTargSpinePropAttachId ||
-                            records_generation !=
-                                target.records_generation) {
-                            result.status = "owner-scope";
-                        } else {
-                            scope_valid = true;
-                            result.status = "scope-valid";
-                        }
-                    }
-                }
-            }
+        auto* const fg_handle = *reinterpret_cast<std::byte* const*>(
+            fg + kFgAnimDataRetainedHandleOffset);
+        if (fg_handle == nullptr || readable_bytes(fg_handle) < 0x10 ||
+            *reinterpret_cast<void* const*>(fg_handle + 0x8) != weapon) {
+            result.status = "fganim-owner";
+            return result;
         }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        result.status = "scope-exception";
-        scope_valid = false;
-    }
 
-    if (!scope_valid) {
-        clear_cold_nadine_mazur_phase_publish_target(target);
-        log_cold_nadine_mazur_phase_publish(result);
-        return false;
-    }
-
-    result.refresh = seh_refresh_initial_local_nadine_holster_transform(
-        result.player, controller, result.weapon,
-        target.records_generation, kCoopRifleArtId,
-        kTargSpinePropAttachId);
-    if (result.refresh.retryable && now >= target.armed_ms &&
-        now - target.armed_ms <= 5000) {
-        return false;
-    }
-    if (!result.refresh.called || !result.refresh.post_verified) {
-        result.status = "refresh-failed";
-        clear_cold_nadine_mazur_phase_publish_target(target);
-        log_cold_nadine_mazur_phase_publish(result);
-        return false;
-    }
-
-    bool composed = false;
-    __try {
-        auto* const weapon = static_cast<std::byte*>(result.weapon);
-        const auto* const parent =
-            reinterpret_cast<const NadineAttachTransform32*>(weapon + 0x110);
-        const auto* const local =
-            reinterpret_cast<const NadineAttachTransform32*>(weapon + 0x130);
-        NadineAttachTransform32 recomposed{};
+        // Match the stock phase-0x40 parent refresh without mutating
+        // ProcessWeapon+0x110: resolve the authored parent by the weapon's
+        // exact key/generation, double-check it, and compose that coherent
+        // local snapshot with ProcessWeapon+0x130.
+        NadineAttachTransform32 parent{};
+        NadineAttachTransform32 local{};
+        const char* source_status = "parent-source";
+        if (!seh_snapshot_cold_nadine_mazur_parent_and_local(
+                weapon, &parent, &local, &source_status)) {
+            result.status = source_status;
+            return result;
+        }
+        NadineAttachTransform32 world{};
         using TransformFunction = NadineAttachTransform32*(__fastcall*)(
             const NadineAttachTransform32*, NadineAttachTransform32*,
             const NadineAttachTransform32*);
         const auto compose = reinterpret_cast<TransformFunction>(
             g_module + kTransformComposeRva);
-        result.stock_world_hash = hash_probe_words(
-            reinterpret_cast<const std::uint32_t*>(stock_transform), 8);
-        if (raw_attach_transform_valid(parent) &&
-            raw_attach_transform_valid(local) &&
-            compose(parent, &recomposed, local) == &recomposed &&
-            raw_attach_transform_valid(&recomposed)) {
-            std::memcpy(
-                corrected_transform, &recomposed, sizeof(recomposed));
-            result.corrected_world_hash = hash_probe_words(
-                reinterpret_cast<const std::uint32_t*>(corrected_transform),
-                8);
-            composed = true;
-            result.status = "published";
-        } else {
-            result.status = "compose-failed";
+        if (compose(&parent, &world, &local) != &world ||
+            !raw_attach_transform_valid(&world)) {
+            result.status = "world-compose";
+            return result;
         }
+
+        result.fg_scale = *reinterpret_cast<const float*>(
+            fg + kFgAnimDataWorldScaleOffset);
+        if (!std::isfinite(result.fg_scale) ||
+            result.fg_scale <= 0.0001F || result.fg_scale > 100.0F) {
+            result.status = "fganim-scale";
+            return result;
+        }
+
+        alignas(16) std::array<float, 16> rigid{};
+        alignas(16) std::array<float, 16> scale{
+            result.fg_scale, 0.0F, 0.0F, 0.0F,
+            0.0F, result.fg_scale, 0.0F, 0.0F,
+            0.0F, 0.0F, result.fg_scale, 0.0F,
+            0.0F, 0.0F, 0.0F, 1.0F};
+        const auto* const locator =
+            reinterpret_cast<const float*>(&world);
+        if (g_matrix4x4_from_translation_quaternion(
+                rigid.data(), locator + 4, locator) != rigid.data() ||
+            g_matrix4x4_multiply(
+                result.target.base_world_matrix.data(),
+                scale.data(), rigid.data()) !=
+                result.target.base_world_matrix.data() ||
+            !finite_matrix4x4(
+                result.target.base_world_matrix.data())) {
+            result.status = "matrix-build";
+            return result;
+        }
+
+        result.target.fg = fg;
+        result.target.player = player;
+        result.target.weapon = weapon;
+        result.target.player_runtime_id = player_runtime_id;
+        result.target.weapon_runtime_id = weapon_runtime_id;
+        result.target.records_generation = records_generation;
+        result.target.updated_ms = GetTickCount64();
+        result.target.parent_hash = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(&parent), 8);
+        result.target.local_hash = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(&local), 8);
+        result.matrix_hash = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(
+                result.target.base_world_matrix.data()),
+            result.target.base_world_matrix.size());
+        result.status = "ok";
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        result.status = "compose-exception";
-        composed = false;
+        result.status = "exception";
     }
-    clear_cold_nadine_mazur_phase_publish_target(target);
-    log_cold_nadine_mazur_phase_publish(result);
-    return composed;
+    return result;
 }
 
+bool publish_cold_nadine_mazur_render_matrix_target(
+    ColdNadineMazurRenderMatrixBuildResult* build,
+    const NadineColdHolsterRefreshResult* refresh) {
+    if (build == nullptr || build->target.fg == nullptr ||
+        build->target.weapon_runtime_id == 0 ||
+        !finite_matrix4x4(build->target.base_world_matrix.data())) {
+        return false;
+    }
+
+    bool new_generation = false;
+    AcquireSRWLockExclusive(&g_cold_nadine_mazur_render_matrix_lock);
+    const auto& current = g_cold_nadine_mazur_render_matrix_target;
+    const bool same_identity =
+        current.fg == build->target.fg &&
+        current.player == build->target.player &&
+        current.weapon == build->target.weapon &&
+        current.player_runtime_id ==
+            build->target.player_runtime_id &&
+        current.weapon_runtime_id ==
+            build->target.weapon_runtime_id &&
+        current.records_generation ==
+            build->target.records_generation &&
+        current.generation != 0;
+    if (same_identity) {
+        build->target.generation = current.generation;
+        build->target.applied_hits = current.applied_hits;
+    } else {
+        build->target.generation =
+            g_cold_nadine_mazur_render_matrix_generation.fetch_add(
+                1, std::memory_order_acq_rel) + 1;
+        build->target.applied_hits = 0;
+        new_generation = true;
+    }
+    build->target.publication =
+        g_cold_nadine_mazur_render_matrix_publication.fetch_add(
+            1, std::memory_order_acq_rel) + 1;
+    g_cold_nadine_mazur_render_matrix_fg.store(
+        0, std::memory_order_release);
+    g_cold_nadine_mazur_render_matrix_target = build->target;
+    g_cold_nadine_mazur_render_matrix_fg.store(
+        reinterpret_cast<std::uintptr_t>(build->target.fg),
+        std::memory_order_release);
+    ReleaseSRWLockExclusive(&g_cold_nadine_mazur_render_matrix_lock);
+
+    if (new_generation) {
+        std::ostringstream line;
+        line << "NADINE-COLD-MAZUR-RENDER-TARGET status=staged"
+             << " generation=" << build->target.generation
+             << " fg=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(build->target.fg)
+             << ":" << build->target.weapon_runtime_id
+             << " player=0x"
+             << reinterpret_cast<std::uintptr_t>(build->target.player)
+             << ":" << build->target.player_runtime_id
+             << " weapon=0x"
+             << reinterpret_cast<std::uintptr_t>(build->target.weapon)
+             << " records=0x" << build->target.records_generation
+             << " parentHash=0x" << build->target.parent_hash
+             << " localHash=0x" << build->target.local_hash
+             << " matrixHash=0x" << build->matrix_hash
+             << std::dec << " scale=" << build->fg_scale;
+        if (refresh != nullptr) {
+            line << " refresh=" << refresh->status << "/"
+                 << (refresh->called ? 1 : 0) << "/"
+                 << (refresh->post_verified ? 1 : 0)
+                 << " changed=0x" << std::hex
+                 << refresh->changed_mask << std::dec;
+        }
+        boot_log_line(line.str().c_str());
+    }
+    return true;
+}
+
+bool stage_cold_nadine_mazur_render_matrix_game_thread(
+    void* player, void* weapon,
+    std::uintptr_t records_generation,
+    const NadineColdHolsterRefreshResult* refresh,
+    bool log_rejection = true) {
+    auto build = seh_build_cold_nadine_mazur_render_matrix_target(
+        player, weapon, records_generation);
+    if (build.target.fg == nullptr) {
+        if (refresh != nullptr && log_rejection) {
+            std::ostringstream line;
+            line << "NADINE-COLD-MAZUR-RENDER-TARGET status=rejected"
+                 << " reason=" << build.status
+                 << " player=0x" << std::hex
+                 << reinterpret_cast<std::uintptr_t>(player)
+                 << " weapon=0x"
+                 << reinterpret_cast<std::uintptr_t>(weapon)
+                 << " records=0x" << records_generation << std::dec;
+            boot_log_line(line.str().c_str());
+        }
+        return false;
+    }
+    return publish_cold_nadine_mazur_render_matrix_target(
+        &build, refresh);
+}
+
+bool seh_resolve_live_cold_nadine_mazur_render_owner(
+    const ColdNadineMazurRenderMatrixTarget& target, void* player,
+    void** weapon_out, std::uintptr_t* records_generation_out,
+    bool* fg_reused_out) {
+    if (weapon_out == nullptr || records_generation_out == nullptr ||
+        fg_reused_out == nullptr) {
+        return false;
+    }
+    *weapon_out = nullptr;
+    *records_generation_out = 0;
+    *fg_reused_out = false;
+
+    void* weapon = nullptr;
+    std::uint8_t attach_index = 0xFF;
+    __try {
+        auto* const fg = static_cast<std::byte*>(target.fg);
+        if (fg == nullptr ||
+            readable_bytes(fg) <
+                kFgAnimDataRetainedIdOffset + sizeof(std::uint32_t)) {
+            return false;
+        }
+        const std::uint32_t current_owner_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRetainedIdOffset);
+        if (current_owner_id != target.weapon_runtime_id) {
+            *fg_reused_out = true;
+            return false;
+        }
+        auto* const handle = *reinterpret_cast<std::byte* const*>(
+            fg + kFgAnimDataRetainedHandleOffset);
+        if (handle == nullptr || readable_bytes(handle) < 0x10) {
+            return false;
+        }
+        weapon = *reinterpret_cast<void* const*>(handle + 0x8);
+        auto* const weapon_bytes = static_cast<std::byte*>(weapon);
+        if (weapon_bytes == nullptr || readable_bytes(weapon_bytes) < 0x864 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                weapon_bytes + kGameObjectRuntimeIdOffset) !=
+                target.weapon_runtime_id ||
+            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x860) !=
+                kCoopRifleArtId ||
+            *reinterpret_cast<void* const*>(weapon_bytes + 0x1A8) !=
+                target.fg) {
+            *fg_reused_out = true;
+            return false;
+        }
+        attach_index =
+            *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x688);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+
+    std::uint32_t attach_id = 0;
+    std::uintptr_t records_generation = 0;
+    if (!seh_weapon_is_player_art(player, weapon, kCoopRifleArtId) ||
+        !seh_weapon_parent_resolves_to_owner(weapon, player) ||
+        !seh_read_owner_attach_record_id(
+            player, attach_index, &attach_id, &records_generation) ||
+        attach_id != kTargSpinePropAttachId || records_generation == 0) {
+        return false;
+    }
+    *weapon_out = weapon;
+    *records_generation_out = records_generation;
+    return true;
+}
+
+void maintain_cold_nadine_mazur_render_matrix_game_thread() {
+    ColdNadineMazurRenderMatrixTarget target{};
+    if (!copy_active_cold_nadine_mazur_render_matrix_target(&target)) {
+        return;
+    }
+    if (!g_net_role_b) {
+        if (clear_cold_nadine_mazur_render_matrix_target(target)) {
+            boot_log_line(
+                "NADINE-COLD-MAZUR-RENDER-TARGET status=cleared reason=role");
+        }
+        return;
+    }
+
+    // Player and ProcessWeapon allocations can relocate while the Fg slot and
+    // retained generation stay stable. Resolve both live owners from the exact
+    // retained Player/Fg pair on every game-thread refresh; raw pointers in the
+    // snapshot are diagnostics, never lifetime authority.
+    void* const player = retained_player_object(0);
+    std::uint32_t look = 0;
+    int current_slot = -99;
+    std::uint32_t draw_state = 0xFFFFFFFFu;
+    if (!player_object_stable(player) ||
+        !seh_read_player_look(player, &look) ||
+        !read_weapon_draw_state(player, current_slot, draw_state)) {
+        log_cold_nadine_mazur_render_reject_once(
+            target, "maintenance-player");
+        return;
+    }
+    if (look != kLegacyNadineAttachTargetLookId ||
+        current_slot >= 0 || draw_state != 0) {
+        if (clear_cold_nadine_mazur_render_matrix_target(target)) {
+            std::ostringstream line;
+            line << "NADINE-COLD-MAZUR-RENDER-TARGET status=cleared"
+                 << " reason=scope-drift"
+                 << " look=0x" << std::hex << look << std::dec
+                 << " current=" << current_slot
+                 << " draw=" << draw_state;
+            boot_log_line(line.str().c_str());
+        }
+        return;
+    }
+
+    void* weapon = nullptr;
+    std::uintptr_t records_generation = 0;
+    bool fg_reused = false;
+    if (!seh_resolve_live_cold_nadine_mazur_render_owner(
+            target, player, &weapon, &records_generation, &fg_reused)) {
+        if (fg_reused &&
+            clear_cold_nadine_mazur_render_matrix_target(target)) {
+            boot_log_line(
+                "NADINE-COLD-MAZUR-RENDER-TARGET status=cleared reason=fg-generation");
+        } else {
+            log_cold_nadine_mazur_render_reject_once(
+                target, "maintenance-owner");
+        }
+        return;
+    }
+
+    // Refresh the absolute BASE matrix every game-thread presentation tick so
+    // the weapon follows the moving Player/spine. Renderer workers accept only
+    // snapshots no older than 100 ms; a skipped/stalled producer therefore
+    // falls back to stock instead of pinning the rifle in world space.
+    auto build = seh_build_cold_nadine_mazur_render_matrix_target(
+        player, weapon, records_generation);
+    if (build.target.fg == nullptr) {
+        log_cold_nadine_mazur_render_reject_once(
+            target, "maintenance-build", build.status);
+        return;
+    }
+    publish_cold_nadine_mazur_render_matrix_target(&build, nullptr);
+}
+
+bool seh_build_cold_nadine_mazur_render_matrix_output(
+    void* fg, float* corrected,
+    const ColdNadineMazurRenderMatrixTarget& target,
+    ColdNadineMazurRenderMatrixApplyDiagnostics* diagnostics) {
+    if (corrected == nullptr || diagnostics == nullptr) {
+        return false;
+    }
+    *diagnostics = {};
+    __try {
+        auto* const fg_bytes = static_cast<std::byte*>(fg);
+        const std::uint32_t owner_id_before =
+            *reinterpret_cast<const std::uint32_t*>(
+                fg_bytes + kFgAnimDataRetainedIdOffset);
+        const std::uint32_t flags_before =
+            *reinterpret_cast<const std::uint32_t*>(
+                fg_bytes + kFgAnimDataFlagsOffset);
+        diagnostics->fg_flags = flags_before;
+        if (owner_id_before != target.weapon_runtime_id) {
+            return false;
+        }
+        if ((flags_before & 0x40000u) != 0) {
+            alignas(16) float auxiliary[16]{};
+            std::memcpy(
+                auxiliary,
+                fg_bytes + kFgAnimDataAuxRenderMatrixOffset,
+                sizeof(auxiliary));
+            diagnostics->auxiliary_hash = hash_probe_words(
+                reinterpret_cast<const std::uint32_t*>(auxiliary), 16);
+            if (!finite_matrix4x4(auxiliary) ||
+                g_matrix4x4_multiply == nullptr ||
+                g_matrix4x4_multiply(
+                    corrected,
+                    target.base_world_matrix.data(),
+                    auxiliary) != corrected ||
+                !finite_matrix4x4(corrected)) {
+                return false;
+            }
+        } else {
+            std::memcpy(
+                corrected, target.base_world_matrix.data(),
+                16 * sizeof(float));
+        }
+        const std::uint32_t owner_id_after =
+            *reinterpret_cast<const std::uint32_t*>(
+                fg_bytes + kFgAnimDataRetainedIdOffset);
+        const std::uint32_t flags_after =
+            *reinterpret_cast<const std::uint32_t*>(
+                fg_bytes + kFgAnimDataFlagsOffset);
+        if (owner_id_after != owner_id_before ||
+            flags_after != flags_before) {
+            return false;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+float* __fastcall hooked_fganim_get_render_world_matrix(
+    void* fg, float* output) {
+    const auto native = g_original_fganim_get_render_world_matrix;
+    float* const stock_result =
+        native != nullptr ? native(fg, output) : output;
+    if (native == nullptr || stock_result != output || fg == nullptr ||
+        output == nullptr ||
+        !g_cold_nadine_mazur_render_matrix_ready.load(
+            std::memory_order_acquire)) {
+        return stock_result;
+    }
+
+    ColdNadineMazurRenderMatrixTarget target{};
+    if (!copy_cold_nadine_mazur_render_matrix_target(fg, &target)) {
+        return stock_result;
+    }
+    const std::uintptr_t return_rva =
+        reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - g_module;
+    const ULONGLONG now = GetTickCount64();
+    if (target.updated_ms == 0 || now < target.updated_ms ||
+        now - target.updated_ms > 100) {
+        log_cold_nadine_mazur_render_reject_once(
+            target, "render-stale", nullptr, return_rva);
+        return stock_result;
+    }
+    if (target.weapon_runtime_id == 0 ||
+        !finite_matrix4x4(target.base_world_matrix.data())) {
+        log_cold_nadine_mazur_render_reject_once(
+            target, "render-target-invalid", nullptr, return_rva);
+        return stock_result;
+    }
+
+    const std::uint64_t stock_hash = hash_probe_words(
+        reinterpret_cast<const std::uint32_t*>(output), 16);
+    alignas(16) float corrected[16]{};
+    ColdNadineMazurRenderMatrixApplyDiagnostics diagnostics{};
+    if (!seh_build_cold_nadine_mazur_render_matrix_output(
+            fg, corrected, target, &diagnostics)) {
+        log_cold_nadine_mazur_render_reject_once(
+            target, "render-output-build", nullptr, return_rva);
+        return stock_result;
+    }
+
+    // Linearize the visible commit against game-thread publish/clear. A copied
+    // snapshot is not authority: it must still be the exact active publication
+    // while the caller output is replaced under the target lock. Increment the
+    // bounded diagnostic hit in the same critical section so a later refresh
+    // cannot hide a successfully committed publication.
+    bool committed = false;
+    std::uint32_t hit = 0;
+    AcquireSRWLockExclusive(&g_cold_nadine_mazur_render_matrix_lock);
+    auto& current = g_cold_nadine_mazur_render_matrix_target;
+    if (current.fg == target.fg &&
+        current.weapon_runtime_id == target.weapon_runtime_id &&
+        current.generation == target.generation &&
+        current.publication == target.publication &&
+        g_cold_nadine_mazur_render_matrix_fg.load(
+            std::memory_order_acquire) ==
+            reinterpret_cast<std::uintptr_t>(fg)) {
+        std::memcpy(output, corrected, sizeof(corrected));
+        committed = true;
+        hit = ++current.applied_hits;
+    }
+    ReleaseSRWLockExclusive(&g_cold_nadine_mazur_render_matrix_lock);
+    if (!committed) {
+        log_cold_nadine_mazur_render_reject_once(
+            target, "render-commit-race", nullptr, return_rva);
+        return stock_result;
+    }
+    const std::uint64_t corrected_hash = hash_probe_words(
+        reinterpret_cast<const std::uint32_t*>(output), 16);
+
+    // The same getter is called for temporal/motion data and once per driven
+    // FgInstance for the final visible matrix. Log only the first bounded hits
+    // of each exact target generation; do not consume the persistent target.
+    if (hit != 0 && hit <= 12) {
+        std::ostringstream line;
+        line << "NADINE-COLD-MAZUR-RENDER status=applied"
+             << " generation=" << target.generation
+             << " publication=" << target.publication
+             << " hit=" << hit
+             << " caller=0x" << std::hex << return_rva
+             << " fg=0x" << reinterpret_cast<std::uintptr_t>(fg)
+             << ":" << target.weapon_runtime_id
+             << " matrixHash=0x" << stock_hash
+             << "->0x" << corrected_hash
+             << " parentHash=0x" << target.parent_hash
+             << " localHash=0x" << target.local_hash
+             << " changed=" << std::dec
+             << (stock_hash != corrected_hash ? 1 : 0)
+             << " flags=0x" << std::hex << diagnostics.fg_flags
+             << " auxHash=0x" << diagnostics.auxiliary_hash
+             << std::dec;
+        boot_log_line(line.str().c_str());
+    }
+    return output;
+}
+
+bool install_cold_nadine_mazur_render_matrix_relay() {
+    struct PreparedCallsite {
+        std::uint8_t* address = nullptr;
+        std::uint8_t* relay = nullptr;
+        std::int32_t new_displacement = 0;
+        std::array<std::uint8_t, 5> stock{};
+        std::array<std::uint8_t, 5> patch{};
+    };
+    std::array<
+        PreparedCallsite,
+        kFgDrawManagerRenderWorldMatrixCallsiteRvas.size()> sites{};
+    const auto free_relays = [&]() {
+        for (auto& site : sites) {
+            if (site.relay != nullptr) {
+                VirtualFree(site.relay, 0, MEM_RELEASE);
+                site.relay = nullptr;
+            }
+        }
+    };
+    for (std::size_t index = 0; index < sites.size(); ++index) {
+        auto& site = sites[index];
+        if (!prepare_plain_callsite_relay(
+                kFgDrawManagerRenderWorldMatrixCallsiteRvas[index],
+                kFgAnimDataGetRenderWorldMatrixRva,
+                reinterpret_cast<const void*>(
+                    &hooked_fganim_get_render_world_matrix),
+                site.address, site.relay, site.new_displacement)) {
+            free_relays();
+            boot_log_line(
+                "cold legacy-Nadine Mazur render-matrix repair SKIPPED (three-callsite preflight)");
+            return false;
+        }
+        std::memcpy(
+            site.stock.data(), site.address, site.stock.size());
+        site.patch = site.stock;
+        site.patch[0] = 0xE8;
+        std::memcpy(
+            site.patch.data() + 1, &site.new_displacement,
+            sizeof(site.new_displacement));
+    }
+
+    g_original_fganim_get_render_world_matrix =
+        reinterpret_cast<FgAnimDataGetRenderWorldMatrixFunction>(
+            g_module + kFgAnimDataGetRenderWorldMatrixRva);
+    g_matrix4x4_from_translation_quaternion =
+        reinterpret_cast<Matrix4x4FromTranslationQuaternionFunction>(
+            g_module + kMatrix4x4FromTranslationQuaternionRva);
+    g_matrix4x4_multiply =
+        reinterpret_cast<Matrix4x4MultiplyFunction>(
+            g_module + kMatrix4x4MultiplyRva);
+
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        free_relays();
+        g_original_fganim_get_render_world_matrix = nullptr;
+        g_matrix4x4_from_translation_quaternion = nullptr;
+        g_matrix4x4_multiply = nullptr;
+        boot_log_line(
+            "cold legacy-Nadine Mazur render-matrix repair SKIPPED (thread suspend)");
+        return false;
+    }
+    std::uint8_t* const patch_begin = sites.front().address;
+    const std::size_t patch_span = static_cast<std::size_t>(
+        sites.back().address + sites.back().patch.size() - patch_begin);
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            patch_begin, patch_span, PAGE_EXECUTE_READWRITE,
+            &old_protection)) {
+        resume_suspended_process_threads(suspended_threads);
+        free_relays();
+        g_original_fganim_get_render_world_matrix = nullptr;
+        g_matrix4x4_from_translation_quaternion = nullptr;
+        g_matrix4x4_multiply = nullptr;
+        boot_log_line(
+            "cold legacy-Nadine Mazur render-matrix repair SKIPPED (protect)");
+        return false;
+    }
+
+    for (const auto& site : sites) {
+        std::memcpy(
+            site.address, site.patch.data(), site.patch.size());
+        FlushInstructionCache(
+            GetCurrentProcess(), site.address, site.patch.size());
+    }
+    const auto all_match = [&](bool patched) {
+        for (const auto& site : sites) {
+            const auto& expected = patched ? site.patch : site.stock;
+            if (std::memcmp(
+                    site.address, expected.data(), expected.size()) != 0) {
+                return false;
+            }
+        }
+        return true;
+    };
+    bool installed = all_match(true);
+    bool rollback_verified = false;
+    if (!installed) {
+        for (const auto& site : sites) {
+            std::memcpy(
+                site.address, site.stock.data(), site.stock.size());
+            FlushInstructionCache(
+                GetCurrentProcess(), site.address, site.stock.size());
+        }
+        rollback_verified = all_match(false);
+    }
+    DWORD ignored = 0;
+    bool protection_restored = VirtualProtect(
+        patch_begin, patch_span, old_protection, &ignored) != 0;
+    if (installed && !protection_restored) {
+        for (const auto& site : sites) {
+            std::memcpy(
+                site.address, site.stock.data(), site.stock.size());
+            FlushInstructionCache(
+                GetCurrentProcess(), site.address, site.stock.size());
+        }
+        rollback_verified = all_match(false);
+        // Even an ambiguous rollback must leave the package admission false.
+        // The stock target pointers and executable relays stay alive below, so
+        // any unexpectedly reachable wrapper remains a safe pass-through.
+        installed = false;
+        protection_restored = VirtualProtect(
+            patch_begin, patch_span, old_protection, &ignored) != 0;
+    }
+    resume_suspended_process_threads(suspended_threads);
+
+    if (!installed) {
+        if (rollback_verified) {
+            free_relays();
+            g_original_fganim_get_render_world_matrix = nullptr;
+            g_matrix4x4_from_translation_quaternion = nullptr;
+            g_matrix4x4_multiply = nullptr;
+        }
+        boot_log_line(
+            rollback_verified && protection_restored
+                ? "cold legacy-Nadine Mazur render-matrix repair SKIPPED (verified rollback)"
+                : "cold legacy-Nadine Mazur render-matrix repair SKIPPED (rollback/protection WARNING; relays retained)");
+        return false;
+    }
+    boot_log_line(
+        protection_restored
+            ? "cold legacy-Nadine Mazur render-matrix relay installed (three exact FgDraw callsites)"
+            : "cold legacy-Nadine Mazur render-matrix relay installed PARTIAL (protection WARNING; relays retained)");
+    return true;
+}
 struct NadineColdHolsterPendingRefresh {
     bool armed = false;
     void* player = nullptr;
@@ -56172,6 +56805,8 @@ struct NadineColdHolsterPendingRefresh {
     std::uint32_t art = 0;
     std::uint32_t attach_id = 0;
     unsigned attempts = 0;
+    bool refresh_completed = false;
+    NadineColdHolsterRefreshResult completed_refresh{};
 };
 
 std::array<NadineColdHolsterPendingRefresh, 2>
@@ -56204,6 +56839,24 @@ void arm_deferred_initial_local_nadine_holster_refresh(
     *pending = {
         true, player, controller, weapon, records_generation,
         art, attach_id, 0};
+}
+
+void arm_completed_initial_local_nadine_holster_refresh(
+    void* player, void* controller, void* weapon,
+    std::uintptr_t records_generation, std::uint32_t art,
+    std::uint32_t attach_id,
+    const NadineColdHolsterRefreshResult& completed_result) {
+    NadineColdHolsterPendingRefresh* const pending =
+        pending_nadine_holster_refresh_for_art(art);
+    if (pending == nullptr || !completed_result.called ||
+        !completed_result.post_verified || completed_result.retryable) {
+        return;
+    }
+    *pending = {
+        true, player, controller, weapon, records_generation,
+        art, attach_id, 0};
+    pending->refresh_completed = true;
+    pending->completed_refresh = completed_result;
 }
 
 void log_deferred_initial_local_nadine_holster_refresh(
@@ -56296,6 +56949,41 @@ void process_deferred_initial_local_nadine_holster_refresh_game_thread() {
             continue;
         }
 
+        if (pending.refresh_completed) {
+            if (pending.art == kCoopRifleArtId && current_slot >= 0) {
+                if (pending.attempts < kMaxDeferredRefreshAttempts) {
+                    continue;
+                }
+                log_deferred_initial_local_nadine_holster_refresh(
+                    pending, pending.completed_refresh,
+                    "stable-slot-timeout");
+                pending = {};
+                continue;
+            }
+            if (pending.art == kCoopRifleArtId) {
+                const bool staged =
+                    stage_cold_nadine_mazur_render_matrix_game_thread(
+                    pending.player, pending.weapon,
+                    pending.records_generation,
+                    &pending.completed_refresh,
+                    pending.attempts == 1 ||
+                        pending.attempts >= kMaxDeferredRefreshAttempts);
+                if (!staged) {
+                    if (pending.attempts < kMaxDeferredRefreshAttempts) {
+                        continue;
+                    }
+                    log_deferred_initial_local_nadine_holster_refresh(
+                        pending, pending.completed_refresh, "stage-timeout");
+                    pending = {};
+                    continue;
+                }
+            }
+            log_deferred_initial_local_nadine_holster_refresh(
+                pending, pending.completed_refresh, "finished");
+            pending = {};
+            continue;
+        }
+
         const NadineColdHolsterRefreshResult result =
             seh_refresh_initial_local_nadine_holster_transform(
                 pending.player, pending.controller, pending.weapon,
@@ -56304,6 +56992,43 @@ void process_deferred_initial_local_nadine_holster_refresh_game_thread() {
         if (result.retryable &&
             pending.attempts < kMaxDeferredRefreshAttempts) {
             continue;
+        }
+        if (pending.art == kCoopRifleArtId && result.called &&
+            result.post_verified && !result.retryable &&
+            current_slot >= 0 &&
+            pending.attempts < kMaxDeferredRefreshAttempts) {
+            // The authored refresh may finish while the controller still names
+            // a transient inventory slot. Preserve that completed result, but
+            // do not publish a persistent back-matrix target until the exact
+            // stable-holster invariant current<0/state0 is restored.
+            pending.refresh_completed = true;
+            pending.completed_refresh = result;
+            continue;
+        }
+        if (pending.art == kCoopRifleArtId && result.called &&
+            result.post_verified && !result.retryable) {
+            const bool staged =
+                stage_cold_nadine_mazur_render_matrix_game_thread(
+                pending.player, pending.weapon,
+                pending.records_generation, &result,
+                pending.attempts == 1 ||
+                    pending.attempts >= kMaxDeferredRefreshAttempts);
+            if (!staged &&
+                pending.attempts < kMaxDeferredRefreshAttempts) {
+                // The stock correction is already complete. Preserve that
+                // one-shot result while the exact Fg/parent-table renderer
+                // source becomes readable instead of consuming the cold
+                // intent after the first failed target build.
+                pending.refresh_completed = true;
+                pending.completed_refresh = result;
+                continue;
+            }
+            if (!staged) {
+                log_deferred_initial_local_nadine_holster_refresh(
+                    pending, result, "stage-timeout");
+                pending = {};
+                continue;
+            }
         }
         log_deferred_initial_local_nadine_holster_refresh(
             pending, result, result.retryable ? "timeout" : "finished");
@@ -57843,7 +58568,7 @@ void census_local_nadine_mazur_strap_game_thread() {
 
 void rebind_initial_local_nadine_rifle_game_thread() {
     if (!g_net_role_b ||
-        !g_cold_nadine_mazur_phase_publish_ready.load(
+        !g_cold_nadine_mazur_render_matrix_ready.load(
             std::memory_order_acquire)) {
         return;
     }
@@ -57959,9 +58684,44 @@ void rebind_initial_local_nadine_rifle_game_thread() {
         parent_is_owner && post_generation == records_generation &&
         post_index == static_cast<std::uint8_t>(back_holster_index) &&
         post_attach_id == kTargSpinePropAttachId && exact_binding;
-    const bool phase_publish_armed = verified && strap_verified &&
-        arm_cold_nadine_mazur_phase_publish(
-            player, weapon, records_generation);
+    const NadineColdHolsterRefreshResult refresh =
+        verified && strap_verified
+        ? seh_refresh_initial_local_nadine_holster_transform(
+              player, controller, weapon, records_generation,
+              kCoopRifleArtId, kTargSpinePropAttachId)
+        : NadineColdHolsterRefreshResult{};
+    bool render_target_staged = false;
+    if (verified && strap_verified) {
+        if (refresh.called && refresh.post_verified && !refresh.retryable) {
+            int post_refresh_current_slot = -99;
+            std::uint32_t post_refresh_draw_state = 0xFFFFFFFFu;
+            const bool post_refresh_state_valid = read_weapon_draw_state(
+                player, post_refresh_current_slot,
+                post_refresh_draw_state);
+            if (post_refresh_state_valid &&
+                post_refresh_draw_state == 0 &&
+                post_refresh_current_slot < 0) {
+                render_target_staged =
+                    stage_cold_nadine_mazur_render_matrix_game_thread(
+                        player, weapon, records_generation, &refresh);
+            }
+            if (!render_target_staged &&
+                (!post_refresh_state_valid ||
+                 post_refresh_draw_state == 0)) {
+                // A completed stock refresh is a one-shot event. If either the
+                // stable slot or the exact renderer parent/Fg source is not
+                // ready yet, retain the verified result and retry boundedly on
+                // the game thread instead of losing the cold placement intent.
+                arm_completed_initial_local_nadine_holster_refresh(
+                    player, controller, weapon, records_generation,
+                    kCoopRifleArtId, kTargSpinePropAttachId, refresh);
+            }
+        } else {
+            arm_deferred_initial_local_nadine_holster_refresh(
+                player, controller, weapon, records_generation,
+                kCoopRifleArtId, kTargSpinePropAttachId, refresh);
+        }
+    }
 
     std::ostringstream line;
     line << "NADINE-LOCAL-MAZUR-REBIND player=0x" << std::hex
@@ -57997,7 +58757,12 @@ void rebind_initial_local_nadine_rifle_game_thread() {
          << " state=" << static_cast<unsigned>(strap_before.holster_state)
          << "->" << static_cast<unsigned>(strap_after.holster_state)
          << " strapVerified=" << (strap_verified ? 1 : 0)
-         << " phasePublishArmed=" << (phase_publish_armed ? 1 : 0);
+         << " refresh=" << refresh.status << "/"
+         << (refresh.called ? 1 : 0) << "/"
+         << (refresh.post_verified ? 1 : 0)
+         << " retryable=" << (refresh.retryable ? 1 : 0)
+         << " renderTargetStaged="
+         << (render_target_staged ? 1 : 0);
     boot_log_line(line.str().c_str());
 }
 
@@ -66882,8 +67647,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-22afg "
-        "(admit already-selected cold Mazur into phase-0x40 publish bridge)");
+        "TLL co-op runtime init 2026-08-22afh "
+        "(cold Mazur corrected BASE matrix at final FgDraw consumers)");
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
     }
@@ -66964,6 +67729,18 @@ DWORD WINAPI install_hook(void*) {
                    kEnableLegacyNadineDrawnP99LocalTransformCensus) &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_nadine_local_transform_probe();
+    }
+    if constexpr (kEnableColdLegacyNadineMazurRenderMatrixRepair) {
+        const bool render_relay_ready =
+            g_nadine_local_transform_probe_ready.load(
+                std::memory_order_acquire) &&
+            install_cold_nadine_mazur_render_matrix_relay();
+        g_cold_nadine_mazur_render_matrix_ready.store(
+            render_relay_ready, std::memory_order_release);
+        boot_log_line(
+            render_relay_ready
+                ? "cold legacy-Nadine Mazur final render-matrix repair READY"
+                : "cold legacy-Nadine Mazur final render-matrix repair SKIPPED (combined package)");
     }
     if constexpr (kEnableLegacyNadineHolsterIkVerification &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
@@ -67073,21 +67850,8 @@ DWORD WINAPI install_hook(void*) {
                 install_aim_joint_exact_input_probe();
             }
         }
-        if (g_enable_puppet_fganim_world_aim_turn ||
-            kEnableColdLegacyNadineMazurPhasePublishRepair) {
-            const bool phase_publish_ready =
-                install_fganim_world_aim_turn_callsite_relay();
-            if constexpr (kEnableColdLegacyNadineMazurPhasePublishRepair) {
-                const bool cold_publish_ready = phase_publish_ready &&
-                    g_nadine_local_transform_probe_ready.load(
-                        std::memory_order_acquire);
-                g_cold_nadine_mazur_phase_publish_ready.store(
-                    cold_publish_ready, std::memory_order_release);
-                boot_log_line(
-                    cold_publish_ready
-                        ? "cold legacy-Nadine Mazur phase-0x40 publish repair READY"
-                        : "cold legacy-Nadine Mazur phase-0x40 publish repair SKIPPED (combined package)");
-            }
+        if (g_enable_puppet_fganim_world_aim_turn) {
+            install_fganim_world_aim_turn_callsite_relay();
         }
         if constexpr (kEnableCharacterLegIkBasePoseRelay) {
             install_character_leg_ik_base_pose_relay();

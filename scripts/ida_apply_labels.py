@@ -3287,7 +3287,9 @@ FUNCTIONS = {
         "mesh bone StringIds, rebuilds a mesh-local 48-byte-row palette directly "
         "from Fg+0x230 at 0x14181B2C4/0x14181B367, and publishes that buffer at "
         "instance+0x78/+0x80 at 0x14181B3A1..B3A5. It separately publishes the "
-        "render world matrix into each driven instance at +0x140..+0x17F.",
+        "render world matrix into each driven instance at +0x140..+0x17F. Exact "
+        "GetRenderWorldMatrix calls 0x14181AD57/0x14181ADFE feed temporal data; "
+        "0x14181B3F4 returns the final matrix copied to each driven instance.",
     ),
     0x14181B890: (
         "FgDrawManager_PrepareInstancesJob",
@@ -3444,7 +3446,9 @@ FUNCTIONS = {
     0x1403014F0: (
         "FgAnimData_GetRenderWorldMatrix",
         "Returns the published 4x4 matrix at FgAnimData+0x1C0, optionally multiplied "
-        "by the auxiliary matrix at +0x2E0 when flag 0x40000 is set.",
+        "on the right by the current auxiliary matrix at +0x2E0 when flag 0x40000 "
+        "is set. Its three PrepareInstance callsites are 0x14181AD57, "
+        "0x14181ADFE and final per-driven-instance 0x14181B3F4.",
     ),
     0x140301310: (
         "Matrix4x4_Multiply",
@@ -4552,11 +4556,14 @@ FUNCTIONS = {
         "AnimManager_DispatchRetainedOwnerPhase",
         "Resolves the animation job's retained owner and dispatches vtable phases "
         "+0x400/+0x408/+0x410/+0x418 according to phase bits 8/0x10/0x20. "
-        "For phase 0x40 it refreshes the owner's parent transform at +0x110/+0x120, "
-        "composes parent +0x110 with local +0x130, and calls "
+        "For phase 0x40 it reads the owner's authored key/generation at "
+        "+0x108/+0x10C, resolves qword table 0x14386FD00[key], requires the "
+        "entry generation at +0x50, copies its first 0x20 bytes to the owner's "
+        "parent transform +0x110, composes that parent with local +0x130, and calls "
         "FgAnimData_PublishWorldTransform at 0x141A8FC00. ProcessWeapon's later "
-        "vtable+0x208 callback is nullsub_385, so this E8 is the exact visible "
-        "world-publication boundary for the cold retained weapon.",
+        "vtable+0x208 callback is nullsub_385. This is a capable stock publisher, "
+        "but the cold retained weapon is not guaranteed to reach the worker/phase "
+        "gate; runtime afg armed exact targets yet observed zero target publications.",
     ),
     0x1403E3E30: (
         "NpcManager_UpdateSpotActors",
@@ -8808,7 +8815,10 @@ FUNCTIONS = {
         "transform state into +0x130/+0x140. In the real Player::Init path "
         "this is called very early with rdx sourced from incoming_packet+0x20, "
         "making player+0x100 the strongest current container for the hidden "
-        "promotion pair.",
+        "promotion pair. Its key/generation/table contract independently matches "
+        "the ProcessWeapon phase-0x40 parent refresh, but the helper itself must "
+        "not be reused there because its later writes would overwrite weapon "
+        "+0x130/+0x140.",
     ),
     0x1416858E0: (
         "BuildCompactDescriptorCarrierFromRuntimeObject50_54",
@@ -12285,6 +12295,13 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x14386FD00: (
+        "g_AuthoredTransformPointerTable",
+        "Shared inline qword pointer table indexed by an owner's authored key at "
+        "+0x108. The selected entry's generation DWORD at +0x50 must match owner "
+        "+0x10C; its first 0x20 bytes are the parent transform copied by the "
+        "retained-owner phase-0x40 path before parent*local composition.",
+    ),
     0x146905C58: (
         "g_ArmIkJointNameIds",
         "Ten runtime-initialized StringIds ordered as left "

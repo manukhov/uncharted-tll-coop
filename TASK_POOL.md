@@ -5474,6 +5474,48 @@ Keep the postblend preservation boundary; replace only its steady content.
       and select a different visible drawable; missing markers are only
       packaging/admission. Draw/Put motion and the sling remain separate.
 
+  Build `afg` is now RUNTIME ADMISSION-INCONCLUSIVE and must not be rerun.
+      PID3184 loaded the exact build and combined READY, then emitted thirteen
+      exact `existing-spine-prop` rebind rows with `verified=1`, binding
+      `57036E96`, `strapVerified=1` and `phasePublishArmed=1`, but zero target
+      `NADINE-COLD-MAZUR-PHASE40` rows. The unchanged lower protrusion therefore
+      does not reject the corrected matrix; it rejects the assumption that the
+      cold weapon is guaranteed to reach that conditional worker seam.
+
+  Build `afh` is STATIC/IMPLEMENTED at the final renderer consumer. Three
+      independent evidence classes earn exactly one single-copy role-B Nadine
+      exam: `afb` proved the corrected selected local while the visible rifle
+      stayed stale; exact control flow proves getter callsites AD57/ADFE/B3F4,
+      with B3F4 copied to every driven `FgInstance+140`; historical render census
+      joins the exact Mazur Fg to all three driven LODs. The producer rebuilds
+      stock-equivalent `BASE=scale*TQ(parent*local)` every presentation tick.
+      The parent is resolved exactly like stock through ProcessWeapon
+      `+108/+10C -> module+386FD00[key]`, generation `entry+50`, without writing
+      `weapon+110`; staged/applied rows carry exact `parentHash/localHash`. The
+      worker preserves current `base*aux`, and the target expires after 100 ms.
+      Scope is role-B/owner0/screen0 legacy Nadine, exact Mazur,
+      targSpineProp, Player parent, current<0/state0 and exact Fg/runtime/
+      attachment generations. Relocated Player/weapon pointers are re-resolved
+      from the live retained Player and Fg weak cell. A per-publication sequence
+      plus the exclusive final commit closes clear/replace races; all three
+      callsites install as one suspended/read-back transaction. A completed
+      one-shot refresh survives a failed first renderer stage for at most 600
+      presentation attempts; stage/reject telemetry is bounded and saturation
+      remains admission-inconclusive.
+
+      Written prediction: require boot `2026-08-22afh`, the three-callsite relay,
+      combined READY, exact cold refresh `ok/1/1`, and staged target. The same
+      target generation must then emit `status=applied` at visible return RVA
+      `caller=0x181B3F9` with matching `parentHash/localHash`,
+      `matrixHash=stock->corrected` and `changed=1`.
+      Those exact markers plus the old protrusion reject final-consumer
+      sufficiency and select a different drawable/wrong corrected source.
+      `changed=0`, a bounded reject reason, no B3F9 hit, or reject-log saturation
+      is packaging/admission/math, not a visual rejection. Draw must clear the
+      target; P99, grip, transitions and sling remain stock/separate. The agent
+      may launch one Nadine copy after source/docs/IDB are committed and pushed,
+      but must never provide gameplay input.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

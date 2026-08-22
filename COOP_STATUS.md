@@ -27591,3 +27591,115 @@ Release `afg` compiles successfully (`tll_coop_runtime.dll`, `781824` bytes;
 the release object is newer than the source).  No new IDB label was needed: the
 change is an admission correction at already-labeled stock boundaries.  No new
 game process was launched or controlled.
+
+### 2026-08-22 RUNTIME ADMISSION-INCONCLUSIVE (`afg`): the cold target does not reach the phase-`0x40` publisher
+
+The single role-B Nadine process `3184` loaded exact boot `afg`, installed the
+phase relay and reported the combined repair `READY`.  The corrected admission
+then ran thirteen times while the retained Player and ProcessWeapon allocations
+settled.  Every row was exact `existing-spine-prop`, `call=1`, `verified=1`,
+binding `57036E96`, `strapVerified=1` and `phasePublishArmed=1`; the final target
+weapon `0x10E0CA4F00` was not displaced by another arm before the log ended.
+Nevertheless the whole run contained zero target
+`NADINE-COLD-MAZUR-PHASE40` rows, and the user saw no change in the protruding
+cold rifle.
+
+This does not reject the corrected matrix or the visible-world hypothesis.  It
+rejects the temporal packaging assumption that an exact cold ProcessWeapon is
+guaranteed to reach `0x141A8FC00`: the worker first depends on its job gate and
+Fg phase flags, and even an exact hook match could return silently while the
+selected local blend was retryable.  A Player-Fg publication elsewhere in the
+same log is not evidence that this weapon Fg reached the call.  Do not rerun the
+phase-`0x40` bridge.  The next boundary must be the guaranteed render consumer,
+with a changed stock-to-corrected matrix in its marker before any visual result
+is interpreted.
+
+### 2026-08-22 STATIC / IMPLEMENTED (`afh`): substitute the corrected cold Mazur matrix at the final render consumers
+
+The new hypothesis is exact: `afb` proved that the authored selected-transform
+correction completes, but the cold weapon can retain a stale renderer-facing
+world matrix because none of its conditional stock publishers is guaranteed to
+run.  `Hstale-render-world` predicts that substituting the same corrected BASE
+matrix at the final `FgAnimData_GetRenderWorldMatrix` consumers will move the
+cold rifle to the already accepted post-Put upper-back placement.  Competing
+hypotheses are `Hdifferent-drawable` (the visible rifle uses another Fg),
+`Hsource-stale` (a later game-thread writer has already restored the bad local),
+`Haux` (the current `Fg+0x2E0` transform changes the result), and
+`Hno-render-reach` (the target Fg is not prepared after staging).
+
+Three independent evidence classes earn one bounded exam.
+
+1. Runtime `afb` reached exact `refresh=ok/1/1`, reset the completed jiggle and
+   changed all eight selected-local words, yet the cold geometry did not move;
+   `afg` then proved that waiting for the weapon's phase-`0x40` publish is not a
+   usable temporal seam.  Historical exact Mazur render census independently
+   joined this weapon Fg to three driven LOD instances and observed their
+   `FgInstance+0x140` matrices equal to the Fg render world.
+2. `FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` calls
+   `FgAnimData_GetRenderWorldMatrix 0x1403014F0` at exact direct E8 sites
+   `0x14181AD57`, `0x14181ADFE` and `0x14181B3F4`.  The first two feed temporal
+   data; the last result is copied immediately to each driven
+   `FgInstance+0x140..+0x17F`, then into the per-frame render record.  This is a
+   consumer of every prepared Fg, not a guessed weapon update callback.
+3. The stock phase-`0x40` publisher first reads ProcessWeapon key/generation
+   `+0x108/+0x10C`, resolves `module+0x386FD00[key]`, requires the entry
+   generation at `+0x50`, copies its 32-byte parent transform, and only then
+   constructs `BASE = diag(Fg+0x140) * TQ(parent*local)`.  The getter returns
+   BASE directly or `BASE * current Fg+0x2E0` when flag `0x40000` is set.  The
+   implementation reproduces the keyed parent snapshot and matrix order locally
+   without writing ProcessWeapon `+0x110`, applies the current auxiliary matrix
+   on the render worker, and returns the caller's original output pointer.
+   `parentHash/localHash` bind every target and applied marker to the exact two
+   composed snapshots.  The Fg pool is reusable, so both producer and consumer
+   require exact Fg plus retained owner generation; the game thread re-resolves
+   relocated Player/ProcessWeapon pointers from the live retained Player and
+   `Fg+0x1A8/+0x1B0` rather than trusting stored raw addresses.
+
+The mutation scope is narrower than the former publisher bridge.  Only role-B
+screen-0 legacy Nadine, exact Mazur art, Player parent, canonical
+`targSpineProp`, `current<0/state=0`, stable runtime/attachment generations and
+the exact weapon Fg can publish a target.  A completed deferred cold refresh is
+held until `current<0/state=0`; Draw or any selected slot clears it.  The BASE
+snapshot is rebuilt every presentation tick and expires after 100 ms.  Its 64
+bytes are transported under one SRW lock.  Every publication has a sequence;
+the render hook calls stock first, computes into a local buffer, then validates
+and commits that exact publication under the same lock, so a clear/replace
+cannot be followed by a stale back-matrix write.  All three callsites are
+preflighted, suspended, patched and read back as one package; ambiguous rollback
+keeps `READY` false and retains safe pass-through relays.
+
+Admission and render failures are observable without an unbounded hot-path log.
+The target build reports its exact rejection status; active targets have a
+64-signature census for maintenance-owner/build, stale/invalid renderer input,
+output-build and publication-race failures, followed by one
+`status=reject-log-saturated` marker.  Completed stock refreshes are retained for
+up to 600 presentation attempts until both `current<0/state=0` and the exact
+parent/Fg target build succeed; a failed first stage no longer consumes the
+one-shot cold intent, and exhaustion is reported as `stage-timeout`.
+
+The falsifiable one-copy prediction is written before launch.  Boot must report
+`2026-08-22afh`, the three-callsite relay and
+`cold legacy-Nadine Mazur final render-matrix repair READY`.  Before any Draw,
+the exact rebind/deferred refresh must reach `ok/1/1`, then
+`NADINE-COLD-MAZUR-RENDER-TARGET status=staged`.  The same generation/Fg must
+produce bounded `NADINE-COLD-MAZUR-RENDER status=applied` rows; the visible
+consumer is return RVA `caller=0x181B3F9`, and its `matrixHash=stock->corrected`
+must have `changed=1`, and its `parentHash/localHash` must match the staged
+generation (with Fg flags and aux hash recorded).  Only those markers plus an
+unchanged lower protrusion reject `Hstale-render-world` and select a different
+drawable or wrong corrected source.  A rejected/missing target, no `0x181B3F9`
+hit, `changed=0`, or reject-log saturation is packaging/admission/math failure,
+not a visual rejection.  Starting Draw must emit a target-clear row and all
+hand/transition behavior remains stock; P99, grip and the separately parked
+sling are untouched.
+The agent may launch exactly one role-B Nadine copy after the package is committed
+and supplies no gameplay input.
+
+Release `afh` compiles successfully (`tll_coop_runtime.dll`, `794624` bytes,
+SHA-256 `FC1ED46B0DB7A75E0F15F8202559B48584AB011F9CE1EF01D384CB50EDE7AC5D`;
+the release object is newer than the source).  The single `ida/tll.i64` was
+updated headlessly with the exact getter callsites, keyed parent-table contract,
+matrix order and rejected cold phase guarantee (`1788 functions, 61 data names`,
+`save_database returned True`); after MCP restart, readback resolves the saved
+names and the phase-dispatch decompilation contains the new comment.  No game
+process was started or controlled during the static closure.
