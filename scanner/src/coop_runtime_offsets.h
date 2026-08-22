@@ -176,7 +176,8 @@ constexpr std::uintptr_t kMatrix4x4FromTranslationQuaternionRva = 0x019A270;
 constexpr std::uintptr_t kMatrix4x4MultiplyRva = 0x0301310;
 // Shared authored-transform pointer table used by the stock retained-owner
 // phase-0x40 parent refresh. ProcessWeapon+0x108 is the table index and +0x10C
-// is matched against the selected entry's generation DWORD at +0x50.
+// is matched against the selected entry's generation DWORD at +0x50. A match
+// refreshes cached parent +0x110; null/mismatch keeps and composes that cache.
 constexpr std::uintptr_t kAuthoredTransformPointerTableRva = 0x386FD00;
 // PrepareInstanceForRendering holds Fg+0x220 and calls the image's memcpy thunk
 // with upload/current/48*jointCount in RCX/RDX/R8. R14 still contains the exact
@@ -967,6 +968,8 @@ constexpr std::uintptr_t kProcessWeaponSelectExistingOwnerPointVtableSlotRva =
     kProcessWeaponVtableRva + 0x7A8;
 constexpr std::uintptr_t kProcessWeaponUpdateSelectedAttachmentVtableSlotRva =
     kProcessWeaponVtableRva + 0x7B8;
+// Calls the selected resolver/0x141ED19BB correction, then applies the optional
+// LongGunJiggle and writes the final post-jiggle local transform to +0x130/+0x140.
 constexpr std::uintptr_t kNdAttachableObjectUpdateSelectedAttachmentRva =
     0x1ED1380;
 // ProcessWeaponBase stores an RTTI LongGunJiggle object at weapon+0x838.

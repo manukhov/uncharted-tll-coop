@@ -39,6 +39,12 @@ FUNCTIONS = {
         "weapon+0x8F4, calls LongGunJiggle vslot +0x28, then calls the shared "
         "local/selected attachment updater.",
     ),
+    0x14150DBF0: (
+        "ProcessWeaponActive_Update",
+        "RTTI ProcessWeapon::Active vtable slot +0x20. Calls "
+        "ProcessWeaponBase_Update at 0x14150DC21, providing the natural per-tick "
+        "path to UpdateLocalAttachmentBlend and ProcessWeapon vslot +0x7B8.",
+    ),
     0x141F7E370: (
         "LongGunJiggle_UpdateFromAttachmentTransform",
         "LongGunJiggle vslot +0x10. Composes the selected attachment transform "
@@ -1135,12 +1141,13 @@ FUNCTIONS = {
     0x141ED1380: (
         "NdAttachableObject_UpdateSelectedAttachmentTransform",
         "Shared NdAttachableObject update path. Calls the selected-attachment "
-        "resolver and writes the current local transform to +0x130/+0x140 when "
-        "+0x5F8 is enabled. A nonnull optional blend object at +0x838 advances "
-        "through GetProcessDeltaTime and callbacks, so out-of-phase callers must "
-        "reject that state. ProcessWeapon inherits this at vtable +0x7B8; the "
-        "normal AnimManager phase establishes that ProcessWeapon as the TLS "
-        "ContextProcess before calling it.",
+        "resolver through 0x141ED19BB, then applies LongGunJiggle vslots +0x10 "
+        "and +0x20 and interpolation before the terminal writes to "
+        "+0x130/+0x140 at 0x141ED16FD/0x141ED1718 when +0x5F8 is enabled. "
+        "ProcessWeapon inherits this at vtable +0x7B8; a wrapper after the stock "
+        "return is the first exact boundary containing the final post-jiggle "
+        "local transform. The stock function returns its success status in AL "
+        "(uint8/char ABI).",
     ),
     0x141ED0190: (
         "NdAttachableObject_SetParentAndAttachmentIndex",
@@ -1156,18 +1163,19 @@ FUNCTIONS = {
         "unchanged; otherwise it derives a rig-joint-relative correction from "
         "object+0x1A8 and the local/depenetration state at +0x4F0..+0x52F and "
         "+0x5F0/+0x5F4. The sole caller is the direct E8 at 0x141ED19BB in "
-        "NdAttachableObject_ResolveSelectedAttachmentTransform. This direct "
-        "callsite is the narrow final-frame seam where an art-scoped caller can "
-        "substitute a stock-resolved owner attachment frame without changing "
-        "the selected attachment id or local correction.",
+        "NdAttachableObject_ResolveSelectedAttachmentTransform. This is the "
+        "narrow authored-frame correction seam, but its output is still upstream "
+        "of LongGunJiggle inside vslot +0x7B8 and is not the final local pose.",
     ),
     0x141ED2060: (
         "NdAttachableObject_UpdateAnimatingLayersAndPublish",
         "Source-bound to the Animating layer and the "
         "NdDrawableObject::GetAnimateCtrl assertion. Calls virtual +0x7B8 for "
         "the selected-attachment update, may rewrite object+0x130/+0x140 from "
-        "an active animation layer at 0x141ED2721/0x141ED2741, then composes "
-        "that local state with +0x110/+0x120 and publishes it to FgAnimData at "
+        "an active animation layer at 0x141ED2721/0x141ED2741, conditionally "
+        "refreshes cached parent +0x110 from g_AuthoredTransformPointerTable, "
+        "then unconditionally composes the cached parent with that local state "
+        "and publishes it to FgAnimData at "
         "0x141ED288F.",
     ),
     0x141ED4390: (
@@ -4557,13 +4565,15 @@ FUNCTIONS = {
         "Resolves the animation job's retained owner and dispatches vtable phases "
         "+0x400/+0x408/+0x410/+0x418 according to phase bits 8/0x10/0x20. "
         "For phase 0x40 it reads the owner's authored key/generation at "
-        "+0x108/+0x10C, resolves qword table 0x14386FD00[key], requires the "
-        "entry generation at +0x50, copies its first 0x20 bytes to the owner's "
-        "parent transform +0x110, composes that parent with local +0x130, and calls "
+        "+0x108/+0x10C and resolves qword table 0x14386FD00[key]. A matching "
+        "entry generation at +0x50 refreshes the owner's cached 0x20-byte parent "
+        "transform +0x110; null/mismatch retains that cache. It then unconditionally "
+        "composes cached parent +0x110 with local +0x130 and calls "
         "FgAnimData_PublishWorldTransform at 0x141A8FC00. ProcessWeapon's later "
         "vtable+0x208 callback is nullsub_385. This is a capable stock publisher, "
-        "but the cold retained weapon is not guaranteed to reach the worker/phase "
-        "gate; runtime afg armed exact targets yet observed zero target publications.",
+        "but runtime afg's target hook could not distinguish no worker/phase reach "
+        "from its silent retryable return and therefore did not provide a usable "
+        "cold-path publication discriminator.",
     ),
     0x1403E3E30: (
         "NpcManager_UpdateSpotActors",
@@ -11016,8 +11026,12 @@ FUNCTIONS = {
     ),
     0x1410A1F90: (
         "PlayerWeaponController_GetWeaponBySlot",
-        "Controller vtable slot +0xB0. Bounds slot to 0..22 and resolves the "
-        "live weapon process handle; ProcessWeapon authored id is at +0x860.",
+        "Controller vtable slot +0xB0. Bounds slot to 0..22, indexes the 0x10-byte "
+        "weak records at controller+0x148, reads handle pointer +0 and generation "
+        "+8, resolves object from handle+8, and requires object+0xBC to match. "
+        "On success it also writes object+0x72=1 at 0x1410A1FCB, so read-only "
+        "inventory admission must reproduce the weak checks instead of calling "
+        "this vslot. ProcessWeapon authored id is at +0x860.",
     ),
     0x1410A77E0: (
         "PlayerWeaponController_DetachWeaponBySlot",
@@ -11806,8 +11820,10 @@ FUNCTIONS = {
     ),
     0x14014E240: (
         "BoundTransform_GetTranslationWs_A",
-        "Resolves the bound parent transform, rotates TranslationPs by the cached "
-        "parent quaternion, adds parent TranslationWs, and returns TranslationWs.",
+        "Conditionally refreshes cached parent +0x10 when the authored table "
+        "entry generation matches; null/mismatch retains the cache. It then rotates "
+        "TranslationPs by the cached parent quaternion, adds cached parent "
+        "TranslationWs, and returns TranslationWs.",
     ),
     0x140186600: (
         "BoundTransform_GetTranslationWs_B",
@@ -12298,9 +12314,9 @@ DATA_NAMES = {
     0x14386FD00: (
         "g_AuthoredTransformPointerTable",
         "Shared inline qword pointer table indexed by an owner's authored key at "
-        "+0x108. The selected entry's generation DWORD at +0x50 must match owner "
-        "+0x10C; its first 0x20 bytes are the parent transform copied by the "
-        "retained-owner phase-0x40 path before parent*local composition.",
+        "+0x108. When the selected entry's generation DWORD at +0x50 matches owner "
+        "+0x10C, its first 0x20 bytes refresh cached parent +0x110. Null/mismatch "
+        "retains that cache, which stock paths still compose with local +0x130.",
     ),
     0x146905C58: (
         "g_ArmIkJointNameIds",
@@ -12644,6 +12660,14 @@ DATA_NAMES = {
 }
 
 
+FUNCTION_TYPES = {
+    0x141ED1380: (
+        "unsigned __int8 __fastcall "
+        "NdAttachableObject_UpdateSelectedAttachmentTransform(void *object);"
+    ),
+}
+
+
 def ensure_function(ea):
     function = ida_funcs.get_func(ea)
     if function is None:
@@ -12672,6 +12696,11 @@ def apply_labels():
             ida_name.SN_FORCE | ida_name.SN_NOCHECK,
         )
         ida_bytes.set_cmt(ea, comment, False)
+    for ea, declaration in FUNCTION_TYPES.items():
+        if not idc.SetType(ea, declaration):
+            raise RuntimeError(
+                f"failed to apply function type at 0x{ea:X}: {declaration}"
+            )
 
 
 def main():
@@ -12688,7 +12717,10 @@ def main():
         n_fn = len(FUNCTIONS)
         n_data = len(DATA_NAMES)
         apply_labels()
-        log.write(f"apply_labels OK: {n_fn} functions, {n_data} data names\n")
+        log.write(
+            f"apply_labels OK: {n_fn} functions, {n_data} data names, "
+            f"{len(FUNCTION_TYPES)} function types\n"
+        )
         # Save the open database (IDA 9.x). flags=0 keeps the DB; this repacks
         # the .i64. (Old DBFL_KILL via _ida_loader was unreliable here.)
         path = idc.get_idb_path()

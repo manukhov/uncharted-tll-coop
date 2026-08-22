@@ -435,13 +435,16 @@ std::array<NadineWeaponCandidate, 32> g_nadine_weapon_candidates{};
 std::atomic<std::uintptr_t> g_local_nadine_inactive_rifle_weapon{0};
 std::atomic<std::uint64_t> g_local_nadine_inactive_rifle_generation{0};
 
-// Build afh: afb proved the authored local correction completes, while afg
-// produced no target phase-0x40 publication despite exact arming (the old seam
-// remained temporally inconclusive). Keep a fresh
-// game-thread snapshot of the fully scaled BASE world matrix and substitute it
-// only at FgDrawManager's three exact GetRenderWorldMatrix callsites. The
-// renderer matches only Fg+owner generation and never dereferences a retained
-// ProcessWeapon pointer on its worker threads.
+// Build afj: afb proved the authored local correction completes, while afh
+// never published a renderer target because it over-constrained the stock
+// cached-parent path. ProcessWeapon+0x130 is refreshed by the selected updater
+// and then rewritten by LongGunJiggle, so the 0x141ED19BB output itself is not
+// final. Publish only after the encompassing ProcessWeapon vslot +0x7B8 returns:
+// compose the stable cached parent at +0x110 with the final post-jiggle local at
+// +0x130, authorized by a same-thread full authored-correction witness from the
+// nested 0x141ED19BB call. The renderer substitutes only at FgDrawManager's three exact
+// GetRenderWorldMatrix callsites and matches only Fg+owner generation; worker
+// threads never dereference a retained ProcessWeapon pointer.
 struct ColdNadineMazurRenderMatrixTarget {
     void* fg = nullptr;
     void* player = nullptr;
@@ -453,8 +456,15 @@ struct ColdNadineMazurRenderMatrixTarget {
     std::uint64_t publication = 0;
     ULONGLONG updated_ms = 0;
     std::uint32_t applied_hits = 0;
+    std::uint32_t staged_logs = 0;
     std::uint32_t parent_hash = 0;
     std::uint32_t local_hash = 0;
+    std::uint32_t world_hash = 0;
+    std::uint32_t binding_hash = 0;
+    float correction_weight = 0.0F;
+    std::uint8_t selected_index = 0xFF;
+    bool depth_applied = false;
+    bool log_publication = false;
     std::array<float, 16> base_world_matrix{};
 };
 struct ColdNadineMazurRenderMatrixApplyDiagnostics {
@@ -468,6 +478,13 @@ std::atomic<std::uint64_t> g_cold_nadine_mazur_render_matrix_generation{0};
 std::atomic<std::uint64_t> g_cold_nadine_mazur_render_matrix_publication{0};
 std::atomic<bool> g_nadine_local_transform_probe_ready{false};
 std::atomic<bool> g_cold_nadine_mazur_render_matrix_ready{false};
+constexpr std::array<std::uint32_t, 8>
+    kAcceptedLegacyNadineMazurBackBindingBits{
+        0x3D9BA5E3u, 0xBCA3D70Au, 0xBD4CCCCDu, 0x00000000u,
+        0xBD6477B3u, 0xBDCD7209u, 0x3E0A06FBu, 0x3F7BF4C4u,
+    };
+std::uint8_t __fastcall hooked_process_weapon_update_selected_attachment(
+    void* weapon);
 
 // Build aab: publish the exact local slot-zero rifle render instances on the
 // game thread, then correlate their shared FgGeometry pointers with the
@@ -2460,12 +2477,12 @@ constexpr bool kEnableEarlyLegacyNadineSpinePropAlias = true;
 // remained at the bad cold placement.  The missing owner is therefore the
 // already-published drawable/Fg transform, not another attachment rebind.
 constexpr bool kEnableColdLegacyNadineMazurFactoryHolsterRebind = false;
-// Build afh avoids the phase-0x40 worker entirely. The game thread continuously
-// rebuilds the already-proven corrected BASE matrix while the exact cold scope
-// remains valid; FgDrawManager consumes that coherent snapshot at all three
-// GetRenderWorldMatrix callsites. The hook writes only the caller's temporary
-// output; stock consumers then copy it into their normal temporal buffers and
-// FgInstance render matrices.
+// Build afj avoids the phase-0x40 worker entirely. The exact ProcessWeapon
+// vslot +0x7B8 wrapper samples parent*final-local only after the nested authored
+// correction and LongGunJiggle have both run. FgDrawManager consumes that fresh
+// coherent BASE snapshot at all three GetRenderWorldMatrix callsites. The render
+// hook writes only the caller's temporary output; stock consumers then copy it
+// into their normal temporal buffers and FgInstance render matrices.
 constexpr bool kEnableColdLegacyNadineMazurRenderMatrixRepair = true;
 // Native NPC Nadine's targSpineProp and legacy Player-Nadine's targSpine are
 // both canonical identity records on spineb/joint16. The attach-table repair
@@ -47602,6 +47619,16 @@ bool install_weapon_ik_terminal_apply_census() {
         protection_restored = VirtualProtect(
             callsite, 5, old_protection, &ignored) != 0;
     }
+    if (installed && protection_restored) {
+        std::int32_t final_readback = 0;
+        std::memcpy(
+            &final_readback, callsite + 1, sizeof(final_readback));
+        if (callsite[0] != 0xE8 || final_readback != new_displacement) {
+            installed = false;
+            rollback_verified = callsite[0] == 0xE8 &&
+                final_readback == old_displacement;
+        }
+    }
     resume_suspended_process_threads(suspended_threads);
     if (!installed) {
         if (rollback_verified) {
@@ -54470,6 +54497,54 @@ bool seh_weapon_is_player_art(
     }
 }
 
+// PlayerWeaponController_GetWeaponBySlot 0x1410A1F90 resolves the same
+// 23-entry weak table but also writes weapon+0x72=1 on success. The afj
+// post-selected producer needs membership only, so reproduce the exact weak
+// pointer/generation checks without invoking that side-effecting vslot.
+bool seh_weapon_is_exact_controller_inventory_member_raw(
+    void* controller, void* weapon, std::uint32_t art) {
+    if (controller == nullptr || weapon == nullptr || art == 0) {
+        return false;
+    }
+    __try {
+        auto* const controller_bytes = static_cast<const std::byte*>(controller);
+        if (readable_bytes(controller_bytes) < sizeof(void*) ||
+            *reinterpret_cast<const std::uintptr_t*>(controller_bytes) !=
+                g_module + kPlayerWeaponControllerVtableRva) {
+            return false;
+        }
+        for (std::uint32_t slot = 0; slot <= 22; ++slot) {
+            auto* const record = controller_bytes + 0x148 +
+                static_cast<std::size_t>(slot) * 0x10;
+            if (readable_bytes(record) < 0x0C) {
+                return false;
+            }
+            auto* const handle =
+                *reinterpret_cast<std::byte* const*>(record);
+            const std::uint32_t generation =
+                *reinterpret_cast<const std::uint32_t*>(record + 0x8);
+            if (handle == nullptr || generation == 0 ||
+                readable_bytes(handle) < 0x10) {
+                continue;
+            }
+            void* const candidate =
+                *reinterpret_cast<void* const*>(handle + 0x8);
+            if (candidate != weapon) {
+                continue;
+            }
+            auto* const weapon_bytes = static_cast<const std::byte*>(weapon);
+            return readable_bytes(weapon_bytes) >= 0x864 &&
+                *reinterpret_cast<const std::uint32_t*>(
+                    weapon_bytes + kGameObjectRuntimeIdOffset) == generation &&
+                *reinterpret_cast<const std::uint32_t*>(
+                    weapon_bytes + 0x860) == art;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+    return false;
+}
+
 struct HolsterExecuteWeaponLocalSnapshot {
     bool readable = false;
     void* weapon = nullptr;
@@ -55534,7 +55609,7 @@ seh_refresh_initial_local_nadine_holster_transform(
     using GetContextProcessFunction = void*(__fastcall*)();
     using SetContextProcessFunction = void*(__fastcall*)(void*);
     using UpdateSelectedAttachmentFunction =
-        std::int64_t(__fastcall*)(void*);
+        std::uint8_t(__fastcall*)(void*);
     using LongGunJiggleSetEnabledAndResetFunction =
         std::int64_t(__fastcall*)(void*, bool);
     const auto get_context_process =
@@ -55607,17 +55682,27 @@ seh_refresh_initial_local_nadine_holster_transform(
             *reinterpret_cast<std::uintptr_t* const*>(weapon_bytes);
         const std::uintptr_t expected_update =
             g_module + kNdAttachableObjectUpdateSelectedAttachmentRva;
+        const std::uintptr_t installed_update =
+            reinterpret_cast<std::uintptr_t>(
+                &hooked_process_weapon_update_selected_attachment);
         constexpr std::size_t kUpdateSelectedAttachmentVtableIndex =
             (kProcessWeaponUpdateSelectedAttachmentVtableSlotRva -
              kProcessWeaponVtableRva) /
             sizeof(std::uintptr_t);
+        const std::uintptr_t admitted_update =
+            kEnableColdLegacyNadineMazurRenderMatrixRepair
+            ? installed_update
+            : expected_update;
         if (vtable == nullptr ||
-            vtable[kUpdateSelectedAttachmentVtableIndex] != expected_update) {
+            (kEnableColdLegacyNadineMazurRenderMatrixRepair &&
+             !g_cold_nadine_mazur_render_matrix_ready.load(
+                 std::memory_order_acquire)) ||
+            vtable[kUpdateSelectedAttachmentVtableIndex] != admitted_update) {
             result.status = "update-vslot";
             return result;
         }
         update_selected_attachment =
-            reinterpret_cast<UpdateSelectedAttachmentFunction>(expected_update);
+            reinterpret_cast<UpdateSelectedAttachmentFunction>(admitted_update);
 
         result.object_flags =
             *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x690);
@@ -55983,7 +56068,13 @@ void log_cold_nadine_mazur_render_reject_once(
          << " fg=0x" << reinterpret_cast<std::uintptr_t>(target.fg)
          << ":" << target.weapon_runtime_id
          << " parentHash=0x" << target.parent_hash
-         << " localHash=0x" << target.local_hash << std::dec
+         << " localHash=0x" << target.local_hash
+         << " worldHash=0x" << target.world_hash
+         << " bindingHash=0x" << target.binding_hash << std::dec
+         << " selected=" << static_cast<unsigned>(target.selected_index)
+         << " correctionWeight=" << target.correction_weight
+         << " depth=" << (target.depth_applied ? 1 : 0)
+         << " worldSource=post-selected-final"
          << " ageMs="
          << (target.updated_ms != 0 && now >= target.updated_ms
                  ? now - target.updated_ms
@@ -56009,96 +56100,25 @@ bool clear_cold_nadine_mazur_render_matrix_target(
     return cleared;
 }
 
-bool
-seh_snapshot_cold_nadine_mazur_parent_and_local(
-    void* weapon, NadineAttachTransform32* parent_out,
-    NadineAttachTransform32* local_out, const char** status_out) {
-    if (status_out != nullptr) {
-        *status_out = "parent-source";
-    }
-    if (weapon == nullptr || parent_out == nullptr || local_out == nullptr) {
-        if (status_out != nullptr) {
-            *status_out = "parent-args";
-        }
-        return false;
-    }
-    *parent_out = {};
-    *local_out = {};
-
-    __try {
-        auto* const weapon_bytes = static_cast<std::byte*>(weapon);
-        const std::uint32_t key_before =
-            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x108);
-        const std::uint32_t generation_before =
-            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x10C);
-        const std::uintptr_t entry_slot =
-            g_module + kAuthoredTransformPointerTableRva +
-            static_cast<std::uintptr_t>(key_before) * sizeof(void*);
-        auto* const entry_before = *reinterpret_cast<std::byte* const*>(
-            entry_slot);
-        if (entry_before == nullptr || readable_bytes(entry_before) < 0x54 ||
-            *reinterpret_cast<const std::uint32_t*>(entry_before + 0x50) !=
-                generation_before) {
-            if (status_out != nullptr) {
-                *status_out = "parent-generation";
-            }
-            return false;
-        }
-
-        std::memcpy(parent_out, entry_before, sizeof(*parent_out));
-        std::memcpy(local_out, weapon_bytes + 0x130, sizeof(*local_out));
-
-        const std::uint32_t key_after =
-            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x108);
-        const std::uint32_t generation_after =
-            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x10C);
-        const std::uintptr_t entry_slot_after =
-            g_module + kAuthoredTransformPointerTableRva +
-            static_cast<std::uintptr_t>(key_after) * sizeof(void*);
-        auto* const entry_after = *reinterpret_cast<std::byte* const*>(
-            entry_slot_after);
-        NadineAttachTransform32 local_after{};
-        std::memcpy(
-            &local_after, weapon_bytes + 0x130, sizeof(local_after));
-        if (key_after != key_before ||
-            generation_after != generation_before ||
-            entry_after != entry_before || entry_after == nullptr ||
-            readable_bytes(entry_after) < 0x54 ||
-            *reinterpret_cast<const std::uint32_t*>(entry_after + 0x50) !=
-                generation_before ||
-            std::memcmp(local_out, &local_after, sizeof(local_after)) != 0 ||
-            !raw_attach_transform_valid(parent_out) ||
-            !raw_attach_transform_valid(local_out)) {
-            *parent_out = {};
-            *local_out = {};
-            if (status_out != nullptr) {
-                *status_out = "parent-or-local-drift";
-            }
-            return false;
-        }
-        if (status_out != nullptr) {
-            *status_out = "ok";
-        }
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        *parent_out = {};
-        *local_out = {};
-        if (status_out != nullptr) {
-            *status_out = "parent-exception";
-        }
-        return false;
-    }
-}
-
 ColdNadineMazurRenderMatrixBuildResult
-seh_build_cold_nadine_mazur_render_matrix_target(
+seh_build_cold_nadine_mazur_render_matrix_target_from_world(
     void* player, void* weapon,
-    std::uintptr_t expected_records_generation) {
+    std::uintptr_t expected_records_generation,
+    const NadineAttachTransform32* corrected_world,
+    std::uint8_t expected_selected_index,
+    std::int16_t expected_selected_joint,
+    float correction_weight, bool depth_applied,
+    std::uint32_t binding_hash,
+    std::uint32_t parent_hash,
+    std::uint32_t local_hash) {
     ColdNadineMazurRenderMatrixBuildResult result{};
     if (!g_cold_nadine_mazur_render_matrix_ready.load(
             std::memory_order_acquire) ||
         !g_net_role_b || player == nullptr || weapon == nullptr ||
-        expected_records_generation == 0 ||
+        corrected_world == nullptr || expected_records_generation == 0 ||
+        expected_selected_index == 0xFF || expected_selected_joint < 0 ||
+        !std::isfinite(correction_weight) || correction_weight < 0.9999F ||
+        correction_weight > 1.0001F || !depth_applied ||
         g_matrix4x4_from_translation_quaternion == nullptr ||
         g_matrix4x4_multiply == nullptr) {
         result.status = "package-or-args";
@@ -56132,8 +56152,8 @@ seh_build_cold_nadine_mazur_render_matrix_target(
                 g_module + kProcessWeaponVtableRva ||
             *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x860) !=
                 kCoopRifleArtId ||
-            !seh_weapon_is_player_art(
-                player, weapon, kCoopRifleArtId) ||
+            !seh_weapon_is_exact_controller_inventory_member_raw(
+                controller, weapon, kCoopRifleArtId) ||
             !seh_weapon_parent_resolves_to_owner(weapon, player)) {
             result.status = "weapon-scope";
             return result;
@@ -56151,16 +56171,65 @@ seh_build_cold_nadine_mazur_render_matrix_target(
             result.status = "runtime-generation";
             return result;
         }
+        const std::uint32_t current_binding_hash = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x4F0),
+            kAcceptedLegacyNadineMazurBackBindingBits.size());
+        if (std::memcmp(
+                weapon_bytes + 0x4F0,
+                kAcceptedLegacyNadineMazurBackBindingBits.data(),
+                sizeof(kAcceptedLegacyNadineMazurBackBindingBits)) != 0 ||
+            current_binding_hash != binding_hash) {
+            result.status = "binding-scope";
+            return result;
+        }
 
         const std::uint8_t attach_index =
             *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x688);
+        float local_blend_duration = 0.0F;
+        std::memcpy(
+            &local_blend_duration, weapon_bytes + 0x640,
+            sizeof(local_blend_duration));
         std::uint32_t attach_id = 0;
         std::uintptr_t records_generation = 0;
         if (!seh_read_owner_attach_record_id(
                 player, attach_index, &attach_id, &records_generation) ||
+            attach_index != expected_selected_index ||
             attach_id != kTargSpinePropAttachId ||
-            records_generation != expected_records_generation) {
+            records_generation != expected_records_generation ||
+            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x5F8) == 0 ||
+            !std::isfinite(local_blend_duration) ||
+            std::fabs(local_blend_duration) > 0.0001F) {
             result.status = "attachment-scope";
+            return result;
+        }
+        auto* const attach_table = *reinterpret_cast<std::byte* const*>(
+            player_bytes + 0x1E0);
+        if (attach_table == nullptr || readable_bytes(attach_table) < 0x18) {
+            result.status = "attachment-table";
+            return result;
+        }
+        const std::uint32_t attach_count =
+            *reinterpret_cast<const std::uint32_t*>(attach_table + 0x4);
+        auto* const attach_records = *reinterpret_cast<std::byte* const*>(
+            attach_table + 0x8);
+        if (attach_records == nullptr ||
+            reinterpret_cast<std::uintptr_t>(attach_records) !=
+                records_generation ||
+            attach_index >= attach_count ||
+            readable_bytes(attach_records) <
+                static_cast<std::size_t>(attach_count) * 48) {
+            result.status = "attachment-records";
+            return result;
+        }
+        auto* const selected_record = attach_records +
+            static_cast<std::size_t>(attach_index) * 48;
+        if (*reinterpret_cast<const std::uint32_t*>(selected_record + 0x20) !=
+                kTargSpinePropAttachId ||
+            *reinterpret_cast<const std::int16_t*>(selected_record + 0x24) !=
+                expected_selected_joint ||
+            std::memcmp(
+                selected_record, kCanonicalAttachIdentityBits.data(), 32) != 0) {
+            result.status = "attachment-record";
             return result;
         }
 
@@ -56185,28 +56254,18 @@ seh_build_cold_nadine_mazur_render_matrix_target(
             result.status = "fganim-owner";
             return result;
         }
-
-        // Match the stock phase-0x40 parent refresh without mutating
-        // ProcessWeapon+0x110: resolve the authored parent by the weapon's
-        // exact key/generation, double-check it, and compose that coherent
-        // local snapshot with ProcessWeapon+0x130.
-        NadineAttachTransform32 parent{};
-        NadineAttachTransform32 local{};
-        const char* source_status = "parent-source";
-        if (!seh_snapshot_cold_nadine_mazur_parent_and_local(
-                weapon, &parent, &local, &source_status)) {
-            result.status = source_status;
+        const std::uint32_t fg_flags =
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataFlagsOffset);
+        if ((fg_flags & 0x50u) != 0x40u) {
+            result.status = "fganim-phase";
             return result;
         }
+
         NadineAttachTransform32 world{};
-        using TransformFunction = NadineAttachTransform32*(__fastcall*)(
-            const NadineAttachTransform32*, NadineAttachTransform32*,
-            const NadineAttachTransform32*);
-        const auto compose = reinterpret_cast<TransformFunction>(
-            g_module + kTransformComposeRva);
-        if (compose(&parent, &world, &local) != &world ||
-            !raw_attach_transform_valid(&world)) {
-            result.status = "world-compose";
+        std::memcpy(&world, corrected_world, sizeof(world));
+        if (!raw_attach_transform_valid(&world)) {
+            result.status = "world-source";
             return result;
         }
 
@@ -56245,14 +56304,55 @@ seh_build_cold_nadine_mazur_render_matrix_target(
         result.target.weapon_runtime_id = weapon_runtime_id;
         result.target.records_generation = records_generation;
         result.target.updated_ms = GetTickCount64();
-        result.target.parent_hash = hash_probe_words(
-            reinterpret_cast<const std::uint32_t*>(&parent), 8);
-        result.target.local_hash = hash_probe_words(
-            reinterpret_cast<const std::uint32_t*>(&local), 8);
+        result.target.parent_hash = parent_hash;
+        result.target.local_hash = local_hash;
+        result.target.world_hash = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(&world), 8);
+        result.target.binding_hash = binding_hash;
+        result.target.correction_weight = correction_weight;
+        result.target.selected_index = attach_index;
+        result.target.depth_applied = depth_applied;
         result.matrix_hash = hash_probe_words(
             reinterpret_cast<const std::uint32_t*>(
                 result.target.base_world_matrix.data()),
             result.target.base_world_matrix.size());
+
+        int current_after = -99;
+        std::uint32_t draw_after = 0xFFFFFFFFu;
+        std::uint32_t attach_id_after = 0;
+        std::uintptr_t records_after = 0;
+        void* controller_after = nullptr;
+        if (!read_weapon_draw_state(player, current_after, draw_after) ||
+            current_after >= 0 || draw_after != 0 ||
+            *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x688) !=
+                attach_index ||
+            !seh_read_owner_attach_record_id(
+                player, attach_index, &attach_id_after, &records_after) ||
+            attach_id_after != kTargSpinePropAttachId ||
+            records_after != records_generation ||
+            !seh_read_exact_player_weapon_controller(
+                player, &controller_after) ||
+            controller_after != controller ||
+            !seh_weapon_is_exact_controller_inventory_member_raw(
+                controller_after, weapon, kCoopRifleArtId) ||
+            std::memcmp(
+                weapon_bytes + 0x4F0,
+                kAcceptedLegacyNadineMazurBackBindingBits.data(),
+                sizeof(kAcceptedLegacyNadineMazurBackBindingBits)) != 0 ||
+            hash_probe_words(
+                reinterpret_cast<const std::uint32_t*>(
+                    weapon_bytes + 0x4F0),
+                kAcceptedLegacyNadineMazurBackBindingBits.size()) !=
+                binding_hash ||
+            *reinterpret_cast<void* const*>(weapon_bytes + 0x1A8) != fg ||
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRetainedIdOffset) != weapon_runtime_id ||
+            (*reinterpret_cast<const std::uint32_t*>(
+                 fg + kFgAnimDataFlagsOffset) & 0x50u) != 0x40u) {
+            result.target = {};
+            result.status = "post-drift";
+            return result;
+        }
         result.status = "ok";
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         result.status = "exception";
@@ -56269,7 +56369,7 @@ bool publish_cold_nadine_mazur_render_matrix_target(
         return false;
     }
 
-    bool new_generation = false;
+    bool log_publication = false;
     AcquireSRWLockExclusive(&g_cold_nadine_mazur_render_matrix_lock);
     const auto& current = g_cold_nadine_mazur_render_matrix_target;
     const bool same_identity =
@@ -56285,17 +56385,22 @@ bool publish_cold_nadine_mazur_render_matrix_target(
         current.generation != 0;
     if (same_identity) {
         build->target.generation = current.generation;
-        build->target.applied_hits = current.applied_hits;
+        build->target.staged_logs = current.staged_logs;
     } else {
         build->target.generation =
             g_cold_nadine_mazur_render_matrix_generation.fetch_add(
                 1, std::memory_order_acq_rel) + 1;
-        build->target.applied_hits = 0;
-        new_generation = true;
+        build->target.staged_logs = 0;
     }
+    build->target.applied_hits = 0;
     build->target.publication =
         g_cold_nadine_mazur_render_matrix_publication.fetch_add(
             1, std::memory_order_acq_rel) + 1;
+    if (build->target.staged_logs < 12) {
+        ++build->target.staged_logs;
+        log_publication = true;
+    }
+    build->target.log_publication = log_publication;
     g_cold_nadine_mazur_render_matrix_fg.store(
         0, std::memory_order_release);
     g_cold_nadine_mazur_render_matrix_target = build->target;
@@ -56304,10 +56409,11 @@ bool publish_cold_nadine_mazur_render_matrix_target(
         std::memory_order_release);
     ReleaseSRWLockExclusive(&g_cold_nadine_mazur_render_matrix_lock);
 
-    if (new_generation) {
+    if (log_publication) {
         std::ostringstream line;
         line << "NADINE-COLD-MAZUR-RENDER-TARGET status=staged"
              << " generation=" << build->target.generation
+             << " publication=" << build->target.publication
              << " fg=0x" << std::hex
              << reinterpret_cast<std::uintptr_t>(build->target.fg)
              << ":" << build->target.weapon_runtime_id
@@ -56319,6 +56425,15 @@ bool publish_cold_nadine_mazur_render_matrix_target(
              << " records=0x" << build->target.records_generation
              << " parentHash=0x" << build->target.parent_hash
              << " localHash=0x" << build->target.local_hash
+             << " worldHash=0x" << build->target.world_hash
+             << " bindingHash=0x" << build->target.binding_hash
+             << std::dec << " selected="
+             << static_cast<unsigned>(build->target.selected_index)
+             << " correctionWeight="
+             << build->target.correction_weight
+             << " depth="
+             << (build->target.depth_applied ? 1 : 0)
+             << " worldSource=post-selected-final" << std::hex
              << " matrixHash=0x" << build->matrix_hash
              << std::dec << " scale=" << build->fg_scale;
         if (refresh != nullptr) {
@@ -56333,29 +56448,53 @@ bool publish_cold_nadine_mazur_render_matrix_target(
     return true;
 }
 
-bool stage_cold_nadine_mazur_render_matrix_game_thread(
+bool stage_cold_nadine_mazur_render_matrix_from_corrected_world(
     void* player, void* weapon,
     std::uintptr_t records_generation,
-    const NadineColdHolsterRefreshResult* refresh,
+    const NadineAttachTransform32* corrected_world,
+    std::uint8_t selected_index,
+    std::int16_t selected_joint,
+    float correction_weight, bool depth_applied,
+    std::uint32_t binding_hash,
+    std::uint32_t parent_hash,
+    std::uint32_t local_hash,
     bool log_rejection = true) {
-    auto build = seh_build_cold_nadine_mazur_render_matrix_target(
-        player, weapon, records_generation);
+    auto build = seh_build_cold_nadine_mazur_render_matrix_target_from_world(
+        player, weapon, records_generation, corrected_world,
+        selected_index, selected_joint, correction_weight, depth_applied,
+        binding_hash, parent_hash, local_hash);
     if (build.target.fg == nullptr) {
-        if (refresh != nullptr && log_rejection) {
-            std::ostringstream line;
-            line << "NADINE-COLD-MAZUR-RENDER-TARGET status=rejected"
-                 << " reason=" << build.status
-                 << " player=0x" << std::hex
-                 << reinterpret_cast<std::uintptr_t>(player)
-                 << " weapon=0x"
-                 << reinterpret_cast<std::uintptr_t>(weapon)
-                 << " records=0x" << records_generation << std::dec;
-            boot_log_line(line.str().c_str());
+        if (log_rejection) {
+            std::uint64_t signature = 1469598103934665603ULL;
+            const auto mix = [&signature](std::uint64_t value) {
+                signature ^= value;
+                signature *= 1099511628211ULL;
+            };
+            mix(reinterpret_cast<std::uintptr_t>(weapon));
+            mix(records_generation);
+            mix(reinterpret_cast<std::uintptr_t>(build.status));
+            mix(selected_index);
+            static std::array<std::atomic<std::uint64_t>, 192> seen{};
+            if (claim_holster_probe_signature(seen, signature)) {
+                std::ostringstream line;
+                line << "NADINE-COLD-MAZUR-RENDER-TARGET status=rejected"
+                     << " reason=" << build.status
+                     << " player=0x" << std::hex
+                     << reinterpret_cast<std::uintptr_t>(player)
+                     << " weapon=0x"
+                     << reinterpret_cast<std::uintptr_t>(weapon)
+                     << " records=0x" << records_generation << std::dec
+                     << " selected=" << static_cast<unsigned>(selected_index)
+                     << ":" << selected_joint
+                     << " correctionWeight=" << correction_weight
+                     << " depth=" << (depth_applied ? 1 : 0);
+                boot_log_line(line.str().c_str());
+            }
         }
         return false;
     }
     return publish_cold_nadine_mazur_render_matrix_target(
-        &build, refresh);
+        &build, nullptr);
 }
 
 bool seh_resolve_live_cold_nadine_mazur_render_owner(
@@ -56412,7 +56551,10 @@ bool seh_resolve_live_cold_nadine_mazur_render_owner(
 
     std::uint32_t attach_id = 0;
     std::uintptr_t records_generation = 0;
-    if (!seh_weapon_is_player_art(player, weapon, kCoopRifleArtId) ||
+    void* controller = nullptr;
+    if (!seh_read_exact_player_weapon_controller(player, &controller) ||
+        !seh_weapon_is_exact_controller_inventory_member_raw(
+            controller, weapon, kCoopRifleArtId) ||
         !seh_weapon_parent_resolves_to_owner(weapon, player) ||
         !seh_read_owner_attach_record_id(
             player, attach_index, &attach_id, &records_generation) ||
@@ -56422,6 +56564,44 @@ bool seh_resolve_live_cold_nadine_mazur_render_owner(
     *weapon_out = weapon;
     *records_generation_out = records_generation;
     return true;
+}
+
+bool seh_read_object_runtime_id(
+    const void* object, std::uint32_t* runtime_id_out) {
+    if (runtime_id_out == nullptr) {
+        return false;
+    }
+    *runtime_id_out = 0;
+    __try {
+        if (object == nullptr || readable_bytes(object) <
+                kGameObjectRuntimeIdOffset + sizeof(std::uint32_t)) {
+            return false;
+        }
+        *runtime_id_out = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(object) +
+            kGameObjectRuntimeIdOffset);
+        return *runtime_id_out != 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *runtime_id_out = 0;
+        return false;
+    }
+}
+
+bool seh_weapon_matches_render_target(
+    const void* weapon, const void* fg, std::uint32_t weapon_runtime_id) {
+    __try {
+        if (weapon == nullptr || fg == nullptr) {
+            return false;
+        }
+        const auto* const weapon_bytes = static_cast<const std::byte*>(weapon);
+        return *reinterpret_cast<void* const*>(weapon_bytes + 0x1A8) == fg &&
+            (weapon_runtime_id == 0 ||
+             *reinterpret_cast<const std::uint32_t*>(
+                 weapon_bytes + kGameObjectRuntimeIdOffset) ==
+                     weapon_runtime_id);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
 }
 
 void maintain_cold_nadine_mazur_render_matrix_game_thread() {
@@ -56481,19 +56661,83 @@ void maintain_cold_nadine_mazur_render_matrix_game_thread() {
         }
         return;
     }
-
-    // Refresh the absolute BASE matrix every game-thread presentation tick so
-    // the weapon follows the moving Player/spine. Renderer workers accept only
-    // snapshots no older than 100 ms; a skipped/stalled producer therefore
-    // falls back to stock instead of pinning the rifle in world space.
-    auto build = seh_build_cold_nadine_mazur_render_matrix_target(
-        player, weapon, records_generation);
-    if (build.target.fg == nullptr) {
-        log_cold_nadine_mazur_render_reject_once(
-            target, "maintenance-build", build.status);
+    std::uint32_t player_runtime_id = 0;
+    if (!seh_read_object_runtime_id(player, &player_runtime_id) ||
+        player_runtime_id != target.player_runtime_id ||
+        records_generation != target.records_generation) {
+        if (clear_cold_nadine_mazur_render_matrix_target(target)) {
+            boot_log_line(
+                "NADINE-COLD-MAZUR-RENDER-TARGET status=cleared reason=source-generation");
+        }
         return;
     }
-    publish_cold_nadine_mazur_render_matrix_target(&build, nullptr);
+
+    // The ProcessWeapon +0x7B8 wrapper publishes every fresh world sample only
+    // after the nested 0x141ED19BB correction and LongGunJiggle have completed.
+    // This maintenance pass only invalidates lifetime/scope drift; it must never
+    // rejuvenate a cached ProcessWeapon+0x130 transform. If the natural producer
+    // stops, the renderer's 100-ms age gate falls back to stock.
+    (void)weapon;
+    (void)records_generation;
+}
+
+void clear_cold_nadine_mazur_render_matrix_for_weapon(
+    void* weapon, const char* reason) {
+    if (weapon == nullptr || reason == nullptr) {
+        return;
+    }
+    const std::uintptr_t active_fg =
+        g_cold_nadine_mazur_render_matrix_fg.load(
+            std::memory_order_acquire);
+    if (active_fg == 0) {
+        return;
+    }
+    const bool possible_target = seh_weapon_matches_render_target(
+        weapon, reinterpret_cast<void*>(active_fg),
+        // This preliminary filter only needs the Fg identity. The exact
+        // generation is checked after the coherent target copy below.
+        0);
+    if (!possible_target) {
+        return;
+    }
+    ColdNadineMazurRenderMatrixTarget target{};
+    if (!copy_active_cold_nadine_mazur_render_matrix_target(&target)) {
+        return;
+    }
+    const bool exact_weapon = seh_weapon_matches_render_target(
+        weapon, target.fg, target.weapon_runtime_id);
+    if (!exact_weapon ||
+        !clear_cold_nadine_mazur_render_matrix_target(target)) {
+        return;
+    }
+    std::ostringstream line;
+    line << "NADINE-COLD-MAZUR-RENDER-TARGET status=cleared reason="
+         << reason << " generation=" << target.generation
+         << " fg=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(target.fg) << ":"
+         << target.weapon_runtime_id << std::dec;
+    boot_log_line(line.str().c_str());
+}
+
+bool cold_nadine_mazur_render_matrix_staged_for_weapon(
+    void* weapon, std::uintptr_t records_generation) {
+    ColdNadineMazurRenderMatrixTarget target{};
+    if (weapon == nullptr || records_generation == 0 ||
+        !copy_active_cold_nadine_mazur_render_matrix_target(&target) ||
+        target.records_generation != records_generation) {
+        return false;
+    }
+    __try {
+        auto* const weapon_bytes = static_cast<const std::byte*>(weapon);
+        return readable_bytes(weapon_bytes) >= 0x1B0 &&
+            *reinterpret_cast<void* const*>(weapon_bytes + 0x1A8) ==
+                target.fg &&
+            *reinterpret_cast<const std::uint32_t*>(
+                weapon_bytes + kGameObjectRuntimeIdOffset) ==
+                target.weapon_runtime_id;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
 }
 
 bool seh_build_cold_nadine_mazur_render_matrix_output(
@@ -56513,7 +56757,8 @@ bool seh_build_cold_nadine_mazur_render_matrix_output(
             *reinterpret_cast<const std::uint32_t*>(
                 fg_bytes + kFgAnimDataFlagsOffset);
         diagnostics->fg_flags = flags_before;
-        if (owner_id_before != target.weapon_runtime_id) {
+        if (owner_id_before != target.weapon_runtime_id ||
+            (flags_before & 0x50u) != 0x40u) {
             return false;
         }
         if ((flags_before & 0x40000u) != 0) {
@@ -56629,7 +56874,7 @@ float* __fastcall hooked_fganim_get_render_world_matrix(
     // The same getter is called for temporal/motion data and once per driven
     // FgInstance for the final visible matrix. Log only the first bounded hits
     // of each exact target generation; do not consume the persistent target.
-    if (hit != 0 && hit <= 12) {
+    if (target.log_publication && hit != 0 && hit <= 12) {
         std::ostringstream line;
         line << "NADINE-COLD-MAZUR-RENDER status=applied"
              << " generation=" << target.generation
@@ -56637,11 +56882,18 @@ float* __fastcall hooked_fganim_get_render_world_matrix(
              << " hit=" << hit
              << " caller=0x" << std::hex << return_rva
              << " fg=0x" << reinterpret_cast<std::uintptr_t>(fg)
-             << ":" << target.weapon_runtime_id
-             << " matrixHash=0x" << stock_hash
-             << "->0x" << corrected_hash
-             << " parentHash=0x" << target.parent_hash
-             << " localHash=0x" << target.local_hash
+              << ":" << target.weapon_runtime_id
+              << " matrixHash=0x" << stock_hash
+              << "->0x" << corrected_hash
+              << " parentHash=0x" << target.parent_hash
+              << " localHash=0x" << target.local_hash
+              << " worldHash=0x" << target.world_hash
+             << " bindingHash=0x" << target.binding_hash
+               << std::dec << " selected="
+               << static_cast<unsigned>(target.selected_index)
+               << " correctionWeight=" << target.correction_weight
+               << " depth=" << (target.depth_applied ? 1 : 0)
+               << " worldSource=post-selected-final"
              << " changed=" << std::dec
              << (stock_hash != corrected_hash ? 1 : 0)
              << " flags=0x" << std::hex << diagnostics.fg_flags
@@ -56805,8 +57057,6 @@ struct NadineColdHolsterPendingRefresh {
     std::uint32_t art = 0;
     std::uint32_t attach_id = 0;
     unsigned attempts = 0;
-    bool refresh_completed = false;
-    NadineColdHolsterRefreshResult completed_refresh{};
 };
 
 std::array<NadineColdHolsterPendingRefresh, 2>
@@ -56839,24 +57089,6 @@ void arm_deferred_initial_local_nadine_holster_refresh(
     *pending = {
         true, player, controller, weapon, records_generation,
         art, attach_id, 0};
-}
-
-void arm_completed_initial_local_nadine_holster_refresh(
-    void* player, void* controller, void* weapon,
-    std::uintptr_t records_generation, std::uint32_t art,
-    std::uint32_t attach_id,
-    const NadineColdHolsterRefreshResult& completed_result) {
-    NadineColdHolsterPendingRefresh* const pending =
-        pending_nadine_holster_refresh_for_art(art);
-    if (pending == nullptr || !completed_result.called ||
-        !completed_result.post_verified || completed_result.retryable) {
-        return;
-    }
-    *pending = {
-        true, player, controller, weapon, records_generation,
-        art, attach_id, 0};
-    pending->refresh_completed = true;
-    pending->completed_refresh = completed_result;
 }
 
 void log_deferred_initial_local_nadine_holster_refresh(
@@ -56949,41 +57181,6 @@ void process_deferred_initial_local_nadine_holster_refresh_game_thread() {
             continue;
         }
 
-        if (pending.refresh_completed) {
-            if (pending.art == kCoopRifleArtId && current_slot >= 0) {
-                if (pending.attempts < kMaxDeferredRefreshAttempts) {
-                    continue;
-                }
-                log_deferred_initial_local_nadine_holster_refresh(
-                    pending, pending.completed_refresh,
-                    "stable-slot-timeout");
-                pending = {};
-                continue;
-            }
-            if (pending.art == kCoopRifleArtId) {
-                const bool staged =
-                    stage_cold_nadine_mazur_render_matrix_game_thread(
-                    pending.player, pending.weapon,
-                    pending.records_generation,
-                    &pending.completed_refresh,
-                    pending.attempts == 1 ||
-                        pending.attempts >= kMaxDeferredRefreshAttempts);
-                if (!staged) {
-                    if (pending.attempts < kMaxDeferredRefreshAttempts) {
-                        continue;
-                    }
-                    log_deferred_initial_local_nadine_holster_refresh(
-                        pending, pending.completed_refresh, "stage-timeout");
-                    pending = {};
-                    continue;
-                }
-            }
-            log_deferred_initial_local_nadine_holster_refresh(
-                pending, pending.completed_refresh, "finished");
-            pending = {};
-            continue;
-        }
-
         const NadineColdHolsterRefreshResult result =
             seh_refresh_initial_local_nadine_holster_transform(
                 pending.player, pending.controller, pending.weapon,
@@ -56993,43 +57190,10 @@ void process_deferred_initial_local_nadine_holster_refresh_game_thread() {
             pending.attempts < kMaxDeferredRefreshAttempts) {
             continue;
         }
-        if (pending.art == kCoopRifleArtId && result.called &&
-            result.post_verified && !result.retryable &&
-            current_slot >= 0 &&
-            pending.attempts < kMaxDeferredRefreshAttempts) {
-            // The authored refresh may finish while the controller still names
-            // a transient inventory slot. Preserve that completed result, but
-            // do not publish a persistent back-matrix target until the exact
-            // stable-holster invariant current<0/state0 is restored.
-            pending.refresh_completed = true;
-            pending.completed_refresh = result;
-            continue;
-        }
-        if (pending.art == kCoopRifleArtId && result.called &&
-            result.post_verified && !result.retryable) {
-            const bool staged =
-                stage_cold_nadine_mazur_render_matrix_game_thread(
-                pending.player, pending.weapon,
-                pending.records_generation, &result,
-                pending.attempts == 1 ||
-                    pending.attempts >= kMaxDeferredRefreshAttempts);
-            if (!staged &&
-                pending.attempts < kMaxDeferredRefreshAttempts) {
-                // The stock correction is already complete. Preserve that
-                // one-shot result while the exact Fg/parent-table renderer
-                // source becomes readable instead of consuming the cold
-                // intent after the first failed target build.
-                pending.refresh_completed = true;
-                pending.completed_refresh = result;
-                continue;
-            }
-            if (!staged) {
-                log_deferred_initial_local_nadine_holster_refresh(
-                    pending, result, "stage-timeout");
-                pending = {};
-                continue;
-            }
-        }
+        // The exact current world is published by the existing 0x141ED19BB
+        // relay during this refresh and on later natural ProcessWeapon updates.
+        // Never rebuild it here from cached +0x130; stable-holster admission is
+        // evaluated at the resolver output itself.
         log_deferred_initial_local_nadine_holster_refresh(
             pending, result, result.retryable ? "timeout" : "finished");
         pending = {};
@@ -57484,12 +57648,6 @@ struct ColdMazurFactoryHolsterResult {
     bool call_completed = false;
     bool verified = false;
 };
-
-constexpr std::array<std::uint32_t, 8>
-    kAcceptedLegacyNadineMazurBackBindingBits{
-        0x3D9BA5E3u, 0xBCA3D70Au, 0xBD4CCCCDu, 0x00000000u,
-        0xBD6477B3u, 0xBDCD7209u, 0x3E0A06FBu, 0x3F7BF4C4u,
-    };
 
 bool seh_rebind_cold_legacy_nadine_mazur_before_snapshot(
     void* weapon, const std::uint64_t* result_out,
@@ -58692,35 +58850,18 @@ void rebind_initial_local_nadine_rifle_game_thread() {
         : NadineColdHolsterRefreshResult{};
     bool render_target_staged = false;
     if (verified && strap_verified) {
-        if (refresh.called && refresh.post_verified && !refresh.retryable) {
-            int post_refresh_current_slot = -99;
-            std::uint32_t post_refresh_draw_state = 0xFFFFFFFFu;
-            const bool post_refresh_state_valid = read_weapon_draw_state(
-                player, post_refresh_current_slot,
-                post_refresh_draw_state);
-            if (post_refresh_state_valid &&
-                post_refresh_draw_state == 0 &&
-                post_refresh_current_slot < 0) {
-                render_target_staged =
-                    stage_cold_nadine_mazur_render_matrix_game_thread(
-                        player, weapon, records_generation, &refresh);
-            }
-            if (!render_target_staged &&
-                (!post_refresh_state_valid ||
-                 post_refresh_draw_state == 0)) {
-                // A completed stock refresh is a one-shot event. If either the
-                // stable slot or the exact renderer parent/Fg source is not
-                // ready yet, retain the verified result and retry boundedly on
-                // the game thread instead of losing the cold placement intent.
-                arm_completed_initial_local_nadine_holster_refresh(
-                    player, controller, weapon, records_generation,
-                    kCoopRifleArtId, kTargSpinePropAttachId, refresh);
-            }
-        } else {
+        if (!refresh.called || !refresh.post_verified || refresh.retryable) {
             arm_deferred_initial_local_nadine_holster_refresh(
                 player, controller, weapon, records_generation,
                 kCoopRifleArtId, kTargSpinePropAttachId, refresh);
         }
+        // The synchronous refresh reaches the already-installed 0x141ED19BB
+        // correction relay. If stable-holster admission was exact at that
+        // resolver output, the target is already published; otherwise later
+        // natural ProcessWeapon updates will publish a fresh world sample.
+        render_target_staged =
+            cold_nadine_mazur_render_matrix_staged_for_weapon(
+                weapon, records_generation);
     }
 
     std::ostringstream line;
@@ -60998,6 +61139,27 @@ struct NadineMazurBackFrameCorrection {
     std::array<std::uint32_t, 8> binding_bits{};
 };
 
+// The authored correction call is nested inside ProcessWeapon vslot +0x7B8.
+// Keep only same-thread authorization metadata here; the pose published to the
+// renderer is sampled after +0x7B8 returns, once LongGunJiggle has produced the
+// final local transform at ProcessWeapon+0x130.
+struct NadineMazurPostSelectedWitness {
+    bool armed = false;
+    bool completed = false;
+    void* expected_weapon = nullptr;
+    void* owner = nullptr;
+    std::uintptr_t records = 0;
+    std::uint8_t selected_index = 0xFF;
+    std::int16_t selected_joint = -1;
+    float correction_weight = 0.0F;
+    bool depth_applied = false;
+    std::uint32_t binding_hash = 0;
+    unsigned hit_count = 0;
+};
+
+thread_local NadineMazurPostSelectedWitness
+    g_nadine_mazur_post_selected_witness{};
+
 struct NadineMazurBackTransitionSample {
     bool valid = false;
     void* owner = nullptr;
@@ -61610,6 +61772,34 @@ std::int64_t __fastcall hooked_nd_attachable_apply_local_transform(
         seh_apply_legacy_nadine_mazur_back_depth(
             output, &mazur_correction);
     }
+    NadineMazurPostSelectedWitness& witness =
+        g_nadine_mazur_post_selected_witness;
+    if (witness.armed && witness.expected_weapon == weapon &&
+        mazur_frame_resolved && g_net_role_b &&
+        mazur_correction.owner_index == 0) {
+        ++witness.hit_count;
+        witness.completed = false;
+        if (witness.hit_count == 1 && mazur_corrected && result != 0 &&
+            mazur_correction.depth_applied &&
+            std::isfinite(mazur_correction.correction_weight) &&
+            mazur_correction.correction_weight >= 0.9999F &&
+            mazur_correction.correction_weight <= 1.0001F &&
+            std::memcmp(
+                mazur_correction.binding_bits.data(),
+                kAcceptedLegacyNadineMazurBackBindingBits.data(),
+                sizeof(kAcceptedLegacyNadineMazurBackBindingBits)) == 0) {
+            witness.completed = true;
+            witness.owner = mazur_correction.owner;
+            witness.records = mazur_correction.records;
+            witness.selected_index = mazur_correction.selected_index;
+            witness.selected_joint = mazur_correction.selected_joint;
+            witness.correction_weight = mazur_correction.correction_weight;
+            witness.depth_applied = mazur_correction.depth_applied;
+            witness.binding_hash = hash_probe_words(
+                mazur_correction.binding_bits.data(),
+                mazur_correction.binding_bits.size());
+        }
+    }
     if (mazur_transition_captured && result != 0) {
         log_legacy_nadine_mazur_back_transition(
             mazur_transition, effective_input, output, mazur_corrected,
@@ -61639,30 +61829,87 @@ bool install_nadine_local_transform_probe() {
         false, std::memory_order_release);
     std::uint8_t* callsite = nullptr;
     std::uint8_t* relay = nullptr;
-    std::int32_t displacement = 0;
+    std::int32_t new_displacement = 0;
     if (!prepare_plain_callsite_relay(
             kNdAttachableObjectLocalTransformCallsiteRva,
             kNdAttachableObjectApplyLocalTransformRva,
             reinterpret_cast<const void*>(
                 &hooked_nd_attachable_apply_local_transform),
-            callsite, relay, displacement)) {
+            callsite, relay, new_displacement)) {
         boot_log_line("Nadine local-transform probe SKIPPED (preflight)");
         return false;
     }
     g_original_nd_attachable_apply_local_transform =
         reinterpret_cast<NdAttachableObjectApplyLocalTransformFunction>(
             g_module + kNdAttachableObjectApplyLocalTransformRva);
-    DWORD old = 0;
-    if (!VirtualProtect(callsite, 5, PAGE_EXECUTE_READWRITE, &old)) {
+    std::int32_t old_displacement = 0;
+    std::memcpy(
+        &old_displacement, callsite + 1, sizeof(old_displacement));
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        g_original_nd_attachable_apply_local_transform = nullptr;
+        boot_log_line(
+            "Nadine local-transform probe SKIPPED (thread suspend)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            callsite, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        resume_suspended_process_threads(suspended_threads);
         VirtualFree(relay, 0, MEM_RELEASE);
         g_original_nd_attachable_apply_local_transform = nullptr;
         boot_log_line("Nadine local-transform probe SKIPPED (protect)");
         return false;
     }
-    *reinterpret_cast<std::int32_t*>(callsite + 1) = displacement;
+    std::memcpy(
+        callsite + 1, &new_displacement, sizeof(new_displacement));
     FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+    std::int32_t readback = 0;
+    std::memcpy(&readback, callsite + 1, sizeof(readback));
+    bool installed = callsite[0] == 0xE8 &&
+        readback == new_displacement;
+    bool rollback_verified = false;
+    if (!installed) {
+        std::memcpy(
+            callsite + 1, &old_displacement, sizeof(old_displacement));
+        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+        std::int32_t rollback_readback = 0;
+        std::memcpy(
+            &rollback_readback, callsite + 1,
+            sizeof(rollback_readback));
+        rollback_verified = callsite[0] == 0xE8 &&
+            rollback_readback == old_displacement;
+    }
     DWORD ignored = 0;
-    VirtualProtect(callsite, 5, old, &ignored);
+    bool protection_restored = VirtualProtect(
+        callsite, 5, old_protection, &ignored) != 0;
+    if (installed && !protection_restored) {
+        std::memcpy(
+            callsite + 1, &old_displacement, sizeof(old_displacement));
+        FlushInstructionCache(GetCurrentProcess(), callsite, 5);
+        std::int32_t rollback_readback = 0;
+        std::memcpy(
+            &rollback_readback, callsite + 1,
+            sizeof(rollback_readback));
+        rollback_verified = callsite[0] == 0xE8 &&
+            rollback_readback == old_displacement;
+        installed = false;
+        protection_restored = VirtualProtect(
+            callsite, 5, old_protection, &ignored) != 0;
+    }
+    resume_suspended_process_threads(suspended_threads);
+    if (!installed) {
+        if (rollback_verified) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+            g_original_nd_attachable_apply_local_transform = nullptr;
+        }
+        boot_log_line(
+            rollback_verified && protection_restored
+                ? "Nadine local-transform probe SKIPPED (verified rollback)"
+                : "Nadine local-transform probe SKIPPED (rollback/protection WARNING; relay retained)");
+        return false;
+    }
     boot_log_line(kEnableLegacyNadineMazurAuthoredBackFrame
         ? (kEnableLegacyNadineMazurWeightedBackHandoff
             ? "legacy-Nadine Mazur smooth weighted authored back-frame correction installed at 0x141ED19BB"
@@ -61685,13 +61932,13 @@ bool install_nadine_local_transform_probe() {
     return true;
 }
 
-// The source-identified "Animating" update calls ProcessWeapon vtable +0x7B8,
-// then may write +0x130/+0x140 again from an animation layer before its final
-// Transform_Compose at 0x141ED287B. These two pass-through boundaries snapshot
-// the same local field on the same thread, making that overwrite directly
-// observable without changing the pose.
+// ProcessWeapon vtable +0x7B8 contains the selected resolver, the authored
+// 0x141ED19BB correction, and the later LongGunJiggle rewrite. The wrapper is
+// therefore the first exact boundary where +0x130 is the final local transform.
+// A nested same-thread witness proves that this invocation actually applied the
+// full authored Mazur correction before parent*local is staged for rendering.
 using NdAttachableObjectUpdateSelectedAttachmentFunction =
-    std::int64_t(__fastcall*)(void*);
+    std::uint8_t(__fastcall*)(void*);
 NdAttachableObjectUpdateSelectedAttachmentFunction
     g_original_process_weapon_update_selected_attachment = nullptr;
 
@@ -61709,28 +61956,168 @@ struct NadinePostSelectedLocalSnapshot {
 thread_local NadinePostSelectedLocalSnapshot
     g_nadine_post_selected_local_snapshot{};
 
-std::int64_t __fastcall hooked_process_weapon_update_selected_attachment(
+bool seh_snapshot_post_selected_nadine_mazur_world(
+    void* weapon, NadineAttachTransform32* world_out,
+    std::uint32_t* parent_hash_out, std::uint32_t* local_hash_out,
+    const char** status_out) {
+    if (world_out == nullptr || parent_hash_out == nullptr ||
+        local_hash_out == nullptr || status_out == nullptr) {
+        return false;
+    }
+    *world_out = {};
+    *parent_hash_out = 0;
+    *local_hash_out = 0;
+    *status_out = "post-selected-args";
+    if (weapon == nullptr || g_module == 0) {
+        return false;
+    }
+
+    __try {
+        auto* const weapon_bytes = static_cast<const std::byte*>(weapon);
+        if (readable_bytes(weapon_bytes) < 0x5FC ||
+            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x5F8) == 0) {
+            *status_out = "post-selected-write-disabled";
+            return false;
+        }
+
+        NadineAttachTransform32 parent_before{};
+        NadineAttachTransform32 local_before{};
+        NadineAttachTransform32 parent_after{};
+        NadineAttachTransform32 local_after{};
+        std::memcpy(&parent_before, weapon_bytes + 0x110, sizeof(parent_before));
+        std::memcpy(&local_before, weapon_bytes + 0x130, sizeof(local_before));
+        std::memcpy(&parent_after, weapon_bytes + 0x110, sizeof(parent_after));
+        std::memcpy(&local_after, weapon_bytes + 0x130, sizeof(local_after));
+        if (std::memcmp(&parent_before, &parent_after, sizeof(parent_before)) != 0 ||
+            std::memcmp(&local_before, &local_after, sizeof(local_before)) != 0 ||
+            !raw_attach_transform_valid(&parent_before) ||
+            !raw_attach_transform_valid(&local_before)) {
+            *status_out = "post-selected-drift";
+            return false;
+        }
+
+        using TransformFunction = NadineAttachTransform32*(__fastcall*)(
+            const NadineAttachTransform32*, NadineAttachTransform32*,
+            const NadineAttachTransform32*);
+        const auto compose = reinterpret_cast<TransformFunction>(
+            g_module + kTransformComposeRva);
+        if (compose(&parent_before, world_out, &local_before) != world_out ||
+            !raw_attach_transform_valid(world_out)) {
+            *world_out = {};
+            *status_out = "post-selected-compose";
+            return false;
+        }
+        *parent_hash_out = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(&parent_before), 8);
+        *local_hash_out = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(&local_before), 8);
+        *status_out = "ok";
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *world_out = {};
+        *parent_hash_out = 0;
+        *local_hash_out = 0;
+        *status_out = "post-selected-exception";
+        return false;
+    }
+}
+
+void log_post_selected_nadine_mazur_render_reject_once(
+    void* weapon, const NadineMazurPostSelectedWitness& witness,
+    const char* reason) {
+    if (weapon == nullptr || reason == nullptr || witness.hit_count == 0) {
+        return;
+    }
+    std::uint64_t signature = 1469598103934665603ULL;
+    const auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(reinterpret_cast<std::uintptr_t>(weapon));
+    mix(witness.records);
+    mix(reinterpret_cast<std::uintptr_t>(reason));
+    mix(witness.hit_count);
+    static std::array<std::atomic<std::uint64_t>, 192> seen{};
+    if (!claim_holster_probe_signature(seen, signature)) {
+        return;
+    }
+    std::ostringstream line;
+    line << "NADINE-COLD-MAZUR-RENDER-TARGET status=rejected"
+         << " reason=" << reason
+         << " weapon=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(weapon)
+         << " records=0x" << witness.records << std::dec
+         << " selected=" << static_cast<unsigned>(witness.selected_index)
+         << ":" << witness.selected_joint
+         << " hits=" << witness.hit_count
+         << " correctionWeight=" << witness.correction_weight
+         << " depth=" << (witness.depth_applied ? 1 : 0);
+    boot_log_line(line.str().c_str());
+}
+
+std::uint8_t __fastcall hooked_process_weapon_update_selected_attachment(
     void* weapon) {
-    const std::int64_t result =
+    const NadineMazurPostSelectedWitness previous_witness =
+        g_nadine_mazur_post_selected_witness;
+    g_nadine_mazur_post_selected_witness = {};
+    g_nadine_mazur_post_selected_witness.armed =
+        g_cold_nadine_mazur_render_matrix_ready.load(
+            std::memory_order_acquire) && weapon != nullptr;
+    g_nadine_mazur_post_selected_witness.expected_weapon = weapon;
+    const std::uint8_t result =
         g_original_process_weapon_update_selected_attachment != nullptr
             ? g_original_process_weapon_update_selected_attachment(weapon)
             : 0;
-    g_nadine_post_selected_local_snapshot = {};
-    NadineLocalTransformProbeCapture capture{};
-    const auto* const local = weapon != nullptr
-        ? static_cast<const std::byte*>(weapon) + 0x130
-        : nullptr;
-    if (seh_capture_nadine_local_transform_pre(weapon, local, &capture)) {
-        NadinePostSelectedLocalSnapshot& snapshot =
-            g_nadine_post_selected_local_snapshot;
-        snapshot.weapon = weapon;
-        snapshot.owner = capture.owner;
-        snapshot.art = capture.art;
-        snapshot.attach_id = capture.attach_id;
-        snapshot.attach_index = capture.attach_index;
-        snapshot.role = capture.role;
-        snapshot.local_bits = capture.input_bits;
-        snapshot.valid = true;
+    const NadineMazurPostSelectedWitness witness =
+        g_nadine_mazur_post_selected_witness;
+    g_nadine_mazur_post_selected_witness = previous_witness;
+
+    bool render_target_staged = false;
+    const char* post_selected_status = "post-selected-witness";
+    if (witness.armed && witness.expected_weapon == weapon &&
+        witness.completed && witness.hit_count == 1) {
+        NadineAttachTransform32 final_world{};
+        std::uint32_t parent_hash = 0;
+        std::uint32_t local_hash = 0;
+        if (seh_snapshot_post_selected_nadine_mazur_world(
+                weapon, &final_world, &parent_hash, &local_hash,
+                &post_selected_status)) {
+            render_target_staged =
+                stage_cold_nadine_mazur_render_matrix_from_corrected_world(
+                    witness.owner, weapon, witness.records, &final_world,
+                    witness.selected_index, witness.selected_joint,
+                    witness.correction_weight, witness.depth_applied,
+                    witness.binding_hash, parent_hash, local_hash);
+            if (!render_target_staged) {
+                post_selected_status = "post-selected-admission";
+            }
+        }
+    }
+    if (witness.armed && !render_target_staged) {
+        log_post_selected_nadine_mazur_render_reject_once(
+            weapon, witness, post_selected_status);
+        clear_cold_nadine_mazur_render_matrix_for_weapon(
+            weapon, "post-selected-source-not-stable");
+    }
+
+    if constexpr (kEnableRejectedNadineWeaponRuntimeProbes) {
+        g_nadine_post_selected_local_snapshot = {};
+        NadineLocalTransformProbeCapture capture{};
+        const auto* const local = weapon != nullptr
+            ? static_cast<const std::byte*>(weapon) + 0x130
+            : nullptr;
+        if (seh_capture_nadine_local_transform_pre(weapon, local, &capture)) {
+            NadinePostSelectedLocalSnapshot& snapshot =
+                g_nadine_post_selected_local_snapshot;
+            snapshot.weapon = weapon;
+            snapshot.owner = capture.owner;
+            snapshot.art = capture.art;
+            snapshot.attach_id = capture.attach_id;
+            snapshot.attach_index = capture.attach_index;
+            snapshot.role = capture.role;
+            snapshot.local_bits = capture.input_bits;
+            snapshot.valid = true;
+        }
     }
     return result;
 }
@@ -61850,32 +62237,79 @@ NadineAttachTransform32* __fastcall hooked_nadine_final_local_compose(
 }
 
 bool install_nadine_post_selected_transform_probe() {
-    auto* const slot = reinterpret_cast<std::uintptr_t*>(
+    auto* const slot = reinterpret_cast<void**>(
         g_module + kProcessWeaponUpdateSelectedAttachmentVtableSlotRva);
-    const std::uintptr_t expected =
-        g_module + kNdAttachableObjectUpdateSelectedAttachmentRva;
-    if (*slot != expected) {
+    void* const expected = reinterpret_cast<void*>(
+        g_module + kNdAttachableObjectUpdateSelectedAttachmentRva);
+    void* const hook = reinterpret_cast<void*>(
+        &hooked_process_weapon_update_selected_attachment);
+    if (slot == nullptr || *slot != expected) {
         boot_log_line(
             "Nadine post-selected transform probe SKIPPED (unexpected vslot)");
         return false;
     }
     g_original_process_weapon_update_selected_attachment =
         reinterpret_cast<NdAttachableObjectUpdateSelectedAttachmentFunction>(
-            *slot);
-    DWORD old = 0;
-    if (!VirtualProtect(slot, sizeof(*slot), PAGE_READWRITE, &old)) {
+            expected);
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        g_original_process_weapon_update_selected_attachment = nullptr;
+        boot_log_line(
+            "Nadine post-selected transform probe SKIPPED (thread suspend)");
+        return false;
+    }
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            slot, sizeof(void*), PAGE_READWRITE, &old_protection)) {
+        resume_suspended_process_threads(suspended_threads);
         g_original_process_weapon_update_selected_attachment = nullptr;
         boot_log_line(
             "Nadine post-selected transform probe SKIPPED (protect)");
         return false;
     }
-    *slot = reinterpret_cast<std::uintptr_t>(
-        &hooked_process_weapon_update_selected_attachment);
-    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(*slot));
+
+    void* const previous = InterlockedCompareExchangePointer(
+        reinterpret_cast<PVOID volatile*>(slot), hook, expected);
+    FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+    bool installed = previous == expected && *slot == hook;
+    bool rollback_verified = false;
+    if (!installed && previous == expected) {
+        InterlockedCompareExchangePointer(
+            reinterpret_cast<PVOID volatile*>(slot), expected, hook);
+        FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+        rollback_verified = *slot == expected;
+    }
     DWORD ignored = 0;
-    VirtualProtect(slot, sizeof(*slot), old, &ignored);
+    bool protection_restored = VirtualProtect(
+        slot, sizeof(void*), old_protection, &ignored) != 0;
+    if (installed && !protection_restored) {
+        InterlockedCompareExchangePointer(
+            reinterpret_cast<PVOID volatile*>(slot), expected, hook);
+        FlushInstructionCache(GetCurrentProcess(), slot, sizeof(void*));
+        rollback_verified = *slot == expected;
+        installed = false;
+        protection_restored = VirtualProtect(
+            slot, sizeof(void*), old_protection, &ignored) != 0;
+    }
+    if (installed && protection_restored && *slot != hook) {
+        installed = false;
+        rollback_verified = *slot == expected;
+    }
+    resume_suspended_process_threads(suspended_threads);
+    if (!installed) {
+        if (rollback_verified) {
+            g_original_process_weapon_update_selected_attachment = nullptr;
+        }
+        boot_log_line(
+            rollback_verified && protection_restored
+                ? "Nadine post-selected transform probe SKIPPED (verified rollback)"
+                : "Nadine post-selected transform probe SKIPPED (rollback/protection WARNING; stock target retained)");
+        return false;
+    }
     boot_log_line(
-        "Nadine post-selected transform read-only vtable probe installed");
+        kEnableColdLegacyNadineMazurRenderMatrixRepair
+            ? "Nadine post-selected final-transform source installed (+0x7B8)"
+            : "Nadine post-selected transform read-only vtable probe installed");
     return true;
 }
 
@@ -67647,8 +68081,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-22afh "
-        "(cold Mazur corrected BASE matrix at final FgDraw consumers)");
+        "TLL co-op runtime init 2026-08-22afj "
+        "(cold Mazur post-selected final matrix at FgDraw consumers)");
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
     }
@@ -67684,6 +68118,7 @@ DWORD WINAPI install_hook(void*) {
     install_player_fire_gate_diagnostics();
     install_scope_visible_gate();
     install_player_main_view_visibility_relay();
+    bool nadine_post_selected_ready = false;
     if constexpr (kEnableRejectedNadineWeaponRuntimeProbes) {
         install_fgdraw_prepare_instance_relay();
     } else {
@@ -67717,7 +68152,8 @@ DWORD WINAPI install_hook(void*) {
         install_native_nadine_weapon_boundary_probe();
         install_nadine_final_transform_probe();
         install_nadine_local_transform_probe();
-        install_nadine_post_selected_transform_probe();
+        nadine_post_selected_ready =
+            install_nadine_post_selected_transform_probe();
         install_nadine_final_local_compose_probe();
     } else {
         boot_log_line(
@@ -67731,9 +68167,14 @@ DWORD WINAPI install_hook(void*) {
         install_nadine_local_transform_probe();
     }
     if constexpr (kEnableColdLegacyNadineMazurRenderMatrixRepair) {
+        if (!nadine_post_selected_ready) {
+            nadine_post_selected_ready =
+                install_nadine_post_selected_transform_probe();
+        }
         const bool render_relay_ready =
             g_nadine_local_transform_probe_ready.load(
                 std::memory_order_acquire) &&
+            nadine_post_selected_ready &&
             install_cold_nadine_mazur_render_matrix_relay();
         g_cold_nadine_mazur_render_matrix_ready.store(
             render_relay_ready, std::memory_order_release);

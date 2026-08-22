@@ -5482,39 +5482,67 @@ Keep the postblend preservation boundary; replace only its steady content.
       does not reject the corrected matrix; it rejects the assumption that the
       cold weapon is guaranteed to reach that conditional worker seam.
 
-  Build `afh` is STATIC/IMPLEMENTED at the final renderer consumer. Three
-      independent evidence classes earn exactly one single-copy role-B Nadine
-      exam: `afb` proved the corrected selected local while the visible rifle
-      stayed stale; exact control flow proves getter callsites AD57/ADFE/B3F4,
-      with B3F4 copied to every driven `FgInstance+140`; historical render census
-      joins the exact Mazur Fg to all three driven LODs. The producer rebuilds
-      stock-equivalent `BASE=scale*TQ(parent*local)` every presentation tick.
-      The parent is resolved exactly like stock through ProcessWeapon
-      `+108/+10C -> module+386FD00[key]`, generation `entry+50`, without writing
-      `weapon+110`; staged/applied rows carry exact `parentHash/localHash`. The
-      worker preserves current `base*aux`, and the target expires after 100 ms.
-      Scope is role-B/owner0/screen0 legacy Nadine, exact Mazur,
-      targSpineProp, Player parent, current<0/state0 and exact Fg/runtime/
-      attachment generations. Relocated Player/weapon pointers are re-resolved
-      from the live retained Player and Fg weak cell. A per-publication sequence
-      plus the exclusive final commit closes clear/replace races; all three
-      callsites install as one suspended/read-back transaction. A completed
-      one-shot refresh survives a failed first renderer stage for at most 600
-      presentation attempts; stage/reject telemetry is bounded and saturation
-      remains admission-inconclusive.
+  Build `afh` is RUNTIME ADMISSION-INCONCLUSIVE at the final renderer consumer.
+      PID10764 loaded exact `afh` and READY, and the stable weapon reached
+      `refresh=ok/1/1`, but target build rejected `parent-generation` at
+      locomotion log 95921/95923. It produced zero staged targets, zero applied
+      rows and zero visible B3F9 substitutions, so the user's unchanged rifle
+      cannot be interpreted as a visual rejection. The table-only predicate was
+      stricter than stock and is REJECTED.
 
-      Written prediction: require boot `2026-08-22afh`, the three-callsite relay,
-      combined READY, exact cold refresh `ok/1/1`, and staged target. The same
-      target generation must then emit `status=applied` at visible return RVA
-      `caller=0x181B3F9` with matching `parentHash/localHash`,
-      `matrixHash=stock->corrected` and `changed=1`.
+  Build `afi` is STATIC REJECTED before runtime. Although the stock table-or-
+      cached-parent rule was exact, repeatedly rebuilding from `weapon+130`
+      would rejuvenate a cached selected-world result and could pin it while the
+      Player/spine moves. Direct `0x141ED19BB` publication is also pre-jiggle.
+      Do not launch or restore that producer.
+
+  Build `afj` is STATIC/IMPLEMENTED at the same final renderer consumer. The
+      producer is now the exact post-`ProcessWeapon +0x7B8` boundary: the nested
+      `0x141ED19BB` call supplies a same-thread full-weight/depth witness, stock
+      then applies LongGunJiggle and writes final local `+130/+140`, and the
+      wrapper double-snapshots cached parent `+110/+120` plus that final local
+      before composing the world. Exact Active caller closure is
+      `0x14150DBF0 -> ProcessWeaponBase_Update 0x141500880 ->
+      UpdateLocalAttachmentBlend 0x141ED4390 -> +0x7B8`; cold Fg flags
+      `0x2004C0` make this a natural fresh cadence, while the Animating path
+      reaches the same vslot. PID10764 independently showed repeated changing
+      full-weight/depth corrected resolver outputs.
+
+      Admission is role-B/owner0/screen0 legacy Nadine, exact Mazur,
+      canonical targSpineProp/joint, Player parent, current<0/state0, exact
+      attachment/runtime/Fg generations, nonzero local-write gate and exactly
+      one witness. It resolves the current inventory Mazur before and after the
+      build from the raw 23-entry weak table (no side-effecting GetWeaponBySlot
+      vcall), requires the accepted `weapon+4F0` back binding twice, and requires
+      the observed cold phase bits (`0x40` set, async `0x10` clear).
+      Partial/missing correction clears the target; valid publications expire
+      after 100 ms and remain publication-linearized at all three final getter
+      relays. Both the 19BB relay and +0x7B8 hook require suspended installation,
+      exact readback and restored page protection with fail-closed rollback;
+      combined READY also requires all three render callsites. Cold refresh calls
+      the verified wrapper rather than rejecting the now-hooked vslot.
+
+      The one-copy prediction requires boot `2026-08-22afj`, the installed
+      post-selected source, three-site render relay and combined READY. A full
+      `NADINE-MAZUR-NATIVE-BACK` correction must be followed by a staged target
+      with `worldSource=post-selected-final`, accepted binding hash, weight/depth
+      `1/1`, and matching nonzero parent/local/world hashes. The same generation
+      and publication must reach `caller=0x181B3F9` with matching source hashes,
+      `matrixHash=stock->corrected changed=1` and no stale/race rejection.
       Those exact markers plus the old protrusion reject final-consumer
-      sufficiency and select a different drawable/wrong corrected source.
-      `changed=0`, a bounded reject reason, no B3F9 hit, or reject-log saturation
-      is packaging/admission/math, not a visual rejection. Draw must clear the
-      target; P99, grip, transitions and sling remain stock/separate. The agent
-      may launch one Nadine copy after source/docs/IDB are committed and pushed,
-      but must never provide gameplay input.
+      sufficiency and select another drawable/wrong authored source. Missing
+      target/witness, a bounded reject, no B3F9 hit or changed=0 remains
+      admission/packaging/math. Draw/Put must clear the target; P99, grip,
+      transitions and sling remain separate. Launch only one role-B Nadine copy
+      after source/docs/IDB are committed and pushed; gameplay input is user-only.
+
+      Release `afj` is built from the reviewed source (`801280` bytes, SHA-256
+      `E46F190F5F6413A4F75C46C2BC4055BD4A7FEC9948EFA78A5616004F972FFAE0`).
+      The single IDB was saved headlessly (`1789` function labels, `61` data
+      names, one exact function type, `save_database returned True`) and restarted
+      MCP readback verifies the post-selected `uint8` ABI, Active update name,
+      inventory weak-table warning and authored-parent table name. No game was
+      launched during closure.
 
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to

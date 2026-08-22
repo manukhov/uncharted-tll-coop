@@ -27703,3 +27703,140 @@ matrix order and rejected cold phase guarantee (`1788 functions, 61 data names`,
 `save_database returned True`); after MCP restart, readback resolves the saved
 names and the phase-dispatch decompilation contains the new comment.  No game
 process was started or controlled during the static closure.
+
+### 2026-08-22 RUNTIME ADMISSION-INCONCLUSIVE (`afh`): table-only parent admission prevented every render substitution
+
+The user reported no visual change, but the written visual discriminator never
+ran.  The single role-B Nadine process `10764` loaded exact boot `afh` and
+reported the final render-matrix package `READY` (`locomotion_hook.log`
+95760/95779).  The stable exact weapon then completed the authored correction at
+95922 with `refresh=ok/1/1`, but target construction was rejected immediately
+before and after it at 95921/95923 with `reason=parent-generation`.  There were
+zero `status=staged`, zero `status=applied` and therefore zero visible
+`caller=0x181B3F9` substitutions.  The unchanged lower protrusion is not evidence
+against the final-render seam or corrected matrix; `afh` is admission-
+inconclusive.  Its telemetry did not distinguish a null table entry from a
+generation mismatch.
+
+The rejected predicate was stricter than stock.  In
+`AnimManager_DispatchRetainedOwnerPhase 0x141A8F9D0`, phase `0x40`, a matching
+`g_AuthoredTransformPointerTable[key]` generation only refreshes the cached
+parent at `ProcessWeapon+0x110`; null/mismatch skips that copy and control falls
+through to the unconditional cached-parent plus `+0x130` composition at
+`0x141A8FB1C..0x141A8FC00`.  Two independent stock consumers have the same
+contract: `BoundTransform_GetTranslationWs_A 0x14014E240` conditionally refreshes
+then unconditionally consumes its cached parent, and
+`NdAttachableObject_UpdateAnimatingLayersAndPublish 0x141ED2060` conditionally
+copies at `0x141ED284D` but unconditionally loads cached `+0x110` at
+`0x141ED2859`, composes at `0x141ED287B` and publishes at `0x141ED288F`.
+Runtime `refresh=ok/1/1` independently proves that this exact live weapon's
+cached `+0x110` and corrected `+0x130` transforms passed the existing finite/
+identity guards in the same cold interval.  `Hrequire-live-parent-table` is
+therefore **REJECTED**.
+
+### 2026-08-22 STATIC REJECTED BEFORE RUNTIME (`afi`): cached `+0x130` is not a persistent attachment source
+
+The table-or-cache parent rule is stock-correct, but the proposed maintained
+local source was not.  `NdAttachableObject_UpdateSelectedAttachmentTransform
+0x141ED1380` writes `ProcessWeapon+0x130/+0x140` as a cache derived from the
+current selected absolute transform and cached parent.  A one-shot cold refresh
+therefore cannot authorize re-publishing the same local with a fresh timestamp
+on later presentation ticks: with the observed identity cached parent it can
+pin a former world pose while the Player/spine moves.  Moreover the corrected
+output at `0x141ED19BB` is not final; the same `+0x7B8` invocation subsequently
+applies `LongGunJiggle` before its terminal local write.  `afi` was never built
+for or run in the game and is STATIC REJECTED as a persistent producer.
+
+### 2026-08-22 STATIC / IMPLEMENTED (`afj`): publish the full post-selected Mazur world at the final render consumers
+
+`Hpost-selected-final` is now exact: only after ProcessWeapon vslot `+0x7B8`
+returns, compose its cached parent `+0x110/+0x120` with the final post-jiggle local
+`+0x130/+0x140`, and substitute the resulting scaled BASE at the three already
+proved final `FgAnimData_GetRenderWorldMatrix` consumers.  Competing hypotheses
+are `Hdifferent-drawable`, `Hlater-render-owner`, `Htransition-source`,
+`Hstale-or-torn-source`, and `Haux`.
+
+Three independent evidence classes earn one bounded one-copy exam.
+
+1. Exact selected-update dataflow: `NdAttachableObject_UpdateSelectedAttachmentTransform
+   0x141ED1380` calls the selected resolver; that reaches the existing direct
+   correction relay at `0x141ED19BB`.  It then calls
+   `LongGunJiggle_UpdateFromAttachmentTransform 0x141F7E370` and
+   `LongGunJiggle_GetTransform 0x141F7E9B0`, interpolates their result, and only
+   at `0x141ED16FD/0x141ED1718` writes the final local.  This rejects the direct
+   `19BB` output as pre-jiggle and makes post-`+0x7B8` the first complete local
+   boundary.
+2. Exact cadence/caller graph: `ProcessWeapon::Active` vtable slot `+0x20`
+   (`0x14150DBF0`) calls `ProcessWeaponBase_Update 0x141500880`, which calls
+   `NdAttachableObject_UpdateLocalAttachmentBlend 0x141ED4390`; when the AnimControl
+   async bit `0x10` is clear it dispatches `+0x7B8` at `0x141ED4487`.  The cold
+   Mazur's independently observed Fg flags `0x2004C0` have that bit clear.  The
+   alternative Animating path also calls the same vslot.  PID `10764` independently
+   emitted multiple stable state-0/full-weight/depth-corrected `0x141ED19BB`
+   rows with changing absolute output, proving a live fresh producer rather than
+   a frozen one-shot cache.
+3. Final-consumer closure remains the independently proved `afh` chain:
+   `FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` calls
+   `FgAnimData_GetRenderWorldMatrix 0x1403014F0` at exact E8 sites
+   `0x14181AD57`, `0x14181ADFE` and `0x14181B3F4`; the last result is copied to
+   the exact weapon's driven `FgInstance+0x140` and then the render record.  The
+   getter's optional `BASE * Fg+0x2E0` operation is preserved on the render
+   worker, and historical runtime joined the target weapon Fg/generation to all
+   three driven LODs.
+
+The implementation is pass-scoped and fail-closed.  The `+0x7B8` wrapper arms a
+nested-safe thread-local witness before stock.  The `0x141ED19BB` relay fills it
+only for the same weapon, exactly one resolved Mazur correction, full weight
+`1.0`, successful stock return and body-depth correction.  After stock `+0x7B8`
+returns, the wrapper double-snapshots finite parent/final-local transforms,
+requires the local-write gate `+0x5F8`, composes `parent*local`, and revalidates
+role-B retained owner 0, screen 0, legacy-Nadine look, state 0/current `<0`, exact
+Mazur RTTI/art/Player parent, canonical `targSpineProp` record/joint, runtime and
+Fg generations.  It additionally resolves the exact current inventory Mazur
+before and after matrix construction through the controller's raw 23-entry weak
+table (without calling the side-effecting `GetWeaponBySlot`, which writes
+`weapon+0x72=1`), requires the accepted eight-DWORD
+`weapon+0x4F0` back binding at both boundaries, and confines this producer to
+the observed cold Fg phase bits (`0x40` set, async `0x10` clear).  Any missing or
+partial witness clears an existing target; otherwise each fresh publication is
+coherent under the existing SRW sequence and expires after 100 ms.
+
+Installer lifetime is also part of the hypothesis.  Both the `0x141ED19BB`
+callsite and stock `+0x7B8` vtable target are patched while other threads are
+suspended; exact post-write readback and page-protection restoration are required,
+with verified rollback and immutable stock targets retained on ambiguity.  The
+render `READY` bit is released only after those two producers and all three
+suspended/read-back render callsites are live.  The cold refresh now requires
+that exact installed wrapper and calls the current verified vslot; it cannot
+reject its own hook as a stock-slot mismatch.
+
+The written falsifiable prediction is: boot reports `2026-08-22afj`,
+`Nadine post-selected final-transform source installed (+0x7B8)`, the three-site
+renderer relay and combined `READY`.  Before any Draw, the exact full-weight
+`NADINE-MAZUR-NATIVE-BACK` row must be followed by
+`NADINE-COLD-MAZUR-RENDER-TARGET status=staged ...
+worldSource=post-selected-final` with the exact accepted binding hash, weight
+`1`, depth `1`, and nonzero parent/local/world hashes.  A bounded staged row is
+emitted for each of the first twelve publications.  The same generation/Fg and
+publication must produce `status=applied`; visible return RVA `caller=0x181B3F9`
+must have matching source hashes and `matrixHash=stock->corrected changed=1`,
+without `stale`/publication-race rejection.  Those exact markers plus the same lower
+protrusion reject the final-consumer hypothesis and select a different drawable
+or wrong authored source.  A missing witness/target, bounded reject reason, no
+`0x181B3F9` hit or `changed=0` is admission/packaging/math, not a visual result.
+Draw/Put must revoke the target while correction weight is below one; P99, grip,
+transition content and the parked sling remain separate.  Only one role-B Nadine
+copy is permitted, and all gameplay input remains user-only.
+
+Release `afj` compiles successfully (`tll_coop_runtime.dll`, `801280` bytes,
+SHA-256 `E46F190F5F6413A4F75C46C2BC4055BD4A7FEC9948EFA78A5616004F972FFAE0`;
+source `14:52:54`, object/DLL `14:55:55`).  The PE contains the exact `afj`
+boot, post-selected source, generation/publication and combined-READY markers.
+The single `ida/tll.i64` was updated headlessly (`1789 functions`, `61` data
+names and one exact function type; `save_database returned True`).  Restarted
+MCP readback resolves `ProcessWeaponActive_Update 0x14150DBF0`, the corrected
+`unsigned __int8 __fastcall NdAttachableObject_UpdateSelectedAttachmentTransform`
+prototype/comment at `0x141ED1380`, the weak-table side-effect warning at
+`PlayerWeaponController_GetWeaponBySlot 0x1410A1F90`, and
+`g_AuthoredTransformPointerTable 0x14386FD00`.  No game process was started or
+controlled during this static/package closure.
