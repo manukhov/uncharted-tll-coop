@@ -5935,6 +5935,50 @@ Keep the postblend preservation boundary; replace only its steady content.
       callback. Clear only on actual selector/phase exit, Put/stable cancellation
       or generation drift; preserve the confirmed full cold `afu` endpoint.
 
+      STATIC / IMPLEMENTED (`afw`): replace the rejected raw one-shot ticket
+      with an SRW phase latch keyed by `{FgAnimData, playerRuntimeId,
+      weaponRuntimeId}`. The key is re-proved from the live inventory weak
+      record, ProcessWeapon parent, `weapon+0x1A8`, Fg retained weak owner and
+      Fg `+0x1B0`; raw owner/weapon/records pointers are telemetry only. Active
+      Draw reserves a serial and commits it only after nonzero stock return plus
+      post-call identity/clock/selector revalidation, so a concurrent Put or
+      rightHand clear cannot be resurrected.
+
+      `PlayerWeaponController_RelocateOwnerPointers 0x14109DC40` and
+      `ProcessWeapon_RelocateOwnedPointers 0x141511470` only rebase pointers and
+      do not reset `+0x640/+0x644`; a mid-active move therefore remains active
+      instead of masquerading as terminal.
+
+      Matching first terminal enters persistent `TerminalHold`; every repeated
+      duration-zero/state1/back callback remains item weight zero until the
+      common 19BB hook observes the selector leave AD047A. Same-raw admission
+      requires current progress `.999`; the first callback on an independently
+      relocated wrapper may follow the stock terminal clock clear and expose
+      progress zero. It is authorized by the committed active Draw plus
+      unchanged Fg/runtime IDs, without an empirical progress threshold.
+      Exact `WeaponAttachment_SelectExistingOwnerPoint 0x141ED0580` writes
+      selector `+0x688` at `0x141ED06EF`, and
+      `ResolveSelectedAttachmentTransform 0x141ED1780` reaches
+      19BB for rightHand too, providing the clear boundary without a new hook.
+      Put, stable/cancel, nonexact duration and logical identity drift also
+      clear. Cold/pre-seed with no committed latch stays full AFU.
+
+      Written prediction: `afw`/logical-terminal install; unchanged cold full
+      endpoint; complementary active Draw; relocated terminal row
+      `rawMoved=1,lastActive=<committed sample>,weight=0`; at least a second
+      terminal ordinal also stays zero, followed by explicit
+      `selector-rightHand` clear. No readable state1/duration0 full AFU is
+      allowed between committed Draw and selector exit; an unreadable first
+      terminal is admission failure, while the true pre-seed state1/duration0
+      row stays full. Put remains monotonic to the accepted back
+      endpoint. Exact evidence plus residual snap moves to action content/stock
+      duration. Frozen Release succeeds with `/O2 /Ob2 /DNDEBUG`:
+      source/object/DLL UTC `19:15:35.574 / 19:15:48.609 / 19:15:48.706`, DLL
+      `788480` bytes, SHA-256
+      `CEBA5F6138CF3708F80CF53A5E93B0D3B17BA2758BC1A94827E7092AE54AF8CC`.
+      PE readback contains exact afw/install/latch/native-back/combined-READY
+      markers.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

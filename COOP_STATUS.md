@@ -28783,3 +28783,83 @@ repeated duration-zero/back-selector callbacks, and clear it only on the
 actual selector/phase exit, Put/stable cancellation or generation drift.  Cold
 state must remain the confirmed full `afu` endpoint.  No new IDB name is
 required for this runtime classification.
+
+### 2026-08-25 STATIC / IMPLEMENTED (`afw`): logical Draw terminal phase survives relocation and repeated callbacks
+
+Three independent evidence classes earn the replacement.  First, PID `9308`
+directly falsified both dimensions of the `afv` ticket: `99629 -> 99633` kept
+owner/weapon generations `7085/7090` but relocated raw ProcessWeapon
+`0x10e0ca1380 -> 0x10e0ca0d00`, while `99709 -> 99710` delivered two terminal
+callbacks on the same raw object.  The pre-seed control at `99678` was
+state-1/duration-zero/full AFU without a prior active ticket and must remain so.
+Second, the already-proven retained-owner contract used by the cold relocation
+path gives the stable logical tuple `{FgAnimData, playerRuntimeId,
+weaponRuntimeId}`: ProcessWeapon `+0x1A8` selects Fg, Fg `+0x1B0` repeats the
+weapon generation, and Fg `+0x1A8` resolves the current raw ProcessWeapon.
+The established relocation callbacks independently close an early-reset
+competitor: `PlayerWeaponController_RelocateOwnerPointers 0x14109DC40` and
+`ProcessWeapon_RelocateOwnedPointers 0x141511470` only rebase pointers in the
+moved allocation and do not initialize or clear `+0x640/+0x644`.  A mid-active
+move therefore remains on the exact positive-duration branch and commits a new
+active sample; a relocated duration-zero callback follows the stock updater's
+terminal clear rather than construction of a second semantic weapon.  Third,
+`NdAttachableObject_UpdateLocalAttachmentBlend 0x141ED4390` skips its
+positive-duration interpolation when `+0x640==0` but still calls vslot `+0x7B8`
+at `0x141ED4487`, proving that terminal is a repeated phase.  On phase exit,
+`WeaponAttachment_SelectExistingOwnerPoint 0x141ED0580` writes the new selector
+to `weapon+0x688` at `0x141ED06EF`;
+`NdAttachableObject_ResolveSelectedAttachmentTransform
+0x141ED1780` consumes that selector and still reaches the common corrected call
+at `0x141ED19BB`.  Thus the existing hook itself observes `rightHand` and can
+clear the phase without another detour.
+
+`afw` replaces the ticket with a process-wide SRW latch keyed only by that
+logical Fg/generation tuple; raw Player, ProcessWeapon and records pointers are
+diagnostics.  Exact local role-B Nadine/Mazur scope now validates the current
+inventory weak record, parent, Fg retained owner and selected record before any
+latch operation.  A successful active Draw reserves a serial, calls stock once,
+then revalidates the same exact Draw/Fg/selector and commits only if no Put,
+selector-exit or identity clear superseded the serial.  Active Put, malformed
+duration, stable/cancel state, a validated different logical identity, or any
+non-`AD047A` selected record clears the latch.
+
+First terminal admission still requires duration zero, Draw direction,
+state `1`, negative current slot and the back selector.  A same-raw callback
+requires current progress at least `.999`; the first callback on an independently
+relocated raw wrapper may arrive after the stock updater has cleared the clock
+and expose progress zero.  It is admitted by the already-committed active Draw
+plus the unchanged Fg and both runtime generations.  There is deliberately no
+empirical progress threshold because the stock 0.1-second clock can complete
+in one long frame.  Once admitted, `TerminalHold` returns item weight zero for
+every repeated matching callback regardless of the reset progress field.  It
+ends only when the same logical weapon reaches a non-back selector (especially
+`rightHand`), active Put, a positively read stable state-0 cancellation, or
+identity drift.  An unreadable/lagging controller cannot enter first terminal
+and cannot destroy the phase; an existing `TerminalHold` remains zero until a
+proved exit.  Cold/pre-seed without a committed active latch remains the
+confirmed full `afu` endpoint.
+
+The next one-copy prediction is exact.  Boot/install must say `afw` and logical
+terminal-hold.  Cold must again finish `authored=1/1/1` at full weight/depth.
+Draw must retain complementary active item/arm ramps, then emit terminal item
+weight `0`; a PID-9308-equivalent relocation must say `rawMoved=1` with the
+preceding committed `lastActive` sample, and a repeated callback must increment
+terminal ordinal while remaining `0`.  The subsequent common 19BB call for
+`rightHand` must emit
+`NADINE-MAZUR-DRAW-LATCH status=clear reason=selector-rightHand`.  No
+readable state-1/duration-zero full AFU row is allowed after a committed Draw;
+an unreadable first-terminal callback is an admission failure, not a visual
+verdict, while the real pre-seed row before a new active clock must remain full.
+Put remains monotonic
+to the same accepted full back endpoint.  Missing latch/clear evidence is
+admission failure; exact traces plus a remaining magnetic motion finally move
+the frontier to the authored transition content or the stock 0.1-second action,
+not this terminal lifecycle.  Grip and strap remain out of scope.  No new IDB
+symbol is required.
+
+Frozen Release build succeeds with `/O2 /Ob2 /DNDEBUG`.  Source/object/DLL UTC
+are `19:15:35.574 / 19:15:48.609 / 19:15:48.706`; the DLL is `788480` bytes,
+SHA-256 `CEBA5F6138CF3708F80CF53A5E93B0D3B17BA2758BC1A94827E7092AE54AF8CC`.
+PE readback contains exact `2026-08-25afw`, logical-terminal install,
+`NADINE-MAZUR-DRAW-LATCH`, `NADINE-MAZUR-NATIVE-BACK`, and authored-pair/native
+Draw-Put/late-steady-IK READY strings.

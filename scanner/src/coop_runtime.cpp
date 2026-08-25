@@ -2603,13 +2603,13 @@ constexpr float kLegacyNadineMazurBackDepthMeters = 0.05F;
 // Transition smoothing remains a separate arm/action problem and must not gate
 // the already accepted cold attachment again.
 constexpr bool kEnableLegacyNadineMazurWeightedBackHandoff = false;
-// Build afv separates the already-confirmed aex item interpolation from the
-// rejected afr..aft cold admission.  The authored afu frame remains the
-// unconditional resolved baseline.  Only an exact stock 0.1-second Draw/Put
-// handoff (or its ticketed terminal Draw callback) may select a weighted frame.
-// A duration-zero non-transition keeps the full afu frame; malformed metadata
-// after an active clock is observed passes stock rather than inserting an
-// authored endpoint step, and can never suppress the cold completion witness.
+// Build afw keeps afv's confirmed active interpolation but replaces its
+// raw-pointer/one-shot terminal ticket with a logical Fg+runtime-generation
+// phase latch.  The authored afu frame remains the unconditional resolved
+// baseline.  Only an exact stock 0.1-second Draw/Put handoff (or its admitted
+// terminal Draw phase) may select a weighted frame.  A duration-zero
+// non-transition keeps the full afu frame; malformed active metadata passes
+// stock and can never suppress the cold completion witness.
 constexpr bool kEnableLegacyNadineMazurTransitionBackBlend = true;
 // The aex transition census has answered its question. afq logs the exact
 // duration/progress/weight at the arm command itself, so keep this older hot
@@ -62687,6 +62687,7 @@ enum class NadineMazurTransitionBackBlendResult : std::uint8_t {
 };
 constexpr std::uint32_t kLegacyNadineMazurStockHandoffDurationBits =
     0x3DCCCCCDu;
+constexpr std::uint32_t kLegacyNadineRightHandAttachId = 0x61A48E01u;
 
 enum class NadineMazurTransitionBackBlendReject : std::uint8_t {
     kNone = 0,
@@ -62713,9 +62714,15 @@ struct NadineMazurBackFrameCorrection {
     std::uint8_t handoff_to_back = 0;
     int handoff_controller_slot = -1;
     std::uint32_t handoff_controller_state = 0xFFFFFFFFu;
+    void* handoff_fg = nullptr;
     std::uint32_t handoff_weapon_generation = 0;
     std::uint32_t handoff_duration_bits = 0;
     std::uint32_t handoff_progress_bits = 0;
+    std::uint64_t handoff_latch_serial = 0;
+    std::uint32_t handoff_terminal_ordinal = 0;
+    bool handoff_terminal_hold = false;
+    bool handoff_raw_relocated = false;
+    float handoff_last_active_progress = 0.0F;
     float handoff_progress = 1.0F;
     float correction_weight = 1.0F;
     NadineMazurTransitionBackBlendReject handoff_reject =
@@ -62727,58 +62734,305 @@ struct NadineMazurBackFrameCorrection {
     std::array<std::uint32_t, 8> binding_bits{};
 };
 
-// Controller state 1 is written before the separate structured event seeds the
-// Draw handoff.  A duration-zero/state-1 tuple can therefore be either pre-seed
-// or the real terminal callback.  Remember only a successfully evaluated exact
-// Draw clock and consume it once at the duration-zero bridge.  The lock makes
-// the proof independent of which stock update worker delivers the next pass.
-struct NadineMazurDrawTerminalTicket {
-    void* weapon = nullptr;
+struct NadineMazurTransitionIdentity {
     void* owner = nullptr;
+    void* weapon = nullptr;
+    void* fg = nullptr;
     std::uint32_t owner_generation = 0;
     std::uint32_t weapon_generation = 0;
+    std::uintptr_t records = 0;
+    std::uint8_t selected_index = 0xFF;
+    std::uint32_t selected_id = 0;
 };
+
+enum class NadineMazurDrawTerminalPhase : std::uint8_t {
+    kEmpty = 0,
+    kPendingDraw = 1,
+    kActiveDrawSeen = 2,
+    kTerminalHold = 3,
+};
+
+// PID 9308 proved that raw ProcessWeapon/Player/records addresses can relocate
+// between the last active Draw sample and the first terminal callback while
+// FgAnimData and both runtime generations remain stable.  The same run also
+// produced more than one duration-zero callback before rightHand won.  Keep a
+// logical phase latch, not a raw-pointer one-shot ticket.  Raw pointers remain
+// diagnostics only.
+struct NadineMazurDrawTerminalTicket {
+    NadineMazurDrawTerminalPhase phase =
+        NadineMazurDrawTerminalPhase::kEmpty;
+    void* fg = nullptr;
+    void* last_owner = nullptr;
+    void* last_weapon = nullptr;
+    std::uint32_t owner_generation = 0;
+    std::uint32_t weapon_generation = 0;
+    std::uint64_t serial = 0;
+    std::uint32_t terminal_callbacks = 0;
+    float last_success_progress = 0.0F;
+};
+
+struct NadineMazurTerminalAuthorization {
+    bool authorized = false;
+    bool entered_terminal = false;
+    bool raw_relocated = false;
+    std::uint64_t serial = 0;
+    std::uint32_t ordinal = 0;
+    float last_active_progress = 0.0F;
+};
+
 SRWLOCK g_nadine_mazur_draw_terminal_ticket_lock = SRWLOCK_INIT;
 NadineMazurDrawTerminalTicket g_nadine_mazur_draw_terminal_ticket{};
+std::uint64_t g_nadine_mazur_draw_terminal_ticket_serial = 0;
+
+bool same_nadine_mazur_transition_identity(
+    const NadineMazurDrawTerminalTicket& ticket,
+    const NadineMazurTransitionIdentity& identity) {
+    return ticket.fg != nullptr && ticket.fg == identity.fg &&
+        ticket.owner_generation == identity.owner_generation &&
+        ticket.weapon_generation == identity.weapon_generation;
+}
+
+bool seh_read_legacy_nadine_mazur_transition_identity(
+    void* weapon, NadineMazurTransitionIdentity* identity) {
+    if (identity == nullptr) {
+        return false;
+    }
+    *identity = {};
+    __try {
+        if (!g_net_role_b || weapon == nullptr || g_module == 0 ||
+            readable_bytes(weapon) < 0x864) {
+            return false;
+        }
+        auto* const weapon_bytes = static_cast<const std::byte*>(weapon);
+        if (*reinterpret_cast<const std::uintptr_t*>(weapon_bytes) !=
+                g_module + kProcessWeaponVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x860) !=
+                kCoopRifleArtId) {
+            return false;
+        }
+        identity->weapon = weapon;
+        identity->weapon_generation =
+            *reinterpret_cast<const std::uint32_t*>(
+                weapon_bytes + kGameObjectRuntimeIdOffset);
+        auto* const parent_handle = *reinterpret_cast<std::byte* const*>(
+            weapon_bytes + 0x4E0);
+        identity->owner_generation =
+            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x4E8);
+        if (identity->weapon_generation == 0 ||
+            identity->owner_generation == 0 || parent_handle == nullptr ||
+            readable_bytes(parent_handle) < 0x10) {
+            *identity = {};
+            return false;
+        }
+        identity->owner = *reinterpret_cast<void* const*>(parent_handle + 0x8);
+        if (identity->owner == nullptr ||
+            identity->owner != retained_player_object(0) ||
+            !player_object_stable(identity->owner) ||
+            !player_screen_index_is(identity->owner, 0) ||
+            readable_bytes(identity->owner) < 0x1E8 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(identity->owner) +
+                kGameObjectRuntimeIdOffset) != identity->owner_generation ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(identity->owner) + 0x170) !=
+                kLegacyNadineAttachTargetLookId ||
+            !seh_weapon_parent_resolves_to_owner(weapon, identity->owner)) {
+            *identity = {};
+            return false;
+        }
+        auto* const controller = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(identity->owner) +
+            kPlayerWeaponControllerOffset);
+        if (!seh_weapon_is_exact_controller_inventory_member_raw(
+                controller, weapon, kCoopRifleArtId)) {
+            *identity = {};
+            return false;
+        }
+        identity->fg = *reinterpret_cast<void* const*>(weapon_bytes + 0x1A8);
+        if (identity->fg == nullptr ||
+            readable_bytes(identity->fg) <
+                kFgAnimDataRetainedIdOffset + sizeof(std::uint32_t)) {
+            *identity = {};
+            return false;
+        }
+        auto* const fg_bytes = static_cast<const std::byte*>(identity->fg);
+        auto* const fg_owner_cell = *reinterpret_cast<std::byte* const*>(
+            fg_bytes + kFgAnimDataRetainedHandleOffset);
+        if (fg_owner_cell == nullptr || readable_bytes(fg_owner_cell) < 0x10 ||
+            *reinterpret_cast<void* const*>(fg_owner_cell + 0x8) != weapon ||
+            *reinterpret_cast<const std::uint32_t*>(
+                fg_bytes + kFgAnimDataRetainedIdOffset) !=
+                identity->weapon_generation) {
+            *identity = {};
+            return false;
+        }
+        identity->selected_index =
+            *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x688);
+        if (!seh_read_owner_attach_record_id(
+                identity->owner, identity->selected_index,
+                &identity->selected_id, &identity->records)) {
+            *identity = {};
+            return false;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *identity = {};
+        return false;
+    }
+}
+
+void clear_all_nadine_mazur_draw_terminal_tickets() {
+    AcquireSRWLockExclusive(&g_nadine_mazur_draw_terminal_ticket_lock);
+    if (g_nadine_mazur_draw_terminal_ticket.phase !=
+            NadineMazurDrawTerminalPhase::kEmpty) {
+        ++g_nadine_mazur_draw_terminal_ticket_serial;
+        g_nadine_mazur_draw_terminal_ticket = {};
+    }
+    ReleaseSRWLockExclusive(&g_nadine_mazur_draw_terminal_ticket_lock);
+}
+
+void reconcile_nadine_mazur_draw_terminal_ticket(
+    const NadineMazurTransitionIdentity& identity) {
+    NadineMazurDrawTerminalTicket cleared{};
+    const char* reason = nullptr;
+    AcquireSRWLockExclusive(&g_nadine_mazur_draw_terminal_ticket_lock);
+    const bool populated = g_nadine_mazur_draw_terminal_ticket.phase !=
+        NadineMazurDrawTerminalPhase::kEmpty;
+    if (populated && !same_nadine_mazur_transition_identity(
+            g_nadine_mazur_draw_terminal_ticket, identity)) {
+        cleared = g_nadine_mazur_draw_terminal_ticket;
+        reason = "identity-replaced";
+        ++g_nadine_mazur_draw_terminal_ticket_serial;
+        g_nadine_mazur_draw_terminal_ticket = {};
+    } else if (populated && identity.selected_id != kTargSpinePropAttachId) {
+        cleared = g_nadine_mazur_draw_terminal_ticket;
+        reason = identity.selected_id == kLegacyNadineRightHandAttachId
+            ? "selector-rightHand"
+            : "selector-other";
+        ++g_nadine_mazur_draw_terminal_ticket_serial;
+        g_nadine_mazur_draw_terminal_ticket = {};
+    }
+    ReleaseSRWLockExclusive(&g_nadine_mazur_draw_terminal_ticket_lock);
+    if (reason != nullptr) {
+        std::ostringstream line;
+        line << "NADINE-MAZUR-DRAW-LATCH status=clear reason=" << reason
+             << " phase=" << static_cast<unsigned>(cleared.phase)
+             << " serial=" << cleared.serial
+             << " generation=" << cleared.owner_generation << "/"
+             << cleared.weapon_generation
+             << " fg=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(cleared.fg)
+             << " raw=0x"
+             << reinterpret_cast<std::uintptr_t>(cleared.last_weapon)
+             << "->0x" << reinterpret_cast<std::uintptr_t>(identity.weapon)
+             << " selected=0x" << identity.selected_id << std::dec
+             << " terminalCallbacks=" << cleared.terminal_callbacks
+             << " lastProgress=" << cleared.last_success_progress;
+        boot_log_line(line.str().c_str());
+    }
+}
 
 void clear_nadine_mazur_draw_terminal_ticket(
-    void* weapon, void* owner, std::uint32_t owner_generation,
-    std::uint32_t weapon_generation) {
+    const NadineMazurTransitionIdentity& identity) {
     AcquireSRWLockExclusive(&g_nadine_mazur_draw_terminal_ticket_lock);
-    const NadineMazurDrawTerminalTicket& ticket =
-        g_nadine_mazur_draw_terminal_ticket;
-    if (ticket.weapon == weapon && ticket.owner == owner &&
-        ticket.owner_generation == owner_generation &&
-        ticket.weapon_generation == weapon_generation) {
+    if (same_nadine_mazur_transition_identity(
+            g_nadine_mazur_draw_terminal_ticket, identity)) {
+        ++g_nadine_mazur_draw_terminal_ticket_serial;
         g_nadine_mazur_draw_terminal_ticket = {};
     }
     ReleaseSRWLockExclusive(&g_nadine_mazur_draw_terminal_ticket_lock);
 }
 
-void arm_nadine_mazur_draw_terminal_ticket(
-    void* weapon, void* owner, std::uint32_t owner_generation,
-    std::uint32_t weapon_generation) {
+std::uint64_t reserve_nadine_mazur_active_draw_terminal_ticket(
+    const NadineMazurTransitionIdentity& identity) {
     AcquireSRWLockExclusive(&g_nadine_mazur_draw_terminal_ticket_lock);
+    const std::uint64_t serial =
+        ++g_nadine_mazur_draw_terminal_ticket_serial;
     g_nadine_mazur_draw_terminal_ticket = {
-        weapon, owner, owner_generation, weapon_generation};
+        NadineMazurDrawTerminalPhase::kPendingDraw,
+        identity.fg,
+        identity.owner,
+        identity.weapon,
+        identity.owner_generation,
+        identity.weapon_generation,
+        serial,
+        0,
+        0.0F,
+    };
     ReleaseSRWLockExclusive(&g_nadine_mazur_draw_terminal_ticket_lock);
+    return serial;
 }
 
-bool consume_nadine_mazur_draw_terminal_ticket(
-    void* weapon, void* owner, std::uint32_t owner_generation,
-    std::uint32_t weapon_generation) {
-    bool matched = false;
+bool commit_nadine_mazur_active_draw_terminal_ticket(
+    std::uint64_t serial, const NadineMazurTransitionIdentity& identity,
+    float progress) {
+    bool committed = false;
     AcquireSRWLockExclusive(&g_nadine_mazur_draw_terminal_ticket_lock);
-    const NadineMazurDrawTerminalTicket& ticket =
+    NadineMazurDrawTerminalTicket& ticket =
         g_nadine_mazur_draw_terminal_ticket;
-    if (ticket.weapon == weapon && ticket.owner == owner &&
-        ticket.owner_generation == owner_generation &&
-        ticket.weapon_generation == weapon_generation) {
-        matched = true;
+    if (serial != 0 && ticket.serial == serial &&
+        ticket.phase == NadineMazurDrawTerminalPhase::kPendingDraw &&
+        same_nadine_mazur_transition_identity(ticket, identity) &&
+        std::isfinite(progress) && progress >= 0.0F && progress <= 1.0F) {
+        ticket.phase = NadineMazurDrawTerminalPhase::kActiveDrawSeen;
+        ticket.last_owner = identity.owner;
+        ticket.last_weapon = identity.weapon;
+        ticket.last_success_progress = progress;
+        committed = true;
+    }
+    ReleaseSRWLockExclusive(&g_nadine_mazur_draw_terminal_ticket_lock);
+    return committed;
+}
+
+void cancel_nadine_mazur_active_draw_terminal_ticket(
+    std::uint64_t serial) {
+    AcquireSRWLockExclusive(&g_nadine_mazur_draw_terminal_ticket_lock);
+    if (serial != 0 &&
+        g_nadine_mazur_draw_terminal_ticket.serial == serial) {
+        ++g_nadine_mazur_draw_terminal_ticket_serial;
         g_nadine_mazur_draw_terminal_ticket = {};
     }
     ReleaseSRWLockExclusive(&g_nadine_mazur_draw_terminal_ticket_lock);
-    return matched;
+}
+
+NadineMazurTerminalAuthorization
+authorize_nadine_mazur_draw_terminal_hold(
+    const NadineMazurTransitionIdentity& identity, float current_progress,
+    bool current_progress_valid, bool may_enter_terminal) {
+    NadineMazurTerminalAuthorization result{};
+    AcquireSRWLockExclusive(&g_nadine_mazur_draw_terminal_ticket_lock);
+    NadineMazurDrawTerminalTicket& ticket =
+        g_nadine_mazur_draw_terminal_ticket;
+    if (same_nadine_mazur_transition_identity(ticket, identity)) {
+        const bool relocated = ticket.last_weapon != identity.weapon;
+        if (ticket.phase == NadineMazurDrawTerminalPhase::kActiveDrawSeen &&
+            may_enter_terminal) {
+            const bool current_terminal = !relocated && current_progress_valid &&
+                current_progress >= 0.999F && current_progress <= 1.01F;
+            // Stock can clear the clock before the first callback observed on
+            // an independently relocated raw ProcessWeapon.  The committed
+            // active-Draw phase plus stable Fg/runtime identity is therefore
+            // the authorization; no sampled threshold is a stock invariant.
+            const bool relocated_terminal = relocated;
+            if (current_terminal || relocated_terminal) {
+                ticket.phase = NadineMazurDrawTerminalPhase::kTerminalHold;
+                ticket.terminal_callbacks = 0;
+                result.entered_terminal = true;
+            }
+        }
+        if (ticket.phase == NadineMazurDrawTerminalPhase::kTerminalHold) {
+            ++ticket.terminal_callbacks;
+            result.authorized = true;
+            result.raw_relocated = relocated;
+            result.serial = ticket.serial;
+            result.ordinal = ticket.terminal_callbacks;
+            result.last_active_progress = ticket.last_success_progress;
+            ticket.last_owner = identity.owner;
+            ticket.last_weapon = identity.weapon;
+        }
+    }
+    ReleaseSRWLockExclusive(&g_nadine_mazur_draw_terminal_ticket_lock);
+    return result;
 }
 
 // The authored correction call is nested inside ProcessWeapon vslot +0x7B8.
@@ -63018,15 +63272,19 @@ seh_prepare_legacy_nadine_mazur_transition_back_frame(
     void* weapon, const void* stock_input,
     const NadineAttachTransform32* authored_frame,
     NadineAttachTransform32* weighted_frame,
+    const NadineMazurTransitionIdentity* identity,
     NadineMazurBackFrameCorrection* capture) {
     if (weapon == nullptr || stock_input == nullptr || authored_frame == nullptr ||
-        weighted_frame == nullptr || capture == nullptr) {
+        weighted_frame == nullptr || identity == nullptr || capture == nullptr) {
         return NadineMazurTransitionBackBlendResult::kNotTransition;
     }
     // This bounded appearance-1 repair is intentionally local-only.  Keep the
     // already-confirmed authored endpoint for remote/Chloe presentation until
     // its independently scheduled controller clock is proven equivalent.
-    if (!g_net_role_b || capture->owner_index != 0 || capture->remote) {
+    if (!g_net_role_b || capture->owner_index != 0 || capture->remote ||
+        identity->weapon != weapon || identity->owner != capture->owner ||
+        identity->owner_generation != capture->generation ||
+        identity->selected_id != kTargSpinePropAttachId) {
         return NadineMazurTransitionBackBlendResult::kNotTransition;
     }
     bool transition_clock_observed = false;
@@ -63038,9 +63296,8 @@ seh_prepare_legacy_nadine_mazur_transition_back_frame(
             return NadineMazurTransitionBackBlendResult::kNotTransition;
         }
         auto* const weapon_bytes = static_cast<const std::byte*>(weapon);
-        const std::uint32_t weapon_generation =
-            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0xBC);
-        capture->handoff_weapon_generation = weapon_generation;
+        capture->handoff_fg = identity->fg;
+        capture->handoff_weapon_generation = identity->weapon_generation;
         std::uint32_t duration_bits = 0;
         std::memcpy(
             &duration_bits, weapon_bytes + 0x640, sizeof(duration_bits));
@@ -63063,17 +63320,10 @@ seh_prepare_legacy_nadine_mazur_transition_back_frame(
         float correction_weight = 1.0F;
         if (duration_bits == kLegacyNadineMazurStockHandoffDurationBits) {
             transition_clock_observed = true;
-            if (weapon_generation == 0) {
-                capture->handoff_reject =
-                    NadineMazurTransitionBackBlendReject::kGeneration;
-                return NadineMazurTransitionBackBlendResult::kRejected;
-            }
             // The exact duration qword is the stock producer's handoff ticket.
             // Controller state can transiently lead/lag it, so retain state as
             // telemetry rather than rejecting an otherwise exact active blend.
-            clear_nadine_mazur_draw_terminal_ticket(
-                weapon, capture->owner, capture->generation,
-                weapon_generation);
+            clear_nadine_mazur_draw_terminal_ticket(*identity);
             std::memcpy(
                 &progress, weapon_bytes + 0x644, sizeof(progress));
             std::memcpy(
@@ -63088,46 +63338,57 @@ seh_prepare_legacy_nadine_mazur_transition_back_frame(
             const float smoothstep =
                 progress * progress * (3.0F - 2.0F * progress);
             correction_weight = to_back ? smoothstep : 1.0F - smoothstep;
-        } else if (duration_bits == 0 && !to_back && controller_read &&
-                   controller_state == 1 && current_slot < 0) {
+        } else if (duration_bits == 0 && !to_back) {
             transition_clock_observed = true;
-            if (weapon_generation == 0 ||
-                !consume_nadine_mazur_draw_terminal_ticket(
-                    weapon, capture->owner, capture->generation,
-                    weapon_generation)) {
+            const bool controller_terminal = controller_read &&
+                controller_state == 1 && current_slot < 0;
+            const bool controller_stable_back = controller_read &&
+                controller_state == 0 && current_slot < 0;
+            if (controller_stable_back) {
+                // A positively observed stable holstered state is a real Draw
+                // cancellation/phase exit.  Clear it before TerminalHold can
+                // authorize; unreadable or merely lagging states stay intact.
+                clear_nadine_mazur_draw_terminal_ticket(*identity);
                 return NadineMazurTransitionBackBlendResult::kNotTransition;
             }
             std::memcpy(
                 &progress, weapon_bytes + 0x644, sizeof(progress));
             std::memcpy(
                 &capture->handoff_progress_bits, &progress, sizeof(progress));
-            if (!std::isfinite(progress) || progress < 0.999F ||
-                progress > 1.01F) {
-                capture->handoff_reject =
-                    NadineMazurTransitionBackBlendReject::kProgress;
-                return NadineMazurTransitionBackBlendResult::kRejected;
+            const bool progress_valid = std::isfinite(progress) &&
+                progress >= 0.0F && progress <= 1.01F;
+            const NadineMazurTerminalAuthorization terminal =
+                authorize_nadine_mazur_draw_terminal_hold(
+                    *identity, progress, progress_valid, controller_terminal);
+            if (!terminal.authorized) {
+                // A cold/pre-seed state-1 tuple has no preceding active Draw
+                // latch and must remain the confirmed AFU endpoint.  Preserve
+                // an ActiveDrawSeen latch across an unreadable controller so a
+                // later positively identified terminal callback can enter.
+                // Other controller values can lead/lag the selector and must
+                // not destroy the phase proof.
+                return NadineMazurTransitionBackBlendResult::kNotTransition;
             }
             // Stock clears duration one callback before switching the selected
-            // record to rightHand.  Preserve the confirmed aex zero-weight
-            // bridge; cold state 0 never enters this branch.
+            // record to rightHand and can invoke +0x7B8 repeatedly while the
+            // clock remains zero.  Hold the aex zero-weight bridge until the
+            // outer 19BB entry observes the actual selector exit.
+            capture->handoff_latch_serial = terminal.serial;
+            capture->handoff_terminal_ordinal = terminal.ordinal;
+            capture->handoff_terminal_hold = true;
+            capture->handoff_raw_relocated = terminal.raw_relocated;
+            capture->handoff_last_active_progress =
+                terminal.last_active_progress;
             progress = 1.0F;
             correction_weight = 0.0F;
         } else if (duration_bits != 0) {
             transition_clock_observed = true;
-            if (weapon_generation != 0) {
-                clear_nadine_mazur_draw_terminal_ticket(
-                    weapon, capture->owner, capture->generation,
-                    weapon_generation);
-            }
+            clear_nadine_mazur_draw_terminal_ticket(*identity);
             capture->handoff_reject =
                 NadineMazurTransitionBackBlendReject::kDuration;
             return NadineMazurTransitionBackBlendResult::kRejected;
         } else {
-            if (weapon_generation != 0) {
-                clear_nadine_mazur_draw_terminal_ticket(
-                    weapon, capture->owner, capture->generation,
-                    weapon_generation);
-            }
+            clear_nadine_mazur_draw_terminal_ticket(*identity);
             return NadineMazurTransitionBackBlendResult::kNotTransition;
         }
         correction_weight = std::clamp(correction_weight, 0.0F, 1.0F);
@@ -63157,6 +63418,12 @@ seh_prepare_legacy_nadine_mazur_transition_back_frame(
         capture->handoff_weighted = true;
         capture->handoff_progress = progress;
         capture->correction_weight = correction_weight;
+        if (duration_bits == kLegacyNadineMazurStockHandoffDurationBits &&
+            !to_back) {
+            capture->handoff_last_active_progress = progress;
+            capture->handoff_latch_serial =
+                reserve_nadine_mazur_active_draw_terminal_ticket(*identity);
+        }
         return NadineMazurTransitionBackBlendResult::kBlended;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         capture->handoff_reject =
@@ -63463,6 +63730,7 @@ void log_nadine_mazur_back_frame_once(
     mix(capture.table);
     mix(capture.records);
     mix(capture.generation);
+    mix(reinterpret_cast<std::uintptr_t>(capture.handoff_fg));
     mix(capture.handoff_weapon_generation);
     const unsigned progress_bucket = capture.handoff_weighted
         ? static_cast<unsigned>(std::clamp(
@@ -63473,6 +63741,9 @@ void log_nadine_mazur_back_frame_once(
     mix(capture.handoff_controller_state);
     mix(capture.handoff_duration_bits);
     mix(progress_bucket);
+    mix(capture.handoff_terminal_hold ? 1u : 0u);
+    mix(capture.handoff_raw_relocated ? 1u : 0u);
+    mix(std::min(capture.handoff_terminal_ordinal, 2u));
     static std::array<std::atomic<std::uint64_t>, 192> seen{};
     if (!claim_holster_probe_signature(seen, signature)) {
         return;
@@ -63487,6 +63758,8 @@ void log_nadine_mazur_back_frame_once(
          << " records=0x" << capture.records << std::dec
          << " generation=" << capture.generation << "/"
          << capture.handoff_weapon_generation
+         << " fg=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(capture.handoff_fg) << std::dec
          << " scope="
          << (capture.owner_index < 0
                  ? "initial"
@@ -63506,6 +63779,12 @@ void log_nadine_mazur_back_frame_once(
          << " clockBits=0x" << std::hex << capture.handoff_duration_bits
          << "/0x" << capture.handoff_progress_bits << std::dec
          << " progress=" << capture.handoff_progress
+         << " latch=" << (capture.handoff_terminal_hold ? "terminal" :
+                (capture.handoff_latch_serial != 0 ? "active" : "none"))
+         << "/" << capture.handoff_latch_serial
+         << " ordinal=" << capture.handoff_terminal_ordinal
+         << " rawMoved=" << (capture.handoff_raw_relocated ? 1 : 0)
+         << " lastActive=" << capture.handoff_last_active_progress
          << " correctionWeight=" << capture.correction_weight
          << " depth=" << (capture.depth_applied ? 1 : 0)
          << ":" << kLegacyNadineMazurBackDepthMeters
@@ -63525,6 +63804,22 @@ void log_nadine_mazur_back_frame_once(
 
 std::int64_t __fastcall hooked_nd_attachable_apply_local_transform(
     void* weapon, void* output, const void* input) {
+    NadineMazurTransitionIdentity mazur_transition_identity{};
+    const bool mazur_transition_identity_valid =
+        kEnableLegacyNadineMazurTransitionBackBlend &&
+        seh_read_legacy_nadine_mazur_transition_identity(
+            weapon, &mazur_transition_identity);
+    if (kEnableLegacyNadineMazurTransitionBackBlend) {
+        if (!g_net_role_b) {
+            clear_all_nadine_mazur_draw_terminal_tickets();
+        } else if (mazur_transition_identity_valid) {
+            // This runs before the AD047A-only authored-frame resolver.  The
+            // common 19BB call is reached for rightHand too, so the first
+            // non-back selected callback is the exact terminal-phase exit.
+            reconcile_nadine_mazur_draw_terminal_ticket(
+                mazur_transition_identity);
+        }
+    }
     NadineLocalTransformProbeCapture capture{};
     const bool captured =
         (kEnableRejectedNadineWeaponRuntimeProbes ||
@@ -63564,7 +63859,8 @@ std::int64_t __fastcall hooked_nd_attachable_apply_local_transform(
         mazur_transition_result =
             seh_prepare_legacy_nadine_mazur_transition_back_frame(
                 weapon, input, &mazur_back_frame,
-                &mazur_weighted_back_frame, &transition_correction);
+                &mazur_weighted_back_frame, &mazur_transition_identity,
+                &transition_correction);
         // Keep diagnostics for all three outcomes.  Only kRejected suppresses
         // the correction; kNotTransition is the locked AFU baseline.
         mazur_correction = transition_correction;
@@ -63588,14 +63884,45 @@ std::int64_t __fastcall hooked_nd_attachable_apply_local_transform(
             ? g_original_nd_attachable_apply_local_transform(
                   weapon, output, effective_input)
             : 0;
-    if (mazur_transition_blended && result != 0 &&
+    if (mazur_correction.handoff_latch_serial != 0 &&
+        !mazur_correction.handoff_terminal_hold &&
         mazur_correction.handoff_to_back == 0 &&
         mazur_correction.handoff_duration_bits ==
-            kLegacyNadineMazurStockHandoffDurationBits &&
-        mazur_correction.handoff_weapon_generation != 0) {
-        arm_nadine_mazur_draw_terminal_ticket(
-            weapon, mazur_correction.owner, mazur_correction.generation,
-            mazur_correction.handoff_weapon_generation);
+            kLegacyNadineMazurStockHandoffDurationBits) {
+        bool committed = false;
+        if (mazur_transition_blended && result != 0) {
+            NadineMazurTransitionIdentity identity_after{};
+            bool active_draw_after = false;
+            if (seh_read_legacy_nadine_mazur_transition_identity(
+                    weapon, &identity_after) &&
+                identity_after.selected_id == kTargSpinePropAttachId) {
+                __try {
+                    const auto* const weapon_bytes =
+                        static_cast<const std::byte*>(weapon);
+                    std::uint32_t duration_after = 0;
+                    std::memcpy(
+                        &duration_after, weapon_bytes + 0x640,
+                        sizeof(duration_after));
+                    active_draw_after = duration_after ==
+                            kLegacyNadineMazurStockHandoffDurationBits &&
+                        *reinterpret_cast<const std::uint8_t*>(
+                            weapon_bytes + 0x8F4) == 0;
+                } __except (EXCEPTION_EXECUTE_HANDLER) {
+                    active_draw_after = false;
+                }
+                if (active_draw_after) {
+                    committed =
+                        commit_nadine_mazur_active_draw_terminal_ticket(
+                            mazur_correction.handoff_latch_serial,
+                            identity_after,
+                            mazur_correction.handoff_progress);
+                }
+            }
+        }
+        if (!committed) {
+            cancel_nadine_mazur_active_draw_terminal_ticket(
+                mazur_correction.handoff_latch_serial);
+        }
     }
     if (mazur_corrected && result != 0) {
         seh_apply_legacy_nadine_mazur_back_depth(
@@ -63760,7 +64087,7 @@ bool install_nadine_local_transform_probe() {
     }
     boot_log_line(kEnableLegacyNadineMazurAuthoredBackFrame
         ? (kEnableLegacyNadineMazurTransitionBackBlend
-            ? "legacy-Nadine Mazur transition-only weighted authored back-frame correction installed at 0x141ED19BB"
+            ? "legacy-Nadine Mazur logical terminal-hold weighted back-frame correction installed at 0x141ED19BB"
             : "legacy-Nadine Mazur authored spined back-frame correction installed at 0x141ED19BB")
         : (kEnableLegacyNadineMazurNativeBackFrame
         ? "legacy-Nadine Mazur native back-frame correction installed at 0x141ED19BB"
@@ -70607,8 +70934,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-25afv "
-        "(preserve afu cold attachment; restore complementary Draw/Put item blend)");
+        "TLL co-op runtime init 2026-08-25afw "
+        "(preserve afu cold; hold Draw terminal across relocation/repeated callbacks)");
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
     }
