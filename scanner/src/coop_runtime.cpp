@@ -2514,9 +2514,10 @@ constexpr bool kEnableColdLegacyNadineMazurFactoryHolsterRebind = false;
 // hook writes only the caller's temporary output; stock consumers then copy it
 // into their normal temporal buffers and FgInstance render matrices.
 constexpr bool kEnableColdLegacyNadineMazurRenderMatrixRepair = false;
-// afk is a read-only cold-vs-post-Put census of the exact ProcessWeapon Fg's
-// 22 x 48-byte skinning palette. It never writes a pose or transform.
-constexpr bool kEnableColdLegacyNadineMazurWeaponPaletteCensus = true;
+// Build afk proved all 22 cold and post-Put rows byte-identical on the same
+// ProcessWeapon Fg/runtime generation. Keep the rejected palette census parked;
+// the remaining owner is a child/submission/deformer state below root+palette.
+constexpr bool kEnableColdLegacyNadineMazurWeaponPaletteCensus = false;
 // Native NPC Nadine's targSpineProp and legacy Player-Nadine's targSpine are
 // both canonical identity records on spineb/joint16. The attach-table repair
 // now creates targSpineProp as an exact id alias of that existing Nadine frame,
@@ -68583,8 +68584,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-25afk "
-        "(read-only cold/post-Put Mazur 22-joint weapon-palette census)");
+        "TLL co-op runtime init 2026-08-25afl "
+        "(afk root/palette lifecycle rejected; child/deformer static frontier)");
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
     }

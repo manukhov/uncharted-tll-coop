@@ -27991,3 +27991,45 @@ must be retained as stock pass-through.  `git diff --check` has no whitespace
 errors.  No new IDB symbol was introduced: all code boundaries used here were
 already named, typed and saved in the single `ida/tll.i64` during the preceding
 palette-consumer closure.
+
+### 2026-08-25 RUNTIME REJECTED: cold and post-Put Mazur palettes are identical in all 22 rows
+
+PID `4332` loaded exact `2026-08-25afk` and reported the palette package
+`READY` (`locomotion_hook.log` 96189/96255).  Admission then joined one exact
+ProcessWeapon identity across the complete user-driven lifecycle:
+`Fg=0x11191D5300`, retained runtime id `520`, skeleton joint count `22`, census
+generation `1`, rifle inventory slot `1`.  Cold stable admission began at 96261;
+post-Put stable admission began at 96341 after the rifle had been drawn and
+returned to `current=-1, draw=0`.
+
+The written discriminator is conclusive.  Twelve bounded cold samples
+(96264--96285) and twelve post-Put samples (96343--96355) were all
+`exact=1, finite=1`; native `Fg+0x230` and uploaded `Fg+0x240` matched on every
+sample.  More importantly, every lifecycle sample had the same full palette
+hash `9C772250`, the same main-body aggregate `0/4/5 = 9DCB4BDE`, the same
+action aggregate `2/9/15 = 448B15F5`, the same identity mask `281`, and the same
+ordered list of all 22 row hashes.  There is no main-body delta, action-only
+delta or hidden upload mismatch.
+
+Therefore **Hweapon-palette-lifecycle** and **Haction-only-delta** are RUNTIME
+REJECTED; **Hpalette-identical** is CONFIRMED.  Together with `afj`'s identical
+final root matrix, this rules out both plausible animation transforms owned by
+the exact weapon Fg.  A literal Chloe animation/pose copy cannot fix the cold
+back defect: the weapon has no Chloe idle/draw/put clip, its root is already the
+same, and its complete internal skinning palette is already the same before and
+after the stock lifecycle that repairs presentation.
+
+The remaining P0 owner is structurally below or beside those transforms: a
+different child drawable/Fg, mesh-instance submission membership, deformer
+binding/base-pose resource, or another renderer-owned child state rebuilt by
+Draw->Put.  Next static work must enumerate the exact visible weapon and strap
+child drawables/instances before and after lifecycle and trace each instance's
+deformer/palette binding.  Do not replay or tune root matrices, Chloe Player
+clips or the 22-row weapon palette again.  The `afk` census is disabled in
+source after this result.
+
+The parked Release `afl` rebuild passes (`780288` bytes, SHA-256
+`011E8D57C6E438888FEA5BA8F88B5AA82A5BB02178AF7A5085F7B3ECDFA14A4B`, source
+`14:22:00`, DLL `14:22:42`).  It contains no enabled `afj` world substitution or
+`afk` palette census and was not injected; the still-running PID4332 retains the
+already-tested `afk` image until the user closes it.

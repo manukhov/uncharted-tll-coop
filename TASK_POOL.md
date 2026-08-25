@@ -5599,6 +5599,21 @@ Keep the postblend preservation boundary; replace only its steady content.
       palette relay's protection-failure path is readiness-false. No new IDB
       name/type was needed because this reuses the already-saved consumer seam.
 
+      PID4332 completed the exact `afk` exam. Same `Fg=0x11191D5300`, runtime
+      `520`, generation `1`, 22-joint skeleton: twelve cold and twelve post-Put
+      samples were all exact/finite, native current==upload, and byte-identical
+      in every row. Full hash `9C772250`, main `0/4/5=9DCB4BDE`, action
+      `2/9/15=448B15F5`, identity mask `281` never changed. Thus
+      Hweapon-palette-lifecycle and Haction-only-delta are RUNTIME REJECTED;
+      Hpalette-identical is CONFIRMED. Park/disable `afk` and do not copy/tune
+      the weapon palette or Chloe Player clips again.
+
+      New exact P0: enumerate the cold versus post-Put child drawable/Fg and
+      driven FgInstance sets, then trace each visible mesh partition's
+      SkinningDeformer/base-pose/palette binding and submission membership. The
+      cause must be below or beside the now-identical root and 22-row palette:
+      alternate child, deformer/bind resource, or renderer submission state.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such
