@@ -5883,6 +5883,41 @@ Keep the postblend preservation boundary; replace only its steady content.
       handoff flag off; keep Draw/Put smoothing, grip and strap explicitly open.
       The exact rejected subguard inside the old weight helper remains unknown.
 
+      STATIC / IMPLEMENTED (`afv`): keep the confirmed `afu` cold correction
+      unconditional, but add a separate local-role-B transition-only item blend
+      at the existing `0x141ED19BB` seam. Exact active duration bits
+      `0x3DCCCCCD` are the stock handoff ticket: Draw item weight is
+      `1-smoothstep`, Put item weight is `smoothstep`, and the five-centimetre
+      depth uses the same scalar. The already-executed arm pair remains exactly
+      complementary. Controller state is diagnostic for active clocks because
+      historical exact clocks can straddle state transitions.
+
+      The old cold failure cannot recur through this design. Duration-zero
+      stable/cold takes the direct full `afu` frame; malformed active metadata is
+      a tri-state stock passthrough with a bounded `BACK-BLEND-REJECT` reason,
+      never a global correction reject or full-frame mid-blend fallback. A
+      process-wide ticket keyed by weapon/owner and both generations is armed
+      only by a successful exact active Draw and consumed once at its terminal
+      duration-zero callback. This distinguishes that callback from the real
+      pre-seed state-1 tuple left by a prior Put. Active Put clears stale tickets.
+
+      Written one-copy prediction: exact `afv` boot and transition-only install;
+      unchanged pre-Draw full native-back/depth row plus deferred
+      `authored=1/1/1`; Draw item `1->0` including ticketed terminal zero opposite
+      arm `0->1`; Put item `0->1` opposite arm `1->0`; final full accepted back
+      placement. Any blend rejection, terminal full row after successful active
+      Draw, missing bucket or cold regression is packaging/admission failure.
+      Exact complementary traces plus a remaining hand snap move the frontier to
+      authored transition content/later IK. Grip and strap remain out of scope;
+      the user alone performs gameplay input.
+
+      Final independent source review found no remaining cold/continuity
+      blocker. Fresh Release is `782848` bytes, SHA-256
+      `AF6B02E938290F2953C065C5F2CEF53231F10329C1FEB989C7C08BCA0DE47A5E`,
+      source/object/DLL UTC `17:27:50.986 / 17:30:00.522 / 17:30:00.615`.
+      PE readback contains the exact `afv`, transition-only, reject and
+      combined-READY markers; no new IDB symbol is required.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

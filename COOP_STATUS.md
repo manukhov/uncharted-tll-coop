@@ -28682,3 +28682,73 @@ Draw/Put smoothness, strap visibility, the in-hand grip and other weapon
 animations remain open and were not exercised by this run.  The thirteen
 redundant `existing-spine-prop` rebinds are lifecycle/efficiency debt, not a
 correctness failure in this confirmed result.  No new IDB name is required.
+
+### 2026-08-25 STATIC / IMPLEMENTED (`afv`): restore the stock item handoff without making it a cold-correction gate
+
+The user's next Draw/Put in confirmed `afu` made the remaining owner explicit:
+the rifle itself teleported directly between back and hands.  The arm package was
+not missing.  PID `5376` emitted eleven increasing Draw command/restore pairs
+(`0.014005 ... 0.991529 -> 1`) and eleven decreasing Put pairs
+(`1 ... 0.017706`), while the item-side authored frame stayed full because
+`afu` deliberately parked the rejected global weight helper.
+
+Three independent evidence classes close the item seam.  First, stock Draw
+`ProcessWeaponBase_EventHandler 0x1414FBE10` and Put
+`PlayerHolsterWeaponAnimAction_Execute 0x14108A640` each atomically seed the
+exact qword `{duration=0.1f, progress=0}` at `ProcessWeapon+0x640/+0x644`; Put
+also writes direction byte `+0x8F4=1`.  Second,
+`NdAttachableObject_UpdateLocalAttachmentBlend 0x141ED4390` advances that clock,
+uses mode-2 smoothstep, writes the interpolated stock frame, clears only
+duration at `0x141ED4464`, and then synchronously reaches the existing corrected
+callsite `0x141ED19BB`.  Third, `aew/aex` runtime covered every Draw/Put progress
+bucket and confirmed item correction weights `1 -> 0` / `0 -> 1`; `aex` removed
+the weapon-frame discontinuity, while its then-full arm step remained magnetic.
+The current `afu` run independently proves the complementary arm weights now
+execute.  Missing stock action/updater, a new endpoint, renderer substitution
+and a disabled arm-weight flag are therefore rejected alternatives.
+
+`afv` keeps the confirmed cold decision structurally separate:
+`kEnableLegacyNadineMazurWeightedBackHandoff` remains `false`, authored-frame
+resolution alone still admits the cold correction, and duration-zero cold or
+completed Put uses the direct full `afu` frame.  A new local-role-B-only
+transition classifier may select a weighted frame only for exact duration bits
+`0x3DCCCCCD`: Draw uses `1-smoothstep(progress)`, Put uses
+`smoothstep(progress)`, and the five-centimetre depth correction uses the same
+weight.  Controller state is telemetry, not an active-clock gate, because
+historical exact clocks can lead or lag state.  Invalid active progress,
+duration or interpolation is a distinct tri-state rejection that passes stock
+input with no depth instead of inserting a one-frame full authored endpoint; a
+bounded `NADINE-MAZUR-BACK-BLEND-REJECT ... fallback=stock` row records it.
+
+The duration-zero Draw boundary is not inferred from state alone.  State `1` is
+written before the later structured event seeds the 0.1-second clock, while a
+previous Put can leave progress `1`; that pre-seed tuple is byte-identical to a
+terminal callback.  A process-wide SRW-protected ticket is armed only after a
+successful exact active Draw for the same weapon, owner and both generations,
+then consumed once when the updater clears duration before switching to
+`rightHand`.  Without that ticket the ambiguous tuple remains the full `afu`
+baseline.  Active Put clears any stale Draw ticket.  No clip, action, selector,
+arm command, steady IK, grip or strap behavior changes.
+
+The one-copy prediction is falsifiable.  Boot must say `afv` and the
+transition-only install marker must appear.  Before first Draw, cold must still
+emit full `NADINE-MAZUR-NATIVE-BACK ... handoff=0 ... correctionWeight=1
+depth=1` followed by `refresh=ok/1/1 ... authored=1/1/1`, with the user-accepted
+upper-back placement unchanged.  Draw must emit item weights monotonically
+`1 -> 0`, including one ticketed terminal zero, opposite the already-confirmed
+arm `0 -> 1`; Put must emit item `0 -> 1` opposite arm `1 -> 0`, then return to
+the same full back endpoint.  Any `BACK-BLEND-REJECT`, a state-1 duration-zero
+full row after successful active Draw, or missing phase buckets is
+admission/package failure rather than a visual verdict.  Both exact
+complementary traces plus the same residual arm snap select authored transition
+content or a later IK writer.  Initial-back regression rejects `afv` outright.
+This exam makes no claim about final steady grip or sling visibility.  One
+role-B Nadine copy is allowed; only the user supplies gameplay input.
+
+Final independent review found no remaining cold/continuity blocker.  Fresh
+Release is `782848` bytes, SHA-256
+`AF6B02E938290F2953C065C5F2CEF53231F10329C1FEB989C7C08BCA0DE47A5E`;
+source/object/DLL UTC are `17:27:50.986 / 17:30:00.522 / 17:30:00.615`.
+The Release build and PE readback contain the exact `afv`, transition-only,
+reject and combined-READY markers.  No new engine address or semantic symbol is
+introduced, so the saved IDB needs no mutation for `afv`.
