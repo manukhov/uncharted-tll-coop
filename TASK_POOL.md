@@ -5786,6 +5786,37 @@ Keep the postblend preservation boundary; replace only its steady content.
       `B4CEAA00315B6A0D8F1DDD319922375FC3FBA1CF415A8BBB8DBCB36CBE60CB29`.
       Do not launch automatically.
 
+      RUNTIME REJECTED (`afr`, PID 5792): the state predicate is correct but the
+      cold producer is not deterministic. Initial rebind and deferred +0x7B8
+      refresh reported `ok/1/1 changed=ff`, yet no authored-back row occurred
+      before Draw and the user still saw the broken cold rifle. After Draw->Put,
+      the same run produced repeated state0/current-1 full-weight/depth authored
+      rows, proving the remaining defect is missing cold producer reach rather
+      than another duration-zero weight error.
+
+      STATIC / IMPLEMENTED (`afs`): a raw +0x130 delta no longer completes the
+      forced Mazur refresh. A same-thread witness around its exact +0x7B8 call is
+      completed only by the existing nested 0x141ED19BB relay for the same
+      weapon with stock result, authored weight and depth all valid/full.
+      Otherwise the request remains `authored-correction-pending`. A prior pass
+      may already have finalized LongGunJiggle, so the exact terminal
+      enabled0/request0 state is now admitted for another resolver pass instead
+      of being dropped as `long-gun-jiggle-not-enabled`.
+
+      Prediction for the next permitted one-copy exam: exact `afs` boot; before
+      any Draw, either bounded pending rows or a finished refresh only with
+      `authored=1/1/1`, preceded by a full state0/current-1
+      `NADINE-MAZUR-NATIVE-BACK` row and the accepted initial placement. A
+      finished authored0 row, no pre-Draw authored row, or the same broken
+      pixels rejects this producer. Do not launch until fresh Release packaging,
+      commit/push and explicit user acceptance.
+
+      Release `afs`: `778752` bytes, SHA-256
+      `624FA4FAB965D364E2D59A7CA93285D4EE1B9D081E0CB6F3DBDA5E16D587E436`;
+      source/object/DLL UTC `15:54:20 / 15:55:24 / 15:55:24`. PE readback
+      contains the exact `afs` boot and authored pending/result markers. No new
+      IDB symbol was introduced.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

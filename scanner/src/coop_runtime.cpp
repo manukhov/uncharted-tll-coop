@@ -508,6 +508,21 @@ std::atomic<std::uint64_t> g_cold_nadine_mazur_render_matrix_publication{0};
 std::atomic<bool> g_nadine_local_transform_probe_ready{false};
 std::atomic<bool> g_cold_nadine_mazur_render_matrix_ready{false};
 
+// Build afs: a forced cold +0x7B8 refresh is successful only if its nested
+// 0x141ED19BB relay actually applies the full authored Mazur frame.  The stock
+// updater can still change ProcessWeapon+0x130 when the selected resolver is
+// not yet able to resolve the authored spined donor, so a raw local hash delta
+// is not a sufficient completion signal.
+struct NadineMazurColdRefreshCorrectionWitness {
+    bool armed = false;
+    bool completed = false;
+    void* expected_weapon = nullptr;
+    float correction_weight = 0.0F;
+    bool depth_applied = false;
+};
+thread_local NadineMazurColdRefreshCorrectionWitness
+    g_nadine_mazur_cold_refresh_correction_witness{};
+
 // Build afk: afj proved that replacing the ProcessWeapon BASE world matrix at
 // every final FgDraw consumer is a byte-for-byte no-op. The remaining exact
 // animated owner is the weapon's own 22-joint palette. Publish only an identity
@@ -56969,6 +56984,9 @@ struct NadineColdHolsterRefreshResult {
     std::uint8_t weapon_update_flags = 0;
     std::uint8_t weapon_jiggle_request = 0;
     std::uint8_t weapon_jiggle_request_after = 0;
+    bool authored_correction_seen = false;
+    float authored_correction_weight = 0.0F;
+    bool authored_depth_applied = false;
 };
 
 NadineColdHolsterRefreshResult
@@ -57001,6 +57019,10 @@ seh_refresh_initial_local_nadine_holster_transform(
     void* saved_process = nullptr;
     bool tls_scope_entered = false;
     bool jiggle_reset_started = false;
+    bool correction_witness_scope_entered = false;
+    const NadineMazurColdRefreshCorrectionWitness
+        previous_correction_witness =
+            g_nadine_mazur_cold_refresh_correction_witness;
     std::array<std::uint32_t, 8> local_before{};
     std::array<std::uint32_t, kLongGunJiggleSize / sizeof(std::uint32_t)>
         jiggle_before{};
@@ -57144,23 +57166,29 @@ seh_refresh_initial_local_nadine_holster_transform(
             }
             result.jiggle_enabled_before =
                 *(static_cast<const std::uint8_t*>(result.selected_blend) + 0x8);
-            if (result.jiggle_enabled_before != 1) {
-                result.status = "long-gun-jiggle-not-enabled";
-                return result;
-            }
-            // Runtime afa proved the cold Mazur has flags bit 3 set and
-            // weapon+0x8F4=1, so ProcessWeaponBase_Update correctly chooses
-            // the active branch.  Admission requires that exact missed-finalizer
-            // state; do not clear an already-finalized or differently-scoped
-            // weapon.
-            if ((result.weapon_update_flags & 0x08) == 0 ||
-                result.weapon_jiggle_request != 1) {
+            if (result.jiggle_enabled_before == 1) {
+                // Runtime afa proved the cold Mazur has flags bit 3 set and
+                // weapon+0x8F4=1 before the missed transition finalizer.  The
+                // first forced pass reproduces that exact stock reset.
+                if ((result.weapon_update_flags & 0x08) == 0 ||
+                    result.weapon_jiggle_request != 1) {
+                    result.status = "long-gun-jiggle-state";
+                    return result;
+                }
+                reset_long_gun_jiggle =
+                    reinterpret_cast<LongGunJiggleSetEnabledAndResetFunction>(
+                        expected_reset);
+            } else if (result.jiggle_enabled_before == 0 &&
+                       result.weapon_jiggle_request == 0) {
+                // A previous forced pass may have completed the stock jiggle
+                // finalizer before the selected resolver could materialize the
+                // authored spined donor.  This is the exact terminal stock
+                // state, so keep retrying the resolver without resetting the
+                // jiggle a second time.
+            } else {
                 result.status = "long-gun-jiggle-state";
                 return result;
             }
-            reset_long_gun_jiggle =
-                reinterpret_cast<LongGunJiggleSetEnabledAndResetFunction>(
-                    expected_reset);
         }
         // Stock clears only the duration DWORD at +0x640 when the interpolation
         // completes; progress at +0x644 remains 1.0 and must not keep this gate
@@ -57266,6 +57294,14 @@ seh_refresh_initial_local_nadine_holster_transform(
         if (!result.tls_set) {
             result.status = "tls-set";
         } else {
+            if (expected_art == kCoopRifleArtId &&
+                kEnableLegacyNadineMazurAuthoredBackFrame) {
+                g_nadine_mazur_cold_refresh_correction_witness = {};
+                g_nadine_mazur_cold_refresh_correction_witness.armed = true;
+                g_nadine_mazur_cold_refresh_correction_witness.expected_weapon =
+                    weapon;
+                correction_witness_scope_entered = true;
+            }
             update_selected_attachment(weapon);
             result.called = true;
             result.status = "called";
@@ -57287,6 +57323,16 @@ seh_refresh_initial_local_nadine_holster_transform(
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         result.tls_restored = false;
+    }
+
+    if (correction_witness_scope_entered) {
+        const NadineMazurColdRefreshCorrectionWitness witness =
+            g_nadine_mazur_cold_refresh_correction_witness;
+        result.authored_correction_seen = witness.completed;
+        result.authored_correction_weight = witness.correction_weight;
+        result.authored_depth_applied = witness.depth_applied;
+        g_nadine_mazur_cold_refresh_correction_witness =
+            previous_correction_witness;
     }
     if (!result.called) {
         return result;
@@ -57330,7 +57376,20 @@ seh_refresh_initial_local_nadine_holster_transform(
                 player, attach_index, &attach_id, &records_generation) &&
             records_generation == expected_records_generation &&
             attach_id == expected_attach_id;
-        result.status = result.post_verified ? "ok" : "post-drift";
+        if (!result.post_verified) {
+            result.status = "post-drift";
+        } else if (expected_art == kCoopRifleArtId &&
+                   kEnableLegacyNadineMazurAuthoredBackFrame &&
+                   (!result.authored_correction_seen ||
+                    !result.authored_depth_applied ||
+                    !std::isfinite(result.authored_correction_weight) ||
+                    result.authored_correction_weight < 0.9999F ||
+                    result.authored_correction_weight > 1.0001F)) {
+            result.status = "authored-correction-pending";
+            result.retryable = true;
+        } else {
+            result.status = "ok";
+        }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         result.status = "post-exception";
         result.post_verified = false;
@@ -58536,7 +58595,11 @@ void log_deferred_initial_local_nadine_holster_refresh(
          << static_cast<unsigned>(result.weapon_update_flags) << "/0x"
          << static_cast<unsigned>(result.weapon_jiggle_request) << "->"
          << static_cast<unsigned>(result.weapon_jiggle_request_after)
-         << " saved=0x" << result.saved_process;
+         << std::dec << " authored="
+         << (result.authored_correction_seen ? 1 : 0) << "/"
+         << result.authored_correction_weight << "/"
+         << (result.authored_depth_applied ? 1 : 0)
+         << std::hex << " saved=0x" << result.saved_process;
     boot_log_line(line.str().c_str());
 }
 
@@ -63185,6 +63248,21 @@ std::int64_t __fastcall hooked_nd_attachable_apply_local_transform(
     if (mazur_corrected && result != 0) {
         seh_apply_legacy_nadine_mazur_back_depth(
             output, &mazur_correction);
+    }
+    NadineMazurColdRefreshCorrectionWitness& cold_refresh_witness =
+        g_nadine_mazur_cold_refresh_correction_witness;
+    if (cold_refresh_witness.armed &&
+        cold_refresh_witness.expected_weapon == weapon) {
+        cold_refresh_witness.completed =
+            mazur_corrected && result != 0 &&
+            mazur_correction.depth_applied &&
+            std::isfinite(mazur_correction.correction_weight) &&
+            mazur_correction.correction_weight >= 0.9999F &&
+            mazur_correction.correction_weight <= 1.0001F;
+        cold_refresh_witness.correction_weight =
+            mazur_corrected ? mazur_correction.correction_weight : 0.0F;
+        cold_refresh_witness.depth_applied =
+            mazur_corrected && mazur_correction.depth_applied;
     }
     NadineMazurPostSelectedWitness& witness =
         g_nadine_mazur_post_selected_witness;
@@ -70173,8 +70251,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-25afr "
-        "(disambiguate cold state 0 from terminal Draw; smooth arm handoff)");
+        "TLL co-op runtime init 2026-08-25afs "
+        "(require authored cold-back correction witness; smooth arm handoff)");
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
     }

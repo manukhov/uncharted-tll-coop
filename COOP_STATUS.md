@@ -28474,3 +28474,68 @@ Fresh Release `afr`: source `2026-08-25T14:17:27.624Z`, object
 `B4CEAA00315B6A0D8F1DDD319922375FC3FBA1CF415A8BBB8DBCB36CBE60CB29`.
 The PE contains the exact `2026-08-25afr` boot marker.  No new engine symbol or
 address was introduced, so the saved IDB requires no label change.
+
+### 2026-08-25 RUNTIME REJECTED (`afr`, PID 5792): the cold forced refresh completed without the authored correction
+
+The controller-state predicate itself behaved correctly, but `afr` still did
+not preserve the confirmed initial `afp` placement.  PID `5792` loaded the
+exact build and reached READY.  Its initial Mazur rebind selected
+`targSpineProp AD047A`, verified the accepted binding and strap, then the
+deferred `+0x7B8` refresh reported `ok/1/1` and changed all eight DWORDs of
+`ProcessWeapon+0x130`.  Nevertheless there was no
+`NADINE-MAZUR-NATIVE-BACK` before the first Draw.  The user reported the cold
+rifle still broken.
+
+This is not another item-weight ambiguity.  After one Draw->Put lifecycle the
+same run emitted repeated state-0/current-1 rows with
+`handoff=0/0 controller=-1/0 correctionWeight=1 depth=1`; therefore `afr`
+does preserve the full correction when the authored resolver is actually
+reached.  Draw and Put also retained the already-confirmed fractional arm
+weights.  Reject `afr` as a release because the forced refresh treated an
+ordinary `+0x130` change as completion even when its nested authored
+`0x141ED19BB` path had not succeeded.
+
+### 2026-08-25 STATIC / IMPLEMENTED (`afs`): require the exact authored-correction witness before completing cold refresh
+
+The missing cold producer is now closed at its synchronous boundary rather
+than inferred from pose bytes.  Three independent evidence classes converge:
+(1) `afr` runtime has `refresh=ok/1/1 changed=0xff` with zero pre-Draw authored
+marker, followed by full state-0 authored rows only after Put; (2) the saved IDB
+shows `NdAttachableObject_UpdateSelectedAttachmentTransform 0x141ED1380` can
+write `+0x130/+0x140` whenever its selected resolver succeeds, while the
+actual authored substitution is the distinct nested callsite `0x141ED19BB`;
+(3) confirmed `afp` PID `13784` reached that exact authored call before Draw
+and produced the accepted placement.  A local-transform hash delta is therefore
+not an authored-correction completion proof.
+
+`afs` arms a nested-safe thread-local witness only around the forced exact
+Mazur `+0x7B8` call.  The existing `0x141ED19BB` relay completes it only for the
+same weapon after a nonzero stock result, full correction weight and successful
+depth adjustment.  Missing/partial correction returns
+`authored-correction-pending` and keeps the generation-scoped deferred request
+alive instead of logging false `ok`.  The first forced pass may already have
+performed the stock LongGunJiggle finalizer; subsequent passes admit only its
+exact terminal `{enabled=0, request=0}` state and retry the selected resolver
+without resetting it again.  Every weapon/player/records relocation still
+passes the existing exact state-0, retained-owner, art, endpoint, Fg and runtime
+guards.  P99, Draw/Put arm weights, steady grip and strap behavior are unchanged.
+
+The written one-copy prediction is deliberately strict.  Boot must say `afs`.
+Before any Draw, the exact Mazur deferred refresh must either remain bounded at
+`authored-correction-pending` or finish only with `authored=1/1/1`; a full
+`NADINE-MAZUR-NATIVE-BACK ... controller=-1/0 correctionWeight=1 depth=1` row
+must precede the finished refresh and the accepted initial back placement.
+`finished authored=0`, no authored row before Draw, or unchanged broken pixels
+rejects the deterministic cold producer.  Draw/Put must continue to emit the
+already-confirmed complementary fractional arm weights.  No game is launched
+until the package is rebuilt, committed and the user explicitly accepts this
+new exam.
+
+Fresh Release `afs`: source `2026-08-25T15:54:20Z`, object/DLL
+`15:55:24Z`, size `778752`, SHA-256
+`624FA4FAB965D364E2D59A7CA93285D4EE1B9D081E0CB6F3DBDA5E16D587E436`.
+The PE contains the exact `afs` boot, `authored-correction-pending`,
+`authored=` and weighted authored-back installation markers.  Release
+compilation/linking and `git diff --check` pass.  This change introduces no new
+engine address or semantic name; it reuses the saved-IDB `0x141ED1380`,
+`0x141ED1780` and `0x141ED19BB` boundaries, so no IDB mutation is required.
