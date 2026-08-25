@@ -5817,6 +5817,31 @@ Keep the postblend preservation boundary; replace only its steady content.
       contains the exact `afs` boot and authored pending/result markers. No new
       IDB symbol was introduced.
 
+      RUNTIME ADMISSION-INCONCLUSIVE (`afs`, PID 11076): exact role-B/READY and
+      accepted `rightHand -> AD047A` rebind occurred, but zero full authored
+      back rows preceded Draw. The Mazur pending refresh aborted **22** times as
+      `scope-drift` while Player/controller/weapon/records raw addresses moved.
+      Later Draw/Put fractional markers remained intact. This does not reject
+      the authored pose; it proves the raw-pointer pending lifetime is wrong.
+
+      STATIC / IMPLEMENTED (`aft`): pending refresh now retains stable
+      Player/weapon runtime ids plus exact weapon Fg. Each retry reacquires the
+      current retained Player, exact controller and unique raw inventory art,
+      then requires the same ids/Fg and revalidates parent, AD047A and the new
+      records array before replacing diagnostic pointers. This reuses the
+      corrected `aav` relocation contract and the side-effect-free controller
+      weak-table resolver. Different generations/endpoints remain fail-closed.
+
+      Prediction: exact `aft`; a relocated request may finish with
+      `relocations>0`, but before Draw it must first emit full state0/current-1
+      `NADINE-MAZUR-NATIVE-BACK` and then `refresh=ok/1/1 authored=1/1/1`.
+      Exact completion plus unchanged pixels rejects authored-frame
+      sufficiency; identity abort/missing completion is admission only. Fresh
+      Release is `779776` bytes, SHA-256
+      `57056289273330584B70CF8826EEFB38E4EA4B13B16E6E724760BCDAB06EC540`,
+      source/object/DLL UTC `16:34:34.825 / 16:34:46.794 / 16:34:46.887`.
+      PE marker/readback and Release build pass; no new IDB label is needed.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

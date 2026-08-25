@@ -58511,14 +58511,23 @@ bool install_cold_nadine_mazur_render_matrix_relay() {
     return true;
 }
 struct NadineColdHolsterPendingRefresh {
+    // Raw Process allocations and the Player attachment-record array relocate
+    // during cold retained-owner materialization.  Preserve them only for
+    // diagnostics; FgAnimData plus the Player/weapon runtime ids are the stable
+    // identity used to reacquire the live objects on every retry (the same
+    // contract proven by the corrected aav renderer census).
     bool armed = false;
     void* player = nullptr;
     void* controller = nullptr;
     void* weapon = nullptr;
+    void* fg = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
     std::uintptr_t records_generation = 0;
     std::uint32_t art = 0;
     std::uint32_t attach_id = 0;
     unsigned attempts = 0;
+    unsigned relocations = 0;
 };
 
 std::array<NadineColdHolsterPendingRefresh, 2>
@@ -58548,9 +58557,38 @@ void arm_deferred_initial_local_nadine_holster_refresh(
     if (pending == nullptr) {
         return;
     }
-    *pending = {
-        true, player, controller, weapon, records_generation,
-        art, attach_id, 0};
+    void* fg = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    if (!seh_read_object_runtime_id(player, &player_runtime_id) ||
+        !seh_read_object_runtime_id(weapon, &weapon_runtime_id)) {
+        return;
+    }
+    __try {
+        auto* const weapon_bytes = static_cast<const std::byte*>(weapon);
+        fg = *reinterpret_cast<void* const*>(weapon_bytes + 0x1A8);
+        auto* const fg_bytes = static_cast<const std::byte*>(fg);
+        if (fg_bytes == nullptr ||
+            readable_bytes(fg_bytes) <
+                kFgAnimDataRetainedIdOffset + sizeof(std::uint32_t) ||
+            *reinterpret_cast<const std::uint32_t*>(
+                fg_bytes + kFgAnimDataRetainedIdOffset) != weapon_runtime_id) {
+            return;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return;
+    }
+    *pending = {};
+    pending->armed = true;
+    pending->player = player;
+    pending->controller = controller;
+    pending->weapon = weapon;
+    pending->fg = fg;
+    pending->player_runtime_id = player_runtime_id;
+    pending->weapon_runtime_id = weapon_runtime_id;
+    pending->records_generation = records_generation;
+    pending->art = art;
+    pending->attach_id = attach_id;
 }
 
 void log_deferred_initial_local_nadine_holster_refresh(
@@ -58563,10 +58601,14 @@ void log_deferred_initial_local_nadine_holster_refresh(
          << " controller=0x"
          << reinterpret_cast<std::uintptr_t>(pending.controller)
          << " weapon=0x" << reinterpret_cast<std::uintptr_t>(pending.weapon)
+         << " fg=0x" << reinterpret_cast<std::uintptr_t>(pending.fg)
+         << " runtime=" << pending.player_runtime_id << "/"
+         << pending.weapon_runtime_id
          << " art=0x" << pending.art
          << " attach=0x" << pending.attach_id
          << " records=0x" << pending.records_generation << std::dec
          << " attempts=" << pending.attempts
+         << " relocations=" << pending.relocations
          << " terminal=" << terminal_status
          << " refresh=" << result.status << "/"
          << (result.called ? 1 : 0) << "/"
@@ -58620,31 +58662,75 @@ void process_deferred_initial_local_nadine_holster_refresh_game_thread() {
         std::uint32_t look = 0;
         int current_slot = -99;
         std::uint32_t draw_state = 0xFFFFFFFFu;
+        void* const live_player = retained_player_object(0);
         void* exact_controller = nullptr;
-        const bool scope_valid =
-            retained_player_object(0) == pending.player &&
-            player_object_stable(pending.player) &&
-            seh_read_player_look(pending.player, &look) &&
-            look == kLegacyNadineAttachTargetLookId &&
-            read_weapon_draw_state(
-                pending.player, current_slot, draw_state) &&
-            // State zero is the controller's authoritative holstered state.
-            // Mazur can acquire a nonnegative inventory/current slot while its
-            // stock attachment blend is still finishing; the refresh helper
-            // independently requires the exact unchanged back/hip endpoint.
-            draw_state == 0 &&
-            seh_read_exact_player_weapon_controller(
-                pending.player, &exact_controller) &&
-            exact_controller == pending.controller &&
-            seh_weapon_is_player_art(
-                pending.player, pending.weapon, pending.art);
-        if (!scope_valid) {
+        void* live_weapon = nullptr;
+        int live_slot = -1;
+        std::uint32_t live_player_runtime_id = 0;
+        std::uint32_t live_weapon_runtime_id = 0;
+        std::uint32_t live_parent_id = 0;
+        std::uint32_t live_attach_id = 0;
+        std::uintptr_t live_records_generation = 0;
+        std::uint8_t live_attach_index = 0xFF;
+        void* live_fg = nullptr;
+        bool stable_identity = false;
+        __try {
+            const bool live_scope =
+                player_object_stable(live_player) &&
+                seh_read_object_runtime_id(
+                    live_player, &live_player_runtime_id) &&
+                live_player_runtime_id == pending.player_runtime_id &&
+                seh_read_player_look(live_player, &look) &&
+                look == kLegacyNadineAttachTargetLookId &&
+                read_weapon_draw_state(
+                    live_player, current_slot, draw_state) &&
+                // State zero is the controller's authoritative holstered state.
+                // Mazur can acquire a nonnegative inventory/current slot while
+                // its stock attachment blend is still finishing; the refresh
+                // helper independently requires the unchanged back/hip endpoint.
+                draw_state == 0 &&
+                seh_read_exact_player_weapon_controller(
+                    live_player, &exact_controller) &&
+                seh_find_exact_controller_inventory_art_raw(
+                    exact_controller, pending.art, &live_weapon, &live_slot) &&
+                seh_read_object_runtime_id(
+                    live_weapon, &live_weapon_runtime_id) &&
+                live_weapon_runtime_id == pending.weapon_runtime_id &&
+                seh_weapon_parent_resolves_to_owner(
+                    live_weapon, live_player) &&
+                seh_read_weapon_attachment_state(
+                    live_weapon, &live_parent_id, &live_attach_index) &&
+                seh_read_owner_attach_record_id(
+                    live_player, live_attach_index, &live_attach_id,
+                    &live_records_generation) &&
+                live_attach_id == pending.attach_id &&
+                live_records_generation != 0;
+            if (live_scope) {
+                live_fg = *reinterpret_cast<void* const*>(
+                    static_cast<const std::byte*>(live_weapon) + 0x1A8);
+                stable_identity = live_fg == pending.fg;
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            stable_identity = false;
+        }
+        if (!stable_identity) {
             NadineColdHolsterRefreshResult result{};
             result.status = "scope-drift";
             log_deferred_initial_local_nadine_holster_refresh(
                 pending, result, "aborted");
             pending = {};
             continue;
+        }
+
+        if (pending.player != live_player ||
+            pending.controller != exact_controller ||
+            pending.weapon != live_weapon ||
+            pending.records_generation != live_records_generation) {
+            ++pending.relocations;
+            pending.player = live_player;
+            pending.controller = exact_controller;
+            pending.weapon = live_weapon;
+            pending.records_generation = live_records_generation;
         }
 
         const NadineColdHolsterRefreshResult result =
@@ -70251,8 +70337,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-25afs "
-        "(require authored cold-back correction witness; smooth arm handoff)");
+        "TLL co-op runtime init 2026-08-25aft "
+        "(carry authored cold-back refresh across retained relocation; smooth arm handoff)");
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
     }

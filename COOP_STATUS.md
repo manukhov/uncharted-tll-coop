@@ -28539,3 +28539,59 @@ The PE contains the exact `afs` boot, `authored-correction-pending`,
 compilation/linking and `git diff --check` pass.  This change introduces no new
 engine address or semantic name; it reuses the saved-IDB `0x141ED1380`,
 `0x141ED1780` and `0x141ED19BB` boundaries, so no IDB mutation is required.
+
+### 2026-08-25 RUNTIME ADMISSION-INCONCLUSIVE (`afs`, PID 11076): the authored request was lost on every retained-object relocation
+
+The user again saw the unchanged broken cold attachment, but the written
+visual discriminator was never reached.  PID `11076` loaded exact `afs`, role B
+and READY.  Its first Mazur rebind changed `rightHand 61A48E01` to accepted
+`targSpineProp AD047A`, verified the binding/strap and armed the deferred
+authored refresh.  Before Draw, however, the log has zero full
+`NADINE-MAZUR-NATIVE-BACK` rows and **22** Mazur deferred terminals with
+`refresh=scope-drift`.
+
+The failures line up exactly with the cold retained-owner move chain.  Player,
+controller, ProcessWeapon and attachment-record addresses repeatedly change;
+some adjacent failures retain the same ProcessWeapon while only Player/records
+move, and later failures move the weapon too.  The old pending record required
+all four raw addresses to remain equal, so it discarded a still-live request
+before the `0x141ED19BB` witness could become full.  Draw/Put afterward still
+emitted the already-confirmed fractional authored-pair markers.  Classify `afs`
+as admission-inconclusive, not a visual rejection of the authored back frame.
+
+### 2026-08-25 STATIC / IMPLEMENTED (`aft`): carry the cold authored refresh by Fg/runtime identity across relocation
+
+`aft` removes only that raw-address lifetime error.  Three independent evidence
+classes support the new key: (1) the 22 exact `afs` failures correlate with the
+changing raw addresses and occur before any authored cold row; (2) the earlier
+corrected `aav` runtime proved a live ProcessWeapon and its parent Player can
+move together while `FgAnimData`, weapon runtime id and all driven LODs remain
+unchanged; (3) stock dataflow stores the live weapon in the Fg retained weak
+cell and independently stores the exact weak pointer/generation in the
+23-entry PlayerWeaponController inventory table.  The existing raw inventory
+resolver reproduces that table without the stock `weapon+0x72` side effect.
+
+Every retry now resolves retained owner 0 afresh, requires the same Player
+runtime id, uniquely reacquires the exact art through the current controller,
+requires the same weapon runtime id and exact original Fg, then revalidates the
+live parent, current attachment id and current records array.  Only after those
+checks does it replace the diagnostic raw pointers and call the unchanged
+authored-witness refresh.  A different Fg/runtime generation, look, art,
+endpoint, parent or controller state still aborts fail-closed.  P99 uses the
+same proven relocation-safe identity but no pose semantics changed.
+
+The one-copy prediction is now specific: boot must say `aft`; the Mazur deferred
+row may report `relocations>0` but must no longer terminate as `scope-drift`
+solely because raw addresses moved.  Before the first Draw it must finish only
+after `NADINE-MAZUR-NATIVE-BACK ... controller=-1/0 correctionWeight=1 depth=1`
+and report `refresh=ok/1/1 ... authored=1/1/1`.  Those exact rows plus unchanged
+broken pixels reject authored-frame sufficiency; a runtime-id/Fg/endpoint abort
+is admission-only.  Draw/Put must retain the confirmed complementary fractional
+weights.  No launch is permitted until Release/commit/push/clean-tree closure.
+
+Fresh Release `aft`: source `2026-08-25T16:34:34.825Z`, object
+`16:34:46.794Z`, DLL `16:34:46.887Z`, size `779776`, SHA-256
+`57056289273330584B70CF8826EEFB38E4EA4B13B16E6E724760BCDAB06EC540`.
+The PE contains exact `aft`, relocation and authored-pending markers.  Release
+compilation/linking and `git diff --check` pass.  No new engine semantic or
+address was introduced, so the already-labelled saved IDB requires no change.
