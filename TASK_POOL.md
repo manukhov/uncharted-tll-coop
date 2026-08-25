@@ -5682,6 +5682,38 @@ Keep the postblend preservation boundary; replace only its steady content.
       boot, combined READY, donor, missing-donor and Chloe-body-relative apply
       markers; Release build and diff check pass.
 
+      RUNTIME ADMISSION-INCONCLUSIVE (`afn`, PID5236): boot/READY were exact,
+      but 143 process rows contained zero live-Chloe donor, zero staged target
+      and zero render apply. Nine old-witness rejects had empty records,
+      sentinel selected joint and zero weight/depth. The user's unchanged
+      vertical rifle was therefore stock. Do not reuse the live-owner1/witness
+      admission and do not call its pixels a rejection of body-relative pose.
+
+      STATIC / IMPLEMENTED (`afo`): eliminate both missing inputs. New offline
+      audit `scripts/chloe_mazur_holster_pose_audit.py` evaluates retail
+      `5F913F74` and composes exact Chloe joints 25..29 plus the exact
+      `targSpineProp` marker from the `chloe-base` inverse-bind root. Samples
+      0/335 close byte-exact at root-relative DWORDs
+      `3D627B2F/3FA9294C/BDC35992/3F800000/BF058597/3F1D1AF9/BE88E0D5/BF076D88`;
+      the bind-marker convention independently lands 12.291 mm / 0.000125 deg
+      from skeleton `spine_prop_attachment`. The local Nadine post-+7B8 path
+      now rebases this fixed retail endpoint under her current Player root and
+      reuses the proven final three-getter relay. It needs neither owner1 Chloe
+      nor the old nested correction witness.
+
+      Written one-copy prediction: READY, then target `staged` with
+      `worldSource=Chloe-retail-idle-root-relative donor=1:0:0`, then visible
+      `caller=0x181B3F9 changed=1` must move the cold rifle away from the current
+      vertical/protruding placement to the canonical Chloe loop endpoint.
+      Missing markers are admission only; exact changed markers plus unchanged
+      pixels reject the rendered owner; exact changed markers plus another bad
+      placement reject this root semantic. User alone supplies gameplay input.
+
+      Final Release `afo`: `803328` bytes, SHA-256
+      `D8051018B4399E96DF12FE218222FBC82A37E5C12D0736D89FE70CA8A779372A`;
+      source `16:16:40`, object/DLL `16:17:14`. Offline audit, PE marker
+      readback, Release build and diff check pass.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

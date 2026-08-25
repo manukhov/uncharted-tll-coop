@@ -472,10 +472,10 @@ struct ColdNadineMazurRenderMatrixTarget {
     std::array<float, 16> base_world_matrix{};
 };
 
-// Build afn: the role-B process already simulates retained owner 1 as Chloe.
-// Keep her final post-selected Mazur pose in body-root-relative coordinates so
-// world position, root yaw and sector parenting never leak into Nadine's pose.
-// The payload is copied under one SRW lock and is accepted for at most 100 ms.
+// Build afo retains the afn payload shape for source diagnostics, but its
+// authoritative transform is now the offline-reconstructed retail Chloe loop
+// endpoint.  Live-player fields are zero by design; sequence 1 and the exact
+// relative hash identify the static source.
 struct ChloeMazurHolsterPoseSnapshot {
     bool valid = false;
     std::uint64_t sequence = 0;
@@ -19007,6 +19007,19 @@ constexpr std::array<std::uint32_t, 8> kChloeTargSpinePropTransformBits{
     0x3CCCCCCDu, 0x3DEF9DB2u, 0xBDCED917u, 0x3F800000u,
     0x3F45AE02u, 0xBF10FC5Bu, 0xBC4A2765u, 0x3E93592Bu,
 };
+
+// Offline retail reconstruction of Chloe's complete steady holster frame at
+// the exact 5F913F74 loop endpoint (samples 0 and 335 are byte-identical).
+// scripts/chloe_mazur_holster_pose_audit.py inverts chloe-base joint-25's
+// inverse bind, evaluates 5F913F74 with the retail handlers, composes
+// upper_base->spinea->spineb->spinec->spined and finally the exact marker
+// above through retail Transform_Compose.  This is a Player-root-relative
+// Locator, not a hand-tuned offset and not a live second-Player dependency.
+constexpr std::array<std::uint32_t, 8>
+    kChloeSteadyMazurHolsterRootRelativeBits{
+        0x3D627B2Fu, 0x3FA9294Cu, 0xBDC35992u, 0x3F800000u,
+        0xBF058597u, 0x3F1D1AF9u, 0xBE88E0D5u, 0xBF076D88u,
+    };
 
 struct NadineAttachRepairResult {
     int status = 0;
@@ -57029,7 +57042,7 @@ void log_cold_nadine_mazur_render_reject_once(
          << " selected=" << static_cast<unsigned>(target.selected_index)
          << " correctionWeight=" << target.correction_weight
          << " depth=" << (target.depth_applied ? 1 : 0)
-         << " worldSource=Chloe-body-relative"
+         << " worldSource=Chloe-retail-idle-root-relative"
          << " donor=" << target.donor_sequence
          << ":" << target.donor_player_runtime_id
          << ":" << target.donor_weapon_runtime_id
@@ -57393,7 +57406,7 @@ bool publish_cold_nadine_mazur_render_matrix_target(
              << build->target.correction_weight
              << " depth="
              << (build->target.depth_applied ? 1 : 0)
-             << " worldSource=Chloe-body-relative"
+             << " worldSource=Chloe-retail-idle-root-relative"
              << " donor=" << build->target.donor_sequence
              << ":" << build->target.donor_player_runtime_id
              << ":" << build->target.donor_weapon_runtime_id
@@ -57460,7 +57473,6 @@ bool stage_cold_nadine_mazur_render_matrix_from_corrected_world(
         return false;
     }
     if (donor == nullptr || !donor->valid || donor->sequence == 0 ||
-        donor->player_runtime_id == 0 || donor->weapon_runtime_id == 0 ||
         donor->relative_hash == 0) {
         return false;
     }
@@ -57800,8 +57812,6 @@ float* __fastcall hooked_fganim_get_render_world_matrix(
         return stock_result;
     }
     if (target.weapon_runtime_id == 0 || target.donor_sequence == 0 ||
-        target.donor_player_runtime_id == 0 ||
-        target.donor_weapon_runtime_id == 0 ||
         target.donor_relative_hash == 0 ||
         !finite_matrix4x4(target.base_world_matrix.data())) {
         log_cold_nadine_mazur_render_reject_once(
@@ -57871,7 +57881,7 @@ float* __fastcall hooked_fganim_get_render_world_matrix(
                << static_cast<unsigned>(target.selected_index)
                << " correctionWeight=" << target.correction_weight
                << " depth=" << (target.depth_applied ? 1 : 0)
-               << " worldSource=Chloe-body-relative"
+               << " worldSource=Chloe-retail-idle-root-relative"
                << " donor=" << target.donor_sequence
                << ":" << target.donor_player_runtime_id
                << ":" << target.donor_weapon_runtime_id
@@ -63383,6 +63393,135 @@ bool seh_rebase_chloe_mazur_holster_pose_to_nadine(
     }
 }
 
+bool seh_stage_retail_chloe_mazur_holster_pose_for_nadine(
+    void* weapon, const char** status_out) {
+    if (status_out == nullptr) {
+        return false;
+    }
+    *status_out = "retail-source-args";
+    if (!g_net_role_b || weapon == nullptr || g_module == 0) {
+        return false;
+    }
+
+    __try {
+        auto* const weapon_bytes = static_cast<const std::byte*>(weapon);
+        if (readable_bytes(weapon_bytes) < 0x864 ||
+            *reinterpret_cast<const std::uintptr_t*>(weapon_bytes) !=
+                g_module + kProcessWeaponVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x860) !=
+                kCoopRifleArtId) {
+            *status_out = "retail-source-art";
+            return false;
+        }
+
+        void* const player = retained_player_object(0);
+        std::uint32_t look = 0;
+        void* controller = nullptr;
+        int current_slot = -99;
+        std::uint32_t draw_state = 0xFFFFFFFFu;
+        if (player == nullptr || !player_object_stable(player) ||
+            !player_screen_index_is(player, 0) ||
+            !seh_read_player_look(player, &look) ||
+            look != kLegacyNadineAttachTargetLookId ||
+            !seh_read_exact_player_weapon_controller(player, &controller) ||
+            !read_weapon_draw_state(player, current_slot, draw_state) ||
+            current_slot >= 0 || draw_state != 0 ||
+            !seh_weapon_is_exact_controller_inventory_member_raw(
+                controller, weapon, kCoopRifleArtId) ||
+            !seh_weapon_parent_resolves_to_owner(weapon, player)) {
+            *status_out = "retail-source-player";
+            return false;
+        }
+
+        const std::uint8_t selected_index =
+            *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x688);
+        std::uint32_t attach_id = 0;
+        std::uintptr_t records_generation = 0;
+        if (!seh_read_owner_attach_record_id(
+                player, selected_index, &attach_id, &records_generation) ||
+            attach_id != kTargSpinePropAttachId || records_generation == 0) {
+            *status_out = "retail-source-attachment";
+            return false;
+        }
+
+        auto* const player_bytes = static_cast<const std::byte*>(player);
+        auto* const table = *reinterpret_cast<std::byte* const*>(
+            player_bytes + 0x1E0);
+        if (table == nullptr || readable_bytes(table) < 0x18) {
+            *status_out = "retail-source-table";
+            return false;
+        }
+        const std::uint32_t count =
+            *reinterpret_cast<const std::uint32_t*>(table + 0x4);
+        auto* const records =
+            *reinterpret_cast<std::byte* const*>(table + 0x8);
+        if (records == nullptr ||
+            reinterpret_cast<std::uintptr_t>(records) != records_generation ||
+            selected_index >= count ||
+            readable_bytes(records) < static_cast<std::size_t>(count) * 48) {
+            *status_out = "retail-source-records";
+            return false;
+        }
+        auto* const selected_record = records +
+            static_cast<std::size_t>(selected_index) * 48;
+        const std::int16_t selected_joint =
+            *reinterpret_cast<const std::int16_t*>(selected_record + 0x24);
+        if (*reinterpret_cast<const std::uint32_t*>(selected_record + 0x20) !=
+                kTargSpinePropAttachId ||
+            selected_joint < 0 ||
+            std::memcmp(
+                selected_record, kCanonicalAttachIdentityBits.data(), 32) != 0 ||
+            std::memcmp(
+                weapon_bytes + 0x4F0,
+                kAcceptedLegacyNadineMazurBackBindingBits.data(),
+                sizeof(kAcceptedLegacyNadineMazurBackBindingBits)) != 0) {
+            *status_out = "retail-source-binding";
+            return false;
+        }
+        const std::uint32_t binding_hash = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x4F0),
+            kAcceptedLegacyNadineMazurBackBindingBits.size());
+
+        ChloeMazurHolsterPoseSnapshot retail{};
+        retail.valid = true;
+        retail.sequence = 1;
+        std::memcpy(
+            retail.body_relative_weapon.data(),
+            kChloeSteadyMazurHolsterRootRelativeBits.data(),
+            sizeof(kChloeSteadyMazurHolsterRootRelativeBits));
+        retail.relative_hash = hash_probe_words(
+            kChloeSteadyMazurHolsterRootRelativeBits.data(),
+            kChloeSteadyMazurHolsterRootRelativeBits.size());
+
+        NadineAttachTransform32 desired_world{};
+        std::uint32_t body_parent_hash = 0;
+        std::uint32_t body_local_hash = 0;
+        if (!seh_rebase_chloe_mazur_holster_pose_to_nadine(
+                retail, player, &desired_world,
+                &body_parent_hash, &body_local_hash)) {
+            *status_out = "retail-source-rebase";
+            return false;
+        }
+
+        // The retail source is already the complete Chloe frame.  A full
+        // weight here means "use that exact root-relative source"; no extra
+        // Nadine depth offset or nested 0x141ED19BB witness contributes to it.
+        if (!stage_cold_nadine_mazur_render_matrix_from_corrected_world(
+                player, weapon, records_generation, &desired_world,
+                selected_index, selected_joint, 1.0F, true,
+                binding_hash, body_parent_hash, body_local_hash,
+                &retail)) {
+            *status_out = "retail-source-stage";
+            return false;
+        }
+        *status_out = "ok";
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *status_out = "retail-source-exception";
+        return false;
+    }
+}
+
 void log_post_selected_nadine_mazur_render_reject_once(
     void* weapon, const NadineMazurPostSelectedWitness& witness,
     const char* reason) {
@@ -63433,51 +63572,16 @@ std::uint8_t __fastcall hooked_process_weapon_update_selected_attachment(
         g_nadine_mazur_post_selected_witness;
     g_nadine_mazur_post_selected_witness = previous_witness;
 
-    // Capture Chloe only after her stock selected updater has completed all
-    // local correction and LongGunJiggle writes.  This is a source snapshot;
-    // it never changes Chloe's ProcessWeapon or render state.
-    NadineAttachTransform32 post_selected_world{};
-    std::uint32_t post_selected_parent_hash = 0;
-    std::uint32_t post_selected_local_hash = 0;
-    const char* post_selected_snapshot_status = "post-selected-snapshot";
-    if (seh_snapshot_post_selected_nadine_mazur_world(
-            weapon, &post_selected_world,
-            &post_selected_parent_hash, &post_selected_local_hash,
-            &post_selected_snapshot_status)) {
-        ChloeMazurHolsterPoseSnapshot source{};
-        if (seh_capture_chloe_mazur_holster_pose(
-                weapon, post_selected_world, &source)) {
-            publish_chloe_mazur_holster_pose(source);
-        }
-    }
-
-    bool render_target_staged = false;
-    const char* post_selected_status = "post-selected-witness";
-    if (witness.armed && witness.expected_weapon == weapon &&
-        witness.completed && witness.hit_count == 1) {
-        ChloeMazurHolsterPoseSnapshot donor{};
-        NadineAttachTransform32 desired_world{};
-        std::uint32_t body_parent_hash = 0;
-        std::uint32_t body_local_hash = 0;
-        if (!copy_fresh_chloe_mazur_holster_pose(&donor)) {
-            post_selected_status = "Chloe-donor-missing";
-        } else if (!seh_rebase_chloe_mazur_holster_pose_to_nadine(
-                       donor, witness.owner, &desired_world,
-                       &body_parent_hash, &body_local_hash)) {
-            post_selected_status = "Chloe-donor-rebase";
-        } else {
-            render_target_staged =
-                stage_cold_nadine_mazur_render_matrix_from_corrected_world(
-                    witness.owner, weapon, witness.records, &desired_world,
-                    witness.selected_index, witness.selected_joint,
-                    witness.correction_weight, witness.depth_applied,
-                    witness.binding_hash, body_parent_hash, body_local_hash,
-                    &donor);
-            if (!render_target_staged) {
-                post_selected_status = "post-selected-admission";
-            }
-        }
-    }
+    // Build afo: afn proved that a one-copy Nadine session has no live Chloe
+    // ProcessWeapon donor.  The source is now the offline-reconstructed retail
+    // 5F913F74 loop endpoint, so neither owner 1 nor the nested Nadine authored
+    // correction witness is part of mutation admission.  The post-stock +7B8
+    // boundary remains the cadence/lifecycle seam and all exact cold Mazur
+    // scope is revalidated by the source helper and renderer builder.
+    const char* post_selected_status = "retail-source-not-admitted";
+    const bool render_target_staged =
+        seh_stage_retail_chloe_mazur_holster_pose_for_nadine(
+            weapon, &post_selected_status);
     if (witness.armed && !render_target_staged) {
         log_post_selected_nadine_mazur_render_reject_once(
             weapon, witness, post_selected_status);
@@ -69648,8 +69752,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-25afn "
-        "(same-process Chloe body-relative Mazur holster pose relay)");
+        "TLL co-op runtime init 2026-08-25afo "
+        "(retail Chloe idle root-relative Mazur holster pose relay)");
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
     }
@@ -69762,7 +69866,7 @@ DWORD WINAPI install_hook(void*) {
             render_relay_ready, std::memory_order_release);
         boot_log_line(
             render_relay_ready
-                ? "legacy-Nadine Mazur same-process Chloe holster-pose relay READY"
+                ? "legacy-Nadine Mazur retail Chloe idle holster-pose relay READY"
                 : "cold legacy-Nadine Mazur final render-matrix repair SKIPPED (combined package)");
     }
     if constexpr (kEnableLegacyNadineHolsterIkVerification &&

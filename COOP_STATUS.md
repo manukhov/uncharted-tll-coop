@@ -28223,3 +28223,80 @@ source `15:48:43`, object/DLL `15:48:55`.  The PE contains the exact `afn`
 boot, combined READY, donor-capture, missing-donor and
 `worldSource=Chloe-body-relative` markers.  Release compilation/linking and
 `git diff --check` pass.
+
+### 2026-08-25 RUNTIME ADMISSION-INCONCLUSIVE (`afn`, PID 5236): one-copy Nadine has neither a live Chloe donor nor the old full-correction witness
+
+The user's unchanged vertical back rifle is exactly a stock result, not a
+failed body-relative substitution.  PID `5236` printed the `afn` boot at
+`reports/locomotion_hook.log:96567` and combined READY at `:96587`, but its 143
+bounded rows contain zero `CHLOE-MAZUR-HOLSTER-DONOR`, zero
+`Chloe-donor-missing`, zero render-target `staged` and zero render `applied`
+rows.  Nine `post-selected-witness` rejects (`:96643..96708`) all have
+`records=0`, `selected=255:-1`, `correctionWeight=0`, `depth=0`.  Thus neither
+the same-process owner-1 source nor the nested full Nadine correction admitted
+the mutation.  The screenshot and user's “nothing changes” report classify
+**H-donor-not-live-cold** as the reached alternative and leave
+H-Chloe-body-relative visually untested.  Do not relaunch `afn` or infer a
+render-owner failure from its unchanged pixels.
+
+### 2026-08-25 STATIC / IMPLEMENTED (`afo`): reconstruct the exact retail Chloe idle holster frame offline, with no second Player dependency
+
+`scripts/chloe_mazur_holster_pose_audit.py` replaces the missing live donor
+with a reproducible retail asset result.  It maps the build-pinned `tll.exe`,
+evaluates `actor77.psarc/anim-chloe-relaxed-movement.pak` clip `5F913F74` at raw
+ANIM `+0x17A460` through the already-audited retail handlers, follows the exact
+Chloe skeleton hierarchy `upper_base 25 -> spinea 26 -> spineb 27 -> spinec 28
+-> spined 29`, then composes the exact `targSpineProp` row through retail
+`Transform_Compose 0x1401998F0`.  Joint 25 is deliberately included: its
+authored quaternion is non-identity even though its bind-local frame is
+identity.
+
+The source is rooted by the exact `chloe-base.pak+0x5A180` skeleton object's
+`+0x28` relative pointer to the 651-row inverse-bind table at `+0x8C350`.
+Inverting joint 25 gives the model/root basis.  As an independent convention
+check, composing the same marker under bind `spined` lands only
+`0.0122908958` metres and `0.00012542` degrees from skeleton joint 47
+`spine_prop_attachment`; this rejects row/axis/transposition alternatives.
+The exact animation opcode sequence is `22/24/11/27/29/30/15/16`, frame stride
+is 60, and samples 0 and 335 produce a byte-identical loop endpoint.  The
+embedded Player-root-relative Locator is:
+
+`T=(0.0552932583,1.32157278,-0.0953856856,1)`,
+`Q=(-0.521569669,0.61369282,-0.267340332,-0.529015064)`, DWORDs
+`3D627B2F/3FA9294C/BDC35992/3F800000/BF058597/3F1D1AF9/BE88E0D5/BF076D88`.
+Across samples 84/168/252 its idle motion ranges up to `0.0702954` metres and
+`26.7993` degrees from that canonical loop endpoint.  `afo` intentionally tests
+the exact authored endpoint first; phase-following idle motion is a separate
+refinement, not permission to tune an angle by eye.
+
+At runtime the post-stock ProcessWeapon `+0x7B8` wrapper now admits the exact
+local role-B retained-0 legacy Nadine/Mazur/current<0/state0/inventory/
+`targSpineProp`/accepted-binding/Fg-phase tuple directly.  It composes Nadine's
+current complete Player root with the embedded Chloe root-relative Locator and
+stages the result through the already-proved three final
+`FgAnimData_GetRenderWorldMatrix 0x1403014F0` consumers.  It no longer reads a
+live owner-1 Chloe and no longer requires the nested `0x141ED19BB` witness that
+failed in `afn`.  Draw/Put and every other art/role/state remain stock.
+
+The evidence quota is met by three independent classes: retail opcode
+evaluation with exact loop closure; skeleton inverse-bind/hierarchy plus the
+independent joint-47 bind check; and the runtime-confirmed final Fg render seam
+with exact cold owner/binding/generation admission.  Competing outcomes are
+explicit.  **H-retail-Chloe-endpoint** predicts combined READY, target
+`status=staged worldSource=Chloe-retail-idle-root-relative donor=1:0:0`, and a
+visible-caller `status=applied caller=0x181B3F9 changed=1`; the cold rifle must
+leave the current vertical/protruding stock placement and take the canonical
+Chloe endpoint.  READY without staged/applied is admission/packaging only.
+Both exact markers with unchanged pixels reject the final-consumer owner.
+Both markers with a changed but still wrong placement reject the chosen
+root-relative endpoint and select a different Chloe body/root semantic.  Only
+one role-B Nadine process is allowed and the user alone performs gameplay
+input.
+
+Final Release `afo` is `803328` bytes, SHA-256
+`D8051018B4399E96DF12FE218222FBC82A37E5C12D0736D89FE70CA8A779372A`;
+source `16:16:40`, object/DLL `16:17:14`.  The offline audit reports exact bind
+convention, loop closure and embedded constant; the PE contains the exact
+`afo` boot, retail READY, `retail-source-*`,
+`worldSource=Chloe-retail-idle-root-relative`, publication and visible-apply
+markers.  Release compilation/linking and `git diff --check` pass.
