@@ -5614,6 +5614,35 @@ Keep the postblend preservation boundary; replace only its steady content.
       cause must be below or beside the now-identical root and 22-row palette:
       alternate child, deformer/bind resource, or renderer submission state.
 
+      STATIC CORRECTION / TEST-READY (`afm`): `afj` compared the cold
+      post-selected world with the same cold stock getter; it did not compare a
+      lifecycle-normalized root before Draw and after Put. `afk` compared those
+      lifecycle phases only for the 22-row palette. Build `afm` closes that
+      exact gap without mutation. After stock
+      `FgDrawManager_PrepareInstanceForRendering 0x14181A9B0`, atomic relays at
+      normal worker return `0x14181B92A` and synchronous return `0x14197DC59`
+      snapshot the same exact ProcessWeapon/Fg generation: parent/final-local/
+      binding/selected tuple, DrawControl mesh layout, all driven FgInstance
+      identities and bone pointers, MeshInstance/FgGeometry, and active versus
+      published InstanceJointData pointers. The stock call always runs first.
+
+      Written discriminator: a stable relative/final-local or binding delta
+      selects Hroot-local-lifecycle; equal root with changed instance/geometry/
+      MeshInstance/JointData identities selects Hinstance-relink; equal
+      identities with changed state/gates/selected or latched bone pointers
+      selects Hsubmission/deformer-state; complete equality rejects the whole
+      measured frontier. Raw absolute world drift alone is ignored. Missing
+      READY, no normal `caller=0x181B92A`, generation turnover, missing post-Put,
+      exact=0 or phase-internal instability is inconclusive. Run one role-B
+      Nadine copy only after fresh Release, commit/push and clean-tree closure;
+      user alone performs one Draw->Put and all gameplay input.
+
+      Final Release `afm`: `797184` bytes, SHA-256
+      `28B169E4DFC6277AC38CAC71B4BD6F42F427265162B00FB9AA19D052A732DFF1`;
+      source `15:29:03`, object/DLL `15:29:19`. PE marker readback, Release build
+      and diff check pass. No new IDB label/type is needed because this reuses
+      the already-saved FgDraw/FgInstance/deformer boundaries.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

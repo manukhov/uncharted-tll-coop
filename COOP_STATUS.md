@@ -28033,3 +28033,96 @@ The parked Release `afl` rebuild passes (`780288` bytes, SHA-256
 `14:22:00`, DLL `14:22:42`).  It contains no enabled `afj` world substitution or
 `afk` palette census and was not injected; the still-running PID4332 retains the
 already-tested `afk` image until the user closes it.
+
+### 2026-08-25 STATIC CORRECTION / TEST-READY (`afm`): compare the exact cold and post-Put render lifecycle, not a cold matrix with itself
+
+The previous conclusion combined two different comparisons and was too broad.
+`afj` proved that, in the **cold** state, reconstructing the current
+post-selected `parent * final-local` world and substituting it at the current
+stock getter was a byte-identical no-op.  It did **not** capture that same
+normalized attachment local before Draw and after Put.  `afk` did make the
+cold/post-Put lifecycle comparison, but only for the 22-joint palette.  Thus the
+palette lifecycle is rejected, while a lifecycle change in attachment-local,
+DrawControl, driven FgInstance identity or deformer binding remains open.  Do
+not read the old phrase "complete root lifecycle rejected" as a measured
+cold-versus-post-Put equality.
+
+Build `afm` implements one bounded read-only discriminator for that exact gap.
+It reuses `afk`'s game-thread identity token: role B, retained owner 0, legacy
+Nadine look, the raw exact PlayerWeaponController inventory Mazur, reciprocal
+ProcessWeapon/Fg owner and the same runtime generation.  Phase is `cold` before
+any observed Draw and `post-put` only after that same identity has been observed
+drawn and returns to `current<0, draw=0`.  No palette hook or pose mutation is
+enabled.
+
+Two direct retail callsites are patched atomically:
+`0x14181B925` (the normal FgDraw worker) and `0x14197DC54` (the independent
+synchronous path), both calling
+`FgDrawManager_PrepareInstanceForRendering 0x14181A9B0`.  The wrapper calls
+stock first and then only reads the exact target.  Its snapshot records:
+
+- ProcessWeapon cached parent `+0x110/+0x120`, final post-selected/jiggle local
+  `+0x130/+0x140`, accepted binding `+0x4F0`, selected index `+0x688`, writer
+  gate `+0x5F8`, local-blend duration `+0x640` and LongGunJiggle identity
+  `+0x838`;
+- Fg flags, current/upload/alternate palette pointers, BASE and auxiliary
+  matrix hashes, DrawControl identity/flags/gates and a complete mesh-entry
+  layout hash;
+- every driven global FgInstance (bounded to the weapon's expected at-most-eight
+  rows): pool index and pointer, state/active/category/retire fields, owner id,
+  FgGeometry, MeshInstance, current/CPU/companion bone pointers, render-world
+  hash and optional remap fields;
+- the concrete `MeshInstance+0x118` InstanceJointData and its active
+  `+0x00/+0x08` plus published `+0x18/+0x28` bone-buffer pointers.
+
+The field choices are not speculative.  Three independent evidence classes
+earn this one census:
+
+1. **Behavioral/runtime:** the user's real Draw->Put changes the initial visual
+   placement while `afk` joined the same exact Fg/runtime generation and proved
+   all 22 palette rows byte-identical.
+2. **Disassembly/dataflow:** `FgDrawManager_PrepareInstanceForRendering` walks
+   `Fg+0x20C/+0x210`, writes the selected bone pointers at instance
+   `+0x78/+0x80`, and writes each current world at `+0x140`.
+   `FgInstance_PublishPerFrameStateToMeshInstance 0x141931810` then publishes
+   record pointers to InstanceJointData, and
+   `FgInstance_PublishAndBuildDeformerCommands 0x141967A70` latches
+   `+0x18/+0x28 -> +0x00/+0x08` before SkinningDeformer consumes them.
+3. **Asset/owner closure:** the installed Mazur package has exactly three
+   weighted weapon LODs on the dedicated 22-joint skeleton; prior exact
+   main-view census joined those LODs to the selected ProcessWeapon rather than
+   the separate strap child or an ownerless drawable.
+
+Competing hypotheses and the written one-copy prediction are:
+
+- **Hroot-local-lifecycle:** stable exact `cold` and `post-put` samples in the
+  same generation have a persistent change in the relative/final local words or
+  binding/selected tuple.  Raw `fgWorld` movement alone is not evidence.
+- **Hinstance-relink:** the root/local tuple remains equal, but post-Put changes
+  the stable driven pool indices, DrawControl layout, FgGeometry, MeshInstance
+  or InstanceJointData identities.
+- **Hsubmission/deformer-state:** identities remain equal, but stable
+  state/active/category/gates or selected/latched/published bone-pointer tuples
+  differ between phases.
+- **Hall-measured-state-identical:** all normalized root, owner, instance and
+  deformer tuples match.  That rejects this entire measured lifecycle frontier;
+  no replay/mutation is earned and the next owner must be a later view/submission
+  consumer not represented by these fields.
+- Missing READY, no normal-worker `caller=0x181B92A`, generation turnover,
+  missing `post-put`, `exact=0`, or phase-internal instability is admission-
+  inconclusive and cannot be interpreted visually.
+
+The installer preflights both exact E8 targets, suspends peer threads, patches
+and reads back both sites, restores each original page protection, and makes
+READY false after any ambiguous rollback/protection outcome.  Any unexpectedly
+live wrapper remains a stock-first pass-through while READY is false.  Run only
+one role-B Nadine copy; the user performs exactly one Draw->Put and then leaves
+the weapon holstered briefly.  The agent never sends gameplay input.
+
+Final Release `afm` is `797184` bytes, SHA-256
+`28B169E4DFC6277AC38CAC71B4BD6F42F427265162B00FB9AA19D052A732DFF1`;
+source `15:29:03`, object/DLL `15:29:19`.  The PE contains the exact `afm`
+boot, two-callsite install, READY, lifecycle-header and per-instance markers.
+The Release build and `git diff --check` pass.  No new IDB name or type was
+introduced: every engine boundary and field used here was already named,
+commented and saved during the existing FgDraw/FgInstance/deformer closure.

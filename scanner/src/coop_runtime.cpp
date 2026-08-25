@@ -492,6 +492,7 @@ enum class NadineMazurWeaponPalettePhase : std::uint8_t {
 };
 struct NadineMazurWeaponPaletteCensusTarget {
     void* fg = nullptr;
+    void* weapon = nullptr;
     std::uint32_t weapon_runtime_id = 0;
     std::uint32_t player_runtime_id = 0;
     std::uint64_t generation = 0;
@@ -508,6 +509,7 @@ NadineMazurWeaponPaletteCensusTarget
 std::atomic<std::uintptr_t> g_nadine_mazur_weapon_palette_census_fg{0};
 std::atomic<std::uint64_t> g_nadine_mazur_weapon_palette_census_generation{0};
 std::atomic<bool> g_nadine_mazur_weapon_palette_census_ready{false};
+std::atomic<bool> g_nadine_mazur_weapon_render_lifecycle_census_ready{false};
 constexpr std::array<std::uint32_t, 8>
     kAcceptedLegacyNadineMazurBackBindingBits{
         0x3D9BA5E3u, 0xBCA3D70Au, 0xBD4CCCCDu, 0x00000000u,
@@ -2518,6 +2520,12 @@ constexpr bool kEnableColdLegacyNadineMazurRenderMatrixRepair = false;
 // ProcessWeapon Fg/runtime generation. Keep the rejected palette census parked;
 // the remaining owner is a child/submission/deformer state below root+palette.
 constexpr bool kEnableColdLegacyNadineMazurWeaponPaletteCensus = false;
+// Build afm: afk proved that the exact cold/post-Put weapon palette is
+// byte-identical, but afj compared only each cold render matrix with the same
+// cold stock getter. It did not compare the lifecycle-normalized attachment
+// root or the three driven FgInstance/deformer identities before and after a
+// real Draw->Put. This census is read-only and closes that remaining split.
+constexpr bool kEnableColdLegacyNadineMazurWeaponRenderLifecycleCensus = true;
 // Native NPC Nadine's targSpineProp and legacy Player-Nadine's targSpine are
 // both canonical identity records on spineb/joint16. The attach-table repair
 // now creates targSpineProp as an exact id alias of that existing Nadine frame,
@@ -20057,7 +20065,8 @@ void service_initial_local_nadine_weapon_presentation_game_thread() {
     if constexpr (kEnableColdLegacyNadineMazurRenderMatrixRepair) {
         maintain_cold_nadine_mazur_render_matrix_game_thread();
     }
-    if constexpr (kEnableColdLegacyNadineMazurWeaponPaletteCensus) {
+    if constexpr (kEnableColdLegacyNadineMazurWeaponPaletteCensus ||
+                  kEnableColdLegacyNadineMazurWeaponRenderLifecycleCensus) {
         update_local_nadine_mazur_weapon_palette_census_target_game_thread();
     }
 }
@@ -54120,6 +54129,7 @@ bool copy_nadine_mazur_weapon_palette_census_target(
     AcquireSRWLockShared(&g_nadine_mazur_weapon_palette_census_lock);
     *target_out = g_nadine_mazur_weapon_palette_census_target;
     const bool valid = target_out->fg == fg &&
+        target_out->weapon != nullptr &&
         target_out->weapon_runtime_id != 0 &&
         target_out->generation != 0 &&
         target_out->phase != NadineMazurWeaponPalettePhase::kNone;
@@ -55011,6 +55021,7 @@ void update_local_nadine_mazur_weapon_palette_census_target_game_thread() {
 
     NadineMazurWeaponPaletteCensusTarget target{};
     target.fg = fg;
+    target.weapon = weapon;
     target.weapon_runtime_id = weapon_runtime_id;
     target.player_runtime_id = player_runtime_id;
     target.generation = lifecycle.generation;
@@ -55046,6 +55057,412 @@ void update_local_nadine_mazur_weapon_palette_census_target_game_thread() {
              << " rifleSlot=" << rifle_slot;
         boot_log_line(line.str().c_str());
     }
+}
+
+struct NadineMazurWeaponRenderInstanceSnapshot {
+    std::uint32_t pool_index = 0xFFFFFFFFu;
+    std::uintptr_t instance = 0;
+    std::uint32_t state_flags = 0;
+    std::uint32_t joint_count = 0;
+    std::uintptr_t current_bones = 0;
+    std::uintptr_t cpu_bones = 0;
+    std::uintptr_t companion_bones = 0;
+    std::uint64_t world_hash = 0;
+    std::uint8_t active = 0;
+    std::uint8_t category = 0;
+    std::uintptr_t geometry = 0;
+    std::uintptr_t mesh_instance = 0;
+    std::uint32_t owner_id = 0;
+    std::uint8_t retire_flags = 0;
+    std::uintptr_t debug_joint_names = 0;
+    std::uintptr_t remap_buffer = 0;
+    std::uintptr_t remap_companion = 0;
+    std::uintptr_t joint_data = 0;
+    std::uintptr_t latched_current = 0;
+    std::uintptr_t latched_companion = 0;
+    std::uintptr_t published_current = 0;
+    std::uintptr_t published_companion = 0;
+};
+
+struct NadineMazurWeaponRenderLifecycleSnapshot {
+    bool exact = false;
+    std::uintptr_t return_rva = 0;
+    std::uint32_t fg_flags = 0;
+    std::uint32_t max_driven = 0;
+    std::uint32_t driven_count = 0;
+    std::uintptr_t current_palette = 0;
+    std::uintptr_t upload_palette = 0;
+    std::uintptr_t alternate_palette = 0;
+    std::uintptr_t alternate_companion = 0;
+    std::uint64_t fg_world_hash = 0;
+    std::uint64_t fg_aux_hash = 0;
+    std::uintptr_t draw_control = 0;
+    std::uint32_t draw_flags = 0;
+    std::uint8_t draw_gate = 0;
+    std::uint8_t inherited_gate = 0;
+    std::uint32_t mesh_count = 0;
+    std::uint64_t draw_layout_hash = 0;
+    std::uint8_t selected_index = 0xFF;
+    std::uint8_t attachment_writer = 0;
+    std::uint32_t attachment_duration_bits = 0;
+    std::uintptr_t long_gun_jiggle = 0;
+    std::uint32_t parent_hash = 0;
+    std::uint32_t local_hash = 0;
+    std::uint32_t binding_hash = 0;
+    std::array<std::uint32_t, 8> parent_words{};
+    std::array<std::uint32_t, 8> local_words{};
+    std::array<NadineMazurWeaponRenderInstanceSnapshot, 8> instances{};
+};
+
+bool seh_capture_nadine_mazur_weapon_render_lifecycle(
+    void* fg_pointer, void* instance_pool_pointer,
+    const NadineMazurWeaponPaletteCensusTarget& target,
+    std::uintptr_t return_rva,
+    NadineMazurWeaponRenderLifecycleSnapshot* snapshot) {
+    if (snapshot == nullptr) {
+        return false;
+    }
+    *snapshot = {};
+    __try {
+        if (fg_pointer == nullptr || instance_pool_pointer == nullptr ||
+            target.weapon == nullptr || target.fg != fg_pointer ||
+            readable_bytes(fg_pointer) < 0x320 ||
+            readable_bytes(target.weapon) < 0x864) {
+            return false;
+        }
+        auto* const fg = static_cast<const std::byte*>(fg_pointer);
+        auto* const weapon = static_cast<const std::byte*>(target.weapon);
+        auto* const owner_cell = *reinterpret_cast<std::byte* const*>(
+            fg + kFgAnimDataRetainedHandleOffset);
+        if (owner_cell == nullptr || readable_bytes(owner_cell) < 0x10 ||
+            *reinterpret_cast<void* const*>(owner_cell + 0x8) !=
+                target.weapon ||
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRetainedIdOffset) !=
+                target.weapon_runtime_id ||
+            *reinterpret_cast<const std::uint32_t*>(
+                weapon + kGameObjectRuntimeIdOffset) !=
+                target.weapon_runtime_id ||
+            *reinterpret_cast<const void* const*>(weapon + 0x1A8) !=
+                fg_pointer) {
+            return false;
+        }
+
+        snapshot->return_rva = return_rva;
+        snapshot->fg_flags = *reinterpret_cast<const std::uint32_t*>(fg);
+        snapshot->max_driven = *reinterpret_cast<const std::uint32_t*>(
+            fg + kFgAnimDataMaxDrivenInstancesOffset);
+        snapshot->driven_count = *reinterpret_cast<const std::uint32_t*>(
+            fg + kFgAnimDataDrivenInstanceCountOffset);
+        const auto* const driven_indices =
+            *reinterpret_cast<const std::uint32_t* const*>(
+                fg + kFgAnimDataDrivenInstanceIndicesOffset);
+        if (snapshot->driven_count == 0 ||
+            snapshot->driven_count > snapshot->max_driven ||
+            snapshot->driven_count > snapshot->instances.size() ||
+            driven_indices == nullptr ||
+            readable_bytes(driven_indices) <
+                sizeof(std::uint32_t) * snapshot->driven_count) {
+            return false;
+        }
+        snapshot->current_palette = reinterpret_cast<std::uintptr_t>(
+            *reinterpret_cast<void* const*>(
+                fg + kFgAnimDataCurrentSkinningMatsOffset));
+        snapshot->upload_palette = reinterpret_cast<std::uintptr_t>(
+            *reinterpret_cast<void* const*>(
+                fg + kFgAnimDataCurrentUploadSkinningMatsOffset));
+        snapshot->alternate_palette =
+            *reinterpret_cast<const std::uintptr_t*>(fg + 0x250);
+        snapshot->alternate_companion =
+            *reinterpret_cast<const std::uintptr_t*>(fg + 0x258);
+        snapshot->fg_world_hash = hash_nadine_render_words(
+            reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRenderWorldMatrixOffset), 16);
+        snapshot->fg_aux_hash = hash_nadine_render_words(
+            reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataAuxRenderMatrixOffset), 16);
+
+        std::memcpy(
+            snapshot->parent_words.data(), weapon + 0x110,
+            sizeof(snapshot->parent_words));
+        std::memcpy(
+            snapshot->local_words.data(), weapon + 0x130,
+            sizeof(snapshot->local_words));
+        snapshot->parent_hash = hash_probe_words(
+            snapshot->parent_words.data(), snapshot->parent_words.size());
+        snapshot->local_hash = hash_probe_words(
+            snapshot->local_words.data(), snapshot->local_words.size());
+        snapshot->binding_hash = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(weapon + 0x4F0), 8);
+        snapshot->selected_index =
+            *reinterpret_cast<const std::uint8_t*>(weapon + 0x688);
+        snapshot->attachment_writer =
+            *reinterpret_cast<const std::uint8_t*>(weapon + 0x5F8);
+        snapshot->attachment_duration_bits =
+            *reinterpret_cast<const std::uint32_t*>(weapon + 0x640);
+        snapshot->long_gun_jiggle =
+            *reinterpret_cast<const std::uintptr_t*>(weapon + 0x838);
+
+        auto* const draw = *reinterpret_cast<std::byte* const*>(weapon + 0x198);
+        snapshot->draw_control = reinterpret_cast<std::uintptr_t>(draw);
+        if (draw == nullptr || readable_bytes(draw) < 0x20 ||
+            *reinterpret_cast<void* const*>(draw) != fg_pointer) {
+            return false;
+        }
+        snapshot->draw_flags =
+            *reinterpret_cast<const std::uint32_t*>(draw + 0x18);
+        snapshot->draw_gate =
+            *reinterpret_cast<const std::uint8_t*>(draw + 0x1C);
+        snapshot->inherited_gate =
+            *reinterpret_cast<const std::uint8_t*>(draw + 0x1D);
+        auto* const meshes = *reinterpret_cast<std::byte* const*>(draw + 0x8);
+        snapshot->mesh_count =
+            *reinterpret_cast<const std::uint32_t*>(draw + 0x14);
+        if (meshes == nullptr || snapshot->mesh_count == 0 ||
+            snapshot->mesh_count > 32) {
+            return false;
+        }
+        std::uint64_t draw_hash = 1469598103934665603ULL;
+        const auto mix = [&draw_hash](std::uint64_t value) {
+            draw_hash ^= value;
+            draw_hash *= 1099511628211ULL;
+        };
+        for (std::uint32_t mesh_index = 0;
+             mesh_index < snapshot->mesh_count; ++mesh_index) {
+            auto* const mesh = meshes + 0x250 * mesh_index;
+            if (readable_bytes(mesh) < 0x250) {
+                return false;
+            }
+            const std::uint32_t entries =
+                *reinterpret_cast<const std::uint8_t*>(mesh + 0x242);
+            if (entries > 16) {
+                return false;
+            }
+            mix(entries);
+            mix(*reinterpret_cast<const std::uint32_t*>(mesh + 0x18));
+            for (std::uint32_t entry_index = 0;
+                 entry_index < entries; ++entry_index) {
+                auto* const entry = mesh + 0x20 * entry_index;
+                mix(*reinterpret_cast<const std::uintptr_t*>(entry));
+                mix(*reinterpret_cast<const std::uintptr_t*>(entry + 0x10));
+                mix(*reinterpret_cast<const std::uint32_t*>(entry + 0x18));
+            }
+        }
+        snapshot->draw_layout_hash = draw_hash;
+
+        auto* const instance_pool =
+            static_cast<const std::byte*>(instance_pool_pointer);
+        const std::uint32_t instance_capacity =
+            *reinterpret_cast<const std::uint32_t*>(
+                g_module + kFgInstancePoolCapacityRva);
+        if (instance_capacity == 0 || instance_capacity > 0x10000u) {
+            return false;
+        }
+        for (std::uint32_t position = 0;
+             position < snapshot->driven_count; ++position) {
+            auto& row = snapshot->instances[position];
+            row.pool_index = driven_indices[position];
+            if (row.pool_index >= instance_capacity) {
+                return false;
+            }
+            auto* const instance = instance_pool +
+                static_cast<std::size_t>(row.pool_index) *
+                    kFgInstancePoolStride;
+            if (readable_bytes(instance) < kFgInstancePoolStride) {
+                return false;
+            }
+            row.instance = reinterpret_cast<std::uintptr_t>(instance);
+            row.state_flags = *reinterpret_cast<const std::uint32_t*>(
+                instance + kFgInstanceStateFlagsOffset);
+            row.joint_count =
+                *reinterpret_cast<const std::uint32_t*>(instance + 0x30);
+            row.current_bones =
+                *reinterpret_cast<const std::uintptr_t*>(instance + 0x78);
+            row.cpu_bones =
+                *reinterpret_cast<const std::uintptr_t*>(instance + 0x80);
+            row.companion_bones =
+                *reinterpret_cast<const std::uintptr_t*>(instance + 0x88);
+            row.world_hash = hash_nadine_render_words(
+                reinterpret_cast<const std::uint32_t*>(instance + 0x140), 16);
+            row.active =
+                *reinterpret_cast<const std::uint8_t*>(instance + 0x1A0);
+            row.category =
+                *reinterpret_cast<const std::uint8_t*>(instance + 0x1A4);
+            row.geometry =
+                *reinterpret_cast<const std::uintptr_t*>(instance + 0x1B0);
+            row.mesh_instance =
+                *reinterpret_cast<const std::uintptr_t*>(instance + 0x1D0);
+            row.owner_id =
+                *reinterpret_cast<const std::uint32_t*>(instance + 0x250);
+            row.retire_flags =
+                *reinterpret_cast<const std::uint8_t*>(instance + 0x254);
+            row.debug_joint_names =
+                *reinterpret_cast<const std::uintptr_t*>(instance + 0x260);
+            row.remap_buffer =
+                *reinterpret_cast<const std::uintptr_t*>(instance + 0x268);
+            row.remap_companion =
+                *reinterpret_cast<const std::uintptr_t*>(instance + 0x270);
+            if (row.owner_id != target.weapon_runtime_id ||
+                row.mesh_instance == 0 ||
+                readable_bytes(reinterpret_cast<const void*>(
+                    row.mesh_instance)) < 0x120) {
+                return false;
+            }
+            row.joint_data = *reinterpret_cast<const std::uintptr_t*>(
+                row.mesh_instance + 0x118);
+            if (row.joint_data == 0 ||
+                readable_bytes(reinterpret_cast<const void*>(
+                    row.joint_data)) < 0x98) {
+                return false;
+            }
+            row.latched_current =
+                *reinterpret_cast<const std::uintptr_t*>(row.joint_data);
+            row.latched_companion =
+                *reinterpret_cast<const std::uintptr_t*>(row.joint_data + 0x8);
+            row.published_current =
+                *reinterpret_cast<const std::uintptr_t*>(row.joint_data + 0x18);
+            row.published_companion =
+                *reinterpret_cast<const std::uintptr_t*>(row.joint_data + 0x28);
+        }
+        snapshot->exact = true;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *snapshot = {};
+        return false;
+    }
+}
+
+void census_local_nadine_mazur_weapon_render_lifecycle(
+    void* fg, void* instance_pool, bool mode, std::uintptr_t return_rva) {
+    NadineMazurWeaponPaletteCensusTarget target{};
+    if (!g_nadine_mazur_weapon_render_lifecycle_census_ready.load(
+            std::memory_order_acquire) ||
+        !copy_nadine_mazur_weapon_palette_census_target(fg, &target)) {
+        return;
+    }
+    const ULONGLONG now = GetTickCount64();
+    if (now < target.updated_ms || now - target.updated_ms > 250) {
+        return;
+    }
+    struct LogMemo {
+        std::uint64_t generation = 0;
+        NadineMazurWeaponPalettePhase phase =
+            NadineMazurWeaponPalettePhase::kNone;
+        ULONGLONG last_sample_ms = 0;
+        unsigned sample_count = 0;
+    };
+    static SRWLOCK log_lock = SRWLOCK_INIT;
+    static LogMemo memo{};
+    unsigned sample = 0;
+    AcquireSRWLockExclusive(&log_lock);
+    if (memo.generation != target.generation || memo.phase != target.phase) {
+        memo = {};
+        memo.generation = target.generation;
+        memo.phase = target.phase;
+    }
+    const bool due = memo.sample_count < 8 &&
+        (memo.last_sample_ms == 0 || now < memo.last_sample_ms ||
+         now - memo.last_sample_ms >= 125);
+    if (due) {
+        memo.last_sample_ms = now;
+        sample = ++memo.sample_count;
+    }
+    ReleaseSRWLockExclusive(&log_lock);
+    if (!due) {
+        return;
+    }
+
+    NadineMazurWeaponRenderLifecycleSnapshot snapshot{};
+    const bool exact = seh_capture_nadine_mazur_weapon_render_lifecycle(
+        fg, instance_pool, target, return_rva, &snapshot);
+    std::ostringstream line;
+    line << "NADINE-MAZUR-WEAPON-RENDER-LIFECYCLE phase="
+         << nadine_mazur_weapon_palette_phase_name(target.phase)
+         << " generation=" << target.generation
+         << " sample=" << sample
+         << " caller=0x" << std::hex << return_rva
+         << " fg=0x" << reinterpret_cast<std::uintptr_t>(fg)
+         << ":" << target.weapon_runtime_id
+         << " weapon=0x" << reinterpret_cast<std::uintptr_t>(target.weapon)
+         << std::dec << " mode=" << (mode ? 1 : 0)
+         << " exact=" << (exact && snapshot.exact ? 1 : 0)
+         << " current=" << target.current_slot
+         << " draw=" << target.draw_state
+         << " rifleSlot=" << target.rifle_slot;
+    if (exact && snapshot.exact) {
+        line << " flags=0x" << std::hex << snapshot.fg_flags
+             << " palettes=0x" << snapshot.current_palette
+             << "/0x" << snapshot.upload_palette
+             << "/0x" << snapshot.alternate_palette
+             << "/0x" << snapshot.alternate_companion
+             << " fgWorld=0x" << snapshot.fg_world_hash
+             << " fgAux=0x" << snapshot.fg_aux_hash
+             << " parentHash=0x" << snapshot.parent_hash
+             << " localHash=0x" << snapshot.local_hash
+             << " bindingHash=0x" << snapshot.binding_hash
+             << " drawControl=0x" << snapshot.draw_control
+             << " drawFlags=0x" << snapshot.draw_flags
+             << " drawLayout=0x" << snapshot.draw_layout_hash
+             << " jiggle=0x" << snapshot.long_gun_jiggle
+             << std::dec << " selected="
+             << static_cast<unsigned>(snapshot.selected_index)
+             << " writer="
+             << static_cast<unsigned>(snapshot.attachment_writer)
+             << " durationBits=0x" << std::hex
+             << snapshot.attachment_duration_bits
+             << std::dec << " gates="
+             << static_cast<unsigned>(snapshot.draw_gate) << "/"
+             << static_cast<unsigned>(snapshot.inherited_gate)
+             << " meshes=" << snapshot.mesh_count
+             << " driven=" << snapshot.driven_count << "/"
+             << snapshot.max_driven << " parent=" << std::hex;
+        for (const std::uint32_t word : snapshot.parent_words) {
+            line << word << ",";
+        }
+        line << " local=";
+        for (const std::uint32_t word : snapshot.local_words) {
+            line << word << ",";
+        }
+        boot_log_line(line.str().c_str());
+        for (std::uint32_t index = 0;
+             index < snapshot.driven_count; ++index) {
+            const auto& row = snapshot.instances[index];
+            std::ostringstream instance_line;
+            instance_line
+                 << "NADINE-MAZUR-WEAPON-RENDER-INSTANCE phase="
+                 << nadine_mazur_weapon_palette_phase_name(target.phase)
+                 << " generation=" << target.generation
+                 << " sample=" << sample
+                 << " position=" << index
+                 << " pool=" << row.pool_index
+                 << "@0x" << std::hex << row.instance
+                 << ",state=0x" << row.state_flags
+                 << ",count=" << std::dec << row.joint_count
+                 << ",bones=0x" << std::hex << row.current_bones
+                 << "/0x" << row.cpu_bones
+                 << "/0x" << row.companion_bones
+                 << ",world=0x" << row.world_hash
+                 << ",active=" << std::dec
+                 << static_cast<unsigned>(row.active)
+                 << ",cat=" << static_cast<unsigned>(row.category)
+                 << ",geom=0x" << std::hex << row.geometry
+                 << ",mesh=0x" << row.mesh_instance
+                 << ",owner=" << std::dec << row.owner_id
+                 << ",retire="
+                 << static_cast<unsigned>(row.retire_flags)
+                 << ",remap=0x" << std::hex << row.debug_joint_names
+                 << "/0x" << row.remap_buffer
+                 << "/0x" << row.remap_companion
+                 << ",jointData=0x" << row.joint_data
+                 << ",latched=0x" << row.latched_current
+                 << "/0x" << row.latched_companion
+                 << ",published=0x" << row.published_current
+                 << "/0x" << row.published_companion;
+            boot_log_line(instance_line.str().c_str());
+        }
+        return;
+    }
+    boot_log_line(line.str().c_str());
 }
 
 struct HolsterExecuteWeaponLocalSnapshot {
@@ -64432,6 +64849,20 @@ void __fastcall hooked_fgdraw_prepare_instance(
     }
 }
 
+void __fastcall hooked_fgdraw_prepare_instance_lifecycle_census(
+    void* fg_anim_data, void* instance_pool_base, bool mode) {
+    const auto original = g_original_fgdraw_prepare_instance;
+    if (original != nullptr) {
+        original(fg_anim_data, instance_pool_base, mode);
+    }
+    if constexpr (kEnableColdLegacyNadineMazurWeaponRenderLifecycleCensus) {
+        const std::uintptr_t return_rva =
+            reinterpret_cast<std::uintptr_t>(_ReturnAddress()) - g_module;
+        census_local_nadine_mazur_weapon_render_lifecycle(
+            fg_anim_data, instance_pool_base, mode, return_rva);
+    }
+}
+
 struct NadineRifleCullQueueMatch {
     std::uintptr_t instance = 0;
     std::uint32_t scene_index = 0xFFFFFFFFu;
@@ -66075,6 +66506,174 @@ bool install_fgdraw_synchronous_prepare_instance_relay() {
     DWORD ignored = 0;
     VirtualProtect(call_site, 5, old_protection, &ignored);
     boot_log_line("FgDraw synchronous prepare callsite relay installed");
+    return true;
+}
+
+bool install_nadine_mazur_weapon_render_lifecycle_census() {
+    struct PreparedCallsite {
+        std::uint8_t* address = nullptr;
+        std::uint8_t* relay = nullptr;
+        std::int32_t new_displacement = 0;
+        std::array<std::uint8_t, 5> stock{};
+        std::array<std::uint8_t, 5> patch{};
+        DWORD old_protection = 0;
+        bool protection_changed = false;
+    };
+    constexpr std::array<std::uintptr_t, 2> kCallsites{
+        kFgDrawManagerPrepareInstanceCallsiteRva,
+        kFgDrawManagerSynchronousPrepareInstanceCallsiteRva};
+    std::array<PreparedCallsite, kCallsites.size()> sites{};
+    const auto free_relays = [&]() {
+        for (auto& site : sites) {
+            if (site.relay != nullptr) {
+                VirtualFree(site.relay, 0, MEM_RELEASE);
+                site.relay = nullptr;
+            }
+        }
+    };
+    for (std::size_t index = 0; index < sites.size(); ++index) {
+        auto& site = sites[index];
+        if (!prepare_plain_callsite_relay(
+                kCallsites[index], kFgDrawManagerPrepareInstanceRva,
+                reinterpret_cast<const void*>(
+                    &hooked_fgdraw_prepare_instance_lifecycle_census),
+                site.address, site.relay, site.new_displacement)) {
+            free_relays();
+            boot_log_line(
+                "Nadine Mazur weapon render-lifecycle census SKIPPED (two-callsite preflight)");
+            return false;
+        }
+        std::memcpy(site.stock.data(), site.address, site.stock.size());
+        site.patch = site.stock;
+        site.patch[0] = 0xE8;
+        std::memcpy(
+            site.patch.data() + 1, &site.new_displacement,
+            sizeof(site.new_displacement));
+    }
+    g_original_fgdraw_prepare_instance =
+        reinterpret_cast<FgDrawManagerPrepareInstanceFunction>(
+            g_module + kFgDrawManagerPrepareInstanceRva);
+
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        free_relays();
+        g_original_fgdraw_prepare_instance = nullptr;
+        boot_log_line(
+            "Nadine Mazur weapon render-lifecycle census SKIPPED (thread suspend)");
+        return false;
+    }
+    bool protections_ready = true;
+    for (auto& site : sites) {
+        site.protection_changed = VirtualProtect(
+            site.address, site.patch.size(), PAGE_EXECUTE_READWRITE,
+            &site.old_protection) != 0;
+        protections_ready = protections_ready && site.protection_changed;
+        if (!site.protection_changed) {
+            break;
+        }
+    }
+    if (!protections_ready) {
+        for (auto& site : sites) {
+            if (!site.protection_changed) {
+                continue;
+            }
+            DWORD ignored = 0;
+            VirtualProtect(
+                site.address, site.patch.size(), site.old_protection,
+                &ignored);
+        }
+        resume_suspended_process_threads(suspended_threads);
+        free_relays();
+        g_original_fgdraw_prepare_instance = nullptr;
+        boot_log_line(
+            "Nadine Mazur weapon render-lifecycle census SKIPPED (protect)");
+        return false;
+    }
+
+    for (const auto& site : sites) {
+        std::memcpy(site.address, site.patch.data(), site.patch.size());
+        FlushInstructionCache(
+            GetCurrentProcess(), site.address, site.patch.size());
+    }
+    const auto all_match = [&](bool patched) {
+        for (const auto& site : sites) {
+            const auto& expected = patched ? site.patch : site.stock;
+            if (std::memcmp(
+                    site.address, expected.data(), expected.size()) != 0) {
+                return false;
+            }
+        }
+        return true;
+    };
+    bool installed = all_match(true);
+    bool rollback_verified = false;
+    if (!installed) {
+        for (const auto& site : sites) {
+            std::memcpy(site.address, site.stock.data(), site.stock.size());
+            FlushInstructionCache(
+                GetCurrentProcess(), site.address, site.stock.size());
+        }
+        rollback_verified = all_match(false);
+    }
+    bool protections_restored = true;
+    for (const auto& site : sites) {
+        DWORD ignored = 0;
+        protections_restored =
+            VirtualProtect(
+                site.address, site.patch.size(), site.old_protection,
+                &ignored) != 0 && protections_restored;
+    }
+    if (installed && !protections_restored) {
+        bool rollback_protections_ready = true;
+        for (const auto& site : sites) {
+            DWORD ignored = 0;
+            rollback_protections_ready =
+                VirtualProtect(
+                    site.address, site.patch.size(), PAGE_EXECUTE_READWRITE,
+                    &ignored) != 0 && rollback_protections_ready;
+        }
+        if (!rollback_protections_ready) {
+            installed = false;
+            for (const auto& site : sites) {
+                DWORD ignored = 0;
+                VirtualProtect(
+                    site.address, site.patch.size(), site.old_protection,
+                    &ignored);
+            }
+            resume_suspended_process_threads(suspended_threads);
+            boot_log_line(
+                "Nadine Mazur weapon render-lifecycle census SKIPPED (rollback protect WARNING; relays retained)");
+            return false;
+        }
+        for (const auto& site : sites) {
+            std::memcpy(site.address, site.stock.data(), site.stock.size());
+            FlushInstructionCache(
+                GetCurrentProcess(), site.address, site.stock.size());
+        }
+        rollback_verified = all_match(false);
+        installed = false;
+        for (const auto& site : sites) {
+            DWORD ignored = 0;
+            VirtualProtect(
+                site.address, site.patch.size(), site.old_protection,
+                &ignored);
+        }
+    }
+    resume_suspended_process_threads(suspended_threads);
+
+    if (!installed) {
+        if (rollback_verified) {
+            free_relays();
+            g_original_fgdraw_prepare_instance = nullptr;
+        }
+        boot_log_line(
+            rollback_verified && protections_restored
+                ? "Nadine Mazur weapon render-lifecycle census SKIPPED (verified rollback)"
+                : "Nadine Mazur weapon render-lifecycle census SKIPPED (rollback/protection WARNING; relays retained)");
+        return false;
+    }
+    boot_log_line(
+        "Nadine Mazur weapon render-lifecycle census installed (two exact FgDraw callsites)");
     return true;
 }
 
@@ -68584,8 +69183,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-25afl "
-        "(afk root/palette lifecycle rejected; child/deformer static frontier)");
+        "TLL co-op runtime init 2026-08-25afm "
+        "(cold/post-Put root, FgInstance and deformer lifecycle census)");
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
     }
@@ -68632,6 +69231,21 @@ DWORD WINAPI install_hook(void*) {
     } else {
         boot_log_line(
             "rejected Nadine synchronous FgDraw prepare relay disabled");
+    }
+    if constexpr (kEnableColdLegacyNadineMazurWeaponRenderLifecycleCensus &&
+                  !kEnableRejectedNadineWeaponRuntimeProbes) {
+        const bool lifecycle_ready =
+            install_nadine_mazur_weapon_render_lifecycle_census();
+        g_nadine_mazur_weapon_render_lifecycle_census_ready.store(
+            lifecycle_ready, std::memory_order_release);
+        // The game-thread producer shares afk's already-proven exact
+        // cold/post-Put identity token but no palette hook is installed.
+        g_nadine_mazur_weapon_palette_census_ready.store(
+            lifecycle_ready, std::memory_order_release);
+        boot_log_line(
+            lifecycle_ready
+                ? "cold legacy-Nadine Mazur weapon render-lifecycle census READY"
+                : "cold legacy-Nadine Mazur weapon render-lifecycle census SKIPPED");
     }
     if constexpr (kEnableStaleRifleCullProbe ||
                   kEnableInitialLocalNadineExactRifleMainViewFlagProbe) {
