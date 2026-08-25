@@ -62534,6 +62534,8 @@ struct NadineMazurBackFrameCorrection {
     std::int16_t donor_joint = -1;
     bool handoff_weighted = false;
     std::uint8_t handoff_to_back = 0;
+    int handoff_controller_slot = -1;
+    std::uint32_t handoff_controller_state = 0xFFFFFFFFu;
     float handoff_progress = 1.0F;
     float correction_weight = 1.0F;
     bool depth_applied = false;
@@ -62803,6 +62805,10 @@ bool seh_weight_legacy_nadine_mazur_back_frame(
         progress = std::clamp(progress, 0.0F, 1.0F);
         const bool to_back =
             *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x8F4) != 0;
+        int current_slot = -1;
+        std::uint32_t controller_state = 0xFFFFFFFFu;
+        const bool controller_read = seh_read_idle_arm_pose_weapon_state(
+            capture->owner, &current_slot, &controller_state, nullptr);
         float correction_weight = 1.0F;
         bool weighted = false;
         if (duration > 0.0F) {
@@ -62811,11 +62817,16 @@ bool seh_weight_legacy_nadine_mazur_back_frame(
             correction_weight = to_back ? smoothstep : 1.0F - smoothstep;
             weighted = true;
         } else if (!to_back && progress >= 0.999F) {
-            // UpdateLocalAttachmentBlend clears duration at t=1 one callback
-            // before the selector changes to rightHand. Preserve continuity in
-            // that terminal draw callback instead of snapping back to full.
-            correction_weight = 0.0F;
-            weighted = true;
+            // Cold initialization and the terminal Draw callback can both
+            // expose {duration=0, progress=1, handoffFlag=0}.  Only the
+            // controller's exact Draw state disambiguates them.  Keep the
+            // confirmed afp frame at full weight for cold state 0; fade to
+            // zero only in the final state-1 callback before rightHand wins.
+            if (controller_read && controller_state == 1 &&
+                current_slot < 0) {
+                correction_weight = 0.0F;
+                weighted = true;
+            }
         }
         correction_weight = std::clamp(correction_weight, 0.0F, 1.0F);
 
@@ -62839,6 +62850,8 @@ bool seh_weight_legacy_nadine_mazur_back_frame(
         }
         capture->handoff_weighted = weighted;
         capture->handoff_to_back = to_back ? 1 : 0;
+        capture->handoff_controller_slot = current_slot;
+        capture->handoff_controller_state = controller_state;
         capture->handoff_progress = progress;
         capture->correction_weight = correction_weight;
         return true;
@@ -63105,6 +63118,8 @@ void log_nadine_mazur_back_frame_once(
          << std::dec
          << " handoff=" << (capture.handoff_weighted ? 1 : 0)
          << "/" << static_cast<unsigned>(capture.handoff_to_back)
+         << " controller=" << capture.handoff_controller_slot << "/"
+         << capture.handoff_controller_state
          << " progress=" << capture.handoff_progress
          << " correctionWeight=" << capture.correction_weight
          << " depth=" << (capture.depth_applied ? 1 : 0)
@@ -70158,8 +70173,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-25afq "
-        "(preserve afp back attachment; smooth Mazur Draw/Put arm handoff)");
+        "TLL co-op runtime init 2026-08-25afr "
+        "(disambiguate cold state 0 from terminal Draw; smooth arm handoff)");
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
     }

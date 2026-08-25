@@ -5772,6 +5772,20 @@ Keep the postblend preservation boundary; replace only its steady content.
       PE readback contains the `2026-08-25afq` boot and native Draw/Put
       weighting READY strings. No new IDB symbol was introduced.
 
+      RUNTIME REJECTED (`afq`, PID 4388): the arm subpath itself executed the
+      full predicted increasing Draw and decreasing Put weight sequences, each
+      with matching postblend restore, but the initial `afp` back placement
+      regressed. The item-weight helper conflated cold state 0 with terminal
+      Draw because both can expose duration0/progress1/handoffFlag0.
+
+      STATIC / IMPLEMENTED (`afr`): gate the duration-zero item weight only on
+      exact controller state1/current<0. Cold state0 and any unreadable
+      controller stay at the confirmed full `afp` correction; active arm and
+      item smoothstep paths remain unchanged. The fresh Release is `777728`
+      bytes, SHA-256
+      `B4CEAA00315B6A0D8F1DDD319922375FC3FBA1CF415A8BBB8DBCB36CBE60CB29`.
+      Do not launch automatically.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

@@ -28431,3 +28431,46 @@ The PE contains both the `2026-08-25afq` boot marker and the native Draw/Put
 weighting READY marker.  This change introduces no new engine address or
 semantic name; all callees/fields used here were already labelled in the saved
 IDB, so no IDB mutation is required for `afq`.
+
+### 2026-08-25 RUNTIME REJECTED (`afq`): fractional arm weights executed, but the combined item handoff regressed the confirmed cold back frame
+
+The one-copy role-B run loaded exact `afq` in PID `4388` and reached the entire
+written command discriminator.  Draw emitted increasing paired weights
+`0.014734, 0.055713, 0.119109, ... 0.995854, 1.0`; Put emitted decreasing
+weights `1.0, 0.947247, 0.887788, ... 0.078636, 0.003423`.  Every command row
+had the same-weight postblend restore.  This confirms the `+0x640/+0x644`
+clock, phase classification and cmd7 plumbing, but does not approve the
+combined build: the user immediately observed that the previously confirmed
+initial back attachment was broken again.
+
+The item-path regression is statically localized rather than an arm-command
+admission failure.  `afq` re-enabled
+`seh_weight_legacy_nadine_mazur_back_frame`; its duration-zero special case
+treated every `{handoffFlag=0, progress=1}` as the terminal Draw callback and
+set the authored back correction to zero.  The confirmed `afp` cold sample had
+that same handoff/progress tuple beside controller state `0`, where its fixed
+full-weight path correctly produced the accepted back placement.  PID 4388
+logged repeated successful state-0 `AD047A` rebinds but no full-weight
+`NADINE-MAZUR-NATIVE-BACK` before Draw; its first corrected row appeared only
+after Draw entered the active `0.1`-second handoff.  Reject `afq` as a release:
+it violated the locked `afp` baseline even though its arm-weight subpath ran.
+
+### 2026-08-25 STATIC / IMPLEMENTED (`afr`): controller-state disambiguation preserves cold `afp` while retaining the proven arm clock
+
+`afr` changes the ambiguous duration-zero branch only.  Weight zero is now
+allowed when the exact Player weapon controller is in Draw state `1` with a
+negative current slot.  Cold state `0` therefore remains the authored `afp`
+back frame at weight one; the observed terminal Draw tuple remains weight zero;
+active Draw/Put continue to use the already-executed complementary smoothstep
+weights.  Failure to read the controller also keeps the confirmed full back
+frame rather than deleting it.  The back-frame marker now prints the exact
+controller slot/state used for this decision.  No other grip, strap, attachment
+identity or pose content changes.  This correction is statically bounded but
+will not be launched until the user explicitly accepts another test after
+reviewing the fresh package.
+
+Fresh Release `afr`: source `2026-08-25T14:17:27.624Z`, object
+`14:17:44.684Z`, DLL `14:17:44.823Z`, size `777728`, SHA-256
+`B4CEAA00315B6A0D8F1DDD319922375FC3FBA1CF415A8BBB8DBCB36CBE60CB29`.
+The PE contains the exact `2026-08-25afr` boot marker.  No new engine symbol or
+address was introduced, so the saved IDB requires no label change.
