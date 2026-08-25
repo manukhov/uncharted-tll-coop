@@ -5496,7 +5496,7 @@ Keep the postblend preservation boundary; replace only its steady content.
       Player/spine moves. Direct `0x141ED19BB` publication is also pre-jiggle.
       Do not launch or restore that producer.
 
-  Build `afj` is STATIC/IMPLEMENTED at the same final renderer consumer. The
+  Build `afj` is RUNTIME REJECTED / NO-OP at the same final renderer consumer. The
       producer is now the exact post-`ProcessWeapon +0x7B8` boundary: the nested
       `0x141ED19BB` call supplies a same-thread full-weight/depth witness, stock
       then applies LongGunJiggle and writes final local `+130/+140`, and the
@@ -5522,7 +5522,7 @@ Keep the postblend preservation boundary; replace only its steady content.
       combined READY also requires all three render callsites. Cold refresh calls
       the verified wrapper rather than rejecting the now-hooked vslot.
 
-      The one-copy prediction requires boot `2026-08-22afj`, the installed
+      The one-copy prediction required boot `2026-08-22afj`, the installed
       post-selected source, three-site render relay and combined READY. A full
       `NADINE-MAZUR-NATIVE-BACK` correction must be followed by a staged target
       with `worldSource=post-selected-final`, accepted binding hash, weight/depth
@@ -5543,6 +5543,35 @@ Keep the postblend preservation boundary; replace only its steady content.
       MCP readback verifies the post-selected `uint8` ABI, Active update name,
       inventory weak-table warning and authored-parent table name. No game was
       launched during closure.
+
+      PID19404 subsequently executed that discriminator completely. Publications
+      2..12 all staged with accepted binding/full weight/depth and each reached
+      visible `caller=0x181B3F9`, but every stock-to-corrected hash was identical
+      (`changed=0`, locomotion log 96101--96153); Draw then cleared the target.
+      The user's unchanged lower protrusion therefore rejects the whole
+      post-selected/root-world frontier, not merely its admission. Do not retry
+      `aff..afj` or tune the same world matrix.
+
+      Direct raw Chloe clip copying is also already STATIC REJECTED: offline
+      retail evaluation of `5F913F74+7D11D4FD` leaves the hand-prop endpoints
+      over half a metre apart, whereas live Chloe closes them only after the
+      stock additive/reference/WeaponIK pipeline. The new P0 is the cold weapon
+      drawable below its now-proven-correct Fg root: trace its internal
+      palette/skinning/child transform and the exact state rebuilt by Draw->Put.
+      No new launch is earned until that owner is closed statically.
+
+      The first below-root pass now proves that `sniper-rifle-bolt.pak` is a
+      22-joint skinned drawable, not a rigid root-only mesh. Twelve partitions
+      across three LODs are weighted to weapon joints `0,2,4,5,9,15`; the main
+      body is dominated by `0/4/5`. Its only weapon-skeleton animations are
+      exact action clips `6B990C0A fire--gun`, `411D111F rechamber--gun` and
+      `D9D39F60 reload-mid--gun`; there is no weapon idle/draw/put/holster clip
+      to copy from Chloe. The next bounded work is a read-only 22-row
+      `Fg+0x230` census under the native palette lock, comparing the exact cold
+      weapon generation with the same generation after Draw->Put. A delta in
+      main-body rows `0/4/5` selects the palette lifecycle; identical rows
+      reject it and move the frontier to child/submission state. Do not mutate
+      or launch from this STATIC result alone.
 
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to

@@ -27840,3 +27840,90 @@ prototype/comment at `0x141ED1380`, the weak-table side-effect warning at
 `PlayerWeaponController_GetWeaponBySlot 0x1410A1F90`, and
 `g_AuthoredTransformPointerTable 0x14386FD00`.  No game process was started or
 controlled during this static/package closure.
+
+### 2026-08-25 RUNTIME REJECTED / NO-OP (`afj`): post-selected world already equals the stock visible-consumer matrix
+
+The user reported no visual change, and this time the written consumer
+discriminator ran completely.  The single role-B Nadine process `19404` loaded
+exact boot `2026-08-22afj`, installed the post-selected `+0x7B8` source and the
+three render relays, and reported combined `READY` (`locomotion_hook.log`
+95928/95946/95948/95993).  After the correction reached full weight/depth, the
+same exact weapon/Fg generation staged publications `2..12` with accepted
+binding hash `57036E96`.  Every publication reached the visible
+`caller=0x181B3F9` three times, but every row was a byte-identical no-op:
+`matrixHash=stock->corrected changed=0` (96101--96153).  There was no stale,
+commit-race, exception or fatal row.  The target was then correctly revoked at
+Draw (`scope-drift`, 96154).
+
+This is a semantic rejection, not packaging or admission failure.  The exact
+post-selected, post-LongGunJiggle world reconstructed from cached parent
+`+0x110/+0x120` and final local `+0x130/+0x140` was already the matrix returned
+by stock `FgAnimData_GetRenderWorldMatrix` for every measured weapon LOD.  Hence
+neither a missed phase-`0x40` publication nor a stale final root/world matrix
+causes the cold lower protrusion.  `Hpost-selected-final` and the complete
+`aff..afj` root-matrix frontier are RUNTIME REJECTED; do not tune or move this
+same matrix again.
+
+The result also explains why a direct "copy Chloe animations" shortcut is not
+available at this boundary.  Earlier retail asset evaluation already rejected
+raw `5F913F74 + 7D11D4FD` as Chloe's final grip: their hand-prop endpoints are
+`0.513..0.543 m` apart, while live Chloe reaches `0.02936 m` only after stock
+reference/additive composition and WeaponIK.  For the cold holster defect, the
+weapon root world is now proven correct while the mesh remains wrong, so the
+remaining owner must be below that root: the exact weapon drawable's internal
+skinning/palette/child transform, or a different rendered child/drawable that a
+real Draw->Put rebuilds.  The next work is static owner tracing from the cold
+weapon Fg through its driven instances and deformer/palette inputs, compared
+with the post-Put lifecycle; no new runtime is earned yet.
+
+### 2026-08-25 STATIC: the Mazur drawable is a 22-joint skinned weapon; its three embedded clips are action-only
+
+The first pass below the rejected root/world boundary rules out a literal
+"copy the Chloe weapon animation" shortcut while locating a concrete remaining
+pose owner.  The retail `sniper-rifle-bolt.pak` registers a dedicated skeleton
+`DFCE7D05` with 22 joints.  All twelve validated mesh partitions (three LODs)
+carry sparse skin weights.  Their exact weighted union is joints
+`0,2,4,5,9,15`; the main rifle-body partitions at `0x9C838`, `0x9CBA8` and
+`0x9CE68` put 18,353 vertices on joint 0 and another 2,198 on joints 4/5.
+Consequently a correct `Fg+0x1C0` root matrix does not prove correct rifle
+geometry: the weapon's own `Fg+0x230` 48-byte-per-joint palette remains an
+independent transform layer consumed by skinning.
+
+The package contains exactly three animations on that weapon skeleton, and
+their printable StringId preimages are exact:
+
+- `6B990C0A = 1lg-sniper-bolt-action--fire--gun`;
+- `411D111F = 1lg-sniper-bolt-action--rechamber--gun`;
+- `D9D39F60 = 1lg-sniper-bolt-action-reload-mid--gun`.
+
+All three cover joints `0..21`.  The offline retail decoder resolves
+`6B990C0A` and `D9D39F60` as the same constant 22-joint rest pose; only
+`411D111F` contains the dynamic opcode stream expected for the bolt/rechamber.
+There is no embedded idle, draw, put or holster clip on the weapon skeleton.
+The remaining eleven animations in the package are Player-skeleton
+fire/rechamber/reload arm, spine and additive clips.  Therefore substituting
+one of the three weapon clips cannot reproduce Chloe's draw/put or back pose;
+the game already composes those from the Player action graph, attachment system
+and IK.
+
+Two independent code paths close the palette consumer.
+`AnimManager_PerformAnimBlend 0x141A92260` allocates/swaps
+`Fg+0x230/+0x238` and either evaluates the object's
+command DAG or publishes identity skinning rows.  Later
+`FgDrawManager_PrepareInstanceForRendering 0x14181A9B0` copies that palette to
+the upload buffer and binds it to each driven weapon instance; the existing
+`SkinningDeformer` chain consumes the latched buffer.  This combines with the
+asset weights and the repeated behavioral fact that a real Draw->Put cycle
+repairs the cold placement while `afj` proved the root matrix unchanged.
+
+The leading hypothesis is now **Hweapon-palette-lifecycle**: the cold weapon Fg
+enters rendering with a stale/uninitialized internal palette and Draw->Put
+causes its normal animation path to rebuild it.  Competitors are
+**Hpalette-identical** (cold and post-Put palettes match, leaving a child or
+submission-state owner) and **Haction-only-delta** (only bolt/clip joints change,
+not the main-body joints 0/4/5).  The next admissible discriminator is a
+read-only, exact-weapon census under the native `Fg+0x220` palette lock: compare
+all 22 row hashes, especially `0/4/5`, before the first Draw and after the same
+weapon returns from Put.  Prediction: a stable main-body-row delta selects the
+palette lifecycle; identical rows reject it.  No palette mutation or new game
+launch is authorized by this STATIC entry alone.
