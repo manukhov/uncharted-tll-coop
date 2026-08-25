@@ -5748,6 +5748,30 @@ Keep the postblend preservation boundary; replace only its steady content.
       attached acceptably to Nadine's back. Lock this topology; Draw/Put arms,
       strap visibility and steady grip remain independent open items.
 
+      STATIC / IMPLEMENTED (`afq`): preserve the confirmed `afp` cold-back
+      topology, but replace the authored arm pair's literal `1/1` step with the
+      exact stock `ProcessWeapon+0x640/+0x644` handoff clock. Draw uses
+      `smoothstep(progress)` for both complementary `56C57AD2/283966ED`
+      overlays; Put uses `1-smoothstep(progress)`. Re-enable the already-proved
+      weighted item back-frame handoff, skip zero weight, keep late IK
+      steady-only, and revalidate exact role/player/Fg/weapon/generation/
+      controller/attachment/duration/progress before postblend restore.
+
+      Written one-copy prediction: `afq` boot and authored-pair READY, unchanged
+      good initial back placement, multiple `source=draw-handoff` rows with
+      increasing fractional weights and matching restores, then multiple
+      `source=put-handoff` rows with decreasing fractional weights and matching
+      restores. Those markers plus removal of the instantaneous Draw/Put snap
+      confirm H-arm-weight-step even if the final grip angle remains wrong.
+      Exact markers plus the same snap reject it; missing either phase is
+      admission/packaging. User alone supplies gameplay input.
+
+      Fresh Release: `777216` bytes, SHA-256
+      `7BC689CC6BD7CBD47967BEB642CFA5F71458DDFC24A4B8E6C52D51AAC3A8F44C`;
+      source/object/DLL UTC `14:04:48.758 / 14:05:18.535 / 14:05:18.629`.
+      PE readback contains the `2026-08-25afq` boot and native Draw/Put
+      weighting READY strings. No new IDB symbol was introduced.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

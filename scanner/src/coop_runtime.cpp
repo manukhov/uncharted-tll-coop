@@ -1869,6 +1869,8 @@ void force_puppet_ads_flag(void* puppet, bool active);
 bool safe_request_gun_state(void* player, int desired_state);
 int find_weapon_slot_by_art_id(void* player, std::uint32_t art_id);
 void* get_weapon_from_slot(void* player, int slot);
+bool seh_find_exact_controller_inventory_art_raw(
+    void* controller, std::uint32_t art, void** weapon_out, int* slot_out);
 bool read_weapon_draw_state(void* player, int& slot, std::uint32_t& state);
 std::uint32_t weapon_art_id_from_object(void* weapon);
 bool seh_weapon_parent_resolves_to_owner(void* weapon, void* owner);
@@ -2582,9 +2584,10 @@ constexpr float kLegacyNadineMazurBackDepthMeters = 0.05F;
 // every progress bucket in both directions while the authored back correction
 // remains fully active. Blend only that correction with the same stock
 // smoothstep: 1 -> 0 while drawing and 0 -> 1 while putting the rifle away.
-constexpr bool kEnableLegacyNadineMazurWeightedBackHandoff = false;
-// The aex transition census has answered its question and is not part of the
-// restored 82e7b9e baseline.
+constexpr bool kEnableLegacyNadineMazurWeightedBackHandoff = true;
+// The aex transition census has answered its question. afq logs the exact
+// duration/progress/weight at the arm command itself, so keep this older hot
+// attachment census disabled.
 constexpr bool kEnableLegacyNadineMazurBackTransitionCensus = false;
 // The suppressed P99 body shares the native Nadine Glock origin to within a
 // few millimetres, while its suppressor alone extends the mesh by 16.9 cm along
@@ -48806,6 +48809,8 @@ struct IdleArmPoseOwnerScope {
     void* weapon = nullptr;
     std::uint32_t weapon_art_id = 0;
     int weapon_slot = -1;
+    int controller_slot = -1;
+    std::uint32_t controller_state = 0;
     float position[3]{};
     float orientation[4]{};
     float move_stick[2]{};
@@ -48816,7 +48821,8 @@ struct IdleArmPoseOwnerScope {
 bool seh_resolve_idle_arm_pose_owner_scope(
     void* player, std::uint32_t expected_screen,
     IdleArmPoseOwnerScope* output,
-    IdleArmPoseAdmissionDiagnostic* diagnostic = nullptr) {
+    IdleArmPoseAdmissionDiagnostic* diagnostic = nullptr,
+    bool allow_legacy_nadine_mazur_handoff = false) {
     if (output == nullptr) {
         return false;
     }
@@ -48955,8 +48961,14 @@ bool seh_resolve_idle_arm_pose_owner_scope(
             diagnostic->stage = IdleArmPoseAdmissionStage::kWeaponController;
         }
         if (!seh_read_idle_arm_pose_weapon_state(
-                player, &weapon_slot, &draw_state, diagnostic) ||
-            draw_state != 2 || weapon_slot < 0 || weapon_slot >= 18) {
+                player, &weapon_slot, &draw_state, diagnostic)) {
+            return false;
+        }
+        const bool steady_weapon_out =
+            draw_state == 2 && weapon_slot >= 0 && weapon_slot < 18;
+        const bool authored_handoff = allow_legacy_nadine_mazur_handoff &&
+            (draw_state == 0 || draw_state == 1 || draw_state == 5);
+        if (!steady_weapon_out && !authored_handoff) {
             return false;
         }
         if (diagnostic != nullptr) {
@@ -48969,7 +48981,19 @@ bool seh_resolve_idle_arm_pose_owner_scope(
         if (diagnostic != nullptr) {
             diagnostic->stage = IdleArmPoseAdmissionStage::kWeapon;
         }
-        void* const weapon = get_weapon_from_slot(player, weapon_slot);
+        void* weapon = nullptr;
+        int resolved_weapon_slot = weapon_slot;
+        if (steady_weapon_out) {
+            weapon = get_weapon_from_slot(player, weapon_slot);
+        } else {
+            void* const controller = *reinterpret_cast<void* const*>(
+                player_bytes + kPlayerWeaponControllerOffset);
+            if (!seh_find_exact_controller_inventory_art_raw(
+                    controller, kCoopRifleArtId, &weapon,
+                    &resolved_weapon_slot)) {
+                return false;
+            }
+        }
         if (weapon == nullptr || readable_bytes(weapon) < 0x864) {
             return false;
         }
@@ -49021,7 +49045,9 @@ bool seh_resolve_idle_arm_pose_owner_scope(
         output->local_pose = local_pose;
         output->weapon = weapon;
         output->weapon_art_id = art;
-        output->weapon_slot = weapon_slot;
+        output->weapon_slot = resolved_weapon_slot;
+        output->controller_slot = weapon_slot;
+        output->controller_state = draw_state;
         output->valid = true;
         if (diagnostic != nullptr) {
             diagnostic->stage = IdleArmPoseAdmissionStage::kScopeComplete;
@@ -49110,7 +49136,7 @@ bool peer_state_is_idle_with_only_weapon_metadata_missing(
     return peer_state_is_steady_drawn_idle(completed, weapon_art_id);
 }
 
-bool local_player_is_steady_drawn_idle(
+bool local_player_is_stationary_uncommanded(
     const IdleArmPoseOwnerScope& scope) {
     if (!scope.valid ||
         !idle_arm_pose_movement_is_zero(
@@ -49122,6 +49148,29 @@ bool local_player_is_steady_drawn_idle(
         g_cached_local_input_buttons.load(std::memory_order_acquire) &
         ~kInputBlockButtonBaseMask;
     return action_bits == 0 || action_bits == 0x9ull;
+}
+
+bool local_player_is_steady_drawn_idle(
+    const IdleArmPoseOwnerScope& scope) {
+    return scope.controller_state == 2 && scope.controller_slot >= 0 &&
+        local_player_is_stationary_uncommanded(scope);
+}
+
+bool local_player_is_stationary_weapon_handoff(
+    const IdleArmPoseOwnerScope& scope) {
+    if (!scope.valid ||
+        !idle_arm_pose_movement_is_zero(
+            scope.move_stick, scope.move_world, scope.move_magnitude) ||
+        player_cover_state_field(scope.player)) {
+        return false;
+    }
+    const std::uint64_t action_bits =
+        g_cached_local_input_buttons.load(std::memory_order_acquire) &
+        ~kInputBlockButtonBaseMask;
+    // Draw/Put itself may still hold the weapon-switch input.  Reject only the
+    // incompatible live aim/fire intents; controller states 1/5 and the exact
+    // attachment handoff remain the authoritative transition discriminator.
+    return (action_bits & (kJoypadAimButtonMask | kJoypadFireButtonMask)) == 0;
 }
 
 void reset_idle_arm_pose_dwell(IdleArmPoseDwellState& state);
@@ -50481,6 +50530,12 @@ enum class LegacyNadineMazurAuthoredPairInjection : std::uint8_t {
     kCapacity = 4,
 };
 
+enum class LegacyNadineMazurAuthoredPairPhase : std::uint8_t {
+    kSteady = 0,
+    kDraw = 1,
+    kPut = 2,
+};
+
 struct LegacyNadineMazurAuthoredPairEpoch {
     bool valid = false;
     void* player = nullptr;
@@ -50495,6 +50550,13 @@ struct LegacyNadineMazurAuthoredPairEpoch {
     std::uint32_t player_runtime_id = 0;
     std::uint32_t weapon_runtime_id = 0;
     std::uint32_t blend_weight_bits = 0x3F800000u;
+    std::uint32_t handoff_duration_bits = 0;
+    std::uint32_t handoff_progress_bits = 0;
+    std::uint32_t selected_attach_id = 0;
+    std::uint8_t selected_attach_index = 0xFF;
+    LegacyNadineMazurAuthoredPairPhase phase =
+        LegacyNadineMazurAuthoredPairPhase::kSteady;
+    bool handoff_finished = false;
     bool transition_weighted = false;
 };
 
@@ -50515,6 +50577,13 @@ struct LegacyNadineMazurAuthoredPairPostBlendTicket {
     std::uint32_t player_runtime_id = 0;
     std::uint32_t weapon_runtime_id = 0;
     std::uint32_t blend_weight_bits = 0x3F800000u;
+    std::uint32_t handoff_duration_bits = 0;
+    std::uint32_t handoff_progress_bits = 0;
+    std::uint32_t selected_attach_id = 0;
+    std::uint8_t selected_attach_index = 0xFF;
+    LegacyNadineMazurAuthoredPairPhase phase =
+        LegacyNadineMazurAuthoredPairPhase::kSteady;
+    bool handoff_finished = false;
     bool transition_weighted = false;
     std::array<std::byte, kMazurAuthoredPairPoseBytes> pose{};
 };
@@ -50701,6 +50770,152 @@ bool seh_resolve_legacy_nadine_mazur_authored_pair_weight(
     }
 }
 
+const char* legacy_nadine_mazur_authored_pair_phase_name(
+    LegacyNadineMazurAuthoredPairPhase phase) {
+    switch (phase) {
+    case LegacyNadineMazurAuthoredPairPhase::kSteady:
+        return "steady-overlay";
+    case LegacyNadineMazurAuthoredPairPhase::kDraw:
+        return "draw-handoff";
+    case LegacyNadineMazurAuthoredPairPhase::kPut:
+        return "put-handoff";
+    }
+    return "unknown";
+}
+
+std::size_t legacy_nadine_mazur_authored_pair_log_bucket(
+    LegacyNadineMazurAuthoredPairPhase phase, float progress) {
+    if (phase == LegacyNadineMazurAuthoredPairPhase::kSteady) {
+        return 0;
+    }
+    const std::size_t progress_bucket = static_cast<std::size_t>(
+        std::clamp(std::floor(progress * 10.0F), 0.0F, 10.0F));
+    return phase == LegacyNadineMazurAuthoredPairPhase::kDraw
+        ? 1u + progress_bucket
+        : 12u + progress_bucket;
+}
+
+// The physical attachment blend is the only shipped transition clock that is
+// present in every observed Mazur Draw/Put.  UpdateLocalAttachmentBlend advances
+// +0x644 and applies mode-2 smoothstep before switching targSpineProp/rightHand.
+// Reuse that exact clock for the complementary 56C/283 arm pair: Draw fades it
+// in, Put fades it out.  The steady endpoint remains the confirmed full weight.
+bool seh_resolve_legacy_nadine_mazur_authored_pair_handoff(
+    const IdleArmPoseOwnerScope& owner,
+    LegacyNadineMazurAuthoredPairPhase* phase_out,
+    std::uint32_t* weight_bits_out,
+    std::uint32_t* duration_bits_out,
+    std::uint32_t* progress_bits_out,
+    bool* handoff_finished_out,
+    std::uint8_t* selected_index_out,
+    std::uint32_t* selected_id_out) {
+    if (phase_out == nullptr || weight_bits_out == nullptr ||
+        duration_bits_out == nullptr || progress_bits_out == nullptr ||
+        handoff_finished_out == nullptr || selected_index_out == nullptr ||
+        selected_id_out == nullptr) {
+        return false;
+    }
+    *phase_out = LegacyNadineMazurAuthoredPairPhase::kSteady;
+    *weight_bits_out = 0x3F800000u;
+    *duration_bits_out = 0;
+    *progress_bits_out = 0;
+    *handoff_finished_out = false;
+    *selected_index_out = 0xFF;
+    *selected_id_out = 0;
+    __try {
+        if (!owner.valid || owner.player == nullptr || owner.weapon == nullptr ||
+            owner.weapon_art_id != kCoopRifleArtId ||
+            readable_bytes(owner.weapon) < 0x8F5) {
+            return false;
+        }
+        auto* const weapon = static_cast<const std::byte*>(owner.weapon);
+        float duration = 0.0F;
+        float progress = 0.0F;
+        std::memcpy(&duration, weapon + 0x640, sizeof(duration));
+        std::memcpy(&progress, weapon + 0x644, sizeof(progress));
+        if (!std::isfinite(duration) || duration < 0.0F ||
+            !std::isfinite(progress) || progress < 0.0F || progress > 1.01F) {
+            return false;
+        }
+        progress = std::clamp(progress, 0.0F, 1.0F);
+        const bool handoff_finished =
+            *reinterpret_cast<const std::uint8_t*>(weapon + 0x8F4) != 0;
+        const std::uint8_t selected =
+            *reinterpret_cast<const std::uint8_t*>(weapon + 0x688);
+        std::uint32_t selected_id = 0;
+        std::uintptr_t records_generation = 0;
+        constexpr std::uint32_t kRightHandAttachId = 0x61A48E01u;
+        if (!seh_read_owner_attach_record_id(
+                owner.player, selected, &selected_id, &records_generation) ||
+            records_generation == 0 ||
+            (selected_id != kRightHandAttachId &&
+             selected_id != kTargSpinePropAttachId)) {
+            return false;
+        }
+
+        LegacyNadineMazurAuthoredPairPhase phase =
+            LegacyNadineMazurAuthoredPairPhase::kSteady;
+        float weight = 1.0F;
+        if (duration > 0.0F) {
+            const float smoothstep =
+                progress * progress * (3.0F - 2.0F * progress);
+            if (handoff_finished) {
+                if (owner.controller_state != 5 &&
+                    owner.controller_state != 0) {
+                    return false;
+                }
+                phase = LegacyNadineMazurAuthoredPairPhase::kPut;
+                weight = 1.0F - smoothstep;
+            } else {
+                if (owner.controller_state != 1 &&
+                    owner.controller_state != 2) {
+                    return false;
+                }
+                phase = LegacyNadineMazurAuthoredPairPhase::kDraw;
+                weight = smoothstep;
+            }
+        } else if (owner.controller_state == 2) {
+            if (selected_id != kRightHandAttachId) {
+                return false;
+            }
+            phase = LegacyNadineMazurAuthoredPairPhase::kSteady;
+            weight = 1.0F;
+        } else if (owner.controller_state == 1 && progress >= 0.999F &&
+                   ((!handoff_finished &&
+                     selected_id == kTargSpinePropAttachId) ||
+                    (handoff_finished &&
+                     selected_id == kRightHandAttachId))) {
+            // Stock clears duration one callback before rightHand becomes the
+            // selected record, then flips +0x8F4. Keep both exact boundary
+            // callbacks continuous without accepting stale back state.
+            phase = LegacyNadineMazurAuthoredPairPhase::kDraw;
+            weight = 1.0F;
+        } else if (owner.controller_state == 5 && handoff_finished &&
+                   progress >= 0.999F) {
+            // Put begins in state 5 while the rifle is still fully in hands;
+            // fade only after the authored to-back handoff actually starts.
+            if (selected_id != kRightHandAttachId) {
+                return false;
+            }
+            phase = LegacyNadineMazurAuthoredPairPhase::kPut;
+            weight = 1.0F;
+        } else {
+            return false;
+        }
+        weight = std::clamp(weight, 0.0F, 1.0F);
+        std::memcpy(weight_bits_out, &weight, sizeof(weight));
+        std::memcpy(duration_bits_out, &duration, sizeof(duration));
+        std::memcpy(progress_bits_out, &progress, sizeof(progress));
+        *phase_out = phase;
+        *handoff_finished_out = handoff_finished;
+        *selected_index_out = selected;
+        *selected_id_out = selected_id;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 bool seh_matches_legacy_nadine_mazur_authored_pair_create_context(
     void* create_context, std::uint32_t group,
     const LegacyNadineMazurAuthoredPairEpoch& epoch) {
@@ -50737,10 +50952,29 @@ seh_select_legacy_nadine_mazur_authored_pair_epoch(
         }
         void* const player = retained_player_object(0);
         IdleArmPoseOwnerScope owner{};
-        if (!seh_resolve_idle_arm_pose_owner_scope(player, 0, &owner) ||
+        if (!seh_resolve_idle_arm_pose_owner_scope(
+                player, 0, &owner, nullptr, true) ||
             owner.fg_anim_data != expected_fg ||
             owner.weapon_art_id != kCoopRifleArtId ||
-            !local_player_is_steady_drawn_idle(owner)) {
+            (owner.controller_state == 2
+                 ? !local_player_is_steady_drawn_idle(owner)
+                 : !local_player_is_stationary_weapon_handoff(owner))) {
+            return LegacyNadineMazurAuthoredPairAdmission::kOwner;
+        }
+
+        LegacyNadineMazurAuthoredPairPhase physical_phase =
+            LegacyNadineMazurAuthoredPairPhase::kSteady;
+        std::uint32_t physical_weight_bits = 0x3F800000u;
+        std::uint32_t handoff_duration_bits = 0;
+        std::uint32_t handoff_progress_bits = 0;
+        bool handoff_finished = false;
+        std::uint8_t selected_attach_index = 0xFF;
+        std::uint32_t selected_attach_id = 0;
+        if (!seh_resolve_legacy_nadine_mazur_authored_pair_handoff(
+                owner, &physical_phase, &physical_weight_bits,
+                &handoff_duration_bits, &handoff_progress_bits,
+                &handoff_finished, &selected_attach_index,
+                &selected_attach_id)) {
             return LegacyNadineMazurAuthoredPairAdmission::kOwner;
         }
 
@@ -50791,11 +51025,90 @@ seh_select_legacy_nadine_mazur_authored_pair_epoch(
             *output = {};
             return LegacyNadineMazurAuthoredPairAdmission::kOwner;
         }
+        output->phase = physical_phase;
+        output->handoff_duration_bits = handoff_duration_bits;
+        output->handoff_progress_bits = handoff_progress_bits;
+        output->handoff_finished = handoff_finished;
+        output->selected_attach_index = selected_attach_index;
+        output->selected_attach_id = selected_attach_id;
+        if (output->custom_pair_instance == nullptr) {
+            output->blend_weight_bits = physical_weight_bits;
+            output->transition_weighted = physical_phase !=
+                LegacyNadineMazurAuthoredPairPhase::kSteady;
+        }
+        float admitted_weight = 0.0F;
+        std::memcpy(
+            &admitted_weight, &output->blend_weight_bits,
+            sizeof(admitted_weight));
+        if (!std::isfinite(admitted_weight) || admitted_weight <= 0.0001F ||
+            admitted_weight > 1.0F) {
+            *output = {};
+            return LegacyNadineMazurAuthoredPairAdmission::kOwner;
+        }
         return LegacyNadineMazurAuthoredPairAdmission::kAdmitted;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *output = {};
         return LegacyNadineMazurAuthoredPairAdmission::kClips;
     }
+}
+
+bool seh_matches_legacy_nadine_mazur_authored_pair_owner_state(
+    void* player, void* fg_anim_data, void* weapon,
+    std::uint32_t player_runtime_id, std::uint32_t weapon_runtime_id,
+    LegacyNadineMazurAuthoredPairPhase phase,
+    std::uint32_t blend_weight_bits,
+    std::uint32_t handoff_duration_bits,
+    std::uint32_t handoff_progress_bits,
+    bool handoff_finished,
+    std::uint8_t selected_attach_index,
+    std::uint32_t selected_attach_id,
+    bool compare_handoff_weight) {
+    IdleArmPoseOwnerScope owner{};
+    const bool transition =
+        phase != LegacyNadineMazurAuthoredPairPhase::kSteady;
+    if (!seh_resolve_idle_arm_pose_owner_scope(
+            player, 0, &owner, nullptr, transition) ||
+        owner.fg_anim_data != fg_anim_data || owner.weapon != weapon ||
+        owner.weapon_art_id != kCoopRifleArtId ||
+        (transition
+             ? !local_player_is_stationary_weapon_handoff(owner)
+             : !local_player_is_steady_drawn_idle(owner))) {
+        return false;
+    }
+    __try {
+        if (*reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(player) +
+                kGameObjectRuntimeIdOffset) != player_runtime_id ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(weapon) +
+                kGameObjectRuntimeIdOffset) != weapon_runtime_id) {
+            return false;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+
+    LegacyNadineMazurAuthoredPairPhase current_phase =
+        LegacyNadineMazurAuthoredPairPhase::kSteady;
+    std::uint32_t current_weight_bits = 0;
+    std::uint32_t current_duration_bits = 0;
+    std::uint32_t current_progress_bits = 0;
+    bool current_handoff_finished = false;
+    std::uint8_t current_selected_index = 0xFF;
+    std::uint32_t current_selected_id = 0;
+    return seh_resolve_legacy_nadine_mazur_authored_pair_handoff(
+               owner, &current_phase, &current_weight_bits,
+               &current_duration_bits, &current_progress_bits,
+               &current_handoff_finished, &current_selected_index,
+               &current_selected_id) &&
+        current_phase == phase &&
+        (!compare_handoff_weight ||
+         current_weight_bits == blend_weight_bits) &&
+        current_duration_bits == handoff_duration_bits &&
+        current_progress_bits == handoff_progress_bits &&
+        current_handoff_finished == handoff_finished &&
+        current_selected_index == selected_attach_index &&
+        current_selected_id == selected_attach_id;
 }
 
 bool seh_capture_legacy_nadine_mazur_authored_pair_postblend_ticket(
@@ -50809,6 +51122,14 @@ bool seh_capture_legacy_nadine_mazur_authored_pair_postblend_ticket(
         if (!epoch.valid || epoch.player == nullptr ||
             epoch.fg_anim_data == nullptr || epoch.weapon == nullptr ||
             epoch.local_pose == nullptr || epoch.target_skeleton == nullptr ||
+            !seh_matches_legacy_nadine_mazur_authored_pair_owner_state(
+                epoch.player, epoch.fg_anim_data, epoch.weapon,
+                epoch.player_runtime_id, epoch.weapon_runtime_id,
+                epoch.phase, epoch.blend_weight_bits,
+                epoch.handoff_duration_bits, epoch.handoff_progress_bits,
+                epoch.handoff_finished, epoch.selected_attach_index,
+                epoch.selected_attach_id,
+                epoch.custom_pair_instance == nullptr) ||
             !player_object_stable(epoch.player) ||
             *reinterpret_cast<const std::uint32_t*>(
                 static_cast<const std::byte*>(epoch.player) +
@@ -50839,16 +51160,16 @@ bool seh_capture_legacy_nadine_mazur_authored_pair_postblend_ticket(
                 kMazurAuthoredPairPoseBytes) {
             return false;
         }
-        if (epoch.custom_pair_instance != nullptr) {
-            LegacyNadineMazurAuthoredPairEpoch current{};
-            if (!seh_resolve_legacy_nadine_mazur_authored_pair_weight(
-                    epoch.player, &current) ||
-                current.weapon_partial_layer != epoch.weapon_partial_layer ||
-                current.custom_pair_instance != epoch.custom_pair_instance ||
-                current.blend_weight_bits != epoch.blend_weight_bits ||
-                current.transition_weighted != epoch.transition_weighted) {
-                return false;
-            }
+        LegacyNadineMazurAuthoredPairEpoch current_layer{};
+        if (!seh_resolve_legacy_nadine_mazur_authored_pair_weight(
+                epoch.player, &current_layer) ||
+            current_layer.weapon_partial_layer != epoch.weapon_partial_layer ||
+            current_layer.custom_pair_instance != epoch.custom_pair_instance ||
+            (epoch.custom_pair_instance != nullptr &&
+             (current_layer.blend_weight_bits != epoch.blend_weight_bits ||
+              current_layer.transition_weighted !=
+                  epoch.transition_weighted))) {
+            return false;
         }
         output->valid = true;
         output->player = epoch.player;
@@ -50861,6 +51182,12 @@ bool seh_capture_legacy_nadine_mazur_authored_pair_postblend_ticket(
         output->player_runtime_id = epoch.player_runtime_id;
         output->weapon_runtime_id = epoch.weapon_runtime_id;
         output->blend_weight_bits = epoch.blend_weight_bits;
+        output->handoff_duration_bits = epoch.handoff_duration_bits;
+        output->handoff_progress_bits = epoch.handoff_progress_bits;
+        output->selected_attach_id = epoch.selected_attach_id;
+        output->selected_attach_index = epoch.selected_attach_index;
+        output->phase = epoch.phase;
+        output->handoff_finished = epoch.handoff_finished;
         output->transition_weighted = epoch.transition_weighted;
         std::memcpy(
             output->pose.data(),
@@ -51432,9 +51759,24 @@ bool seh_restore_legacy_nadine_mazur_authored_pair_after_postblend(
             !player_object_stable(player)) {
             return false;
         }
+        if (!seh_matches_legacy_nadine_mazur_authored_pair_owner_state(
+                ticket.player, ticket.fg_anim_data, ticket.weapon,
+                ticket.player_runtime_id, ticket.weapon_runtime_id,
+                ticket.phase, ticket.blend_weight_bits,
+                ticket.handoff_duration_bits, ticket.handoff_progress_bits,
+                ticket.handoff_finished, ticket.selected_attach_index,
+                ticket.selected_attach_id,
+                ticket.custom_pair_instance == nullptr)) {
+            return false;
+        }
+        const bool transition = ticket.phase !=
+            LegacyNadineMazurAuthoredPairPhase::kSteady;
         IdleArmPoseOwnerScope owner{};
-        if (!seh_resolve_idle_arm_pose_owner_scope(player, 0, &owner) ||
-            !local_player_is_steady_drawn_idle(owner) ||
+        if (!seh_resolve_idle_arm_pose_owner_scope(
+                player, 0, &owner, nullptr, transition) ||
+            (transition
+                 ? !local_player_is_stationary_weapon_handoff(owner)
+                 : !local_player_is_steady_drawn_idle(owner)) ||
             owner.player != ticket.player ||
             owner.fg_anim_data != ticket.fg_anim_data ||
             owner.weapon != ticket.weapon ||
@@ -51463,16 +51805,16 @@ bool seh_restore_legacy_nadine_mazur_authored_pair_after_postblend(
                 ticket.pose.size()) {
             return false;
         }
-        if (ticket.custom_pair_instance != nullptr) {
-            LegacyNadineMazurAuthoredPairEpoch current{};
-            if (!seh_resolve_legacy_nadine_mazur_authored_pair_weight(
-                    player, &current) ||
-                current.weapon_partial_layer != ticket.weapon_partial_layer ||
-                current.custom_pair_instance != ticket.custom_pair_instance ||
-                current.blend_weight_bits != ticket.blend_weight_bits ||
-                current.transition_weighted != ticket.transition_weighted) {
-                return false;
-            }
+        LegacyNadineMazurAuthoredPairEpoch current_layer{};
+        if (!seh_resolve_legacy_nadine_mazur_authored_pair_weight(
+                player, &current_layer) ||
+            current_layer.weapon_partial_layer != ticket.weapon_partial_layer ||
+            current_layer.custom_pair_instance != ticket.custom_pair_instance ||
+            (ticket.custom_pair_instance != nullptr &&
+             (current_layer.blend_weight_bits != ticket.blend_weight_bits ||
+              current_layer.transition_weighted !=
+                  ticket.transition_weighted))) {
+            return false;
         }
         std::memcpy(
             static_cast<std::byte*>(ticket.local_pose) +
@@ -51631,7 +51973,7 @@ seh_inject_legacy_nadine_mazur_authored_pair(
             output[2] = scratch_lane;
             output[3] = 0;
             output[4] = 1;
-            output[5] = 0x3F800000u;
+            output[5] = epoch.blend_weight_bits;
             output += kAnimCommandWordCountBlend;
         };
         std::uint32_t* output = words + finalizer_word;
@@ -51677,18 +52019,35 @@ hooked_create_anim_cmds_for_legacy_nadine_mazur_authored_pair(
             return result;
         }
         g_legacy_nadine_mazur_authored_pair_injected = true;
-        static std::atomic<bool> transition_logged{false};
-        if (!transition_logged.exchange(true, std::memory_order_relaxed)) {
-            float blend_weight = 0.0F;
-            std::memcpy(
-                &blend_weight, &epoch.blend_weight_bits,
-                sizeof(blend_weight));
+        float blend_weight = 0.0F;
+        float duration = 0.0F;
+        float progress = 0.0F;
+        std::memcpy(
+            &blend_weight, &epoch.blend_weight_bits,
+            sizeof(blend_weight));
+        std::memcpy(
+            &duration, &epoch.handoff_duration_bits,
+            sizeof(duration));
+        std::memcpy(
+            &progress, &epoch.handoff_progress_bits,
+            sizeof(progress));
+        static std::array<std::atomic<bool>, 23> transition_logged{};
+        const std::size_t log_bucket =
+            legacy_nadine_mazur_authored_pair_log_bucket(
+                epoch.phase, progress);
+        if (log_bucket < transition_logged.size() &&
+            !transition_logged[log_bucket].exchange(
+                true, std::memory_order_relaxed)) {
             std::ostringstream line;
             line << "NADINE-MAZUR-AUTHORED-PAIR preserved"
                  << " stage=perform source=stock-transition"
                  << " state=0x" << std::hex << kMazurAuthoredPairStateId
                  << std::dec << " group=" << group
                  << " nativeWeight=" << blend_weight
+                 << " phase="
+                 << legacy_nadine_mazur_authored_pair_phase_name(epoch.phase)
+                 << " blend=" << duration << "/" << progress
+                 << " handoffFlag=" << (epoch.handoff_finished ? 1 : 0)
                  << " commandWeighted="
                  << (epoch.transition_weighted ? 1 : 0);
             boot_log_line(line.str().c_str());
@@ -51701,14 +52060,35 @@ hooked_create_anim_cmds_for_legacy_nadine_mazur_authored_pair(
         create_context, command_record, group, epoch, &scratch_lane);
     if (injection == LegacyNadineMazurAuthoredPairInjection::kInjected) {
         g_legacy_nadine_mazur_authored_pair_injected = true;
-        static std::atomic<bool> injected_logged{false};
-        if (!injected_logged.exchange(true, std::memory_order_relaxed)) {
+        float blend_weight = 0.0F;
+        float duration = 0.0F;
+        float progress = 0.0F;
+        std::memcpy(
+            &blend_weight, &epoch.blend_weight_bits,
+            sizeof(blend_weight));
+        std::memcpy(
+            &duration, &epoch.handoff_duration_bits,
+            sizeof(duration));
+        std::memcpy(
+            &progress, &epoch.handoff_progress_bits,
+            sizeof(progress));
+        static std::array<std::atomic<bool>, 23> injected_logged{};
+        const std::size_t log_bucket =
+            legacy_nadine_mazur_authored_pair_log_bucket(
+                epoch.phase, progress);
+        if (log_bucket < injected_logged.size() &&
+            !injected_logged[log_bucket].exchange(
+                true, std::memory_order_relaxed)) {
             std::ostringstream line;
             line << "NADINE-MAZUR-AUTHORED-PAIR injected stage=perform"
                  << " hands=0x" << std::hex << kMazurAuthoredHandsClipId
                  << " arms=0x" << kMazurAuthoredArmsClipId << std::dec
                  << " group=" << group << " lane=" << scratch_lane
-                 << " weights=1/1 source=steady-overlay";
+                 << " weights=" << blend_weight << "/" << blend_weight
+                 << " source="
+                 << legacy_nadine_mazur_authored_pair_phase_name(epoch.phase)
+                 << " blend=" << duration << "/" << progress
+                 << " handoffFlag=" << (epoch.handoff_finished ? 1 : 0);
             boot_log_line(line.str().c_str());
         }
     } else if (injection != LegacyNadineMazurAuthoredPairInjection::kIgnored) {
@@ -51865,119 +52245,142 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
         WeaponIkJointSetSeedDiagnostic left_seed_diagnostic{};
         WeaponIkJointSetSeedDiagnostic right_seed_diagnostic{};
         if constexpr (kEnableLegacyNadineMazurLateSteadyIkRepair) {
-            const bool allocator_entered =
-                seh_enter_weapon_ik_transient_allocator_scope(
-                    &allocator_diagnostic);
-            if (allocator_entered) {
-                late_ik_result = seh_apply_legacy_nadine_mazur_late_steady_ik(
-                    ticket, &right_position_error, &right_angle_error,
-                    &left_prop_gap, &left_angle_gap,
-                    &left_seed_diagnostic, &right_seed_diagnostic);
-            } else {
-                late_ik_result =
-                    LegacyNadineMazurLateSteadyIkResult::kAllocator;
-            }
-            const bool allocator_left = allocator_entered &&
-                seh_leave_weapon_ik_transient_allocator_scope(
-                    &allocator_diagnostic);
-            if (allocator_entered && !allocator_left) {
+            if (ticket.phase ==
+                LegacyNadineMazurAuthoredPairPhase::kSteady) {
+                const bool allocator_entered =
+                    seh_enter_weapon_ik_transient_allocator_scope(
+                        &allocator_diagnostic);
+                if (allocator_entered) {
+                    late_ik_result =
+                        seh_apply_legacy_nadine_mazur_late_steady_ik(
+                            ticket, &right_position_error, &right_angle_error,
+                            &left_prop_gap, &left_angle_gap,
+                            &left_seed_diagnostic, &right_seed_diagnostic);
+                } else {
+                    late_ik_result =
+                        LegacyNadineMazurLateSteadyIkResult::kAllocator;
+                }
+                const bool allocator_left = allocator_entered &&
+                    seh_leave_weapon_ik_transient_allocator_scope(
+                        &allocator_diagnostic);
+                if (allocator_entered && !allocator_left) {
+                    if (late_ik_result ==
+                        LegacyNadineMazurLateSteadyIkResult::kApplied) {
+                        seh_recompute_legacy_nadine_mazur_primary_arm_world_locators(
+                            ticket, true);
+                    }
+                    late_ik_result =
+                        LegacyNadineMazurLateSteadyIkResult::kAllocator;
+                }
                 if (late_ik_result ==
                     LegacyNadineMazurLateSteadyIkResult::kApplied) {
-                    seh_recompute_legacy_nadine_mazur_primary_arm_world_locators(
-                        ticket, true);
-                }
-                late_ik_result =
-                    LegacyNadineMazurLateSteadyIkResult::kAllocator;
-            }
-            if (late_ik_result ==
-                LegacyNadineMazurLateSteadyIkResult::kApplied) {
-                static std::atomic<bool> late_ik_applied_logged{false};
-                if (!late_ik_applied_logged.exchange(
-                        true, std::memory_order_relaxed)) {
-                    char line[320]{};
-                    std::snprintf(
-                        line, sizeof(line),
-                        "NADINE-MAZUR-LATE-IK applied stage=postblend"
-                        " source=static-Chloe-steady rightPosError=%.6f"
-                        " rightAngleErrorDeg=%.6f leftPropGap=%.6f"
-                        " leftAngleGapDeg=%.6f rows=19..30"
-                        " allocator=14/%u/%u/%u",
-                        static_cast<double>(right_position_error),
-                        static_cast<double>(right_angle_error),
-                        static_cast<double>(left_prop_gap),
-                        static_cast<double>(left_angle_gap),
-                        allocator_diagnostic.current_match ? 1u : 0u,
-                        allocator_diagnostic.popped_match ? 1u : 0u,
-                        allocator_diagnostic.restored ? 1u : 0u);
-                    boot_log_line(line);
-                }
-            } else {
-                static std::array<std::atomic<bool>, 9> rejected_logged{};
-                const std::size_t reason =
-                    static_cast<std::size_t>(late_ik_result);
-                if (reason < rejected_logged.size() &&
-                    !rejected_logged[reason].exchange(
-                        true, std::memory_order_relaxed)) {
-                    char line[512]{};
-                    std::snprintf(
-                        line, sizeof(line),
-                        "NADINE-MAZUR-LATE-IK rejected stage=%zu"
-                        " allocator=14/%u/%u/%u/%u/%u"
-                        " left=%u/%u/%d/%p/%p/%zu/x%08x@%llx/%llu/%p"
-                        " right=%u/%u/%d/%p/%p/%zu/x%08x@%llx/%llu/%p",
-                        reason,
-                        allocator_diagnostic.expected_resolved ? 1u : 0u,
-                        allocator_diagnostic.pushed ? 1u : 0u,
-                        allocator_diagnostic.current_match ? 1u : 0u,
-                        allocator_diagnostic.popped_match ? 1u : 0u,
-                        allocator_diagnostic.restored ? 1u : 0u,
-                        static_cast<unsigned>(left_seed_diagnostic.failure),
-                        static_cast<unsigned>(left_seed_diagnostic.state),
-                        static_cast<int>(left_seed_diagnostic.count),
-                        left_seed_diagnostic.buffers_before,
-                        left_seed_diagnostic.buffers_after,
-                        left_seed_diagnostic.readable_after,
-                        left_seed_diagnostic.exception_code,
-                        static_cast<unsigned long long>(
-                            left_seed_diagnostic.exception_rva),
-                        static_cast<unsigned long long>(
-                            left_seed_diagnostic.exception_access),
-                        left_seed_diagnostic.exception_fault_address,
-                        static_cast<unsigned>(right_seed_diagnostic.failure),
-                        static_cast<unsigned>(right_seed_diagnostic.state),
-                        static_cast<int>(right_seed_diagnostic.count),
-                        right_seed_diagnostic.buffers_before,
-                        right_seed_diagnostic.buffers_after,
-                        right_seed_diagnostic.readable_after,
-                        right_seed_diagnostic.exception_code,
-                        static_cast<unsigned long long>(
-                            right_seed_diagnostic.exception_rva),
-                        static_cast<unsigned long long>(
-                            right_seed_diagnostic.exception_access),
-                        right_seed_diagnostic.exception_fault_address);
-                    boot_log_line(line);
+                    static std::atomic<bool> late_ik_applied_logged{false};
+                    if (!late_ik_applied_logged.exchange(
+                            true, std::memory_order_relaxed)) {
+                        char line[320]{};
+                        std::snprintf(
+                            line, sizeof(line),
+                            "NADINE-MAZUR-LATE-IK applied stage=postblend"
+                            " source=static-Chloe-steady rightPosError=%.6f"
+                            " rightAngleErrorDeg=%.6f leftPropGap=%.6f"
+                            " leftAngleGapDeg=%.6f rows=19..30"
+                            " allocator=14/%u/%u/%u",
+                            static_cast<double>(right_position_error),
+                            static_cast<double>(right_angle_error),
+                            static_cast<double>(left_prop_gap),
+                            static_cast<double>(left_angle_gap),
+                            allocator_diagnostic.current_match ? 1u : 0u,
+                            allocator_diagnostic.popped_match ? 1u : 0u,
+                            allocator_diagnostic.restored ? 1u : 0u);
+                        boot_log_line(line);
+                    }
+                } else {
+                    static std::array<std::atomic<bool>, 9> rejected_logged{};
+                    const std::size_t reason =
+                        static_cast<std::size_t>(late_ik_result);
+                    if (reason < rejected_logged.size() &&
+                        !rejected_logged[reason].exchange(
+                            true, std::memory_order_relaxed)) {
+                        char line[512]{};
+                        std::snprintf(
+                            line, sizeof(line),
+                            "NADINE-MAZUR-LATE-IK rejected stage=%zu"
+                            " allocator=14/%u/%u/%u/%u/%u"
+                            " left=%u/%u/%d/%p/%p/%zu/x%08x@%llx/%llu/%p"
+                            " right=%u/%u/%d/%p/%p/%zu/x%08x@%llx/%llu/%p",
+                            reason,
+                            allocator_diagnostic.expected_resolved ? 1u : 0u,
+                            allocator_diagnostic.pushed ? 1u : 0u,
+                            allocator_diagnostic.current_match ? 1u : 0u,
+                            allocator_diagnostic.popped_match ? 1u : 0u,
+                            allocator_diagnostic.restored ? 1u : 0u,
+                            static_cast<unsigned>(left_seed_diagnostic.failure),
+                            static_cast<unsigned>(left_seed_diagnostic.state),
+                            static_cast<int>(left_seed_diagnostic.count),
+                            left_seed_diagnostic.buffers_before,
+                            left_seed_diagnostic.buffers_after,
+                            left_seed_diagnostic.readable_after,
+                            left_seed_diagnostic.exception_code,
+                            static_cast<unsigned long long>(
+                                left_seed_diagnostic.exception_rva),
+                            static_cast<unsigned long long>(
+                                left_seed_diagnostic.exception_access),
+                            left_seed_diagnostic.exception_fault_address,
+                            static_cast<unsigned>(right_seed_diagnostic.failure),
+                            static_cast<unsigned>(right_seed_diagnostic.state),
+                            static_cast<int>(right_seed_diagnostic.count),
+                            right_seed_diagnostic.buffers_before,
+                            right_seed_diagnostic.buffers_after,
+                            right_seed_diagnostic.readable_after,
+                            right_seed_diagnostic.exception_code,
+                            static_cast<unsigned long long>(
+                                right_seed_diagnostic.exception_rva),
+                            static_cast<unsigned long long>(
+                                right_seed_diagnostic.exception_access),
+                            right_seed_diagnostic.exception_fault_address);
+                        boot_log_line(line);
+                    }
                 }
             }
         }
-        static std::array<std::atomic<bool>, 2> restored_logged{};
         const bool stock_transition =
             ticket.custom_pair_instance != nullptr;
-        const std::size_t log_index = stock_transition ? 0 : 1;
-        if (!restored_logged[log_index].exchange(
+        float blend_weight = 0.0F;
+        float duration = 0.0F;
+        float progress = 0.0F;
+        std::memcpy(
+            &blend_weight, &ticket.blend_weight_bits,
+            sizeof(blend_weight));
+        std::memcpy(
+            &duration, &ticket.handoff_duration_bits,
+            sizeof(duration));
+        std::memcpy(
+            &progress, &ticket.handoff_progress_bits,
+            sizeof(progress));
+        static std::array<std::atomic<bool>, 46> restored_logged{};
+        const std::size_t log_bucket =
+            legacy_nadine_mazur_authored_pair_log_bucket(
+                ticket.phase, progress);
+        const std::size_t log_index =
+            (stock_transition ? 23u : 0u) + log_bucket;
+        if (log_index < restored_logged.size() &&
+            !restored_logged[log_index].exchange(
                 true, std::memory_order_relaxed)) {
-            float blend_weight = 0.0F;
-            std::memcpy(
-                &blend_weight, &ticket.blend_weight_bits,
-                sizeof(blend_weight));
-            char line[256]{};
+            char line[384]{};
             std::snprintf(
                 line, sizeof(line),
                 "NADINE-MAZUR-AUTHORED-PAIR restored stage=postblend"
                 " rows=19..30 weight=%.6f source=%s commandWeighted=%u"
-                " lateIk=%u",
+                " phase=%s blend=%.6f/%.6f handoffFlag=%u lateIk=%u",
                 static_cast<double>(blend_weight),
-                stock_transition ? "stock-transition" : "steady-overlay",
+                stock_transition
+                    ? "stock-transition"
+                    : legacy_nadine_mazur_authored_pair_phase_name(ticket.phase),
                 ticket.transition_weighted ? 1u : 0u,
+                legacy_nadine_mazur_authored_pair_phase_name(ticket.phase),
+                static_cast<double>(duration),
+                static_cast<double>(progress),
+                ticket.handoff_finished ? 1u : 0u,
                 late_ik_result == LegacyNadineMazurLateSteadyIkResult::kApplied
                     ? 1u : 0u);
             boot_log_line(line);
@@ -52209,7 +52612,7 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     boot_log_line(
         ready
             ? (kEnableLegacyNadineMazurLateSteadyIkRepair
-                   ? "legacy-Nadine Mazur authored-pair + late steady IK READY (Player+0x4308 JointSets; allocator 14 scope; three exact callsite relays)"
+                   ? "legacy-Nadine Mazur authored-pair + native Draw/Put weighting + late steady IK READY (Player+0x4308 JointSets; allocator 14 scope; three exact callsite relays)"
                    : "legacy-Nadine Mazur authored-pair preservation READY (native state fade; three exact callsite relays)")
             : (rollback_verified
                    ? "legacy-Nadine Mazur authored-pair preservation SKIPPED (verified rollback)"
@@ -69755,8 +70158,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-25afp "
-        "(restore Mazur back attachment baseline from 82e7b9e)");
+        "TLL co-op runtime init 2026-08-25afq "
+        "(preserve afp back attachment; smooth Mazur Draw/Put arm handoff)");
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
     }

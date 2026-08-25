@@ -28372,3 +28372,62 @@ restored `82e7b9e` attachment topology.  Treat this cold back placement as a
 locked baseline: do not re-enable the rejected retail renderer transform or
 the early alias.  Remaining Draw/Put arm discontinuity, missing strap and
 incorrect steady grip are separate owners and do not invalidate this result.
+
+### 2026-08-25 STATIC / IMPLEMENTED (`afq`): drive the Mazur arm pair from the exact native Draw/Put handoff clock
+
+The confirmed `afp` cold-back result leaves a separate discontinuity.  In PID
+`13784`, the first successful arm command after Draw was still the injected
+`56C57AD2 + 283966ED` pair at literal weights `1/1`; it had no preceding or
+concurrent `source=stock-transition` row.  The user independently saw the
+weapon and arms snap into place.  The item attachment and arm owner are not the
+same failure: builds `aew/aex` already proved that stock advances the exact
+`ProcessWeapon+0x640/+0x644` handoff through all progress buckets in both
+directions and that `NdAttachableObject_UpdateLocalAttachmentBlend 0x141ED4390`
+uses mode-2 `t*t*(3-2*t)` interpolation.  That test made the item frame smooth
+but left the arm snap, selecting the full-weight pose step.
+
+The evidence quota is satisfied by three independent classes: (1) current
+runtime command markers plus the user's visual discontinuity; (2) the earlier
+complete Draw/Put controller, selector and handoff-progress census; (3) static
+command dataflow showing that the two complementary Player masks are appended
+as sequential cmd7 overlays and that both cmd7 weights were hard-coded to
+`1.0`.  The current Base+Hands lane already carries the same C39 arm/hand rows,
+so mode-1 cmd7 uses the fractional weight on jointly-valid rows rather than the
+right-only copy rule.  `afq` changes only those two weights and the
+already-confirmed item handoff.  During Draw the pair weight is
+`smoothstep(progress)`; during Put it is `1-smoothstep(progress)`.  State 5
+before the to-back blend remains at one, the terminal state-1 Draw callback
+remains at one, steady state 2 remains at one, and a zero endpoint injects
+nothing.  The already-confirmed weighted back correction is enabled with the
+same clock; cold `afp` placement remains byte-semantically full weight.
+
+Admission is fail-closed to the local role-B retained-0 legacy Nadine, exact
+Mazur inventory member and generations, exact Player Fg/skeleton, neutral
+movement/cover/aim/fire and idle grenade controller.  Only steady state 2,
+states 1/5, state 2 during an active Draw handoff, and state 0 during an active
+Put handoff are accepted.  The selected attachment must remain either exact
+`rightHand 61A48E01` or `targSpineProp AD047A`; duration, progress, direction,
+record index/id and command weight are revalidated after Perform and again
+after Player postblend.  A newly appearing `11EE475B` instance invalidates an
+injected epoch.  Late steady IK remains state-2/steady-only.  Grip endpoint and
+strap code are deliberately unchanged.
+
+Competing outcomes are explicit.  **H-arm-weight-step** predicts bounded
+`source=draw-handoff` rows with increasing fractional weights and
+`source=put-handoff` rows with decreasing fractional weights, each paired with
+the same-weight postblend restore; the initial back placement must remain the
+confirmed `afp` result and Draw/Put must lose the instantaneous arm/item snap.
+The final held angle may remain wrong because that is a separate steady-content
+problem.  Exact fractional markers plus the same snap reject this owner and
+select stock transition content or a later writer.  READY without both phase
+markers is admission/packaging only.  One role-B Nadine copy is allowed and the
+user alone performs gameplay input.
+
+Release packaging for this one-copy exam is fresh: source
+`2026-08-25T14:04:48.758Z`, object `14:05:18.535Z`, DLL
+`14:05:18.629Z`, size `777216`, SHA-256
+`7BC689CC6BD7CBD47967BEB642CFA5F71458DDFC24A4B8E6C52D51AAC3A8F44C`.
+The PE contains both the `2026-08-25afq` boot marker and the native Draw/Put
+weighting READY marker.  This change introduces no new engine address or
+semantic name; all callees/fields used here were already labelled in the saved
+IDB, so no IDB mutation is required for `afq`.
