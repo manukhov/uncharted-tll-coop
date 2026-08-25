@@ -5573,6 +5573,32 @@ Keep the postblend preservation boundary; replace only its steady content.
       reject it and move the frontier to child/submission state. Do not mutate
       or launch from this STATIC result alone.
 
+      Build `afk` now implements that exact read-only discriminator and disables
+      the rejected `afj` render-matrix mutation. A game-thread token admits only
+      role-B retained-owner-0 legacy Nadine, the raw exact controller inventory
+      Mazur, reciprocal ProcessWeapon Fg/runtime owner and 22-joint skeleton.
+      The native `0x14181AB33` upload memcpy runs first; under its existing
+      `Fg+0x220` lock the wrapper only copies `22*48` bytes to private arrays and
+      hashes all rows, with aggregates for main body `0/4/5` and action joints
+      `2/9/15`. Lifecycle is `cold` before any Draw and `post-put` only after the
+      same `(Fg,runtime id)` has been observed drawn and returns to
+      `current<0/draw=0`.
+
+      Written prediction for the one-copy test: exact finite cold/post-Put
+      samples in the same generation plus a persistent `0/4/5` delta select
+      Hweapon-palette-lifecycle; all 22 rows identical reject it and select the
+      child/submission frontier; only `2/9/15` changing is action-only. Missing
+      READY/phase, generation turnover, `exact=0`, `finite=0`, or unequal native
+      current/upload hashes is admission-inconclusive. Launch only one role-B
+      Nadine after fresh Release build, commit/push and clean-tree verification;
+      user performs one Draw->Put and all gameplay input.
+
+      Release `afk`: `788992` bytes, SHA-256
+      `ADD8EB4E1862FF98E9B62B7E8830E1EB95FD6C9ABF2C58DC873CA06D31F34EFD`;
+      source `14:16:09`, DLL `14:16:30`. Build and marker readback pass; the
+      palette relay's protection-failure path is readiness-false. No new IDB
+      name/type was needed because this reuses the already-saved consumer seam.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

@@ -27927,3 +27927,67 @@ all 22 row hashes, especially `0/4/5`, before the first Draw and after the same
 weapon returns from Put.  Prediction: a stable main-body-row delta selects the
 palette lifecycle; identical rows reject it.  No palette mutation or new game
 launch is authorized by this STATIC entry alone.
+
+### 2026-08-25 STATIC / TEST-READY: `afk` reads the exact cold/post-Put 22-joint weapon palette; `afj` mutation is disabled
+
+The bounded discriminator above is now implemented without any pose, attachment,
+palette or render-matrix write.  `kEnableColdLegacyNadineMazurRenderMatrixRepair`
+is false, so the RUNTIME-REJECTED `afj` BASE-world substitution cannot affect the
+exam.  The only new producer runs on the NadineBuddy game-thread service and
+publishes an identity/lifecycle token after proving role B, retained owner 0,
+legacy-Nadine look `D27C074F`, the exact raw PlayerWeaponController weak-table
+member for Mazur `33E29A1B`, ProcessWeapon RTTI/vtable, Player parent, reciprocal
+Fg weak owner/runtime id and the exact 22-joint weapon skeleton.  It labels the
+same `(Fg, runtime id)` as `cold` before any Draw and as `post-put` only after a
+nonzero Draw/current-rifle state has been observed and the controller returns to
+`current<0, draw=0`.
+
+The consumer reuses the already-proven direct relay at `0x14181AB33`.  Stock
+`memcpy(upload, current, 48*jointCount)` runs first while the native `Fg+0x220`
+lock is held; the wrapper then accepts only exact size `22*48=1056`, exact
+`Fg+0x230` source, exact `Fg+0x240` destination, matching retained generation and
+a game-thread token no older than 250 ms.  It copies both buffers into private
+stack arrays and only hashes them.  Twelve bounded samples per lifecycle phase
+record the full palette, each of 22 row hashes, identity mask, main-body aggregate
+`0/4/5`, action aggregate `2/9/15`, and current-vs-upload equality.  No live
+palette byte is written after stock memcpy.
+
+This exam meets the three independent evidence classes required for runtime:
+
+1. retail asset/mesh data proves the dedicated 22-joint `DFCE7D05` skeleton and
+   exact main-body skin weights on `0/4/5`;
+2. disassembly/dataflow proves `AnimManager_PerformAnimBlend 0x141A92260`
+   creates `Fg+0x230`, while `FgDrawManager_PrepareInstanceForRendering
+   0x14181A9B0` copies that exact buffer at `0x14181AB33` to the renderer;
+3. runtime behavior independently proves a real Draw->Put repairs the initial
+   rifle while complete final-root substitution `afj` is a byte-identical no-op.
+
+Competing hypotheses and the written single-copy prediction are exact:
+
+- **Hweapon-palette-lifecycle**: the same generation emits finite/exact `cold`
+  and `post-put` rows, and the stable post-Put main-body rows `0/4/5` differ from
+  cold.  This earns a later replay/initialization repair at the palette owner.
+- **Hpalette-identical**: all 22 stable row hashes match across the two phases.
+  This rejects the internal palette and moves the owner to a child drawable or
+  submission/deformer state.
+- **Haction-only-delta**: differences are confined to action joints such as
+  `2/9/15`, while `0/4/5` match.  That is bolt/clip lifecycle, not an explanation
+  for the displaced main rifle body.
+- Missing `READY`, missing exact `cold`, a generation change, no `post-put`,
+  `exact=0`, `finite=0`, or `currentHash!=uploadHash` is admission/packaging and
+  does not select any visual hypothesis.
+
+Run exactly one role-B Nadine copy.  The user performs one manual rifle Draw and
+Put and then leaves it holstered briefly; the agent never sends game input.
+
+Release `afk` was rebuilt after the fail-closed installer review: source
+`14:16:09`, object/DLL `14:16:30`, DLL size `788992`, SHA-256
+`ADD8EB4E1862FF98E9B62B7E8830E1EB95FD6C9ABF2C58DC873CA06D31F34EFD`.
+The PE contains the exact `2026-08-25afk`, `READY`, target and palette-row
+markers.  The `0x14181AB33` relay installer suspends peer threads, verifies the
+new displacement, rolls back on any mismatch and now refuses to publish READY
+after any page-protection restoration failure, even if an ambiguous live relay
+must be retained as stock pass-through.  `git diff --check` has no whitespace
+errors.  No new IDB symbol was introduced: all code boundaries used here were
+already named, typed and saved in the single `ida/tll.i64` during the preceding
+palette-consumer closure.
