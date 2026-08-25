@@ -461,12 +461,41 @@ struct ColdNadineMazurRenderMatrixTarget {
     std::uint32_t local_hash = 0;
     std::uint32_t world_hash = 0;
     std::uint32_t binding_hash = 0;
+    std::uint64_t donor_sequence = 0;
+    std::uint32_t donor_player_runtime_id = 0;
+    std::uint32_t donor_weapon_runtime_id = 0;
+    std::uint32_t donor_relative_hash = 0;
     float correction_weight = 0.0F;
     std::uint8_t selected_index = 0xFF;
     bool depth_applied = false;
     bool log_publication = false;
     std::array<float, 16> base_world_matrix{};
 };
+
+// Build afn: the role-B process already simulates retained owner 1 as Chloe.
+// Keep her final post-selected Mazur pose in body-root-relative coordinates so
+// world position, root yaw and sector parenting never leak into Nadine's pose.
+// The payload is copied under one SRW lock and is accepted for at most 100 ms.
+struct ChloeMazurHolsterPoseSnapshot {
+    bool valid = false;
+    std::uint64_t sequence = 0;
+    ULONGLONG captured_ms = 0;
+    void* player = nullptr;
+    void* weapon = nullptr;
+    void* fg = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    std::uintptr_t records_generation = 0;
+    std::uint8_t selected_index = 0xFF;
+    std::int16_t selected_joint = -1;
+    std::uint32_t body_hash = 0;
+    std::uint32_t weapon_world_hash = 0;
+    std::uint32_t relative_hash = 0;
+    std::array<std::byte, 32> body_relative_weapon{};
+};
+SRWLOCK g_chloe_mazur_holster_pose_lock = SRWLOCK_INIT;
+ChloeMazurHolsterPoseSnapshot g_chloe_mazur_holster_pose_snapshot{};
+std::atomic<std::uint64_t> g_chloe_mazur_holster_pose_sequence{0};
 struct ColdNadineMazurRenderMatrixApplyDiagnostics {
     std::uint32_t fg_flags = 0;
     std::uint64_t auxiliary_hash = 0;
@@ -2515,7 +2544,13 @@ constexpr bool kEnableColdLegacyNadineMazurFactoryHolsterRebind = false;
 // coherent BASE snapshot at all three GetRenderWorldMatrix callsites. The render
 // hook writes only the caller's temporary output; stock consumers then copy it
 // into their normal temporal buffers and FgInstance render matrices.
-constexpr bool kEnableColdLegacyNadineMazurRenderMatrixRepair = false;
+// Build afn: afj proved the renderer seam and afm rejected a lifecycle/relink
+// split.  The remaining source error is that the old correction combines only
+// Chloe's static targSpineProp marker with Nadine's live spined pose.  Capture
+// the stock post-selected Mazur world from the same-process retained Chloe,
+// normalize it to Chloe's complete Player root, and rebuild it under Nadine's
+// complete Player root at the already-proven final render consumers.
+constexpr bool kEnableColdLegacyNadineMazurRenderMatrixRepair = true;
 // Build afk proved all 22 cold and post-Put rows byte-identical on the same
 // ProcessWeapon Fg/runtime generation. Keep the rejected palette census parked;
 // the remaining owner is a child/submission/deformer state below root+palette.
@@ -2525,7 +2560,7 @@ constexpr bool kEnableColdLegacyNadineMazurWeaponPaletteCensus = false;
 // cold stock getter. It did not compare the lifecycle-normalized attachment
 // root or the three driven FgInstance/deformer identities before and after a
 // real Draw->Put. This census is read-only and closes that remaining split.
-constexpr bool kEnableColdLegacyNadineMazurWeaponRenderLifecycleCensus = true;
+constexpr bool kEnableColdLegacyNadineMazurWeaponRenderLifecycleCensus = false;
 // Native NPC Nadine's targSpineProp and legacy Player-Nadine's targSpine are
 // both canonical identity records on spineb/joint16. The attach-table repair
 // now creates targSpineProp as an exact id alias of that existing Nadine frame,
@@ -56994,7 +57029,12 @@ void log_cold_nadine_mazur_render_reject_once(
          << " selected=" << static_cast<unsigned>(target.selected_index)
          << " correctionWeight=" << target.correction_weight
          << " depth=" << (target.depth_applied ? 1 : 0)
-         << " worldSource=post-selected-final"
+         << " worldSource=Chloe-body-relative"
+         << " donor=" << target.donor_sequence
+         << ":" << target.donor_player_runtime_id
+         << ":" << target.donor_weapon_runtime_id
+         << " donorRelativeHash=0x" << std::hex
+         << target.donor_relative_hash << std::dec
          << " ageMs="
          << (target.updated_ms != 0 && now >= target.updated_ms
                  ? now - target.updated_ms
@@ -57353,7 +57393,12 @@ bool publish_cold_nadine_mazur_render_matrix_target(
              << build->target.correction_weight
              << " depth="
              << (build->target.depth_applied ? 1 : 0)
-             << " worldSource=post-selected-final" << std::hex
+             << " worldSource=Chloe-body-relative"
+             << " donor=" << build->target.donor_sequence
+             << ":" << build->target.donor_player_runtime_id
+             << ":" << build->target.donor_weapon_runtime_id
+             << " donorRelativeHash=0x" << std::hex
+             << build->target.donor_relative_hash
              << " matrixHash=0x" << build->matrix_hash
              << std::dec << " scale=" << build->fg_scale;
         if (refresh != nullptr) {
@@ -57378,6 +57423,7 @@ bool stage_cold_nadine_mazur_render_matrix_from_corrected_world(
     std::uint32_t binding_hash,
     std::uint32_t parent_hash,
     std::uint32_t local_hash,
+    const ChloeMazurHolsterPoseSnapshot* donor,
     bool log_rejection = true) {
     auto build = seh_build_cold_nadine_mazur_render_matrix_target_from_world(
         player, weapon, records_generation, corrected_world,
@@ -57413,6 +57459,15 @@ bool stage_cold_nadine_mazur_render_matrix_from_corrected_world(
         }
         return false;
     }
+    if (donor == nullptr || !donor->valid || donor->sequence == 0 ||
+        donor->player_runtime_id == 0 || donor->weapon_runtime_id == 0 ||
+        donor->relative_hash == 0) {
+        return false;
+    }
+    build.target.donor_sequence = donor->sequence;
+    build.target.donor_player_runtime_id = donor->player_runtime_id;
+    build.target.donor_weapon_runtime_id = donor->weapon_runtime_id;
+    build.target.donor_relative_hash = donor->relative_hash;
     return publish_cold_nadine_mazur_render_matrix_target(
         &build, nullptr);
 }
@@ -57744,7 +57799,10 @@ float* __fastcall hooked_fganim_get_render_world_matrix(
             target, "render-stale", nullptr, return_rva);
         return stock_result;
     }
-    if (target.weapon_runtime_id == 0 ||
+    if (target.weapon_runtime_id == 0 || target.donor_sequence == 0 ||
+        target.donor_player_runtime_id == 0 ||
+        target.donor_weapon_runtime_id == 0 ||
+        target.donor_relative_hash == 0 ||
         !finite_matrix4x4(target.base_world_matrix.data())) {
         log_cold_nadine_mazur_render_reject_once(
             target, "render-target-invalid", nullptr, return_rva);
@@ -57813,7 +57871,12 @@ float* __fastcall hooked_fganim_get_render_world_matrix(
                << static_cast<unsigned>(target.selected_index)
                << " correctionWeight=" << target.correction_weight
                << " depth=" << (target.depth_applied ? 1 : 0)
-               << " worldSource=post-selected-final"
+               << " worldSource=Chloe-body-relative"
+               << " donor=" << target.donor_sequence
+               << ":" << target.donor_player_runtime_id
+               << ":" << target.donor_weapon_runtime_id
+               << " donorRelativeHash=0x" << std::hex
+               << target.donor_relative_hash
              << " changed=" << std::dec
              << (stock_hash != corrected_hash ? 1 : 0)
              << " flags=0x" << std::hex << diagnostics.fg_flags
@@ -62942,6 +63005,384 @@ bool seh_snapshot_post_selected_nadine_mazur_world(
     }
 }
 
+bool seh_snapshot_player_root_world(
+    void* player, NadineAttachTransform32* world_out,
+    std::uint32_t* parent_hash_out, std::uint32_t* local_hash_out) {
+    if (player == nullptr || world_out == nullptr || parent_hash_out == nullptr ||
+        local_hash_out == nullptr || g_module == 0) {
+        return false;
+    }
+    *world_out = {};
+    *parent_hash_out = 0;
+    *local_hash_out = 0;
+    __try {
+        auto* const bytes = static_cast<const std::byte*>(player);
+        if (readable_bytes(bytes) < 0x150) {
+            return false;
+        }
+        NadineAttachTransform32 parent_before{};
+        NadineAttachTransform32 local_before{};
+        NadineAttachTransform32 parent_after{};
+        NadineAttachTransform32 local_after{};
+        std::memcpy(&parent_before, bytes + 0x110, sizeof(parent_before));
+        std::memcpy(&local_before, bytes + 0x130, sizeof(local_before));
+        std::memcpy(&parent_after, bytes + 0x110, sizeof(parent_after));
+        std::memcpy(&local_after, bytes + 0x130, sizeof(local_after));
+        if (std::memcmp(&parent_before, &parent_after, sizeof(parent_before)) != 0 ||
+            std::memcmp(&local_before, &local_after, sizeof(local_before)) != 0 ||
+            !raw_attach_transform_valid(&parent_before) ||
+            !raw_attach_transform_valid(&local_before)) {
+            return false;
+        }
+        using TransformFunction = NadineAttachTransform32*(__fastcall*)(
+            const NadineAttachTransform32*, NadineAttachTransform32*,
+            const NadineAttachTransform32*);
+        const auto compose = reinterpret_cast<TransformFunction>(
+            g_module + kTransformComposeRva);
+        if (compose(&parent_before, world_out, &local_before) != world_out ||
+            !raw_attach_transform_valid(world_out)) {
+            *world_out = {};
+            return false;
+        }
+        *parent_hash_out = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(&parent_before), 8);
+        *local_hash_out = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(&local_before), 8);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *world_out = {};
+        *parent_hash_out = 0;
+        *local_hash_out = 0;
+        return false;
+    }
+}
+
+bool seh_capture_chloe_mazur_holster_pose(
+    void* weapon, const NadineAttachTransform32& weapon_world,
+    ChloeMazurHolsterPoseSnapshot* snapshot_out) {
+    if (snapshot_out == nullptr) {
+        return false;
+    }
+    *snapshot_out = {};
+    if (!g_net_role_b || weapon == nullptr || g_module == 0 ||
+        !raw_attach_transform_valid(&weapon_world)) {
+        return false;
+    }
+    __try {
+        auto* const weapon_bytes = static_cast<const std::byte*>(weapon);
+        if (readable_bytes(weapon_bytes) < 0x864 ||
+            *reinterpret_cast<const std::uintptr_t*>(weapon_bytes) !=
+                g_module + kProcessWeaponVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x860) !=
+                kCoopRifleArtId) {
+            return false;
+        }
+        auto* const owner_cell = *reinterpret_cast<std::byte* const*>(
+            weapon_bytes + 0x4E0);
+        const std::uint32_t player_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(weapon_bytes + 0x4E8);
+        if (owner_cell == nullptr || player_runtime_id == 0 ||
+            readable_bytes(owner_cell) < 0x10) {
+            return false;
+        }
+        void* const player = *reinterpret_cast<void* const*>(owner_cell + 0x8);
+        std::uint32_t look = 0;
+        void* controller = nullptr;
+        int current_slot = -99;
+        std::uint32_t draw_state = 0xFFFFFFFFu;
+        if (player == nullptr || player != retained_player_object(1) ||
+            !player_object_stable(player) ||
+            !player_screen_index_is(player, kSlot1ScreenIndex) ||
+            !seh_read_player_look(player, &look) ||
+            look != kChloeAttachDonorLookId ||
+            !seh_read_exact_player_weapon_controller(player, &controller) ||
+            !read_weapon_draw_state(player, current_slot, draw_state) ||
+            current_slot >= 0 || draw_state != 0 ||
+            !seh_weapon_is_exact_controller_inventory_member_raw(
+                controller, weapon, kCoopRifleArtId) ||
+            !seh_weapon_parent_resolves_to_owner(weapon, player)) {
+            return false;
+        }
+        auto* const player_bytes = static_cast<const std::byte*>(player);
+        if (readable_bytes(player_bytes) < 0x1E8 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                player_bytes + kGameObjectRuntimeIdOffset) !=
+                player_runtime_id) {
+            return false;
+        }
+        const std::uint32_t weapon_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                weapon_bytes + kGameObjectRuntimeIdOffset);
+        if (weapon_runtime_id == 0) {
+            return false;
+        }
+        const std::uint8_t selected_index =
+            *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x688);
+        std::uint32_t attach_id = 0;
+        std::uintptr_t records_generation = 0;
+        if (!seh_read_owner_attach_record_id(
+                player, selected_index, &attach_id, &records_generation) ||
+            attach_id != kTargSpinePropAttachId || records_generation == 0) {
+            return false;
+        }
+        auto* const table = *reinterpret_cast<std::byte* const*>(
+            player_bytes + 0x1E0);
+        if (table == nullptr || readable_bytes(table) < 0x18) {
+            return false;
+        }
+        const std::uint32_t count =
+            *reinterpret_cast<const std::uint32_t*>(table + 0x4);
+        auto* const records = *reinterpret_cast<std::byte* const*>(table + 0x8);
+        const std::int16_t spined_joint =
+            raw_resolve_attach_joint(table, kSpinedJointNameId);
+        if (records == nullptr ||
+            reinterpret_cast<std::uintptr_t>(records) != records_generation ||
+            selected_index >= count || spined_joint < 0 ||
+            readable_bytes(records) < static_cast<std::size_t>(count) * 48) {
+            return false;
+        }
+        auto* const selected_record = records +
+            static_cast<std::size_t>(selected_index) * 48;
+        if (*reinterpret_cast<const std::uint32_t*>(selected_record + 0x20) !=
+                kTargSpinePropAttachId ||
+            *reinterpret_cast<const std::int16_t*>(selected_record + 0x24) !=
+                spined_joint ||
+            std::memcmp(
+                selected_record, kChloeTargSpinePropTransformBits.data(),
+                sizeof(kChloeTargSpinePropTransformBits)) != 0) {
+            return false;
+        }
+        auto* const fg = *reinterpret_cast<std::byte* const*>(weapon_bytes + 0x1A8);
+        if (fg == nullptr || readable_bytes(fg) <
+                kFgAnimDataRetainedIdOffset + sizeof(std::uint32_t) ||
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRetainedIdOffset) != weapon_runtime_id ||
+            (*reinterpret_cast<const std::uint32_t*>(
+                 fg + kFgAnimDataFlagsOffset) & 0x50u) != 0x40u) {
+            return false;
+        }
+        auto* const fg_owner_cell = *reinterpret_cast<std::byte* const*>(
+            fg + kFgAnimDataRetainedHandleOffset);
+        if (fg_owner_cell == nullptr || readable_bytes(fg_owner_cell) < 0x10 ||
+            *reinterpret_cast<void* const*>(fg_owner_cell + 0x8) != weapon) {
+            return false;
+        }
+
+        NadineAttachTransform32 body_world{};
+        NadineAttachTransform32 relative{};
+        std::uint32_t body_parent_hash = 0;
+        std::uint32_t body_local_hash = 0;
+        if (!seh_snapshot_player_root_world(
+                player, &body_world, &body_parent_hash, &body_local_hash)) {
+            return false;
+        }
+        using TransformFunction = NadineAttachTransform32*(__fastcall*)(
+            const NadineAttachTransform32*, NadineAttachTransform32*,
+            const NadineAttachTransform32*);
+        const auto make_relative = reinterpret_cast<TransformFunction>(
+            g_module + kTransformMakeRelativeRva);
+        if (make_relative(&body_world, &relative, &weapon_world) != &relative ||
+            !raw_attach_transform_valid(&relative)) {
+            return false;
+        }
+
+        void* controller_after = nullptr;
+        int current_after = -99;
+        std::uint32_t draw_after = 0xFFFFFFFFu;
+        std::uint32_t attach_after = 0;
+        std::uintptr_t records_after = 0;
+        if (!seh_read_exact_player_weapon_controller(player, &controller_after) ||
+            controller_after != controller ||
+            !read_weapon_draw_state(player, current_after, draw_after) ||
+            current_after >= 0 || draw_after != 0 ||
+            !seh_weapon_is_exact_controller_inventory_member_raw(
+                controller_after, weapon, kCoopRifleArtId) ||
+            *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x688) !=
+                selected_index ||
+            !seh_read_owner_attach_record_id(
+                player, selected_index, &attach_after, &records_after) ||
+            attach_after != kTargSpinePropAttachId ||
+            records_after != records_generation ||
+            *reinterpret_cast<std::byte* const*>(weapon_bytes + 0x1A8) != fg ||
+            (*reinterpret_cast<const std::uint32_t*>(
+                 fg + kFgAnimDataFlagsOffset) & 0x50u) != 0x40u) {
+            return false;
+        }
+
+        snapshot_out->valid = true;
+        snapshot_out->captured_ms = GetTickCount64();
+        snapshot_out->player = player;
+        snapshot_out->weapon = weapon;
+        snapshot_out->fg = fg;
+        snapshot_out->player_runtime_id = player_runtime_id;
+        snapshot_out->weapon_runtime_id = weapon_runtime_id;
+        snapshot_out->records_generation = records_generation;
+        snapshot_out->selected_index = selected_index;
+        snapshot_out->selected_joint = spined_joint;
+        snapshot_out->body_hash = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(&body_world), 8);
+        snapshot_out->weapon_world_hash = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(&weapon_world), 8);
+        snapshot_out->relative_hash = hash_probe_words(
+            reinterpret_cast<const std::uint32_t*>(&relative), 8);
+        std::memcpy(
+            snapshot_out->body_relative_weapon.data(), &relative,
+            sizeof(relative));
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *snapshot_out = {};
+        return false;
+    }
+}
+
+void publish_chloe_mazur_holster_pose(
+    ChloeMazurHolsterPoseSnapshot snapshot) {
+    if (!snapshot.valid || snapshot.captured_ms == 0 ||
+        snapshot.player == nullptr || snapshot.weapon == nullptr ||
+        snapshot.relative_hash == 0) {
+        return;
+    }
+    snapshot.sequence = g_chloe_mazur_holster_pose_sequence.fetch_add(
+        1, std::memory_order_acq_rel) + 1;
+    AcquireSRWLockExclusive(&g_chloe_mazur_holster_pose_lock);
+    g_chloe_mazur_holster_pose_snapshot = snapshot;
+    ReleaseSRWLockExclusive(&g_chloe_mazur_holster_pose_lock);
+
+    if (snapshot.sequence <= 12) {
+        std::ostringstream line;
+        line << "CHLOE-MAZUR-HOLSTER-DONOR status=captured"
+             << " sequence=" << snapshot.sequence
+             << " player=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(snapshot.player)
+             << ":" << snapshot.player_runtime_id
+             << " weapon=0x"
+             << reinterpret_cast<std::uintptr_t>(snapshot.weapon)
+             << ":" << snapshot.weapon_runtime_id
+             << " fg=0x" << reinterpret_cast<std::uintptr_t>(snapshot.fg)
+             << " records=0x" << snapshot.records_generation
+             << " bodyHash=0x" << snapshot.body_hash
+             << " weaponWorldHash=0x" << snapshot.weapon_world_hash
+             << " relativeHash=0x" << snapshot.relative_hash << std::dec
+             << " selected=" << static_cast<unsigned>(snapshot.selected_index)
+             << ":" << snapshot.selected_joint;
+        boot_log_line(line.str().c_str());
+    }
+}
+
+bool copy_fresh_chloe_mazur_holster_pose(
+    ChloeMazurHolsterPoseSnapshot* snapshot_out) {
+    if (snapshot_out == nullptr) {
+        return false;
+    }
+    *snapshot_out = {};
+    AcquireSRWLockShared(&g_chloe_mazur_holster_pose_lock);
+    *snapshot_out = g_chloe_mazur_holster_pose_snapshot;
+    ReleaseSRWLockShared(&g_chloe_mazur_holster_pose_lock);
+    const ULONGLONG now = GetTickCount64();
+    if (!snapshot_out->valid || snapshot_out->sequence == 0 ||
+        snapshot_out->captured_ms == 0 || now < snapshot_out->captured_ms ||
+        now - snapshot_out->captured_ms > 100 ||
+        !raw_attach_transform_valid(
+            reinterpret_cast<const NadineAttachTransform32*>(
+                snapshot_out->body_relative_weapon.data()))) {
+        return false;
+    }
+    __try {
+        void* controller = nullptr;
+        int current_slot = -99;
+        std::uint32_t draw_state = 0xFFFFFFFFu;
+        std::uint32_t look = 0;
+        std::uint32_t attach_id = 0;
+        std::uintptr_t records_generation = 0;
+        auto* const player_bytes = static_cast<const std::byte*>(
+            snapshot_out->player);
+        auto* const weapon_bytes = static_cast<const std::byte*>(
+            snapshot_out->weapon);
+        if (snapshot_out->player != retained_player_object(1) ||
+            !player_object_stable(snapshot_out->player) ||
+            !player_screen_index_is(snapshot_out->player, kSlot1ScreenIndex) ||
+            !seh_read_player_look(snapshot_out->player, &look) ||
+            look != kChloeAttachDonorLookId ||
+            *reinterpret_cast<const std::uint32_t*>(
+                player_bytes + kGameObjectRuntimeIdOffset) !=
+                snapshot_out->player_runtime_id ||
+            !seh_read_exact_player_weapon_controller(
+                snapshot_out->player, &controller) ||
+            !read_weapon_draw_state(
+                snapshot_out->player, current_slot, draw_state) ||
+            current_slot >= 0 || draw_state != 0 ||
+            !seh_weapon_is_exact_controller_inventory_member_raw(
+                controller, snapshot_out->weapon, kCoopRifleArtId) ||
+            !seh_weapon_parent_resolves_to_owner(
+                snapshot_out->weapon, snapshot_out->player) ||
+            *reinterpret_cast<const std::uint32_t*>(
+                weapon_bytes + kGameObjectRuntimeIdOffset) !=
+                snapshot_out->weapon_runtime_id ||
+            *reinterpret_cast<const std::uint8_t*>(weapon_bytes + 0x688) !=
+                snapshot_out->selected_index ||
+            !seh_read_owner_attach_record_id(
+                snapshot_out->player, snapshot_out->selected_index,
+                &attach_id, &records_generation) ||
+            attach_id != kTargSpinePropAttachId ||
+            records_generation != snapshot_out->records_generation ||
+            *reinterpret_cast<std::byte* const*>(weapon_bytes + 0x1A8) !=
+                snapshot_out->fg ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(snapshot_out->fg) +
+                kFgAnimDataRetainedIdOffset) !=
+                snapshot_out->weapon_runtime_id ||
+            (*reinterpret_cast<const std::uint32_t*>(
+                 static_cast<const std::byte*>(snapshot_out->fg) +
+                 kFgAnimDataFlagsOffset) & 0x50u) != 0x40u) {
+            *snapshot_out = {};
+            return false;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *snapshot_out = {};
+        return false;
+    }
+}
+
+bool seh_rebase_chloe_mazur_holster_pose_to_nadine(
+    const ChloeMazurHolsterPoseSnapshot& source, void* nadine,
+    NadineAttachTransform32* desired_world,
+    std::uint32_t* body_parent_hash, std::uint32_t* body_local_hash) {
+    if (!source.valid || nadine == nullptr || desired_world == nullptr ||
+        body_parent_hash == nullptr || body_local_hash == nullptr ||
+        g_module == 0) {
+        return false;
+    }
+    *desired_world = {};
+    NadineAttachTransform32 nadine_body_world{};
+    NadineAttachTransform32 relative{};
+    std::memcpy(
+        &relative, source.body_relative_weapon.data(), sizeof(relative));
+    if (!raw_attach_transform_valid(&relative) ||
+        !seh_snapshot_player_root_world(
+            nadine, &nadine_body_world,
+            body_parent_hash, body_local_hash)) {
+        return false;
+    }
+    __try {
+        using TransformFunction = NadineAttachTransform32*(__fastcall*)(
+            const NadineAttachTransform32*, NadineAttachTransform32*,
+            const NadineAttachTransform32*);
+        const auto compose = reinterpret_cast<TransformFunction>(
+            g_module + kTransformComposeRva);
+        if (compose(
+                &nadine_body_world, desired_world, &relative) != desired_world ||
+            !raw_attach_transform_valid(desired_world)) {
+            *desired_world = {};
+            return false;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *desired_world = {};
+        return false;
+    }
+}
+
 void log_post_selected_nadine_mazur_render_reject_once(
     void* weapon, const NadineMazurPostSelectedWitness& witness,
     const char* reason) {
@@ -62992,22 +63433,46 @@ std::uint8_t __fastcall hooked_process_weapon_update_selected_attachment(
         g_nadine_mazur_post_selected_witness;
     g_nadine_mazur_post_selected_witness = previous_witness;
 
+    // Capture Chloe only after her stock selected updater has completed all
+    // local correction and LongGunJiggle writes.  This is a source snapshot;
+    // it never changes Chloe's ProcessWeapon or render state.
+    NadineAttachTransform32 post_selected_world{};
+    std::uint32_t post_selected_parent_hash = 0;
+    std::uint32_t post_selected_local_hash = 0;
+    const char* post_selected_snapshot_status = "post-selected-snapshot";
+    if (seh_snapshot_post_selected_nadine_mazur_world(
+            weapon, &post_selected_world,
+            &post_selected_parent_hash, &post_selected_local_hash,
+            &post_selected_snapshot_status)) {
+        ChloeMazurHolsterPoseSnapshot source{};
+        if (seh_capture_chloe_mazur_holster_pose(
+                weapon, post_selected_world, &source)) {
+            publish_chloe_mazur_holster_pose(source);
+        }
+    }
+
     bool render_target_staged = false;
     const char* post_selected_status = "post-selected-witness";
     if (witness.armed && witness.expected_weapon == weapon &&
         witness.completed && witness.hit_count == 1) {
-        NadineAttachTransform32 final_world{};
-        std::uint32_t parent_hash = 0;
-        std::uint32_t local_hash = 0;
-        if (seh_snapshot_post_selected_nadine_mazur_world(
-                weapon, &final_world, &parent_hash, &local_hash,
-                &post_selected_status)) {
+        ChloeMazurHolsterPoseSnapshot donor{};
+        NadineAttachTransform32 desired_world{};
+        std::uint32_t body_parent_hash = 0;
+        std::uint32_t body_local_hash = 0;
+        if (!copy_fresh_chloe_mazur_holster_pose(&donor)) {
+            post_selected_status = "Chloe-donor-missing";
+        } else if (!seh_rebase_chloe_mazur_holster_pose_to_nadine(
+                       donor, witness.owner, &desired_world,
+                       &body_parent_hash, &body_local_hash)) {
+            post_selected_status = "Chloe-donor-rebase";
+        } else {
             render_target_staged =
                 stage_cold_nadine_mazur_render_matrix_from_corrected_world(
-                    witness.owner, weapon, witness.records, &final_world,
+                    witness.owner, weapon, witness.records, &desired_world,
                     witness.selected_index, witness.selected_joint,
                     witness.correction_weight, witness.depth_applied,
-                    witness.binding_hash, parent_hash, local_hash);
+                    witness.binding_hash, body_parent_hash, body_local_hash,
+                    &donor);
             if (!render_target_staged) {
                 post_selected_status = "post-selected-admission";
             }
@@ -69183,8 +69648,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-25afm "
-        "(cold/post-Put root, FgInstance and deformer lifecycle census)");
+        "TLL co-op runtime init 2026-08-25afn "
+        "(same-process Chloe body-relative Mazur holster pose relay)");
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
     }
@@ -69297,7 +69762,7 @@ DWORD WINAPI install_hook(void*) {
             render_relay_ready, std::memory_order_release);
         boot_log_line(
             render_relay_ready
-                ? "cold legacy-Nadine Mazur final render-matrix repair READY"
+                ? "legacy-Nadine Mazur same-process Chloe holster-pose relay READY"
                 : "cold legacy-Nadine Mazur final render-matrix repair SKIPPED (combined package)");
     }
     if constexpr (kEnableLegacyNadineHolsterIkVerification &&

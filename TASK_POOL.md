@@ -5643,6 +5643,45 @@ Keep the postblend preservation boundary; replace only its steady content.
       and diff check pass. No new IDB label/type is needed because this reuses
       the already-saved FgDraw/FgInstance/deformer boundaries.
 
+      RUNTIME REJECTED (`afm`, PID3824): a real user-driven Draw->Put did not
+      repair the visible rifle. The exact same Fg/runtime, three driven pool
+      entries 1059/1060/1061, FgGeometry, MeshInstances, InstanceJointData,
+      DrawControl layout, selected record, writer gate and LongGunJiggle
+      topology persist across cold and post-Put. The binding hash change
+      `57036E96 -> 5D728985` is only 2--3 ULP endpoint rounding, not a different
+      transform. Hinstance-relink, Hsubmission/deformer-state and the old
+      Draw->Put-repairs premise are rejected. The remaining P0 is the source
+      frame: current code uses Chloe's static marker under Nadine's live spined,
+      not Chloe's complete final holster pose.
+
+      STATIC / IMPLEMENTED (`afn`): relay the same-process retained Chloe's
+      complete post-selected/post-jiggle Mazur world normalized to her complete
+      Player root. The exact +0x7B8 wrapper calls stock first, captures only
+      role-B owner1 Chloe/Mazur/current<0/draw0/targSpineProp, computes
+      `relative = MakeRelative(ChloeRoot, ChloeWeaponWorld)`, and publishes a
+      locked <=100-ms donor without writing Chloe. The exact local owner0 Nadine
+      wrapper computes `desired = NadineRoot * relative` and stages it through
+      the already-proved three final GetRenderWorldMatrix consumers. Existing
+      authored correction is only the same-pass admission witness; the Chloe
+      body-relative world is the rendered result. Role/look/art/inventory/
+      selected-record/runtime/Fg-phase drift, Draw/Put or stale source are
+      stock fallback and clear/expire the publication.
+
+      Written one-copy prediction: READY + `CHLOE-MAZUR-HOLSTER-DONOR` + target
+      staged with the same donor sequence + visible `caller=0x181B3F9 changed=1`
+      must move the rifle to Chloe's body-relative back position/orientation.
+      READY with no donor and `Chloe-donor-missing` is admission-only. All exact
+      markers plus unchanged pixels rejects H-Chloe-body-relative; markers plus
+      a different wrong placement selects root/body-proportion semantics. User
+      alone performs gameplay input after fresh Release, commit/push and clean
+      tree. No new IDB symbol is introduced.
+
+      Final Release `afn`: `807424` bytes, SHA-256
+      `186BEAE5B5B3F8C04F8217E946D042247922D46DAB54388E80D015188E998950`;
+      source `15:48:43`, object/DLL `15:48:55`. PE readback contains the exact
+      boot, combined READY, donor, missing-donor and Chloe-body-relative apply
+      markers; Release build and diff check pass.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

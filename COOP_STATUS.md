@@ -28126,3 +28126,100 @@ boot, two-callsite install, READY, lifecycle-header and per-instance markers.
 The Release build and `git diff --check` pass.  No new IDB name or type was
 introduced: every engine boundary and field used here was already named,
 commented and saved during the existing FgDraw/FgInstance/deformer closure.
+
+### 2026-08-25 RUNTIME REJECTED (`afm`): Draw->Put does not relink or repair the current rifle
+
+PID `3824` loaded exact `2026-08-25afm`, printed the two-callsite lifecycle
+`READY`, and produced both exact phases around the user's real Draw->Put.  The
+user then reported that the rifle still protruded from Nadine's back.  This is
+the first direct correction to the old behavioral premise: in the current
+package a Draw->Put does **not** repair the visible cold placement.
+
+The structural discriminator is conclusive.  Cold and post-Put retain the same
+weapon Fg `0x11191D5300`, runtime id `1197`, the same three driven pool entries
+`1059/1060/1061`, the same geometry `0x10664FC6C0`, the same three
+MeshInstances/InstanceJointData objects, the same one-mesh DrawControl layout
+hash `0x72291C74B022F387`, selected index `39`, writer gate and LongGunJiggle
+topology.  Per-frame palette/bone-buffer addresses and world hashes continue to
+rotate normally in both phases; no persistent identity, membership, gate or
+deformer-owner split appears after Put.
+
+The apparent binding-hash change is not semantic.  Cold exact bits
+`3D9BA5E3/BCA3D70A/BD4CCCCD/0/BD6477B3/BDCD7209/3E0A06FB/3F7BF4C4`
+hash to `57036E96`.  The completed stock blend produces only the rounded words
+`.../BCA3D708/BD4CCCD0/...`, hashing to `5D728985`; every changed word is only
+two or three ULP from the accepted endpoint.  It is the same transform, not a
+new attachment binding and not a donor worth replaying.
+
+Therefore **Hinstance-relink**, **Hsubmission/deformer-state** and the claimed
+Draw->Put repair are RUNTIME REJECTED.  Combined with `afj`'s byte-identical
+final-consumer substitution and `afk`'s identical 22-row palette, the current
+wrong result is not caused by failure to propagate the computed frame.  The
+source frame itself is wrong: `seh_resolve_legacy_nadine_mazur_back_frame`
+uses only Chloe's static `targSpineProp` local row but composes it under
+Nadine's live `spined`, then adds an invented five-centimetre depth.  That is
+not Chloe's final animated holster pose.  Disable the completed `afm` census;
+do not replay the rounded binding or another cold/post-Put instance identity.
+
+### 2026-08-25 STATIC / IMPLEMENTED (`afn`): relay Chloe's complete body-relative holster pose
+
+`afn` implements the literal, bounded form of "take it from Chloe".  It does
+not substitute a named clip or copy selected bones.  The already-installed
+ProcessWeapon vslot `+0x7B8` wrapper runs stock first.  For retained owner 1
+Chloe it then composes cached parent `+0x110/+0x120` with the final
+post-selected, post-LongGunJiggle local `+0x130/+0x140`.  It independently
+composes Chloe Player parent/root from Player `+0x110/+0x120` and
+`+0x130/+0x140`, then calls stock `Transform_MakeRelative 0x1401990F0` to
+store the complete Mazur world relative to Chloe's body root.  No Chloe field
+is written.
+
+For local retained owner 0 legacy Nadine, only after her own stock `+0x7B8`
+and full authored-correction witness, the wrapper consumes a source no older
+than 100 ms, composes Nadine's current complete Player root with that relative
+weapon pose, and stages the result at the three previously proved
+`FgAnimData_GetRenderWorldMatrix 0x1403014F0` callsites.  Stock getter and
+current auxiliary `Fg+0x2E0` multiplication still run first; the final 64-byte
+caller output is replaced only while the exact publication remains current.
+Draw/Put, a stale donor, role/look/art/state/selected-record/generation/Fg-phase
+drift or any nonfinite transform falls back to stock and clears/expires the
+target.
+
+The runtime quota is met by three independent evidence classes:
+
+1. disassembly and prior `afj` prove the source is sampled after the exact
+   resolver/correction, LongGunJiggle and terminal `+0x130/+0x140` writes, and
+   that the three getter relays are the final visible FgInstance consumers;
+2. `ady` independently confirmed that role-B retained owner 1 is a live Chloe
+   Player with the exact Mazur and supplies fresh correct weapon animation data
+   in the same process, while the user's Chloe comparison is the desired visual;
+3. `afj/afk/afm` prove the current Nadine frame reaches the exact same visible
+   drawable, palette and three LODs unchanged, yet remains visually wrong;
+   source geometry, not propagation or lifecycle identity, is the surviving
+   alternative.
+
+Competing hypotheses remain falsifiable. **H-Chloe-body-relative** predicts
+`CHLOE-MAZUR-HOLSTER-DONOR status=captured`, then a target `status=staged`
+with the same donor sequence, followed by visible-caller
+`NADINE-COLD-MAZUR-RENDER status=applied caller=0x181B3F9 changed=1`; the rifle
+must take Chloe's body-relative back position and orientation instead of the
+static-marker/Nadine-spined result.  **H-donor-not-live-cold** predicts READY
+but no donor marker and a fail-closed `Chloe-donor-missing`; that is admission,
+not a visual result.  All three markers plus an unchanged pose rejects the
+body-root transfer and selects a still-different rendered owner.  All three
+markers plus a different but still wrong placement selects root/body-proportion
+semantics rather than permission to tune another arbitrary offset.  Draw and
+Put themselves must remain stock because the relay admits only
+`current<0, draw=0` on both exact owners.
+
+The exam remains one role-B Nadine copy.  The user performs all gameplay input;
+the agent only launches/injects after fresh Release, commit/push and clean-tree
+closure.  No new engine function or field was discovered, so no new IDB label
+is required; this reuses the already saved `UpdateSelectedAttachmentTransform`,
+`Transform_MakeRelative`, `Transform_Compose` and final Fg render boundaries.
+
+Final Release `afn` is `807424` bytes, SHA-256
+`186BEAE5B5B3F8C04F8217E946D042247922D46DAB54388E80D015188E998950`;
+source `15:48:43`, object/DLL `15:48:55`.  The PE contains the exact `afn`
+boot, combined READY, donor-capture, missing-donor and
+`worldSource=Chloe-body-relative` markers.  Release compilation/linking and
+`git diff --check` pass.
