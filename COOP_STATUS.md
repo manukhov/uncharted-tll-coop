@@ -28595,3 +28595,61 @@ Fresh Release `aft`: source `2026-08-25T16:34:34.825Z`, object
 The PE contains exact `aft`, relocation and authored-pending markers.  Release
 compilation/linking and `git diff --check` pass.  No new engine semantic or
 address was introduced, so the already-labelled saved IDB requires no change.
+
+### 2026-08-25 RUNTIME ADMISSION-INCONCLUSIVE (`aft`, PID 19492): relocation was not the remaining cold-back failure
+
+PID `19492` loaded exact `aft`, role B and READY.  Nineteen verified Mazur
+rebind rows kept the accepted `AD047A` endpoint and binding while raw Player,
+controller, records and ProcessWeapon allocations churned.  `aft` eliminated
+the earlier `scope-drift` terminal, but the final stable request still timed out
+after `600` exact retries with `refresh=authored-correction-pending/1/1` and
+`authored=0/0/0`.  There were zero `NADINE-MAZUR-NATIVE-BACK`, renderer-staged
+or renderer-applied rows.  The user's unchanged attachment is therefore not a
+visual rejection: the authored correction never became the input to stock.
+
+The exact dataflow further narrows the failure.  IDA shows that
+`NdAttachableObject_UpdateSelectedAttachmentTransform 0x141ED1380` can change
+`ProcessWeapon+0x130/+0x140` only after `0x141ED1780` returned success; that
+resolver unconditionally passes through patched callsite `0x141ED19BB` before
+returning success.  The observed `changed=0xfe` therefore proves the relay was
+reached, while the zero witness proves `mazur_corrected==false` inside it.  Do
+not move downstream to the renderer: stock received the uncorrected input.
+
+### 2026-08-25 STATIC / IMPLEMENTED (`afu`): restore the accepted `afp` attachment decision and separate transition smoothing
+
+`afu` removes the only semantic gate inserted at `0x141ED19BB` after the
+accepted `afp`/`82e7b9e` result: item-side
+`kEnableLegacyNadineMazurWeightedBackHandoff`.  Three independent evidence
+classes justify this exact rollback: (1) user-visible `afp` plus PID `13784`
+confirmed the direct authored frame at full weight/depth; (2) the resolver,
+endpoint, binding, parent and donor topology are unchanged in git, while the
+weight helper is the unique new decision between a resolved authored frame and
+the stock call; (3) PID `19492` plus IDA prove the current callsite executes but
+the final corrected predicate remains false.  A downstream renderer owner and
+raw relocation are rejected for this failure; a new transform guess is neither
+needed nor permitted.
+
+The flag is restored to `false`, so the shipped authored frame again goes
+directly into the existing stock `0x141ED0A70` call, byte/topology-equivalent to
+`afp`.  The separately confirmed arm-pair/late-IK code stays enabled.  Draw/Put
+item smoothing is parked as its own task instead of gating the locked cold
+attachment.
+
+The one-copy prediction is exact: boot must say `afu`; before the first Draw,
+the Mazur must emit `NADINE-MAZUR-NATIVE-BACK ... handoff=0/0 ...
+correctionWeight=1 depth=1`, followed by a deferred row with
+`refresh=ok/1/1 ... authored=1/1/1`, and the visible placement must return to
+the user-accepted `afp` upper-back frame.  Exact markers plus unchanged pixels
+would reject stock publication sufficiency; missing markers remain an
+admission/package failure.  No claim is made yet about Draw/Put smoothness,
+strap visibility or the in-hand grip.
+
+Fresh Release `afu`: source `2026-08-25T16:46:40.564Z`, object
+`16:47:55.642Z`, DLL `16:47:55.778Z`, size `779264`, SHA-256
+`2419409DCF8089012CCD7C25F4B93BDCF5DE88BA0E3238E68FE0B9AA6F759485`.
+PE readback contains exact `afu`, the accepted-baseline description and the
+unweighted `authored spined back-frame correction installed at 0x141ED19BB`
+marker; source constants keep early alias/renderer substitution disabled and
+the authored frame enabled.  Release compilation/linking and
+`git diff --check` pass.  This rollback adds no engine address or semantic
+name, so the saved IDB requires no mutation.

@@ -5842,6 +5842,35 @@ Keep the postblend preservation boundary; replace only its steady content.
       source/object/DLL UTC `16:34:34.825 / 16:34:46.794 / 16:34:46.887`.
       PE marker/readback and Release build pass; no new IDB label is needed.
 
+      RUNTIME ADMISSION-INCONCLUSIVE (`aft`, PID19492): the relocation-only
+      prediction was not reached. Nineteen verified AD047A rebinds survived
+      raw allocation churn without the old `scope-drift`, but the final exact
+      request timed out after 600 retries with
+      `authored-correction-pending/1/1`, `authored=0/0/0` and zero native-back
+      or renderer rows. IDA proves `changed=fe` at +0x130 can occur here only
+      after 0x141ED1780 succeeds and calls patched 0x141ED19BB; therefore the
+      relay ran but passed stock input because `mazur_corrected` stayed false.
+      The unchanged pixels are admission-inconclusive, not a visual rejection.
+
+      STATIC / IMPLEMENTED (`afu`): restore the exact accepted `afp` decision
+      by disabling only item-side `kEnableLegacyNadineMazurWeightedBackHandoff`.
+      The authored resolver/topology is unchanged from afp; the added weight
+      helper is the unique new predicate between its resolved frame and stock
+      0x141ED0A70. Keep the separate arm-pair/late-IK work enabled and park
+      Draw/Put item smoothing rather than gate the accepted cold attachment.
+
+      Prediction: exact `afu`; before Draw, a full
+      `NADINE-MAZUR-NATIVE-BACK handoff=0/0 correctionWeight=1 depth=1` must
+      precede `refresh=ok/1/1 authored=1/1/1`, and the visible Mazur must return
+      to the user-accepted afp/82e7b9e upper-back placement. Exact markers plus
+      unchanged pixels reject stock publication sufficiency; absent markers
+      remain admission/package failure. This exam says nothing yet about
+      transition smoothness, strap visibility or the in-hand grip. Fresh
+      Release is `779264` bytes, SHA-256
+      `2419409DCF8089012CCD7C25F4B93BDCF5DE88BA0E3238E68FE0B9AA6F759485`,
+      source/object/DLL UTC `16:46:40.564 / 16:47:55.642 / 16:47:55.778`.
+      PE marker/readback and Release build pass; no new IDB label is needed.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

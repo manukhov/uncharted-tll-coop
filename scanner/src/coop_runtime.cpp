@@ -2595,11 +2595,14 @@ constexpr bool kEnableLegacyNadineMazurNativeBackFrame = false;
 // authored spined-relative marker only for local legacy-Nadine Mazur output.
 constexpr bool kEnableLegacyNadineMazurAuthoredBackFrame = true;
 constexpr float kLegacyNadineMazurBackDepthMeters = 0.05F;
-// Build aex: aew proved that the stock 0.1-second local-attachment blend reaches
-// every progress bucket in both directions while the authored back correction
-// remains fully active. Blend only that correction with the same stock
-// smoothstep: 1 -> 0 while drawing and 0 -> 1 while putting the rifle away.
-constexpr bool kEnableLegacyNadineMazurWeightedBackHandoff = true;
+// Build afp is the accepted 82e7b9e-compatible back attachment: the authored
+// frame reaches 0x141ED19BB directly at full weight. Builds afr..aft added a
+// second Draw/Put weighting gate here; aft then reached stock +0x7B8 and the
+// patched 0x141ED19BB call but produced zero authored corrections across 600
+// exact cold retries. Restore the confirmed afp semantics at this decision.
+// Transition smoothing remains a separate arm/action problem and must not gate
+// the already accepted cold attachment again.
+constexpr bool kEnableLegacyNadineMazurWeightedBackHandoff = false;
 // The aex transition census has answered its question. afq logs the exact
 // duration/progress/weight at the arm command itself, so keep this older hot
 // attachment census disabled.
@@ -70337,8 +70340,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-25aft "
-        "(carry authored cold-back refresh across retained relocation; smooth arm handoff)");
+        "TLL co-op runtime init 2026-08-25afu "
+        "(restore accepted afp/82e7b9e Mazur back attachment semantics)");
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
     }
