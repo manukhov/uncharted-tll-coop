@@ -2527,11 +2527,15 @@ static_assert(
 // rebind only as the producer for the phase-0x40 publication bridge below; the
 // rejected updater-only path remains disabled.
 constexpr bool kEnableInitialLocalNadineRifleRebind = true;
-// Player::SetupAttachSystem is the last stock boundary after the AttachSystem
-// table exists and before GiveWeapon can perform its initial holster rebind.
-// Materialize only Nadine's self-derived targSpineProp alias there so the stock
-// initialization path owns selection, binding, animation and first publish.
-constexpr bool kEnableEarlyLegacyNadineSpinePropAlias = true;
+// Player::SetupAttachSystem was tested as an earlier stock boundary for the
+// cold weapon, but that alias did not exist in the accepted 82e7b9e baseline.
+// Build afo proved that the later cold-holster stack does not reproduce the
+// attachment behavior of the last user-accepted baseline 82e7b9e.  In
+// particular, publishing a root-relative retail Chloe matrix at the renderer
+// put the Mazur vertically beside Nadine rather than on her back.  Restore the
+// 82e7b9e attachment topology: let the stock table materialize normally, then
+// use the retained-player authored back-frame correction below.
+constexpr bool kEnableEarlyLegacyNadineSpinePropAlias = false;
 // Build afd did not reach this post-Initialize relay for the already existing
 // campaign Mazur.  Independently, the stock cold object later reached exact
 // targSpineProp/state-0/accepted back binding while its visible drawable still
@@ -2550,7 +2554,9 @@ constexpr bool kEnableColdLegacyNadineMazurFactoryHolsterRebind = false;
 // the stock post-selected Mazur world from the same-process retained Chloe,
 // normalize it to Chloe's complete Player root, and rebuild it under Nadine's
 // complete Player root at the already-proven final render consumers.
-constexpr bool kEnableColdLegacyNadineMazurRenderMatrixRepair = true;
+// Build afo reached this seam on every visible LOD but produced the wrong
+// vertical placement; keep the rejected renderer substitution out of afp.
+constexpr bool kEnableColdLegacyNadineMazurRenderMatrixRepair = false;
 // Build afk proved all 22 cold and post-Put rows byte-identical on the same
 // ProcessWeapon Fg/runtime generation. Keep the rejected palette census parked;
 // the remaining owner is a child/submission/deformer state below root+palette.
@@ -2576,9 +2582,10 @@ constexpr float kLegacyNadineMazurBackDepthMeters = 0.05F;
 // every progress bucket in both directions while the authored back correction
 // remains fully active. Blend only that correction with the same stock
 // smoothstep: 1 -> 0 while drawing and 0 -> 1 while putting the rifle away.
-constexpr bool kEnableLegacyNadineMazurWeightedBackHandoff = true;
-// Retain the bounded transition census for the single falsifiable aex exam.
-constexpr bool kEnableLegacyNadineMazurBackTransitionCensus = true;
+constexpr bool kEnableLegacyNadineMazurWeightedBackHandoff = false;
+// The aex transition census has answered its question and is not part of the
+// restored 82e7b9e baseline.
+constexpr bool kEnableLegacyNadineMazurBackTransitionCensus = false;
 // The suppressed P99 body shares the native Nadine Glock origin to within a
 // few millimetres, while its suppressor alone extends the mesh by 16.9 cm along
 // weapon-local +Z. The exact native hip endpoint and stock refresh are already
@@ -59719,8 +59726,9 @@ void census_local_nadine_mazur_strap_game_thread() {
 
 void rebind_initial_local_nadine_rifle_game_thread() {
     if (!g_net_role_b ||
-        !g_cold_nadine_mazur_render_matrix_ready.load(
-            std::memory_order_acquire)) {
+        (kEnableColdLegacyNadineMazurRenderMatrixRepair &&
+         !g_cold_nadine_mazur_render_matrix_ready.load(
+             std::memory_order_acquire))) {
         return;
     }
 
@@ -62468,28 +62476,28 @@ bool seh_resolve_legacy_nadine_mazur_back_frame(
         capture->owner = *reinterpret_cast<void* const*>(parent_handle + 0x8);
         if (capture->owner == nullptr ||
             readable_bytes(capture->owner) < 0x1E8 ||
-            *reinterpret_cast<const std::uintptr_t*>(capture->owner) !=
-                g_module + kPlayerVtableRva ||
             *reinterpret_cast<const std::uint32_t*>(
                 static_cast<const std::byte*>(capture->owner) +
                 kGameObjectRuntimeIdOffset) != capture->generation) {
             return false;
         }
         capture->owner_index = retained_player_index(capture->owner);
-        if (*reinterpret_cast<const std::uint32_t*>(
+        const bool local_nadine = g_net_role_b &&
+            capture->owner_index == 0 &&
+            player_screen_index_is(capture->owner, 0);
+        const bool remote_nadine = !g_net_role_b && g_state_net.enabled &&
+            g_state_net.peer_set && capture->owner_index == 1 &&
+            player_screen_index_is(
+                capture->owner, kSlot1ScreenIndex);
+        if ((!local_nadine && !remote_nadine) ||
+            !player_object_stable(capture->owner) ||
+            *reinterpret_cast<const std::uint32_t*>(
                 static_cast<const std::byte*>(capture->owner) + 0x170) !=
                 kLegacyNadineAttachTargetLookId ||
-            !seh_weapon_parent_resolves_to_owner(
-                weapon, capture->owner)) {
+            !seh_weapon_parent_resolves_to_owner(weapon, capture->owner)) {
             return false;
         }
-        // The cold GiveWeapon publish precedes retained-player publication and
-        // inventory insertion.  Parent weak identity, exact Player RTTI/look,
-        // Mazur art and the selected owner record are the complete semantic
-        // identity here; retained/inventory gates would deterministically miss
-        // this first stock publish.  Once retained, keep the scope label only
-        // for diagnostics -- it is not part of mutation admission.
-        capture->remote = capture->owner_index == 1;
+        capture->remote = remote_nadine;
 
         auto* const table = *reinterpret_cast<std::byte* const*>(
             static_cast<const std::byte*>(capture->owner) + 0x1E0);
@@ -62514,13 +62522,8 @@ bool seh_resolve_legacy_nadine_mazur_back_frame(
             static_cast<std::size_t>(capture->selected_index) * 48;
         capture->selected_joint =
             *reinterpret_cast<const std::int16_t*>(selected_record + 0x24);
-        const std::int16_t spineb_joint = raw_resolve_attach_joint(
-            table, kSpinebJointNameId);
         if (*reinterpret_cast<const std::uint32_t*>(selected_record + 0x20) !=
-                kTargSpinePropAttachId ||
-            spineb_joint < 0 || capture->selected_joint != spineb_joint ||
-            std::memcmp(
-                selected_record, kCanonicalAttachIdentityBits.data(), 32) != 0) {
+                kTargSpinePropAttachId) {
             return false;
         }
 
@@ -69752,8 +69755,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-25afo "
-        "(retail Chloe idle root-relative Mazur holster pose relay)");
+        "TLL co-op runtime init 2026-08-25afp "
+        "(restore Mazur back attachment baseline from 82e7b9e)");
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
     }

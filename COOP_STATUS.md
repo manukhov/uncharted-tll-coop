@@ -28300,3 +28300,59 @@ convention, loop closure and embedded constant; the PE contains the exact
 `afo` boot, retail READY, `retail-source-*`,
 `worldSource=Chloe-retail-idle-root-relative`, publication and visible-apply
 markers.  Release compilation/linking and `git diff --check` pass.
+
+### 2026-08-25 RUNTIME REJECTED (`afo`, PID 1168): retail Chloe root-relative frame is not a valid Nadine back attachment
+
+This is a semantic rejection, not another admission failure.  PID `1168`
+printed the exact `afo` boot at `reports/locomotion_hook.log:96710` and retail
+READY at `:96730`.  It then produced 326 `status=staged` publications and 1300
+changed render applies; 975 of those reached the visible consumer return
+`caller=0x181B3F9 changed=1`.  The first complete pair is `:96795..96799` and
+the last is `:98489..98493`, with the expected
+`worldSource=Chloe-retail-idle-root-relative`, donor `1:0:0` and constant
+`donorRelativeHash=0xA15B8575` throughout.
+
+The user's screenshot shows the resulting Mazur vertical beside Nadine, with
+the stock attachment relationship to her back lost.  This satisfies the
+written changed-but-wrong falsifier and rejects **H-retail-Chloe-endpoint**.
+Do not tune this matrix by eye and do not reuse the offline root-relative
+constant as a weapon attachment.  The audit remains useful as an asset decoder,
+not as a runtime transform provider.
+
+### 2026-08-25 STATIC / IMPLEMENTED (`afp`): restore the Mazur back-attachment behavior of `82e7b9e`
+
+The user identified `82e7b9e` as the last build in which the rifle was actually
+attached to Nadine's back.  Source history gives three independent differences
+from that baseline: the later early `targSpineProp` alias did not exist there;
+the later weighted Draw/Put handoff did not exist there; and the final
+`FgAnimData_GetRenderWorldMatrix` override was added much later.  The original
+build already used the retained-player one-shot rifle rebind and the authored
+spined back-frame correction at the exact `0x141ED19BB` callsite.
+
+`afp` therefore disables only the post-baseline early alias, weighted handoff,
+transition census and final renderer substitution.  It restores the old
+retained local/remote Player admission and accepts the stock `targSpineProp`
+record without requiring the later synthesized spineb identity row.  The
+one-shot rebind no longer depends on renderer-package READY.  Grip, networking,
+P99 and every unrelated later repair remain unchanged; this is not a repository
+rollback.
+
+Evidence quota: (1) exact `afo` runtime publication and visible-consumer
+replacement plus the user's visual rejection; (2) direct `82e7b9e` source
+comparison of feature topology and retained-player admission; (3) static
+dataflow showing the disabled three-callsite renderer relay was the final
+matrix replacement while `0x141ED19BB` is the old stock attachment correction
+boundary.  Prediction for one role-B Nadine copy: boot must say `afp`; the old
+authored back-frame install marker must appear; retail READY/staged/applied
+markers must be absent; the initial Mazur must return to the `82e7b9e` back
+attachment rather than the `afo` vertical placement.  A successful rebind plus
+the same bad pixels would reject restoration sufficiency; no rebind/correction
+marker is admission-only.  The user alone performs gameplay input.
+
+Final Release `afp` is `771072` bytes, SHA-256
+`3370080403DBD110F0E6DEECCB45A95BB67FD99FD53B848AC07371EF0761973A`;
+source UTC `13:33:36`, object/DLL UTC `13:34:00`.  PE readback contains the exact `afp`
+boot and old authored back-frame marker and contains neither the `afo` boot nor
+the retail READY marker.  Release compilation/linking and `git diff --check`
+pass.  No new IDB symbol was introduced: this unit restores already-labelled
+boundaries and changes only their compile-time admission.

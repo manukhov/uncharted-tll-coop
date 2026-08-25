@@ -5714,6 +5714,33 @@ Keep the postblend preservation boundary; replace only its steady content.
       source `16:16:40`, object/DLL `16:17:14`. Offline audit, PE marker
       readback, Release build and diff check pass.
 
+      RUNTIME REJECTED (`afo`, PID1168): packaging and visible delivery were
+      exact, with 326 staged publications, 1300 changed applies and 975 changed
+      applies at visible caller return `0x181B3F9`.  The user's screenshot shows
+      the resulting Mazur vertical beside Nadine rather than attached to her
+      back.  Reject the retail Chloe root-relative endpoint itself; do not tune
+      or reuse it as a weapon world transform.
+
+      STATIC / IMPLEMENTED (`afp`): restore only the back-attachment topology
+      from user-accepted commit `82e7b9e`.  Disable the later early
+      `targSpineProp` alias, weighted handoff, transition census and all three
+      final renderer substitutions.  Restore retained-player admission for the
+      old authored `0x141ED19BB` back frame and let the one-shot rifle rebind run
+      without renderer READY.  Preserve all unrelated grip/network/P99 work.
+
+      Written one-copy prediction: `afp` boot and the old authored back-frame
+      install marker appear; retail READY/staged/applied markers are absent; the
+      initial Mazur returns to the `82e7b9e` back attachment instead of the
+      `afo` vertical placement.  Exact rebind/correction markers plus the same
+      pixels reject restoration sufficiency; missing them is admission-only.
+      User alone supplies gameplay input.
+
+      Final Release `afp`: `771072` bytes, SHA-256
+      `3370080403DBD110F0E6DEECCB45A95BB67FD99FD53B848AC07371EF0761973A`;
+      source UTC `13:33:36`, object/DLL UTC `13:34:00`. PE readback contains `afp` and
+      the old authored-back marker but no `afo` boot or retail READY marker;
+      Release build and diff check pass. No new IDB symbol is required.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such
