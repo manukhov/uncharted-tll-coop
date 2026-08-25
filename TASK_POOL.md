@@ -5741,6 +5741,13 @@ Keep the postblend preservation boundary; replace only its steady content.
       the old authored-back marker but no `afo` boot or retail READY marker;
       Release build and diff check pass. No new IDB symbol is required.
 
+      RUNTIME CONFIRMED (`afp`, PID13784): exact Mazur rebind
+      `rightHand 61A48E01 -> targSpineProp AD047A` completed with
+      `verified=1/strapVerified=1`, the old authored back correction ran at full
+      weight/depth, and the user confirmed that the initial rifle is now
+      attached acceptably to Nadine's back. Lock this topology; Draw/Put arms,
+      strap visibility and steady grip remain independent open items.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

@@ -28356,3 +28356,19 @@ boot and old authored back-frame marker and contains neither the `afo` boot nor
 the retail READY marker.  Release compilation/linking and `git diff --check`
 pass.  No new IDB symbol was introduced: this unit restores already-labelled
 boundaries and changes only their compile-time admission.
+
+### 2026-08-25 RUNTIME CONFIRMED (`afp`, PID 13784): the `82e7b9e` back-attachment path restores the cold Mazur placement
+
+PID `13784` loaded the exact `afp` build and reached the old authored
+`0x141ED19BB` correction path.  The inventory rebind changed the exact Mazur
+from `rightHand 61A48E01` at slot 16 to `targSpineProp AD047A` at slot 39 with
+`verified=1`, `strapVerified=1` and no renderer target.  The corresponding
+`NADINE-MAZUR-NATIVE-BACK` row records the retained local owner, canonical
+`spined` donor and full `correctionWeight=1/depth=1`.
+
+The user then confirmed that the initial rifle is attached acceptably to
+Nadine's back.  This satisfies the written `afp` prediction and confirms the
+restored `82e7b9e` attachment topology.  Treat this cold back placement as a
+locked baseline: do not re-enable the rejected retail renderer transform or
+the early alias.  Remaining Draw/Put arm discontinuity, missing strap and
+incorrect steady grip are separate owners and do not invalidate this result.
