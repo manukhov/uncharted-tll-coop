@@ -28653,3 +28653,32 @@ marker; source constants keep early alias/renderer substitution disabled and
 the authored frame enabled.  Release compilation/linking and
 `git diff --check` pass.  This rollback adds no engine address or semantic
 name, so the saved IDB requires no mutation.
+
+### 2026-08-25 RUNTIME CONFIRMED (`afu`, PID 5376): accepted cold Mazur back attachment restored
+
+PID `5376` loaded exact `afu`, selected role B/local Nadine and reached READY.
+The first cold rebind moved the Mazur from right-hand index `16` / id
+`61A48E01` to canonical back index `39` / id `AD047A` with exact binding and
+strap verification.  The first natural `NADINE-MAZUR-NATIVE-BACK` then used
+local owner `0`, selected `39:16/AD047A`, donor `30:18/4F62CD9D`,
+`handoff=0/0`, `correctionWeight=1` and `depth=1:0.05`.  The rifle deferred
+request completed after two attempts with `refresh=ok/1/1`, `retryable=0` and
+`authored=1/1/1`, exactly matching the written prediction.
+
+Across subsequent retained-object materialization the run produced `14`
+Mazur rebind rows and `14` matching native-back rows; all `14/14` corrections
+remained full-weight/full-depth.  No timeout, scope-drift or authored-pending
+terminal occurred.  The renderer-target experiment remained parked
+(`renderTargetStaged=0`), so the user's visual confirmation — "Щас
+починилось" — independently confirms that the restored native
+`0x141ED19BB` path reaches the visible cold placement without a downstream
+renderer override.
+
+This closes only the initial/holstered Mazur placement.  Keep
+`kEnableLegacyNadineMazurWeightedBackHandoff=false`: removing that item-side
+decision is confirmed to restore the accepted `afp`/`82e7b9e` topology, but
+the exact internal weighted-helper guard that rejected `aft` is not identified.
+Draw/Put smoothness, strap visibility, the in-hand grip and other weapon
+animations remain open and were not exercised by this run.  The thirteen
+redundant `existing-spine-prop` rebinds are lifecycle/efficiency debt, not a
+correctness failure in this confirmed result.  No new IDB name is required.

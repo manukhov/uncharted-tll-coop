@@ -5871,6 +5871,18 @@ Keep the postblend preservation boundary; replace only its steady content.
       source/object/DLL UTC `16:46:40.564 / 16:47:55.642 / 16:47:55.778`.
       PE marker/readback and Release build pass; no new IDB label is needed.
 
+      RUNTIME CONFIRMED (`afu`, PID5376): the cold Mazur attachment prediction
+      passed. Exact role-B Nadine rebind changed rightHand `16/61A48E01` to
+      back `39/AD047A`; the first native-back row used donor
+      `30:18/4F62CD9D`, `handoff=0/0`, `correctionWeight=1`, `depth=1`, and the
+      deferred request finished after two attempts with
+      `refresh=ok/1/1 authored=1/1/1`. All 14 rebinds had matching full
+      native-back rows, and the user confirmed the initial placement is fixed.
+      The parked renderer path remained unused, proving stock downstream
+      publication is sufficient for this cold path. Lock the item-side weighted
+      handoff flag off; keep Draw/Put smoothing, grip and strap explicitly open.
+      The exact rejected subguard inside the old weight helper remains unknown.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such
