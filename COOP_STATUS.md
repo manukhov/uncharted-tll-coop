@@ -28752,3 +28752,34 @@ source/object/DLL UTC are `17:27:50.986 / 17:30:00.522 / 17:30:00.615`.
 The Release build and PE readback contain the exact `afv`, transition-only,
 reject and combined-READY markers.  No new engine address or semantic symbol is
 introduced, so the saved IDB needs no mutation for `afv`.
+
+### 2026-08-25 RUNTIME REJECTED (`afv`, PID 9308): terminal Draw authorization was raw-pointer/one-shot, restoring the snap
+
+The package and active interpolation both executed, so this was not a no-op or
+an item-clock rejection.  Exact role-B `afv` reached READY, the accepted cold
+path again completed `refresh=ok/1/1 ... authored=1/1/1`, and there were zero
+`BACK-BLEND-REJECT`, exception, timeout or scope-drift rows.  Across the run,
+twenty active Draw item samples reached `correctionWeight=0.990883 ...
+0.00782335`, while eighteen active Put samples reached `0.0128325 ...
+0.902904`.  The already-confirmed arm pair remained complementary.
+
+The written terminal prediction failed in two independently observed ways.  In
+the first Draw, item weight reached `0.00791985` on ProcessWeapon
+`0x10e0ca1380` while the arms reached `0.99208`; the next duration-zero/state-1
+callback materialized the same logical weapon/generations as
+`0x10e0ca0d00`.  The raw-pointer-keyed ticket missed and the item correction
+jumped directly to full `1`.  In the second Draw the pointer stayed stable:
+active weight reached `0.00782335`, the first duration-zero callback correctly
+used terminal weight `0`, but a second duration-zero callback arrived before
+the selector changed and the one-shot ticket had already been consumed, so the
+next row again jumped to full `1`.  The user's unchanged visual result is
+therefore exactly consistent with our own terminal endpoint being reinserted;
+it does not reject the active stock-clock interpolation or select later IK.
+
+`afv` is REJECTED as a complete Draw/Put continuity repair.  The next design
+must key the Draw transition by stable logical owner/weapon generations rather
+than the raw ProcessWeapon pointer, keep terminal-zero authorization across all
+repeated duration-zero/back-selector callbacks, and clear it only on the
+actual selector/phase exit, Put/stable cancellation or generation drift.  Cold
+state must remain the confirmed full `afu` endpoint.  No new IDB name is
+required for this runtime classification.

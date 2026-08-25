@@ -5918,6 +5918,23 @@ Keep the postblend preservation boundary; replace only its steady content.
       PE readback contains the exact `afv`, transition-only, reject and
       combined-READY markers; no new IDB symbol is required.
 
+      RUNTIME REJECTED (`afv`, PID9308): cold and the active item clock both
+      executed, with zero blend rejects, exceptions, timeouts or scope drift.
+      Draw item weights reached `0.990883 -> 0.00782335` opposite the arm ramp;
+      Put reached `0.0128325 -> 0.902904`. The failure was our terminal
+      lifecycle. One Draw relocated the same logical weapon from
+      `0x10e0ca1380` to `0x10e0ca0d00` between the last active and first
+      duration-zero callback, so the raw-pointer ticket missed and weight jumped
+      to `1`. A second Draw reached terminal weight `0`, then a repeated
+      duration-zero callback consumed the now-empty one-shot ticket and also
+      jumped to `1`. The user's unchanged visual therefore rejects `afv` as a
+      complete continuity repair without rejecting active interpolation.
+
+      Next seam: logical owner/weapon-generation identity across raw relocation,
+      plus a terminal-zero hold across every repeated duration-zero/back-selector
+      callback. Clear only on actual selector/phase exit, Put/stable cancellation
+      or generation drift; preserve the confirmed full cold `afu` endpoint.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such
