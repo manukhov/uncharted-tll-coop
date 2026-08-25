@@ -5979,6 +5979,21 @@ Keep the postblend preservation boundary; replace only its steady content.
       PE readback contains exact afw/install/latch/native-back/combined-READY
       markers.
 
+      RUNTIME REJECTED (`afw`, PID18356): the logical terminal exam passed but
+      the user still saw the same magnetic motion. Draw item weights were
+      monotonic `0.985623 -> 0.00622833`, complementary arm restores were
+      `0.0143766 -> 0.993772`, terminal item weight stayed zero through ordinals
+      `1/2/29`, survived raw relocation at `41/42`, then cleared on rightHand
+      after 51 callbacks. Cold stayed `authored=1/1/1`; zero blend rejects or
+      exceptions. Put item weights rose `0.0130022 -> 0.907431`, but its final
+      arm injection `0.0925692` lost the matching postblend restore at the state
+      change. This confirms the latch and rejects terminal/item-scalar absence
+      as the Draw owner. Next trace the complete time-varying
+      `s_weapon-draw`/holster transition through postblend/Async and close the
+      Put-tail restore edge. `ael` already rejected replaying one late Draw
+      sample; do not pick another phase, retime `+0x640`, or launch another
+      endpoint blend without new static ownership proof.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

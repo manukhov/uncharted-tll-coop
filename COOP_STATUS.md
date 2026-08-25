@@ -28863,3 +28863,44 @@ SHA-256 `CEBA5F6138CF3708F80CF53A5E93B0D3B17BA2758BC1A94827E7092AE54AF8CC`.
 PE readback contains exact `2026-08-25afw`, logical-terminal install,
 `NADINE-MAZUR-DRAW-LATCH`, `NADINE-MAZUR-NATIVE-BACK`, and authored-pair/native
 Draw-Put/late-steady-IK READY strings.
+
+### 2026-08-25 RUNTIME REJECTED (`afw`, PID 18356): terminal lifecycle is exact, but the synthetic endpoint blend is still magnetic
+
+The exact one-copy role-B package reached `afw`, logical-terminal install and
+the combined authored-pair/native Draw-Put/late-IK READY markers.  Cold remained
+the accepted AFU baseline: the Mazur deferred refresh completed
+`refresh=ok/1/1 ... authored=1/1/1`.  There were no back-blend rejects,
+exceptions, fatal rows, timeouts or scope drift, and the process remained
+responsive after the user's test.
+
+The written Draw lifecycle discriminator passed completely.  Ten active item
+samples decreased monotonically from correction weight `0.985623` to
+`0.00622833`; the complementary static arm-pair samples increased from
+`0.0143766` to `0.993772`, and every one was restored postblend.  Terminal item
+weight then remained exactly zero at ordinals `1`, `2` and `29`; after the raw
+ProcessWeapon moved, ordinal `41` reported `rawMoved=1` with the same logical
+Fg/generations and ordinal `42` stayed zero.  The common rightHand callback
+finally cleared phase 3 with `terminalCallbacks=51`.  Thus neither raw-pointer
+relocation nor repeated duration-zero callbacks reinserted the back endpoint.
+
+Put also exercised the complementary item clock: nine active samples rose
+monotonically from `0.0130022` to `0.907431` before the stable full endpoint.
+Arm-pair restore rows fell from `1` to `0.162675`; the last `0.0925692`
+injection coincided with the state change and had no matching postblend restore,
+so the final Put-tail frame remains a separately observable admission edge.
+It cannot explain the Draw result, whose complete item, arm and terminal traces
+all passed.
+
+The user nevertheless reported the same abrupt/magnetic Draw-Put motion.  This
+**RUNTIME REJECTS `afw` as a complete visual repair** while confirming the
+logical terminal hold itself.  It also rejects missing item interpolation or a
+missing complementary arm scalar as the leading Draw cause.  The current arm
+repair still crossfades the one-sample steady pair `56C57AD2 + 283966ED` using
+the attachment's fixed 0.1-second clock; it does not consume the authored
+time-varying `s_weapon-draw`/holster transition.  The next frontier is static
+tracing of that complete transition through postblend/Async, including the
+Put-tail restore loss.  The earlier `ael` result already rejected freezing one
+late Draw sample, so no individual phase is an earned replacement.  Do not
+lengthen `+0x640`, retune smoothstep, add another terminal latch, or launch
+again until the real authored owner is proven.  Grip and strap remain separate
+open tasks.
