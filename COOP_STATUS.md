@@ -28904,3 +28904,84 @@ late Draw sample, so no individual phase is an earned replacement.  Do not
 lengthen `+0x640`, retune smoothstep, add another terminal latch, or launch
 again until the real authored owner is proven.  Grip and strap remain separate
 open tasks.
+
+### 2026-08-25 STATIC / IMPLEMENTED (`afx`): expose the complete native WeaponPartial Draw/Holster path
+
+`afw` closed the scalar and terminal lifecycle but left the pixels unchanged,
+so the next owner is no longer speculative.  Three independent evidence classes
+show that our arm package sits after, and overwrites, a longer stock action.
+First, the exact request graph is
+`PlayerGetWeaponInHandAction_OnStart 0x141096150` /
+`PlayerPutGunAwayAction_OnStart 0x141096BB0 ->
+PlayerWeaponAnimControl_RequestWeaponState 0x14108C2D0 -> WeaponPartial
+E2B990B9`.  Normal Draw contributes `28B0F93B`, `1313FB4E`, `11EE475B` and
+`7405AACB`; Put contributes `DF5B68FC`, with `AD73C917` as the reverse-grab
+`s_weapon-holster^no-weapon` tail.  Second, the shipped assets are not static
+endpoints: Draw `66846123` and the normal holster variants have eleven frames,
+while grab/reverse-grab has seven; they own the Player arm chain `21..32`.
+Draw requests a `0.2 / weaponSwapSpeed` fade and Put a `0.1 / speed` fade,
+independent of the fixed attachment clock at `ProcessWeapon+0x640/+0x644`.
+Third, exact command order shows that the AFW Create wrapper called stock first
+and then inserted the one-frame `56C57AD2 + 283966ED` pair immediately before
+the final cmd3, after every stock action command.  Its postblend wrapper then
+restored those already-synthetic C39 rows `19..30` after stock Player `+0x408`,
+discarding both WeaponIKFeather and Put-specific
+`PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0 -> SolveArmIk`.  Async and
+the renderer only publish that result; there is no remaining late writer that
+could restore the native action.
+
+The competing explanations are now separable.  `H-synthetic-overwrite` predicts
+that removing both of our late arm owners exposes visibly continuous native
+elbow/hand motion.  `H-native-retarget/content` predicts that the exact native
+track/phase/fade rows execute but the arms still jump magnetically.  A missing
+request/track hypothesis is rejected by the action graph, the multi-frame
+assets and earlier runtime fade inventories; an item-clock or terminal-latch
+hypothesis is rejected by the complete `afw` trace.  A renderer/attachment
+writer cannot explain both directions after the proven final-palette order.
+
+`afx` is therefore a bounded stock-arm-output exam, not a guessed replacement.
+It keeps the runtime-confirmed AFU cold/back correction at `0x141ED19BB`, but
+sets both `kEnableLegacyNadineMazurAuthoredPairRepair` and
+`kEnableLegacyNadineMazurLateSteadyIkRepair` to `false`.  Consequently no
+synthetic animation command is appended, no pre-postblend C39 pose is restored,
+and no late custom arm IK runs.  The already runtime-proven, read-only
+WeaponPartial transition-lifecycle and post-weight fade observers are enabled
+only to identify the exact stock state/track/phase visible to the user.  The
+Perform relay ABI used by the parked packages is corrected to
+`int64 __fastcall(void*)`, preserving the stock `RAX`; AFX itself adds no new
+Perform/Create/postblend detour.
+
+The one-copy prediction is strict.  Boot must say `afx`, both read-only
+WeaponPartial observer install markers and the combined
+`legacy-Nadine Mazur native transition census READY` marker must
+appear, while no `NADINE-MAZUR-AUTHORED-PAIR injected/restored` or
+`NADINE-MAZUR-LATE-IK applied` row may occur.  Cold launch must still complete
+the already-confirmed `refresh=ok/1/1 ... authored=1/1/1` and retain the accepted
+back placement.  On one Draw, wait, then one Put, the log must show the native
+grab/draw/holster states advancing through multiple phase/fade samples.  If the
+elbow/hand motion is now continuous, `H-synthetic-overwrite` is confirmed and the permanent
+fix must move the steady pair below WeaponPartial rather than reintroduce a late
+overlay.  If the same snap remains with those exact native samples, the result
+rejects overlay sufficiency and selects the stock Nadine retarget/action content.
+Missing observer/install/state evidence is package admission failure, not a
+visual verdict.  The steady in-hand grip may revert to the known stock-broken
+pose during this diagnostic.  `kEnableLegacyNadineMazurTransitionBackBlend`
+remains enabled to protect the confirmed item/back attachment, so this is a
+clean native **arm** discriminator rather than a fully stock rifle-transform
+exam; judge elbows/hands separately from the rifle's retained 0.1-second item
+handoff.  Grip and strap remain explicitly out of scope.
+Only one role-B Nadine copy is allowed and only the user supplies gameplay input.
+
+Independent review found no ABI, install, scope or cold-lifecycle blocker.
+Fresh Release uses `/O2 /Ob2 /DNDEBUG`; source/object/DLL UTC are
+`20:08:26.228 / 20:09:26.243 / 20:09:26.334`, the DLL is `768512` bytes and
+SHA-256 is
+`1D68B36170B1823BA2EBDABE9C9AFD4A192CD20F98D18B88A041DA270759F8BC`.
+PE readback contains exact `afx`, both individual observer-install strings and
+the combined native-transition READY marker, and contains no linked authored-
+pair restore or late-IK-applied marker.
+The durable IDB update applied `1789` function names/comments, `61` data names
+and `1` function type to the single `ida/tll.i64`; headless save returned
+`True`.  Restarted-MCP readback resolves the new track-order comment at
+`AnimStateLayer_CreateAnimCommands 0x14189EA60` and the exact multi-frame Draw
+and Holster producer comments at `0x141096150` / `0x141096BB0`.

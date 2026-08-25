@@ -5994,6 +5994,36 @@ Keep the postblend preservation boundary; replace only its steady content.
       sample; do not pick another phase, retime `+0x640`, or launch another
       endpoint blend without new static ownership proof.
 
+      STATIC / IMPLEMENTED (`afx`): run the bounded native WeaponPartial visual
+      exam with the synthetic pair and late steady IK both disabled. Static
+      ownership is closed by three independent classes: the exact
+      `0x141096150/0x141096BB0 -> 0x14108C2D0 -> E2B990B9` request graph; the
+      seven/eleven-frame grab/draw/holster assets owning Player joints 21..32;
+      and the Create -> Perform -> Player+0x408 -> Async order proving that AFW
+      appended a one-frame pair after stock action commands and then restored it
+      after WeaponIK/HolsterIK. Existing transition-lifecycle and fade-trace
+      observers are read-only and runtime-proven; they identify the native
+      state/phase while the user's pixels use unmodified stock arms.
+
+      Written prediction: one role-B Nadine copy must boot `afx`, install both
+      WeaponPartial observers and emit combined native-transition READY,
+      preserve the confirmed cold
+      `refresh=ok/1/1 ... authored=1/1/1`, emit no authored-pair restore/late-IK
+      marker, and show multi-sample grab/draw/holster phase/fade rows for one
+      Draw and one Put. Smooth elbow/hand motion confirms our late synthetic overwrite and
+      earns a future steady underlay below WeaponPartial. The same snap with
+      exact native samples rejects overwrite sufficiency and selects native
+      retarget/action content. Missing markers are admission failure. The
+      steady grip may look stock-broken in this diagnostic. The item-side AFW
+      transition correction remains enabled, so judge elbow/hand continuity,
+      not the rifle transform alone; grip and strap stay open. Fresh Release:
+      `/O2 /Ob2 /DNDEBUG`, source/object/DLL UTC
+      `20:08:26.228 / 20:09:26.243 / 20:09:26.334`, DLL `768512`, SHA-256
+      `1D68B36170B1823BA2EBDABE9C9AFD4A192CD20F98D18B88A041DA270759F8BC`.
+      IDB persistence is closed: `1789/61/1` labels/data/types applied to the
+      single `ida/tll.i64`, `save_database returned True`, and restarted-MCP
+      readback confirms `0x14189EA60`, `0x141096150` and `0x141096BB0`.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

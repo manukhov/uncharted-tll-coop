@@ -1880,7 +1880,9 @@ FUNCTIONS = {
     ),
     0x14189EA60: (
         "AnimStateLayer_CreateAnimCommands",
-        "Type-2 layer command generator. Walks active AnimStateInstances through "
+        "Type-2 layer command generator. Reads tracks in reverse array order "
+        "[count-1..0], so commands fold oldest to newest and track zero is the "
+        "final/current contributor. Walks active AnimStateInstances through "
         "AnimStateSnapshot_GenerateAnimCommands and emits transition command 7 "
         "from per-state track weight +0x158. Its terminal per-layer command 7 at "
         "0x14189EC8C..0x14189ECD6 is left=0, right=1, out=0, mode=1, weight=1; "
@@ -11889,9 +11891,11 @@ FUNCTIONS = {
     ),
     0x141096150: (
         "PlayerGetWeaponInHandAction_OnStart",
-        "PlayerGetWeaponInHandAction vtable +0x10. Resolves and binds the "
-        "weapon holster descriptor, derives s_weapon-holster state variants, "
-        "then requests the state through PlayerWeaponAnimControl vtable +0x10.",
+        "PlayerGetWeaponInHandAction vtable +0x10. Resolves the retained weapon "
+        "descriptor and requests the authored s_weapon-grab 28B0F93B / "
+        "s_weapon-draw 1313FB4E path through PlayerWeaponAnimControl vtable "
+        "+0x10; this is the multi-frame Draw producer, not the separate 0.1 s "
+        "ProcessWeapon attachment clock.",
     ),
     0x141096730: (
         "PlayerGetWeaponInHandAction_PostAnimUpdate",
@@ -11903,9 +11907,10 @@ FUNCTIONS = {
     0x141096BB0: (
         "PlayerPutGunAwayAction_OnStart",
         "PlayerPutGunAwayAction vtable +0x10. Resolves and binds the weapon "
-        "holster descriptor, selects s_weapon-holster or no-weapon state from "
-        "the current animation state, then requests it through "
-        "PlayerWeaponAnimControl vtable +0x10.",
+        "holster descriptor and normally requests s_weapon-holster DF5B68FC. "
+        "When the current state is s_weapon-grab it selects phase 3 and requests "
+        "AD73C917 s_weapon-holster^no-weapon, the seven-frame reverse-grab tail, "
+        "through PlayerWeaponAnimControl vtable +0x10.",
     ),
     0x141096F00: (
         "PlayerPutGunAwayAction_PreAnimUpdate",

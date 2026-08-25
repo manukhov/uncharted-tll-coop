@@ -2711,13 +2711,13 @@ static_assert(
 constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
 // Runtime-confirmed 82e7b9e/adr two-hand baseline. Build aep retains it as the
 // exact fail-closed pose under the one-process semantic right-hand reference.
-constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = true;
+constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = false;
 // The static Chloe right-hand reference never overlapped the steady authored
 // pair at the earlier Feather callsite (aep). Re-seed the persistent
 // Player+0x4308 JointSets only after the confirmed pair has been restored,
 // solve both arms with stock operators, and let the later Async job consume the
 // resulting local pose.
-constexpr bool kEnableLegacyNadineMazurLateSteadyIkRepair = true;
+constexpr bool kEnableLegacyNadineMazurLateSteadyIkRepair = false;
 // Build aej installed the exact one-process postblend seam but produced no
 // capture/replay marker: the visual result was just the stock broken pose. Keep
 // the unexecuted mutation disabled. The next bounded pass observes the first
@@ -2727,6 +2727,12 @@ constexpr bool kEnableLegacyNadineMazurTransientPostblendReplay = false;
 constexpr bool kEnableLegacyNadineMazurTransientPostblendCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsOwnerCensus = false;
 constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
+// Build afx is the bounded native-transition visual exam.  It removes both
+// synthetic owners that AFW proved can execute while the pixels remain
+// magnetic: the late one-frame pair and its postblend C39 restore/steady IK.
+// The already runtime-proven WeaponPartial lifecycle/fade observers remain
+// read-only and expose the exact native Draw/Holster tracks during the exam.
+constexpr bool kEnableLegacyNadineMazurStockTransitionCensus = true;
 // REJECTED (aen): requiring the remapped Chloe Hands root before the nested
 // retarget capture made the promised source discriminator unreachable.
 constexpr bool kEnableLegacyNadineVirtualChloeGripSourceCensus = false;
@@ -2768,18 +2774,30 @@ static_assert(
         (!kEnableLegacyNadineMazurRightHandPropRelay &&
          !kEnableLegacyNadineMazurChloeRightHandPropReference),
     "late steady IK must be the only right-hand goal mutation");
+static_assert(
+    !kEnableLegacyNadineMazurStockTransitionCensus ||
+        (!kEnableLegacyNadineMazurAuthoredPairRepair &&
+         !kEnableLegacyNadineMazurLateSteadyIkRepair &&
+         !kEnableLegacyNadineMazurTransientPostblendReplay &&
+         !kEnableLegacyNadineMazurDrawEndpointRepair &&
+         !kEnableLegacyNadineWeaponIkFeatherSuppression &&
+         !kEnableLegacyNadineMazurRightHandPropRelay &&
+         !kEnableLegacyNadineMazurChloeRightHandPropReference),
+    "stock transition census must not coexist with an arm/pose mutation");
 // Build ada proved a repeatable first-Draw-good -> steady-broken transition,
 // followed by immediately broken later Draws. The animation layer has exact
 // create-new and loop-current paths while consuming its bounded transition
 // queue. Observe that lifecycle for the retained local WeaponPartial layer;
 // never alter a request, instance, weight, or pose row in this census.
-constexpr bool kEnableWeaponPartialTransitionLifecycleCensus = false;
+constexpr bool kEnableWeaponPartialTransitionLifecycleCensus =
+    kEnableLegacyNadineMazurStockTransitionCensus;
 // Build add rejected both loop-current reuse and a missing second request.
 // The first custom Draw transition nevertheless starts from one track while
 // the repeated Draw starts from two. Sample the exact WeaponPartial track and
 // instance fade fields after stock UpdateBlendWeights so the visual break can
 // be joined to a concrete source/destination weight endpoint. Read-only.
-constexpr bool kEnableWeaponPartialFadeTraceCensus = false;
+constexpr bool kEnableWeaponPartialFadeTraceCensus =
+    kEnableLegacyNadineMazurStockTransitionCensus;
 // The Mazur strap child owns a complete authored state-zero pose, but its
 // dynamic endpoint lookup fails because legacy Nadine has no strap2..strap14
 // joints and hides the otherwise valid mesh. Reveal that exact published child
@@ -42677,7 +42695,7 @@ bool install_weapon_partial_transition_lifecycle_census() {
         protection_restored
             ? "WeaponPartial transition lifecycle census installed (read-only new-vs-loop pre/post)"
             : "WeaponPartial transition lifecycle census installed (read-only; protection WARNING)");
-    return true;
+    return protection_restored;
 }
 
 struct WeaponPartialFadeTraceInstance {
@@ -43057,7 +43075,7 @@ bool install_weapon_partial_fade_trace_census() {
         protection_restored
             ? "WeaponPartial fade trace census installed (read-only post-weight-update)"
             : "WeaponPartial fade trace census installed (read-only; protection WARNING)");
-    return true;
+    return protection_restored;
 }
 
 // Read-only lifecycle snapshot for the exact channel-one weapon actions. The
@@ -49239,7 +49257,7 @@ constexpr std::uintptr_t kAnimManagerCreateAnimCmdsNormalReturnRva =
 
 using AnimManagerCreateAnimCmdsForObjectFunction =
     std::uint64_t(__fastcall*)(void*, void*, std::uint32_t);
-using AnimManagerPerformAnimBlendFunction = void(__fastcall*)(void*);
+using AnimManagerPerformAnimBlendFunction = std::int64_t(__fastcall*)(void*);
 using AnimManagerAsyncObjectUpdateJointBlendJobFunction =
     void(__fastcall*)(void*);
 
@@ -50363,11 +50381,11 @@ void log_legacy_nadine_mazur_steady_hands_admission(
     boot_log_line(line.str().c_str());
 }
 
-void run_legacy_nadine_mazur_steady_hands_command_epoch(
+std::int64_t run_legacy_nadine_mazur_steady_hands_command_epoch(
     void* job, AnimManagerPerformAnimBlendFunction original,
     LegacyNadineMazurSteadyHandsCommandStage stage) {
     if (original == nullptr) {
-        return;
+        return 0;
     }
     const LegacyNadineMazurSteadyHandsEpoch previous =
         g_legacy_nadine_mazur_steady_hands_epoch;
@@ -50412,7 +50430,7 @@ void run_legacy_nadine_mazur_steady_hands_command_epoch(
         log_legacy_nadine_mazur_steady_hands_admission(admission);
     }
 
-    original(job);
+    const std::int64_t result = original(job);
     if (stage == LegacyNadineMazurSteadyHandsCommandStage::kPerform) {
         auto promoted = g_legacy_nadine_mazur_draw_endpoint_pending_ticket;
         if (promoted.valid) {
@@ -50423,17 +50441,26 @@ void run_legacy_nadine_mazur_steady_hands_command_epoch(
     }
     g_legacy_nadine_mazur_steady_hands_epoch = previous;
     g_legacy_nadine_mazur_steady_hands_command_stage = previous_stage;
+    return result;
 }
 
-void __fastcall hooked_perform_anim_blend_for_nadine_mazur(void* job) {
-    run_legacy_nadine_mazur_steady_hands_command_epoch(
+std::int64_t __fastcall hooked_perform_anim_blend_for_nadine_mazur(void* job) {
+    return run_legacy_nadine_mazur_steady_hands_command_epoch(
         job, g_original_perform_anim_blend_for_nadine_mazur,
         LegacyNadineMazurSteadyHandsCommandStage::kPerform);
 }
 
+std::int64_t __fastcall call_original_async_joint_blend_for_nadine_mazur(
+    void* job) {
+    if (g_original_async_joint_blend_for_nadine_mazur != nullptr) {
+        g_original_async_joint_blend_for_nadine_mazur(job);
+    }
+    return 0;
+}
+
 void __fastcall hooked_async_joint_blend_for_nadine_mazur(void* job) {
-    run_legacy_nadine_mazur_steady_hands_command_epoch(
-        job, g_original_async_joint_blend_for_nadine_mazur,
+    (void)run_legacy_nadine_mazur_steady_hands_command_epoch(
+        job, &call_original_async_joint_blend_for_nadine_mazur,
         LegacyNadineMazurSteadyHandsCommandStage::kAsync);
 }
 
@@ -50617,7 +50644,7 @@ struct LegacyNadineMazurAuthoredPairPostBlendTicket {
 using LegacyNadineMazurAuthoredPairCreateFunction =
     std::uint64_t(__fastcall*)(void*, void*, std::uint32_t);
 using LegacyNadineMazurAuthoredPairPerformFunction =
-    void(__fastcall*)(void*);
+    std::int64_t(__fastcall*)(void*);
 using LegacyNadineMazurAuthoredPairPostBlendFunction =
     std::int64_t(__fastcall*)(void*);
 
@@ -52132,12 +52159,12 @@ hooked_create_anim_cmds_for_legacy_nadine_mazur_authored_pair(
     return result;
 }
 
-void __fastcall
+std::int64_t __fastcall
 hooked_perform_anim_blend_for_legacy_nadine_mazur_authored_pair(void* job) {
     const auto original =
         g_original_perform_anim_blend_for_authored_mazur_pair;
     if (original == nullptr) {
-        return;
+        return 0;
     }
     const LegacyNadineMazurAuthoredPairEpoch previous =
         g_legacy_nadine_mazur_authored_pair_epoch;
@@ -52189,7 +52216,7 @@ hooked_perform_anim_blend_for_legacy_nadine_mazur_authored_pair(void* job) {
         }
     }
 
-    original(job);
+    const std::int64_t result = original(job);
     if (g_legacy_nadine_mazur_authored_pair_injected &&
         g_legacy_nadine_mazur_authored_pair_epoch.valid) {
         LegacyNadineMazurAuthoredPairPostBlendTicket ticket{};
@@ -52199,6 +52226,7 @@ hooked_perform_anim_blend_for_legacy_nadine_mazur_authored_pair(void* job) {
         }
     }
     g_legacy_nadine_mazur_authored_pair_epoch = previous;
+    return result;
 }
 
 std::int64_t __fastcall
@@ -53049,10 +53077,11 @@ hooked_add_retarget_commands_for_virtual_chloe_source_census(
         source_skeleton, target_skeleton, output_pose, output_valid_bits);
 }
 
-void __fastcall hooked_perform_for_virtual_chloe_source_census(void* job) {
+std::int64_t __fastcall
+hooked_perform_for_virtual_chloe_source_census(void* job) {
     const auto original = g_original_perform_anim_blend_for_virtual_chloe_source;
     if (original == nullptr) {
-        return;
+        return 0;
     }
     const VirtualChloeGripSourceEpoch previous =
         g_virtual_chloe_grip_source_epoch;
@@ -53099,7 +53128,7 @@ void __fastcall hooked_perform_for_virtual_chloe_source_census(void* job) {
         }
     }
 
-    original(job);
+    const std::int64_t result = original(job);
     auto& epoch = g_virtual_chloe_grip_source_epoch;
     if (epoch.valid) {
         const std::uint32_t attempt =
@@ -53137,6 +53166,7 @@ void __fastcall hooked_perform_for_virtual_chloe_source_census(void* job) {
         }
     }
     g_virtual_chloe_grip_source_epoch = previous;
+    return result;
 }
 
 bool install_virtual_chloe_grip_source_census() {
@@ -70934,8 +70964,13 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-25afw "
-        "(preserve afu cold; hold Draw terminal across relocation/repeated callbacks)");
+        "TLL co-op runtime init 2026-08-25afx "
+        "(preserve afu cold; native WeaponPartial Draw/Holster visual exam; synthetic arm pair disabled)");
+    if constexpr (kEnableLegacyNadineMazurStockTransitionCensus) {
+        boot_log_line(
+            "legacy-Nadine Mazur native transition census ACTIVE "
+            "(stock WeaponPartial + postblend; synthetic pair/restore/late IK disabled)");
+    }
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
     }
@@ -71064,13 +71099,26 @@ DWORD WINAPI install_hook(void*) {
     if constexpr (kEnableWeaponPartialNormalRequestProbe) {
         install_weapon_partial_normal_request_probe();
     }
+    bool weapon_partial_transition_lifecycle_ready =
+        !kEnableWeaponPartialTransitionLifecycleCensus;
     if constexpr (kEnableWeaponPartialTransitionLifecycleCensus &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
-        install_weapon_partial_transition_lifecycle_census();
+        weapon_partial_transition_lifecycle_ready =
+            install_weapon_partial_transition_lifecycle_census();
     }
+    bool weapon_partial_fade_trace_ready =
+        !kEnableWeaponPartialFadeTraceCensus;
     if constexpr (kEnableWeaponPartialFadeTraceCensus &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
-        install_weapon_partial_fade_trace_census();
+        weapon_partial_fade_trace_ready =
+            install_weapon_partial_fade_trace_census();
+    }
+    if constexpr (kEnableLegacyNadineMazurStockTransitionCensus) {
+        boot_log_line(
+            weapon_partial_transition_lifecycle_ready &&
+                    weapon_partial_fade_trace_ready
+                ? "legacy-Nadine Mazur native transition census READY (stock arms; lifecycle + fade observers)"
+                : "legacy-Nadine Mazur native transition census SKIPPED (observer package)");
     }
     if constexpr (kEnableLegacyNadineActiveWeaponGripOverlayRepair &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
