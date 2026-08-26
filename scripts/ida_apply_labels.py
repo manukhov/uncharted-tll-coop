@@ -8,6 +8,14 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-08-26: native animation opcode-28 offline parity ---
+    0x140128020: (
+        "InitializeAnimJointProgramOpcode28PermutationRows",
+        "CRT initializer registered in the executable constructor table at "
+        "0x1425EAA30. It copies the two 32-byte constant blocks at "
+        "0x142BF0700/0x142BF0740 into the AVX permutation rows at "
+        "0x146C71CE0/0x146C71D00 consumed by joint-program opcode 28.",
+    ),
     # --- 2026-08-21: cold ProcessWeapon factory lifecycle ---
     0x141103B70: (
         "ProcessWeapon_FactoryInitialize",
@@ -3659,6 +3667,21 @@ FUNCTIONS = {
         "joint valid in the right child. The "
         "generator short-circuits weight <=0.0001 to child 0 and weight >=0.9999 "
         "to child 1 when endpoint evaluation is enabled.",
+    ),
+    0x142188A30: (
+        "AnimJointParams_BlendTransformsByValidBits",
+        "Transform-record helper used by AnimCmdEvaluator_ApplyBlend. It "
+        "interpolates only joints valid in both inputs; joints valid in just "
+        "one input are copied as complete 48-byte records without applying the "
+        "cmd7 weight. This one-sided rule makes an empty animation-state track "
+        "an ineffective endpoint for WeaponPartial fades.",
+    ),
+    0x142193E90: (
+        "AnimJointProgramOp28_RefinePackedQuaternion",
+        "Retail joint-program opcode 28 handler. It consumes the AVX "
+        "permutation rows materialized by the CRT initializer at 0x140128020; "
+        "offline mapped-image evaluators must reproduce those exact copies "
+        "before invoking this handler.",
     ),
     0x141AB78F0: (
         "AnimCmdEvaluator_FinalizeGroupDefaults",

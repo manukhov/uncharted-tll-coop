@@ -2712,6 +2712,12 @@ constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
 // Runtime-confirmed 82e7b9e/adr two-hand baseline. Build aep retains it as the
 // exact fail-closed pose under the one-process semantic right-hand reference.
 constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = false;
+// Build afz repairs the exact one-sided WeaponPartial fade exposed by AFY.
+// s_no-weapon has an empty-pose root, so stock cmd7 otherwise copies the
+// action-only ValidBits at full strength regardless of the authored track
+// weight.  Fill only an empty track adjacent to a successfully seeded native
+// Draw/Put action; keep the older whole-list transition overlay disabled.
+constexpr bool kEnableLegacyNadineMazurEmptyTrackEndpointFiller = true;
 // The static Chloe right-hand reference never overlapped the steady authored
 // pair at the earlier Feather callsite (aep). Re-seed the persistent
 // Player+0x4308 JointSets only after the confirmed pair has been restored,
@@ -2732,14 +2738,14 @@ constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 // magnetic: the late one-frame pair and its postblend C39 restore/steady IK.
 // The already runtime-proven WeaponPartial lifecycle/fade observers remain
 // read-only and expose the exact native Draw/Holster tracks during the exam.
-constexpr bool kEnableLegacyNadineMazurStockTransitionCensus = true;
+constexpr bool kEnableLegacyNadineMazurStockTransitionCensus = false;
 // Build afy keeps the afx native WeaponPartial action tree exposed and adds
 // only a same-worker, read-only C39 census around stock Perform and Player
 // +0x408. It never appends a command, changes a blend weight, or restores a
 // pose row. The three verbatim snapshots localize the first arm-pose owner to
 // the normal DAG or Player Weapon/Holster IK before any later Async/palette
 // experiment is considered.
-constexpr bool kEnableLegacyNadineMazurStockPosePipelineCensus = true;
+constexpr bool kEnableLegacyNadineMazurStockPosePipelineCensus = false;
 // REJECTED (aen): requiring the remapped Chloe Hands root before the nested
 // retarget capture made the promised source discriminator unreachable.
 constexpr bool kEnableLegacyNadineVirtualChloeGripSourceCensus = false;
@@ -2784,6 +2790,7 @@ static_assert(
 static_assert(
     !kEnableLegacyNadineMazurStockTransitionCensus ||
         (!kEnableLegacyNadineMazurAuthoredPairRepair &&
+         !kEnableLegacyNadineMazurEmptyTrackEndpointFiller &&
          !kEnableLegacyNadineMazurLateSteadyIkRepair &&
          !kEnableLegacyNadineMazurTransientPostblendReplay &&
          !kEnableLegacyNadineMazurDrawEndpointRepair &&
@@ -2802,6 +2809,24 @@ static_assert(
          !kEnableLegacyNadineMazurDrawEndpointRepair &&
          !kEnableLegacyNadineMazurSteadyHandsCommandCensus),
     "stock pose pipeline census must own Perform/+0x408 read-only");
+static_assert(
+    !kEnableLegacyNadineMazurEmptyTrackEndpointFiller ||
+        (!kEnableLegacyNadineMazurAuthoredPairRepair &&
+         !kEnableLegacyNadineMazurLateSteadyIkRepair &&
+         !kEnableLegacyNadineMazurTransientPostblendReplay &&
+         !kEnableLegacyNadineMazurTransientPostblendCensus &&
+         !kEnableLegacyNadineMazurStockTransitionCensus &&
+         !kEnableLegacyNadineMazurStockPosePipelineCensus &&
+         !kEnableLegacyNadineIdleArmPoseRoundTrip &&
+         !kEnableLegacyNadineActiveWeaponGripOverlayRepair &&
+         !kEnableLegacyNadineMazurDrawEndpointRepair &&
+         !kEnableLegacyNadineWeaponIkGoalRelay &&
+         !kEnableLegacyNadineWeaponIkTerminalGoalRelay &&
+         !kEnableLegacyNadineWeaponIkFeatherSuppression &&
+         !kEnableLegacyNadineMazurRightHandPropRelay &&
+         !kEnableLegacyNadineMazurChloeRightHandPropReference &&
+         !kEnableLegacyNadineVirtualChloeGripSourceCensus),
+    "afz empty-track filler must be the only arm-transition mutation");
 // Build ada proved a repeatable first-Draw-good -> steady-broken transition,
 // followed by immediately broken later Draws. The animation layer has exact
 // create-new and loop-current paths while consuming its bounded transition
@@ -2809,6 +2834,12 @@ static_assert(
 // never alter a request, instance, weight, or pose row in this census.
 constexpr bool kEnableWeaponPartialTransitionLifecycleCensus =
     kEnableLegacyNadineMazurStockTransitionCensus;
+// AFZ still needs the already-proven successful TakeTransitions seed, but not
+// either AFY observer stream.  Keep seed publication independently selectable
+// so disabling the census cannot silently widen filler admission.
+constexpr bool kEnableWeaponPartialSuccessfulActionSeed =
+    kEnableWeaponPartialTransitionLifecycleCensus ||
+    kEnableLegacyNadineMazurEmptyTrackEndpointFiller;
 // Build add rejected both loop-current reuse and a missing second request.
 // The first custom Draw transition nevertheless starts from one track while
 // the repeated Draw starts from two. Sample the exact WeaponPartial track and
@@ -42540,6 +42571,33 @@ bool seh_publish_weapon_partial_successful_action_seed(
         g_weapon_partial_successful_action_seed = seed;
         ReleaseSRWLockExclusive(
             &g_weapon_partial_successful_action_seed_lock);
+        constexpr std::uint32_t kMaxSeedRows = 32;
+        static std::atomic<std::uint32_t> seed_rows{0};
+        static std::atomic<bool> seed_budget_logged{false};
+        const std::uint32_t seed_row =
+            seed_rows.fetch_add(1, std::memory_order_relaxed);
+        if (seed_row < kMaxSeedRows) {
+            char line[512]{};
+            std::snprintf(
+                line, sizeof(line),
+                "WEAPON-PARTIAL-ACTION-SEED row=%u serial=%llu"
+                " direction=%s queue=%u state=0x%08X controller=%u"
+                " requestedSlot=%d rifleSlot=%d playerGen=%u weaponGen=%u"
+                " fg=%p layer=%p",
+                seed_row,
+                static_cast<unsigned long long>(seed.serial),
+                direction == 1 ? "draw" : "put",
+                seed.queue_sequence, after.current_state,
+                player_state.draw_state, player_state.requested_slot,
+                seed.rifle_slot, seed.player_runtime_id,
+                seed.weapon_runtime_id, seed.fg_anim_data,
+                seed.weapon_partial_layer);
+            boot_log_line(line);
+        } else if (!seed_budget_logged.exchange(
+                       true, std::memory_order_relaxed)) {
+            boot_log_line(
+                "WEAPON-PARTIAL-ACTION-SEED SATURATED rows=32");
+        }
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         return false;
@@ -42618,6 +42676,12 @@ std::uint8_t __fastcall hooked_anim_state_layer_take_transitions(
         g_weapon_partial_fade_trace_layer.store(
             reinterpret_cast<std::uintptr_t>(layer),
             std::memory_order_release);
+    }
+
+    if constexpr (!kEnableWeaponPartialTransitionLifecycleCensus) {
+        // AFZ consumes only the successful semantic seed above.  Do not retain
+        // AFY's bounded observer stream in the mutation package.
+        return result;
     }
 
     constexpr std::uint32_t kMaxRows = 96;
@@ -42823,7 +42887,9 @@ bool install_weapon_partial_transition_lifecycle_census() {
     }
     boot_log_line(
         protection_restored
-            ? "WeaponPartial transition lifecycle census installed (read-only new-vs-loop pre/post)"
+            ? (kEnableWeaponPartialTransitionLifecycleCensus
+                   ? "WeaponPartial transition lifecycle census installed (read-only new-vs-loop pre/post)"
+                   : "WeaponPartial successful action-seed hook installed (AFZ scope only; lifecycle logging disabled)")
             : "WeaponPartial transition lifecycle census installed (read-only; protection WARNING)");
     return protection_restored;
 }
@@ -50779,17 +50845,86 @@ using LegacyNadineMazurAuthoredPairPerformFunction =
     std::int64_t(__fastcall*)(void*);
 using LegacyNadineMazurAuthoredPairPostBlendFunction =
     std::int64_t(__fastcall*)(void*);
+using LegacyNadineMazurTrackGenerateCommandsFunction = std::int64_t(
+    __fastcall*)(void*, void*, void*, std::uint32_t, std::int32_t,
+                 std::int32_t, void*, std::int32_t, void*);
+
+// Exact E8 inside AnimStateLayer_CreateAnimCommands. Stock has already
+// generated this one track when our wrapper records the command boundary, and
+// the caller has not yet emitted the cmd7 that folds the track into the older
+// accumulated pose. The wrapper is observation-only: the actual insertion is
+// deferred until the outer CreateAnimCmds call has completed, so the final word
+// count and capacity are known before any bytes are moved.
+constexpr std::uintptr_t
+    kAnimStateLayerTrackGenerateCommandsCallsiteRva = 0x189EB17;
+constexpr std::uintptr_t kAnimStateSnapshotGenerateCommandsRva = 0x1AB6C40;
+
+enum class LegacyNadineMazurEmptyEndpointKind : std::uint8_t {
+    kNone = 0,
+    kBase = 1,
+    kPair = 2,
+};
+
+enum class LegacyNadineMazurEmptyEndpointRole : std::uint8_t {
+    kNone = 0,
+    kIngress = 1,
+    kEgress = 2,
+    kSteady = 3,
+};
+
+struct LegacyNadineMazurEmptyTrackEpoch {
+    bool valid = false;
+    std::uint8_t direction = 0;
+    LegacyNadineMazurEmptyEndpointKind endpoint =
+        LegacyNadineMazurEmptyEndpointKind::kNone;
+    LegacyNadineMazurEmptyEndpointRole role =
+        LegacyNadineMazurEmptyEndpointRole::kNone;
+    void* player = nullptr;
+    void* fg_anim_data = nullptr;
+    void* weapon = nullptr;
+    void* target_skeleton = nullptr;
+    void* weapon_partial_layer = nullptr;
+    void* empty_track = nullptr;
+    void* hands_clip = nullptr;
+    void* arms_clip = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    std::uint32_t action_state = 0;
+    std::uint32_t native_weight_bits = 0;
+    std::uint64_t action_seed_serial = 0;
+    std::uint32_t empty_track_index = UINT32_MAX;
+};
+
+struct LegacyNadineMazurEmptyTrackDeferredInsert {
+    bool valid = false;
+    LegacyNadineMazurEmptyTrackEpoch endpoint{};
+    void* command_record = nullptr;
+    std::uint32_t* words = nullptr;
+    std::uint32_t insertion_word = 0;
+    std::uint32_t output_lane = 0;
+};
 
 LegacyNadineMazurAuthoredPairCreateFunction
     g_original_create_anim_cmds_for_authored_mazur_pair = nullptr;
 LegacyNadineMazurAuthoredPairPerformFunction
     g_original_perform_anim_blend_for_authored_mazur_pair = nullptr;
+LegacyNadineMazurTrackGenerateCommandsFunction
+    g_original_track_generate_commands_for_empty_endpoint = nullptr;
 std::atomic<bool> g_legacy_nadine_mazur_authored_pair_ready{false};
+// Published only after the successful-action seed hook, the exact per-track
+// GenerateAnimCommands relay and the steady-only postblend package are all
+// installed.  Every AFZ mutation checks this combined release barrier.
+std::atomic<bool> g_legacy_nadine_mazur_empty_track_filler_ready{false};
 thread_local LegacyNadineMazurAuthoredPairEpoch
     g_legacy_nadine_mazur_authored_pair_epoch{};
 thread_local bool g_legacy_nadine_mazur_authored_pair_injected = false;
 thread_local LegacyNadineMazurAuthoredPairPostBlendTicket
     g_legacy_nadine_mazur_authored_pair_postblend_ticket{};
+thread_local LegacyNadineMazurEmptyTrackEpoch
+    g_legacy_nadine_mazur_empty_track_epoch{};
+thread_local LegacyNadineMazurEmptyTrackDeferredInsert
+    g_legacy_nadine_mazur_empty_track_deferred_insert{};
+thread_local bool g_legacy_nadine_mazur_empty_track_filled = false;
 
 // Resolve the exact outer transition weight that stock command generation uses
 // for custom-weapon-part-with-feather. Tracks are generated oldest-to-newest;
@@ -50951,6 +51086,245 @@ bool seh_resolve_legacy_nadine_mazur_authored_pair_weight(
         }
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_legacy_nadine_mazur_has_exact_sole_no_weapon_track(void* layer) {
+    WeaponPartialFadeTraceSnapshot topology{};
+    if (!seh_capture_weapon_partial_fade_trace(layer, &topology) ||
+        !topology.valid || topology.track_count != 1 ||
+        topology.captured_track_count != 1) {
+        return false;
+    }
+    const auto& track = topology.tracks[0];
+    return track.track != nullptr && track.instance_count == 1 &&
+        track.captured_instance_count == 1 &&
+        track.instances[0].instance != nullptr &&
+        track.instances[0].state_id == kWeaponPartialNoWeaponStateId;
+}
+
+bool legacy_nadine_mazur_endpoint_action_state(
+    std::uint8_t direction, std::uint32_t state_id) {
+    if (direction == 1) {
+        return state_id == kWeaponPartialGrabStateId ||
+            state_id == kWeaponPartialDrawStateId ||
+            state_id == kMazurAuthoredPairStateId ||
+            state_id == kWeaponPartialWeaponOutStateId;
+    }
+    if (direction == 2) {
+        return state_id == kWeaponPartialHolsterStateId ||
+            state_id == kWeaponPartialHolsterNoWeaponStateId;
+    }
+    return false;
+}
+
+bool seh_resolve_legacy_nadine_mazur_endpoint_pair_clips(
+    void** hands_clip_out, void** arms_clip_out) {
+    if (hands_clip_out == nullptr || arms_clip_out == nullptr) {
+        return false;
+    }
+    *hands_clip_out = nullptr;
+    *arms_clip_out = nullptr;
+    __try {
+        void* const hands_clip = seh_resolve_exact_animation_clip(
+            kPlayerAnimationDatabaseId, kPlayerAnimationSkeletonId,
+            kMazurAuthoredHandsClipId);
+        void* const arms_clip = seh_resolve_exact_animation_clip(
+            kPlayerAnimationDatabaseId, kPlayerAnimationSkeletonId,
+            kMazurAuthoredArmsClipId);
+        auto* const hands_data = hands_clip != nullptr
+            ? *reinterpret_cast<std::byte* const*>(
+                  static_cast<std::byte*>(hands_clip) + 0x28)
+            : nullptr;
+        auto* const arms_data = arms_clip != nullptr
+            ? *reinterpret_cast<std::byte* const*>(
+                  static_cast<std::byte*>(arms_clip) + 0x28)
+            : nullptr;
+        if (hands_clip == nullptr || arms_clip == nullptr ||
+            hands_clip == arms_clip || hands_data == nullptr ||
+            arms_data == nullptr || readable_bytes(hands_data) < 0x24 ||
+            readable_bytes(arms_data) < 0x24 ||
+            *reinterpret_cast<const std::uint16_t*>(hands_data + 0x22) !=
+                kMazurAuthoredPairFrameCount ||
+            *reinterpret_cast<const std::uint16_t*>(arms_data + 0x22) !=
+                kMazurAuthoredPairFrameCount) {
+            return false;
+        }
+        *hands_clip_out = hands_clip;
+        *arms_clip_out = arms_clip;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *hands_clip_out = nullptr;
+        *arms_clip_out = nullptr;
+        return false;
+    }
+}
+
+bool seh_select_legacy_nadine_mazur_empty_track_epoch(
+    void* expected_fg, LegacyNadineMazurEmptyTrackEpoch* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (!kEnableLegacyNadineMazurEmptyTrackEndpointFiller ||
+            !g_legacy_nadine_mazur_empty_track_filler_ready.load(
+                std::memory_order_acquire) ||
+            !g_state_net.enabled || !g_net_role_b || expected_fg == nullptr) {
+            return false;
+        }
+        void* const player = retained_player_object(0);
+        IdleArmPoseOwnerScope owner{};
+        if (!seh_resolve_idle_arm_pose_owner_scope(
+                player, 0, &owner, nullptr, true) ||
+            owner.fg_anim_data != expected_fg ||
+            owner.weapon_art_id != kCoopRifleArtId ||
+            !local_player_is_stationary_weapon_handoff(owner)) {
+            return false;
+        }
+
+        LegacyNadineMazurAuthoredPairEpoch layer_scope{};
+        if (!seh_resolve_legacy_nadine_mazur_authored_pair_weight(
+                player, &layer_scope) ||
+            layer_scope.weapon_partial_layer == nullptr) {
+            return false;
+        }
+        const WeaponPartialSuccessfulActionSeed seed =
+            copy_weapon_partial_successful_action_seed();
+        const ULONGLONG now = GetTickCount64();
+        if (!seed.valid || seed.direction == 0 ||
+            seed.deadline_tick == 0 || now > seed.deadline_tick ||
+            seed.fg_anim_data != expected_fg ||
+            seed.weapon_partial_layer != layer_scope.weapon_partial_layer ||
+            seed.player_runtime_id == 0 || seed.weapon_runtime_id == 0 ||
+            seed.rifle_slot < 0 || owner.weapon_slot != seed.rifle_slot ||
+            (seed.direction == 1 &&
+             owner.controller_state != 1 && owner.controller_state != 2) ||
+            (seed.direction == 2 &&
+             owner.controller_state != 5 && owner.controller_state != 0)) {
+            return false;
+        }
+        const std::uint32_t player_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(player) +
+                kGameObjectRuntimeIdOffset);
+        const std::uint32_t weapon_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(owner.weapon) +
+                kGameObjectRuntimeIdOffset);
+        if (player_runtime_id != seed.player_runtime_id ||
+            weapon_runtime_id != seed.weapon_runtime_id) {
+            return false;
+        }
+
+        WeaponPartialFadeTraceSnapshot topology{};
+        if (!seh_capture_weapon_partial_fade_trace(
+                layer_scope.weapon_partial_layer, &topology) ||
+            !topology.valid || topology.track_count < 2 ||
+            topology.track_count > 3 ||
+            topology.captured_track_count != topology.track_count) {
+            return false;
+        }
+        std::uint32_t empty_index = UINT32_MAX;
+        std::uint32_t action_state = 0;
+        std::uint32_t action_count = 0;
+        for (std::uint32_t index = 0;
+             index < topology.captured_track_count; ++index) {
+            const auto& track = topology.tracks[index];
+            if (track.track == nullptr || track.instance_count != 1 ||
+                track.captured_instance_count != 1 ||
+                track.instances[0].instance == nullptr) {
+                return false;
+            }
+            const std::uint32_t state = track.instances[0].state_id;
+            if (state == kWeaponPartialNoWeaponStateId) {
+                if (empty_index != UINT32_MAX) {
+                    return false;
+                }
+                empty_index = index;
+                continue;
+            }
+            if (!legacy_nadine_mazur_endpoint_action_state(
+                    seed.direction, state)) {
+                return false;
+            }
+            action_state = state;
+            ++action_count;
+        }
+        if (empty_index == UINT32_MAX || action_count == 0 ||
+            (empty_index != 0 &&
+             empty_index + 1 != topology.captured_track_count)) {
+            return false;
+        }
+        const std::uint32_t adjacent_action_index =
+            empty_index == 0 ? 1 : empty_index - 1;
+        action_state = topology.tracks[adjacent_action_index]
+            .instances[0].state_id;
+        const bool empty_is_newest = empty_index == 0;
+        // The fade that first joins this endpoint is owned by the newer side
+        // of its adjacent fold.  For an ingress (empty oldest), that is the
+        // immediately newer action track; for an egress, it is the empty
+        // current track itself.  This affects telemetry only--stock cmd7 keeps
+        // consuming the original +0x158 value.
+        const std::uint32_t blend_track_index = empty_is_newest
+            ? empty_index
+            : adjacent_action_index;
+        const auto& blend_instance =
+            topology.tracks[blend_track_index].instances[0];
+        float native_weight = 0.0F;
+        std::memcpy(
+            &native_weight, &blend_instance.fade_in_weight_bits,
+            sizeof(native_weight));
+        if (!std::isfinite(native_weight) || native_weight < 0.0F ||
+            native_weight > 1.01F) {
+            return false;
+        }
+
+        const LegacyNadineMazurEmptyEndpointKind endpoint =
+            seed.direction == 1
+            ? (empty_is_newest
+                   ? LegacyNadineMazurEmptyEndpointKind::kPair
+                   : LegacyNadineMazurEmptyEndpointKind::kBase)
+            : (empty_is_newest
+                   ? LegacyNadineMazurEmptyEndpointKind::kBase
+                   : LegacyNadineMazurEmptyEndpointKind::kPair);
+        void* hands_clip = nullptr;
+        void* arms_clip = nullptr;
+        if (endpoint == LegacyNadineMazurEmptyEndpointKind::kPair &&
+            !seh_resolve_legacy_nadine_mazur_endpoint_pair_clips(
+                &hands_clip, &arms_clip)) {
+            return false;
+        }
+        auto* const target_skeleton = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(expected_fg) +
+            kFgAnimDataSkeletonOffset);
+        if (target_skeleton == nullptr) {
+            return false;
+        }
+        output->valid = true;
+        output->direction = seed.direction;
+        output->endpoint = endpoint;
+        output->role = empty_is_newest
+            ? LegacyNadineMazurEmptyEndpointRole::kEgress
+            : LegacyNadineMazurEmptyEndpointRole::kIngress;
+        output->player = player;
+        output->fg_anim_data = expected_fg;
+        output->weapon = owner.weapon;
+        output->target_skeleton = target_skeleton;
+        output->weapon_partial_layer = layer_scope.weapon_partial_layer;
+        output->empty_track = topology.tracks[empty_index].track;
+        output->hands_clip = hands_clip;
+        output->arms_clip = arms_clip;
+        output->player_runtime_id = player_runtime_id;
+        output->weapon_runtime_id = weapon_runtime_id;
+        output->action_state = action_state;
+        output->native_weight_bits = blend_instance.fade_in_weight_bits;
+        output->action_seed_serial = seed.serial;
+        output->empty_track_index = empty_index;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
         return false;
     }
 }
@@ -51129,21 +51503,31 @@ seh_select_legacy_nadine_mazur_authored_pair_epoch(
     }
     *output = {};
     __try {
-        if (!kEnableLegacyNadineMazurAuthoredPairRepair ||
+        if ((!kEnableLegacyNadineMazurAuthoredPairRepair &&
+             !kEnableLegacyNadineMazurEmptyTrackEndpointFiller) ||
             !g_legacy_nadine_mazur_authored_pair_ready.load(
                 std::memory_order_acquire) ||
+            (kEnableLegacyNadineMazurEmptyTrackEndpointFiller &&
+             !g_legacy_nadine_mazur_empty_track_filler_ready.load(
+                 std::memory_order_acquire)) ||
             !g_state_net.enabled || !g_net_role_b || expected_fg == nullptr) {
             return LegacyNadineMazurAuthoredPairAdmission::kPrerequisite;
         }
         void* const player = retained_player_object(0);
         IdleArmPoseOwnerScope owner{};
+        const bool afz_steady_only =
+            kEnableLegacyNadineMazurEmptyTrackEndpointFiller &&
+            !kEnableLegacyNadineMazurAuthoredPairRepair;
         if (!seh_resolve_idle_arm_pose_owner_scope(
                 player, 0, &owner, nullptr, true) ||
             owner.fg_anim_data != expected_fg ||
             owner.weapon_art_id != kCoopRifleArtId ||
-            (owner.controller_state == 2
-                 ? !local_player_is_steady_drawn_idle(owner)
-                 : !local_player_is_stationary_weapon_handoff(owner))) {
+            (afz_steady_only
+                 ? (owner.controller_state != 2 ||
+                    !local_player_is_steady_drawn_idle(owner))
+                 : (owner.controller_state == 2
+                        ? !local_player_is_steady_drawn_idle(owner)
+                        : !local_player_is_stationary_weapon_handoff(owner)))) {
             return LegacyNadineMazurAuthoredPairAdmission::kOwner;
         }
 
@@ -51207,6 +51591,14 @@ seh_select_legacy_nadine_mazur_authored_pair_epoch(
                 kGameObjectRuntimeIdOffset);
         if (!seh_resolve_legacy_nadine_mazur_authored_pair_weight(
                 player, output)) {
+            *output = {};
+            return LegacyNadineMazurAuthoredPairAdmission::kOwner;
+        }
+        if (afz_steady_only &&
+            (physical_phase != LegacyNadineMazurAuthoredPairPhase::kSteady ||
+             output->custom_pair_instance != nullptr ||
+             !seh_legacy_nadine_mazur_has_exact_sole_no_weapon_track(
+                 output->weapon_partial_layer))) {
             *output = {};
             return LegacyNadineMazurAuthoredPairAdmission::kOwner;
         }
@@ -51350,6 +51742,9 @@ bool seh_capture_legacy_nadine_mazur_authored_pair_postblend_ticket(
                 epoch.player, &current_layer) ||
             current_layer.weapon_partial_layer != epoch.weapon_partial_layer ||
             current_layer.custom_pair_instance != epoch.custom_pair_instance ||
+            (kEnableLegacyNadineMazurEmptyTrackEndpointFiller &&
+             !seh_legacy_nadine_mazur_has_exact_sole_no_weapon_track(
+                 current_layer.weapon_partial_layer)) ||
             (epoch.custom_pair_instance != nullptr &&
              (current_layer.blend_weight_bits != epoch.blend_weight_bits ||
               current_layer.transition_weighted !=
@@ -51995,6 +52390,9 @@ bool seh_restore_legacy_nadine_mazur_authored_pair_after_postblend(
                 player, &current_layer) ||
             current_layer.weapon_partial_layer != ticket.weapon_partial_layer ||
             current_layer.custom_pair_instance != ticket.custom_pair_instance ||
+            (kEnableLegacyNadineMazurEmptyTrackEndpointFiller &&
+             !seh_legacy_nadine_mazur_has_exact_sole_no_weapon_track(
+                 current_layer.weapon_partial_layer)) ||
             (ticket.custom_pair_instance != nullptr &&
              (current_layer.blend_weight_bits != ticket.blend_weight_bits ||
               current_layer.transition_weighted !=
@@ -52177,6 +52575,423 @@ seh_inject_legacy_nadine_mazur_authored_pair(
     }
 }
 
+enum class LegacyNadineMazurEmptyTrackFillResult : std::uint8_t {
+    kIgnored = 0,
+    kBase = 1,
+    kPair = 2,
+    kContext = 3,
+    kRecord = 4,
+    kCapacity = 5,
+};
+
+LegacyNadineMazurEmptyTrackFillResult
+seh_capture_legacy_nadine_mazur_empty_track_insert(
+    void* create_context, void* command_record, std::uint32_t output_lane,
+    const LegacyNadineMazurEmptyTrackEpoch& endpoint,
+    LegacyNadineMazurEmptyTrackDeferredInsert* deferred_out) {
+    if (deferred_out == nullptr) {
+        return LegacyNadineMazurEmptyTrackFillResult::kRecord;
+    }
+    *deferred_out = {};
+    __try {
+        if (!endpoint.valid || endpoint.endpoint ==
+                LegacyNadineMazurEmptyEndpointKind::kNone) {
+            return LegacyNadineMazurEmptyTrackFillResult::kIgnored;
+        }
+        auto* const context = static_cast<std::byte*>(create_context);
+        if (context == nullptr || readable_bytes(context) < 0x20 ||
+            *reinterpret_cast<void* const*>(context) !=
+                endpoint.target_skeleton ||
+            *reinterpret_cast<const std::uint32_t*>(context + 0x0C) != 0 ||
+            *reinterpret_cast<const std::uint8_t*>(context + 0x10) != 1 ||
+            *reinterpret_cast<const std::uint8_t*>(context + 0x11) != 3 ||
+            *reinterpret_cast<const std::uint8_t*>(context + 0x1C) != 1) {
+            return LegacyNadineMazurEmptyTrackFillResult::kContext;
+        }
+        auto* const record = static_cast<std::byte*>(command_record);
+        if (record == nullptr || readable_bytes(record) < 0x20) {
+            return LegacyNadineMazurEmptyTrackFillResult::kRecord;
+        }
+        auto* const words = *reinterpret_cast<std::uint32_t**>(record);
+        const std::uint32_t capacity =
+            *reinterpret_cast<const std::uint32_t*>(record + 0x08);
+        const std::uint32_t word_count =
+            *reinterpret_cast<const std::uint32_t*>(record + 0x0C);
+        const std::uint32_t maximum_lane =
+            *reinterpret_cast<const std::uint32_t*>(record + 0x10);
+        auto* const pending_lane_count =
+            *reinterpret_cast<std::uint32_t**>(record + 0x18);
+        if (words == nullptr ||
+            (capacity != 1024 && capacity != 4096) ||
+            word_count < 7 || word_count > capacity ||
+            readable_bytes(words) <
+                static_cast<std::size_t>(capacity) * sizeof(std::uint32_t) ||
+            words[4] != 0x00040002u || pending_lane_count != words + 6 ||
+            output_lane == 0 || output_lane > maximum_lane ||
+            maximum_lane >= kAnimWorkBufferLaneCapacity ||
+            (endpoint.endpoint == LegacyNadineMazurEmptyEndpointKind::kPair &&
+             (endpoint.hands_clip == nullptr || endpoint.arms_clip == nullptr ||
+              endpoint.hands_clip == endpoint.arms_clip))) {
+            return LegacyNadineMazurEmptyTrackFillResult::kRecord;
+        }
+
+        deferred_out->valid = true;
+        deferred_out->endpoint = endpoint;
+        deferred_out->command_record = command_record;
+        deferred_out->words = words;
+        deferred_out->insertion_word = word_count;
+        deferred_out->output_lane = output_lane;
+        return LegacyNadineMazurEmptyTrackFillResult::kIgnored;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *deferred_out = {};
+        return LegacyNadineMazurEmptyTrackFillResult::kRecord;
+    }
+}
+
+LegacyNadineMazurEmptyTrackFillResult
+seh_commit_legacy_nadine_mazur_empty_track_insert(
+    void* create_context, void* command_record, std::uint32_t group,
+    const LegacyNadineMazurEmptyTrackDeferredInsert& deferred,
+    std::uint32_t* scratch_lane_out) {
+    if (scratch_lane_out != nullptr) {
+        *scratch_lane_out = 0;
+    }
+    __try {
+        if (!deferred.valid || !deferred.endpoint.valid ||
+            deferred.endpoint.endpoint ==
+                LegacyNadineMazurEmptyEndpointKind::kNone ||
+            create_context == nullptr || command_record == nullptr ||
+            command_record != deferred.command_record || group != 0 ||
+            readable_bytes(create_context) < 0x18 ||
+            *reinterpret_cast<void* const*>(create_context) !=
+                deferred.endpoint.fg_anim_data ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(create_context) + 0x08) !=
+                deferred.endpoint.target_skeleton ||
+            *reinterpret_cast<const std::uint8_t*>(
+                static_cast<const std::byte*>(create_context) + 0x10) != 1 ||
+            *reinterpret_cast<const std::uint8_t*>(
+                static_cast<const std::byte*>(create_context) + 0x11) != 3 ||
+            readable_bytes(command_record) < 0x20) {
+            return LegacyNadineMazurEmptyTrackFillResult::kContext;
+        }
+
+        auto* const record = static_cast<std::byte*>(command_record);
+        auto* const words = *reinterpret_cast<std::uint32_t**>(record);
+        const std::uint32_t capacity =
+            *reinterpret_cast<const std::uint32_t*>(record + 0x08);
+        const std::uint32_t word_count =
+            *reinterpret_cast<const std::uint32_t*>(record + 0x0C);
+        const std::uint32_t pending_count =
+            *reinterpret_cast<const std::uint32_t*>(record + 0x10);
+        void* const pending_header =
+            *reinterpret_cast<void* const*>(record + 0x18);
+        const std::uint32_t inserted_words =
+            deferred.endpoint.endpoint ==
+                    LegacyNadineMazurEmptyEndpointKind::kBase
+                ? 4u
+                : 2u * (kAnimCommandWordCountAnimation +
+                        kAnimCommandWordCountBlend);
+        if (words == nullptr || words != deferred.words || word_count == 0 ||
+            (capacity != 1024 && capacity != 4096) ||
+            word_count > capacity || deferred.insertion_word < 8 ||
+            deferred.insertion_word >= word_count || pending_count != 0 ||
+            pending_header != nullptr ||
+            inserted_words > capacity - word_count ||
+            readable_bytes(words) <
+                static_cast<std::size_t>(word_count + inserted_words) *
+                    sizeof(std::uint32_t)) {
+            return LegacyNadineMazurEmptyTrackFillResult::kRecord;
+        }
+
+        std::uint32_t cursor = 0;
+        std::uint32_t opener_word = UINT32_MAX;
+        std::uint32_t finalizer_word = UINT32_MAX;
+        std::uint32_t object_begin_count = 0;
+        std::uint32_t control_begin_count = 0;
+        std::uint32_t opener_count = 0;
+        std::uint32_t finalizer_count = 0;
+        bool insertion_is_boundary = deferred.insertion_word == 0;
+        while (cursor < word_count) {
+            if (cursor == deferred.insertion_word) {
+                insertion_is_boundary = true;
+            }
+            const std::uint32_t header = words[cursor];
+            const std::uint32_t opcode = header & 0xFFFFu;
+            const std::uint32_t command_words = header >> 16;
+            if (command_words == 0 || command_words > word_count - cursor) {
+                return LegacyNadineMazurEmptyTrackFillResult::kRecord;
+            }
+            if (opcode == kAnimCommandBeginObject) {
+                if (command_words != 2 || cursor != 0) {
+                    return LegacyNadineMazurEmptyTrackFillResult::kRecord;
+                }
+                ++object_begin_count;
+            } else if (opcode == kAnimCommandBeginControl) {
+                if (command_words != 2 || cursor != 2) {
+                    return LegacyNadineMazurEmptyTrackFillResult::kRecord;
+                }
+                ++control_begin_count;
+            } else if (opcode == kAnimCommandAllocateBlock) {
+                if (command_words != 4 || cursor != 4) {
+                    return LegacyNadineMazurEmptyTrackFillResult::kRecord;
+                }
+                ++opener_count;
+                opener_word = cursor;
+            } else if (opcode == kAnimCommandFinalizeBlock) {
+                if (command_words != kAnimCommandWordCountFinalizeBlock) {
+                    return LegacyNadineMazurEmptyTrackFillResult::kRecord;
+                }
+                ++finalizer_count;
+                finalizer_word = cursor;
+            }
+            cursor += command_words;
+        }
+        if (cursor != word_count || !insertion_is_boundary ||
+            object_begin_count != 1 || control_begin_count != 1 ||
+            opener_count != 1 || finalizer_count != 1 ||
+            opener_word == UINT32_MAX || finalizer_word == UINT32_MAX ||
+            deferred.insertion_word <= opener_word ||
+            deferred.insertion_word >= finalizer_word) {
+            return LegacyNadineMazurEmptyTrackFillResult::kRecord;
+        }
+
+        const std::uint32_t old_lane_count = words[opener_word + 2];
+        if (old_lane_count == 0 ||
+            old_lane_count > kAnimWorkBufferLaneCapacity ||
+            deferred.output_lane >= old_lane_count) {
+            return LegacyNadineMazurEmptyTrackFillResult::kCapacity;
+        }
+        std::uint32_t scratch_lane = 0;
+        if (deferred.endpoint.endpoint ==
+            LegacyNadineMazurEmptyEndpointKind::kPair) {
+            if (old_lane_count >= kAnimWorkBufferLaneCapacity) {
+                return LegacyNadineMazurEmptyTrackFillResult::kCapacity;
+            }
+            scratch_lane = old_lane_count;
+        }
+
+        const std::uint32_t suffix_words =
+            word_count - deferred.insertion_word;
+        std::memmove(
+            words + deferred.insertion_word + inserted_words,
+            words + deferred.insertion_word,
+            static_cast<std::size_t>(suffix_words) * sizeof(std::uint32_t));
+        std::uint32_t* output = words + deferred.insertion_word;
+        if (deferred.endpoint.endpoint ==
+            LegacyNadineMazurEmptyEndpointKind::kBase) {
+            // Stock cmd13 records are four dwords even though the evaluator
+            // consumes only source/destination. Preserve the list's 8-byte
+            // command alignment for every qword-bearing command in the suffix.
+            output[0] = 0x0004000Du;
+            output[1] = 0;
+            output[2] = deferred.output_lane;
+            output[3] = 0;
+        } else {
+            const auto emit_clip_overlay = [&](void* clip) {
+                output[0] =
+                    (kAnimCommandWordCountAnimation << 16) |
+                    kAnimCommandAnimation;
+                output[1] = 0;
+                std::memcpy(output + 2, &clip, sizeof(clip));
+                output[4] = scratch_lane;
+                output[5] = 0;
+                output += kAnimCommandWordCountAnimation;
+                output[0] =
+                    (kAnimCommandWordCountBlend << 16) | kAnimCommandBlend;
+                output[1] = deferred.output_lane;
+                output[2] = scratch_lane;
+                output[3] = deferred.output_lane;
+                output[4] = 1;
+                output[5] = 0x3F800000u;
+                output += kAnimCommandWordCountBlend;
+            };
+            emit_clip_overlay(deferred.endpoint.hands_clip);
+            emit_clip_overlay(deferred.endpoint.arms_clip);
+            words[opener_word + 2] = scratch_lane + 1;
+        }
+        *reinterpret_cast<std::uint32_t*>(record + 0x0C) =
+            word_count + inserted_words;
+        if (scratch_lane_out != nullptr) {
+            *scratch_lane_out = scratch_lane;
+        }
+        return deferred.endpoint.endpoint ==
+                LegacyNadineMazurEmptyEndpointKind::kBase
+            ? LegacyNadineMazurEmptyTrackFillResult::kBase
+            : LegacyNadineMazurEmptyTrackFillResult::kPair;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return LegacyNadineMazurEmptyTrackFillResult::kRecord;
+    }
+}
+
+const char* legacy_nadine_mazur_empty_endpoint_name(
+    LegacyNadineMazurEmptyEndpointKind endpoint) {
+    return endpoint == LegacyNadineMazurEmptyEndpointKind::kBase
+        ? "base"
+        : endpoint == LegacyNadineMazurEmptyEndpointKind::kPair
+            ? "pair"
+            : "none";
+}
+
+const char* legacy_nadine_mazur_empty_endpoint_role_name(
+    LegacyNadineMazurEmptyEndpointRole role) {
+    return role == LegacyNadineMazurEmptyEndpointRole::kIngress
+        ? "ingress"
+        : role == LegacyNadineMazurEmptyEndpointRole::kEgress
+            ? "egress"
+            : role == LegacyNadineMazurEmptyEndpointRole::kSteady
+                ? "steady"
+                : "none";
+}
+
+void log_legacy_nadine_mazur_empty_track_fill(
+    const LegacyNadineMazurEmptyTrackEpoch& epoch,
+    std::uint32_t output_lane, std::uint32_t scratch_lane,
+    LegacyNadineMazurEmptyTrackFillResult result) {
+    float native_weight = 0.0F;
+    std::memcpy(
+        &native_weight, &epoch.native_weight_bits,
+        sizeof(native_weight));
+    const std::uint32_t weight_bucket = std::isfinite(native_weight)
+        ? static_cast<std::uint32_t>(
+              std::clamp(native_weight, 0.0F, 1.0F) * 10.0F)
+        : 11u;
+    std::uint64_t signature = kAimPipelineFnvOffset;
+    signature = aim_pipeline_hash_word(
+        signature, static_cast<std::uint32_t>(epoch.action_seed_serial));
+    signature = aim_pipeline_hash_word(
+        signature, static_cast<std::uint32_t>(epoch.action_seed_serial >> 32));
+    signature = aim_pipeline_hash_word(signature, epoch.direction);
+    signature = aim_pipeline_hash_word(
+        signature, static_cast<std::uint32_t>(epoch.role));
+    signature = aim_pipeline_hash_word(
+        signature, static_cast<std::uint32_t>(epoch.endpoint));
+    signature = aim_pipeline_hash_word(
+        signature, static_cast<std::uint32_t>(result));
+    signature = aim_pipeline_hash_word(signature, epoch.action_state);
+    signature = aim_pipeline_hash_word(signature, weight_bucket);
+    static SRWLOCK log_lock = SRWLOCK_INIT;
+    static std::array<std::uint64_t, 64> signatures{};
+    static std::size_t signature_count = 0;
+    static bool saturation_logged = false;
+    bool should_log = false;
+    bool log_saturation = false;
+    AcquireSRWLockExclusive(&log_lock);
+    bool duplicate = false;
+    for (std::size_t index = 0; index < signature_count; ++index) {
+        if (signatures[index] == signature) {
+            duplicate = true;
+            break;
+        }
+    }
+    if (!duplicate && signature_count < signatures.size()) {
+        signatures[signature_count++] = signature;
+        should_log = true;
+    } else if (!duplicate && !saturation_logged) {
+        saturation_logged = true;
+        log_saturation = true;
+    }
+    ReleaseSRWLockExclusive(&log_lock);
+    if (log_saturation) {
+        boot_log_line(
+            "NADINE-MAZUR-EMPTY-ENDPOINT SATURATED signatures=64");
+    }
+    if (!should_log) {
+        return;
+    }
+    std::ostringstream line;
+    line << "NADINE-MAZUR-EMPTY-ENDPOINT result="
+         << static_cast<unsigned>(result)
+         << " seed=" << epoch.action_seed_serial
+         << " direction=" << (epoch.direction == 1 ? "draw" : "put")
+         << " role=" << legacy_nadine_mazur_empty_endpoint_role_name(epoch.role)
+         << " endpoint=" << legacy_nadine_mazur_empty_endpoint_name(epoch.endpoint)
+         << " state=0x" << std::hex << epoch.action_state
+         << " weightBits=0x" << epoch.native_weight_bits << std::dec
+         << " weight=" << native_weight
+         << " track=" << epoch.empty_track_index
+         << " lane=" << output_lane << "/" << scratch_lane;
+    boot_log_line(line.str().c_str());
+}
+
+std::int64_t __fastcall
+hooked_track_generate_commands_for_legacy_nadine_mazur_empty_endpoint(
+    void* track, void* create_context, void* command_record,
+    std::uint32_t output_lane, std::int32_t a5, std::int32_t a6,
+    void* a7, std::int32_t track_index, void* a9) {
+    const auto original =
+        g_original_track_generate_commands_for_empty_endpoint;
+    const std::int64_t result = original != nullptr
+        ? original(
+              track, create_context, command_record, output_lane,
+              a5, a6, a7, track_index, a9)
+        : 0;
+    if (!g_legacy_nadine_mazur_empty_track_filler_ready.load(
+            std::memory_order_acquire) ||
+        g_legacy_nadine_mazur_empty_track_filled ||
+        g_legacy_nadine_mazur_empty_track_deferred_insert.valid) {
+        return result;
+    }
+
+    LegacyNadineMazurEmptyTrackEpoch fill{};
+    const LegacyNadineMazurEmptyTrackEpoch transition =
+        g_legacy_nadine_mazur_empty_track_epoch;
+    if (transition.valid && transition.empty_track == track &&
+        static_cast<std::uint32_t>(track_index) ==
+            transition.empty_track_index) {
+        fill = transition;
+    } else {
+        const LegacyNadineMazurAuthoredPairEpoch steady =
+            g_legacy_nadine_mazur_authored_pair_epoch;
+        WeaponPartialFadeTraceSnapshot topology{};
+        if (!steady.valid || steady.weapon_partial_layer == nullptr ||
+            !seh_capture_weapon_partial_fade_trace(
+                steady.weapon_partial_layer, &topology) ||
+            !topology.valid || topology.track_count != 1 ||
+            topology.captured_track_count != 1 ||
+            topology.tracks[0].track != track ||
+            topology.tracks[0].instance_count != 1 ||
+            topology.tracks[0].captured_instance_count != 1 ||
+            topology.tracks[0].instances[0].state_id !=
+                kWeaponPartialNoWeaponStateId ||
+            track_index != 0) {
+            return result;
+        }
+        fill.valid = true;
+        fill.direction = 1;
+        fill.endpoint = LegacyNadineMazurEmptyEndpointKind::kPair;
+        fill.role = LegacyNadineMazurEmptyEndpointRole::kSteady;
+        fill.player = steady.player;
+        fill.fg_anim_data = steady.fg_anim_data;
+        fill.weapon = steady.weapon;
+        fill.target_skeleton = steady.target_skeleton;
+        fill.weapon_partial_layer = steady.weapon_partial_layer;
+        fill.empty_track = track;
+        fill.hands_clip = steady.hands_clip;
+        fill.arms_clip = steady.arms_clip;
+        fill.player_runtime_id = steady.player_runtime_id;
+        fill.weapon_runtime_id = steady.weapon_runtime_id;
+        fill.native_weight_bits = 0x3F800000u;
+        fill.empty_track_index = 0;
+    }
+
+    LegacyNadineMazurEmptyTrackDeferredInsert deferred{};
+    const auto capture_result =
+        seh_capture_legacy_nadine_mazur_empty_track_insert(
+            create_context, command_record, output_lane, fill, &deferred);
+    if (deferred.valid) {
+        // Do not consume capacity while stock still has layers/finalizers to
+        // emit. The exact outer Create wrapper will insert at this recorded
+        // boundary only after it sees the completed command list.
+        g_legacy_nadine_mazur_empty_track_deferred_insert = deferred;
+    } else if (capture_result !=
+               LegacyNadineMazurEmptyTrackFillResult::kIgnored) {
+        log_legacy_nadine_mazur_empty_track_fill(
+            fill, output_lane, 0, capture_result);
+    }
+    return result;
+}
+
 std::uint64_t __fastcall
 hooked_create_anim_cmds_for_legacy_nadine_mazur_authored_pair(
     void* command_record, void* create_context, std::uint32_t group) {
@@ -52187,6 +53002,35 @@ hooked_create_anim_cmds_for_legacy_nadine_mazur_authored_pair(
         : 0;
     if (!g_legacy_nadine_mazur_authored_pair_ready.load(
             std::memory_order_acquire)) {
+        return result;
+    }
+    if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
+        const LegacyNadineMazurEmptyTrackDeferredInsert deferred =
+            g_legacy_nadine_mazur_empty_track_deferred_insert;
+        g_legacy_nadine_mazur_empty_track_deferred_insert = {};
+        if (!deferred.valid) {
+            return result;
+        }
+        std::uint32_t scratch_lane = 0;
+        const auto fill_result =
+            seh_commit_legacy_nadine_mazur_empty_track_insert(
+                create_context, command_record, group, deferred,
+                &scratch_lane);
+        if (fill_result == LegacyNadineMazurEmptyTrackFillResult::kBase ||
+            fill_result == LegacyNadineMazurEmptyTrackFillResult::kPair) {
+            g_legacy_nadine_mazur_empty_track_filled = true;
+            if (deferred.endpoint.role ==
+                    LegacyNadineMazurEmptyEndpointRole::kSteady &&
+                fill_result == LegacyNadineMazurEmptyTrackFillResult::kPair) {
+                // Only the exact sole steady endpoint earns the confirmed ADR
+                // postblend preservation. Transition fills leave Player+0x408
+                // completely stock.
+                g_legacy_nadine_mazur_authored_pair_injected = true;
+            }
+        }
+        log_legacy_nadine_mazur_empty_track_fill(
+            deferred.endpoint, deferred.output_lane, scratch_lane,
+            fill_result);
         return result;
     }
     const LegacyNadineMazurAuthoredPairEpoch epoch =
@@ -52300,8 +53144,15 @@ hooked_perform_anim_blend_for_legacy_nadine_mazur_authored_pair(void* job) {
     }
     const LegacyNadineMazurAuthoredPairEpoch previous =
         g_legacy_nadine_mazur_authored_pair_epoch;
+    const LegacyNadineMazurEmptyTrackEpoch previous_empty =
+        g_legacy_nadine_mazur_empty_track_epoch;
+    const LegacyNadineMazurEmptyTrackDeferredInsert previous_deferred =
+        g_legacy_nadine_mazur_empty_track_deferred_insert;
     g_legacy_nadine_mazur_authored_pair_epoch = {};
+    g_legacy_nadine_mazur_empty_track_epoch = {};
+    g_legacy_nadine_mazur_empty_track_deferred_insert = {};
     g_legacy_nadine_mazur_authored_pair_injected = false;
+    g_legacy_nadine_mazur_empty_track_filled = false;
     g_legacy_nadine_mazur_authored_pair_postblend_ticket = {};
 
     bool exact_local_fg = false;
@@ -52326,6 +53177,11 @@ hooked_perform_anim_blend_for_legacy_nadine_mazur_authored_pair(void* job) {
         fg = nullptr;
     }
     if (exact_local_fg) {
+        LegacyNadineMazurEmptyTrackEpoch empty_endpoint{};
+        if (seh_select_legacy_nadine_mazur_empty_track_epoch(
+                fg, &empty_endpoint)) {
+            g_legacy_nadine_mazur_empty_track_epoch = empty_endpoint;
+        }
         LegacyNadineMazurAuthoredPairEpoch selected{};
         const auto admission =
             seh_select_legacy_nadine_mazur_authored_pair_epoch(
@@ -52358,6 +53214,8 @@ hooked_perform_anim_blend_for_legacy_nadine_mazur_authored_pair(void* job) {
         }
     }
     g_legacy_nadine_mazur_authored_pair_epoch = previous;
+    g_legacy_nadine_mazur_empty_track_epoch = previous_empty;
+    g_legacy_nadine_mazur_empty_track_deferred_insert = previous_deferred;
     return result;
 }
 
@@ -52578,6 +53436,8 @@ hooked_player_postblend_for_legacy_nadine_mazur_authored_pair(void* player) {
 bool install_legacy_nadine_mazur_authored_pair_repair() {
     g_legacy_nadine_mazur_authored_pair_ready.store(
         false, std::memory_order_release);
+    g_legacy_nadine_mazur_empty_track_filler_ready.store(
+        false, std::memory_order_release);
     if constexpr (kEnableLegacyNadineMazurLateSteadyIkRepair) {
         if (!initialize_weapon_ik_native_helpers()) {
             boot_log_line(
@@ -52592,6 +53452,9 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     std::uint8_t* create_site = nullptr;
     std::uint8_t* create_relay = nullptr;
     std::int32_t create_new_displacement = 0;
+    std::uint8_t* outer_create_site = nullptr;
+    std::uint8_t* outer_create_relay = nullptr;
+    std::int32_t outer_create_new_displacement = 0;
     std::uint8_t* perform_site = nullptr;
     std::uint8_t* perform_relay = nullptr;
     std::int32_t perform_new_displacement = 0;
@@ -52603,11 +53466,18 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
 
     const bool preflight =
         prepare_plain_callsite_relay(
+            kAnimStateLayerTrackGenerateCommandsCallsiteRva,
+            kAnimStateSnapshotGenerateCommandsRva,
+            reinterpret_cast<const void*>(
+                &hooked_track_generate_commands_for_legacy_nadine_mazur_empty_endpoint),
+            create_site, create_relay, create_new_displacement) &&
+        prepare_plain_callsite_relay(
             kAnimManagerCreateAnimCmdsNormalCallsiteRva,
             kAnimManagerCreateAnimCmdsForObjectRva,
             reinterpret_cast<const void*>(
                 &hooked_create_anim_cmds_for_legacy_nadine_mazur_authored_pair),
-            create_site, create_relay, create_new_displacement) &&
+            outer_create_site, outer_create_relay,
+            outer_create_new_displacement) &&
         prepare_plain_callsite_relay(
             kAnimManagerPerformAnimBlendCallsiteRva,
             kAnimManagerPerformAnimBlendRva,
@@ -52623,6 +53493,9 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     const auto free_relays = [&]() {
         if (create_relay != nullptr) {
             VirtualFree(create_relay, 0, MEM_RELEASE);
+        }
+        if (outer_create_relay != nullptr) {
+            VirtualFree(outer_create_relay, 0, MEM_RELEASE);
         }
         if (perform_relay != nullptr) {
             VirtualFree(perform_relay, 0, MEM_RELEASE);
@@ -52644,13 +53517,15 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
         std::array<std::uint8_t, 6> stock{};
         std::array<std::uint8_t, 6> patch{};
     };
-    std::array<PatchSite, 3> sites{};
+    std::array<PatchSite, 4> sites{};
     sites[0].address = create_site;
     sites[0].size = 5;
-    sites[1].address = perform_site;
+    sites[1].address = outer_create_site;
     sites[1].size = 5;
-    sites[2].address = postblend_site;
-    sites[2].size = 6;
+    sites[2].address = perform_site;
+    sites[2].size = 5;
+    sites[3].address = postblend_site;
+    sites[3].size = 6;
     for (auto& site : sites) {
         std::memcpy(site.stock.data(), site.address, site.size);
         std::memcpy(site.patch.data(), site.address, site.size);
@@ -52661,10 +53536,17 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
         sizeof(create_new_displacement));
     sites[1].patch[0] = 0xE8;
     std::memcpy(
-        sites[1].patch.data() + 1, &perform_new_displacement,
+        sites[1].patch.data() + 1, &outer_create_new_displacement,
+        sizeof(outer_create_new_displacement));
+    sites[2].patch[0] = 0xE8;
+    std::memcpy(
+        sites[2].patch.data() + 1, &perform_new_displacement,
         sizeof(perform_new_displacement));
-    sites[2].patch = postblend_patch;
+    sites[3].patch = postblend_patch;
 
+    g_original_track_generate_commands_for_empty_endpoint =
+        reinterpret_cast<LegacyNadineMazurTrackGenerateCommandsFunction>(
+            g_module + kAnimStateSnapshotGenerateCommandsRva);
     g_original_create_anim_cmds_for_authored_mazur_pair =
         reinterpret_cast<LegacyNadineMazurAuthoredPairCreateFunction>(
             g_module + kAnimManagerCreateAnimCmdsForObjectRva);
@@ -52686,18 +53568,27 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     const std::size_t perform_page_span =
         static_cast<std::size_t>((postblend_site + 6) - perform_site);
     DWORD create_old_protection = 0;
+    DWORD outer_create_old_protection = 0;
     DWORD perform_page_old_protection = 0;
     const bool create_protected = VirtualProtect(
         create_site, 5, PAGE_EXECUTE_READWRITE,
         &create_old_protection) != 0;
+    const bool outer_create_protected = VirtualProtect(
+        outer_create_site, 5, PAGE_EXECUTE_READWRITE,
+        &outer_create_old_protection) != 0;
     const bool perform_page_protected = VirtualProtect(
         perform_site, perform_page_span, PAGE_EXECUTE_READWRITE,
         &perform_page_old_protection) != 0;
-    if (!create_protected || !perform_page_protected) {
+    if (!create_protected || !outer_create_protected ||
+        !perform_page_protected) {
         DWORD ignored = 0;
         if (create_protected) {
             VirtualProtect(
                 create_site, 5, create_old_protection, &ignored);
+        }
+        if (outer_create_protected) {
+            VirtualProtect(
+                outer_create_site, 5, outer_create_old_protection, &ignored);
         }
         if (perform_page_protected) {
             VirtualProtect(
@@ -52739,26 +53630,33 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     DWORD ignored = 0;
     const bool create_restored = VirtualProtect(
         create_site, 5, create_old_protection, &ignored) != 0;
+    const bool outer_create_restored = VirtualProtect(
+        outer_create_site, 5, outer_create_old_protection, &ignored) != 0;
     const bool perform_page_restored = VirtualProtect(
         perform_site, perform_page_span, perform_page_old_protection,
         &ignored) != 0;
     const bool protections_restored =
-        create_restored && perform_page_restored;
+        create_restored && outer_create_restored && perform_page_restored;
 
     if (installed && !protections_restored) {
         // Never publish an armed mutation on a page whose protection could not
-        // be restored. Reopen all three exact sites, roll every byte back and
+        // be restored. Reopen all four exact sites, roll every byte back and
         // verify while every other process thread remains suspended.
         DWORD create_retry_old = 0;
+        DWORD outer_create_retry_old = 0;
         DWORD perform_retry_old = 0;
         const bool create_reopened = VirtualProtect(
             create_site, 5, PAGE_EXECUTE_READWRITE,
             &create_retry_old) != 0;
+        const bool outer_create_reopened = VirtualProtect(
+            outer_create_site, 5, PAGE_EXECUTE_READWRITE,
+            &outer_create_retry_old) != 0;
         const bool perform_page_reopened = VirtualProtect(
             perform_site, perform_page_span, PAGE_EXECUTE_READWRITE,
             &perform_retry_old) != 0;
         const bool reopened_all =
-            create_reopened && perform_page_reopened;
+            create_reopened && outer_create_reopened &&
+            perform_page_reopened;
         if (reopened_all) {
             for (const auto& site : sites) {
                 std::memcpy(site.address, site.stock.data(), site.size);
@@ -52766,11 +53664,16 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
                     GetCurrentProcess(), site.address, site.size);
             }
             rollback_verified = all_match(false);
-            VirtualProtect(
+            const bool create_rollback_restored = VirtualProtect(
                 create_site, 5, create_old_protection, &ignored);
-            VirtualProtect(
+            const bool outer_create_rollback_restored = VirtualProtect(
+                outer_create_site, 5, outer_create_old_protection, &ignored);
+            const bool perform_rollback_restored = VirtualProtect(
                 perform_site, perform_page_span,
                 perform_page_old_protection, &ignored);
+            rollback_verified = rollback_verified &&
+                create_rollback_restored && outer_create_rollback_restored &&
+                perform_rollback_restored;
         } else {
             if (create_reopened) {
                 VirtualProtect(
@@ -52780,6 +53683,11 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
                 VirtualProtect(
                     perform_site, perform_page_span,
                     perform_page_old_protection, &ignored);
+            }
+            if (outer_create_reopened) {
+                VirtualProtect(
+                    outer_create_site, 5, outer_create_old_protection,
+                    &ignored);
             }
         }
         installed = false;
@@ -52792,12 +53700,14 @@ bool install_legacy_nadine_mazur_authored_pair_repair() {
     }
     resume_suspended_process_threads(suspended_threads);
 
-    if (!installed && rollback_verified) {
+    if (!installed && rollback_verified && protections_restored) {
         free_relays();
     }
     boot_log_line(
         ready
-            ? (kEnableLegacyNadineMazurLateSteadyIkRepair
+            ? (kEnableLegacyNadineMazurEmptyTrackEndpointFiller
+                   ? "legacy-Nadine Mazur empty-track endpoint command package INSTALLED (inner boundary + outer commit + Perform + postblend; combined seed barrier pending)"
+                   : kEnableLegacyNadineMazurLateSteadyIkRepair
                    ? "legacy-Nadine Mazur authored-pair + native Draw/Put weighting + late steady IK READY (Player+0x4308 JointSets; allocator 14 scope; three exact callsite relays)"
                    : "legacy-Nadine Mazur authored-pair preservation READY (native state fade; three exact callsite relays)")
             : (rollback_verified
@@ -72520,8 +73430,13 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-26afy "
-        "(preserve afu cold; stock C39 pre/post Perform and Player+0x408 census)");
+        "TLL co-op runtime init 2026-08-26afz "
+        "(preserve afu cold; direction-aware WeaponPartial empty-endpoint fade)");
+    if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
+        boot_log_line(
+            "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "
+            "(stock cmd7 weights; Draw base->pair, Put pair->base; steady-only restore)");
+    }
     if constexpr (kEnableLegacyNadineMazurStockTransitionCensus) {
         boot_log_line(
             "legacy-Nadine Mazur native transition census ACTIVE "
@@ -72661,8 +73576,8 @@ DWORD WINAPI install_hook(void*) {
         install_weapon_partial_normal_request_probe();
     }
     bool weapon_partial_transition_lifecycle_ready =
-        !kEnableWeaponPartialTransitionLifecycleCensus;
-    if constexpr (kEnableWeaponPartialTransitionLifecycleCensus &&
+        !kEnableWeaponPartialSuccessfulActionSeed;
+    if constexpr (kEnableWeaponPartialSuccessfulActionSeed &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         weapon_partial_transition_lifecycle_ready =
             install_weapon_partial_transition_lifecycle_census();
@@ -73068,7 +73983,8 @@ DWORD WINAPI install_hook(void*) {
     // Install only after role, peer endpoint and the ARMP session epoch are
     // immutable.  The vtable CAS is the publication barrier seen by animation
     // workers, so the hook never races partially initialized network state.
-    if constexpr (kEnableLegacyNadineMazurAuthoredPairRepair &&
+    if constexpr ((kEnableLegacyNadineMazurAuthoredPairRepair ||
+                   kEnableLegacyNadineMazurEmptyTrackEndpointFiller) &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         bool authored_pair_ready = false;
         if (state_net_started) {
@@ -73077,6 +73993,16 @@ DWORD WINAPI install_hook(void*) {
         } else {
             boot_log_line(
                 "legacy-Nadine Mazur authored-pair repair SKIPPED (state net)");
+        }
+        if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
+            const bool filler_ready = authored_pair_ready &&
+                weapon_partial_transition_lifecycle_ready;
+            g_legacy_nadine_mazur_empty_track_filler_ready.store(
+                filler_ready, std::memory_order_release);
+            boot_log_line(
+                filler_ready
+                    ? "legacy-Nadine Mazur AFZ endpoint filler READY (successful action seed + four-callsite command/postblend package)"
+                    : "legacy-Nadine Mazur AFZ endpoint filler SKIPPED (combined package)");
         }
         if constexpr (kEnableLegacyNadineMazurRightHandPropRelay ||
                       kEnableLegacyNadineMazurChloeRightHandPropReference) {

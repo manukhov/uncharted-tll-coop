@@ -142,6 +142,21 @@ class MappedImage:
                         raise ValueError(f"unsupported relocation type {kind}")
                 cursor += block_size
 
+        # The retail CRT initializer at 0x140128020 materializes four AVX
+        # permutation rows used by joint-program opcode 28.  A mapped image
+        # does not run the CRT constructor table, so copy only the two exact
+        # build-pinned constant blocks instead of executing arbitrary game
+        # initialization inside the audit helper.
+        for source_va, destination_va in (
+            (0x142BF0700, 0x146C71CE0),
+            (0x142BF0740, 0x146C71D00),
+        ):
+            ctypes.memmove(
+                self.address + (destination_va - PREFERRED_BASE),
+                self.address + (source_va - PREFERRED_BASE),
+                0x20,
+            )
+
         old = ctypes.c_ulong()
         if not self._kernel32.VirtualProtect(
             ctypes.c_void_p(self.address),
@@ -184,6 +199,7 @@ HANDLERS = {
     22: 0x142193CE0,
     24: 0x142193D60,
     27: 0x142193E30,
+    28: 0x142193E90,
     29: 0x142193EF0,
     30: 0x142193F50,
 }

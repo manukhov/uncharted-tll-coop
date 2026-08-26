@@ -6095,6 +6095,49 @@ Keep the postblend preservation boundary; replace only its steady content.
       contribution-aware AD73 occlusion and per-action budgets before another
       complete owner exam.
 
+      STATIC / IMPLEMENTED (`afz`): repair the exact one-sided-ValidBits
+      endpoint snap rather than replacing the native action. AFY proved a Put
+      edge of `87.6623 deg` at new-track weight about `0.009`. Disassembly now
+      explains it: `AnimStateLayer_CreateAnimCommands 0x14189EA60` folds the
+      newer track with cmd7, but `ApplyBlend 0x14217CF90` interpolates only
+      joints valid on both inputs and copies one-sided joints at full weight;
+      `3889CC0E` is an empty-pose root. Missing action, item `+0x640` timing,
+      Player `+0x408` and Async are rejected as sole endpoint owners; interior
+      cmd6/content/retarget remains the residual competitor.
+
+      AFZ fills only an action-adjacent empty track under a successful exact
+      Mazur Grab/Holster action seed. Draw is base/ingress then pair/egress; Put
+      is pair/ingress then base/egress. Base uses exact four-word cmd13
+      `{0004000D,0,destination,0}`; pair uses the confirmed two clips and one
+      scratch lane. The inner E8 `0x14189EB17` records a boundary only. After
+      stock finishes the whole list, the outer Create E8 `0x141A915FF` validates
+      final grammar/capacity and commits with one suffix memmove, so no
+      mid-generation capacity is consumed. Perform and Player+0x408 complete a
+      four-site atomic package; transition fills never arm postblend restore,
+      while the exact sole drawn steady endpoint may use the proven steady-only
+      preservation.
+
+      Written prediction: require exact `afz`, bounded
+      `WEAPON-PARTIAL-ACTION-SEED` rows, command-package INSTALLED and combined
+      AFZ READY. Preserve cold native-back weight/depth1 and deferred
+      `authored=1/1/1`. One Draw must show base/ingress then pair/egress; one Put
+      pair/ingress then base/egress, with successful result values and changing
+      native-weight buckets. The user must see smooth elbows/hands both ways and
+      retain the cold back placement plus steady two-hand endpoint. Missing
+      markers, saturation, non-base/pair result, exception or cold regression
+      is admission failure. Exact rows plus the same snap rejects this endpoint
+      repair and selects an interior cmd6/retarget census. Perfect grip, strap
+      and remote behavior remain open.
+
+      Fresh Release `/O2 /Ob2 /DNDEBUG`: source/object/DLL UTC
+      `09:52:18.337 / 09:52:55.938 / 09:52:56.033`, DLL `794624`, SHA-256
+      `E1323B27C595EB498C6561D35D0CD5DEC212C33AE58D40B3319ACB2BEB2941E1`.
+      Offline animation decoding now materializes the two CRT opcode-28 AVX
+      permutation tables, resolves unit quaternions and preserves exact holster
+      loop closure. The single IDB now persists `1792/61/1` names/data/types with
+      `save_database returned True`; restarted-MCP readback resolves all three
+      new functions and the one-sided-ValidBits comment.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

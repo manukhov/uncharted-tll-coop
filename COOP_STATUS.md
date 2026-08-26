@@ -29184,3 +29184,118 @@ inside Perform: trace the exact group-zero Build/Process path around
 `11EE475B` Draw continuation, treat stale older AD73 as occluded when the newest
 empty track is fully contributing, and budget Draw and Put independently. Do
 not move to Async or alter `+0x408` until the earlier Perform owner is resolved.
+
+### 2026-08-26 STATIC / IMPLEMENTED (`afz`): make native WeaponPartial endpoint fades operate on two valid arm poses
+
+`afy` localized the first visible discontinuity to stock Perform, but the exact
+command semantics narrow it further than a broad cmd6/retarget substitution.
+Three independent evidence classes identify the endpoint defect. First,
+`AnimStateLayer_CreateAnimCommands 0x14189EA60` generates tracks from oldest to
+newest and folds each newer track with cmd7 at `0x14189EB4B..0x14189EBD2`, using
+the newer instance's authored `+0x158` weight. Second,
+`AnimCmdEvaluator_ApplyBlend 0x14217CF90` unions the two ValidBits sets, while
+`AnimJointParams_BlendTransformsByValidBits 0x142188A30` interpolates only
+`leftValid & rightValid`; a joint present on only one side is copied as a full
+48-byte JointParams record and is therefore independent of the cmd7 weight.
+Third, actor-77 asset topology resolves `3889CC0E s_no-weapon` to an empty-pose
+root while Grab/Draw/Holster own Player arm joints 21..32. The decisive `afy`
+Put sample starts `DF5B68FC` over the older empty track at only
+`weightBits=0x3C1429AD` (about `0.009`) yet immediately produces an `87.6623`
+degree post-Perform arm edge. This is the exact predicted one-sided-ValidBits
+copy, not a normal 0.9-percent interpolation.
+
+This rejects missing stock action content, the independent ProcessWeapon
+`+0x640/+0x644` item clock, Player `+0x408`, and later Async as the sole cause of
+the endpoint snap. `+0x408` remains a measured secondary writer and is left
+stock. Interior action discontinuities inside cmd6/content/retarget remain a
+separate competitor: `afz` repairs only the first/last overlap where one
+WeaponPartial track is empty. The four direction-aware endpoints are exact:
+
+- Draw ingress fills the older empty output with lane 0, the already accumulated
+  Base+Hands/holstered pose; Draw egress fills the newer empty output with the
+  confirmed `56C57AD2 + 283966ED` two-hand pair.
+- Put ingress fills the older empty output with that pair; Put egress fills the
+  newer empty output with lane 0. A sole cold/pre-seed empty track is never a
+  transition endpoint.
+- The exact sole drawn `3889CC0E` steady topology may receive the same pair and
+  the already-confirmed steady-only postblend preservation. Transition fills
+  never publish that preservation ticket, so WeaponIK/HolsterIK remain stock
+  throughout Draw and Put.
+
+The base filler uses the engine's exact four-word cmd13 grammar
+`{0x0004000D, sourceLane=0, destinationLane, 0}`; cmd13 case
+`0x141ABA612` copies the complete pose lane plus ValidBits before stock cmd7
+applies its unchanged weight. The pair endpoint uses two unchanged cmd6+cmd7
+overlays and one scratch lane. The inner exact E8 at `0x14189EB17 ->
+AnimStateSnapshot_GenerateAnimCommands 0x141AB6C40` only records the parser-
+validated insertion boundary after the empty track and before its fold. It does
+not consume command capacity while stock is still generating. The nested outer
+Create callsite `0x141A915FF` calls stock first, then validates the completed
+single-block list, final 1024/4096-word capacity, opener/finalizer, lane count
+and command boundary before one bounded suffix `memmove` and insertion. No
+later writer appends to that completed record. This deferred full-list commit
+closes the unsafe mid-generation tail-capacity hypothesis.
+
+Admission comes from the successful WeaponPartial action seed, not controller
+state alone. The existing TakeTransitions hook now always emits bounded
+`WEAPON-PARTIAL-ACTION-SEED` rows only after stock returns nonzero, consumes a
+pending transition, returns the new current Grab/controller-1 or
+Holster/controller-5 instance, and proves requested-slot equality with the
+exact raw-inventory Mazur plus retained Player/Fg/runtime identity. The filler
+requires the same seed serial/deadline, logical identities, exact
+WeaponPartial layer, one empty edge track, one or two adjacent allowlisted
+action tracks, and the matching Draw or Put controller phase. Raw
+ProcessWeapon relocation is diagnostic only. Endpoint telemetry is keyed by
+seed/direction/role/endpoint/result/action state/native-weight bucket; both the
+32-seed and 64-endpoint budgets emit explicit SATURATED markers.
+
+Four callsites form one suspended, verify-or-rollback package: the inner track
+E8 `0x14189EB17`, outer Create E8 `0x141A915FF`, Perform E8 `0x141A92905`, and
+the indirect Player `+0x408` call at `0x141A929A1`. Their exact stock targets and
+RAX values are preserved. The inner page, outer-Create page and shared
+Perform/postblend page are protected and restored independently; READY is
+published only after all four byte readbacks, all protection restores and the
+separate successful-seed hook. Transition TLS is reset per Perform, a deferred
+insert is consumed only by its nested outer Create, and only a successful sole
+steady pair can arm the postblend restore.
+
+The one-copy prediction is falsifiable. A fresh process must boot exact `afz`,
+emit the successful-seed hook install, `empty-track endpoint command package
+INSTALLED`, and combined `legacy-Nadine Mazur AFZ endpoint filler READY`. Cold
+must retain the confirmed AFU placement with native-back weight/depth `1/1`
+and deferred `refresh=ok/1/1 ... authored=1/1/1`. One Draw must emit a Draw
+seed plus successful `NADINE-MAZUR-EMPTY-ENDPOINT` base/ingress and pair/egress
+rows; one Put must emit a Put seed plus pair/ingress and base/egress rows. Native
+weight buckets must change without any transition postblend-restore ticket,
+and the user must see continuous elbow/hand motion in both directions while the
+cold back placement and steady two-hand endpoint remain intact. Missing seed,
+READY, endpoint role, a non-base/pair result, saturation, exception or cold
+regression is admission/package failure. Exact endpoint markers plus the same
+snap rejects the empty-track filler and moves the frontier to the interior
+cmd6/content/retarget/cmd7 boundary; it does not justify suppressing `+0x408`
+or retiming the item clock. Perfect Chloe grip, strap visibility/physics and
+remote observation remain outside this exam.
+
+The offline native animation audit now reproduces the executable's CRT
+initializer `0x140128020`: it copies the two 32-byte AVX permutation tables
+`0x142BF0700 -> 0x146C71CE0` and `0x142BF0740 -> 0x146C71D00`, and maps opcode
+28 to `AnimJointProgramOp28_RefinePackedQuaternion 0x142193E90`. This fixes the
+previous mapper-only `(x,x,x,x)` quaternion artifact; decoded Grab/Draw/Holster
+samples have unit quaternions, while the looped Chloe holster audit still closes
+exactly. The label script carries durable names/comments for the initializer,
+opcode-28 handler and ValidBits blend helper.
+
+Fresh Release succeeds with `/O2 /Ob2 /DNDEBUG`. Source/object/DLL UTC are
+`09:52:18.337 / 09:52:55.938 / 09:52:56.033`; the DLL is `794624` bytes and
+SHA-256 is
+`E1323B27C595EB498C6561D35D0CD5DEC212C33AE58D40B3319ACB2BEB2941E1`.
+PE readback contains exact `2026-08-26afz`, the action-seed and endpoint
+saturation markers, the four-callsite package-installed marker and combined
+AFZ READY string. The single `ida/tll.i64` was updated headlessly with `1792`
+function names, `61` data names and one function type; `save_database returned
+True`. Restarted-MCP readback resolves
+`InitializeAnimJointProgramOpcode28PermutationRows 0x140128020`,
+`AnimJointParams_BlendTransformsByValidBits 0x142188A30`, and
+`AnimJointProgramOp28_RefinePackedQuaternion 0x142193E90`, and independently
+returns the saved one-sided-ValidBits comment. Runtime remains untested until
+the repository handoff is committed and pushed.
