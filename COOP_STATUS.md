@@ -28985,3 +28985,42 @@ and `1` function type to the single `ida/tll.i64`; headless save returned
 `True`.  Restarted-MCP readback resolves the new track-order comment at
 `AnimStateLayer_CreateAnimCommands 0x14189EA60` and the exact multi-frame Draw
 and Holster producer comments at `0x141096150` / `0x141096BB0`.
+
+### 2026-08-26 RUNTIME REJECTED (`afx`, PID 17880): native actions execute, but the elbows/hands still snap
+
+The bounded stock-arm discriminator reached every written admission marker.
+Boot/install rows `99926..99945` identify exact `afx`, both read-only
+WeaponPartial observers and the combined native-transition `READY`; row `99990`
+selects role B/local Nadine.  The AFU cold/back baseline also survived: rows
+`100002/100005` are full authored native-back corrections, and deferred refresh
+`100006` completed `refresh=ok/1/1 ... authored=1/1/1`.
+
+The synthetic competitors were genuinely absent: this PID emitted zero
+`NADINE-MAZUR-AUTHORED-PAIR injected/restored`, zero
+`NADINE-MAZUR-LATE-IK applied`, and no exception, timeout or fatal row.  Stock
+WeaponPartial nevertheless executed both complete action paths.  Draw
+`100043..100083` selected `28B0F93B s_weapon-grab`, advanced the multi-frame
+`1313FB4E s_weapon-draw`, crossed `7405AACB s_weapon-out`, and faded into
+`3889CC0E s_no-weapon`.  Put `100087..100158` selected
+`DF5B68FC s_weapon-holster`, then retained the `AD73C917`
+`s_weapon-holster^no-weapon` reverse-grab tail until the sole empty state.
+There are four successful lifecycle requests and 85 post-weight fade samples.
+
+The user then evaluated the exact requested visual boundary, ignoring the
+known-broken steady endpoint and the separately corrected rifle transform, and
+reported that the elbows/hands still moved **sharply**.  This satisfies the
+negative `afx` prediction: `H-synthetic-overwrite` is rejected as a sufficient
+cause, while `H-native-retarget/content` or a later stock `Player+0x408` writer
+remains.  The separate report that steady holding was fully broken is the
+predicted effect of disabling the pair/late IK; it is not evidence about the
+transition owner and must not be shipped.
+
+No underlay, endpoint blend or new clip is earned from this result.  The next
+bounded step is a same-pass **read-only** C39 census over rows `19..30`: snapshot
+the exact local role-B Nadine pose before/after stock Perform at callsite
+`0x141A92905`, then after stock Player `+0x408` at `0x141A929A1`, keyed to the
+live `1313FB4E/7405AACB` Draw and `DF5B68FC/AD73C917 -> 3889CC0E` Put topology.
+Time-varying post-Perform rows that collapse after `+0x408` select stock
+WeaponIK/HolsterIK; already static/jumping post-Perform rows select the authored
+DAG/retarget/content; no delta at either seam moves the frontier to Async/final
+palette.  Missing same-pass stages are admission failure, not a visual result.

@@ -6024,6 +6024,20 @@ Keep the postblend preservation boundary; replace only its steady content.
       single `ida/tll.i64`, `save_database returned True`, and restarted-MCP
       readback confirms `0x14189EA60`, `0x141096150` and `0x141096BB0`.
 
+      RUNTIME REJECTED (`afx`, PID17880): the clean stock-arm package passed
+      admission but did not make Draw/Put smooth. Exact boot/dual observer/
+      combined READY and role-B Nadine appeared; cold AFU finished
+      `authored=1/1/1`; four lifecycle requests and 85 fade rows covered
+      `28B0F93B -> 1313FB4E -> 7405AACB -> 3889CC0E` and
+      `DF5B68FC -> AD73C917 -> 3889CC0E`. There were zero synthetic-pair,
+      late-IK, exception or timeout rows. The user explicitly reported that,
+      ignoring the broken steady endpoint, the elbows/hands still moved
+      sharply. Reject late synthetic overwrite as a sufficient cause. Do not
+      implement the steady underlay yet. Next run only a same-pass read-only
+      C39 rows `19..30` census before/after Perform `0x141A92905` and after
+      Player `+0x408` `0x141A929A1`, keyed to the exact Draw/Put states, to
+      separate authored DAG/retarget from WeaponIK/HolsterIK and later Async.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such
