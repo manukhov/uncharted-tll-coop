@@ -2733,6 +2733,13 @@ constexpr bool kEnableLegacyNadineMazurSteadyHandsCommandCensus = false;
 // The already runtime-proven WeaponPartial lifecycle/fade observers remain
 // read-only and expose the exact native Draw/Holster tracks during the exam.
 constexpr bool kEnableLegacyNadineMazurStockTransitionCensus = true;
+// Build afy keeps the afx native WeaponPartial action tree exposed and adds
+// only a same-worker, read-only C39 census around stock Perform and Player
+// +0x408. It never appends a command, changes a blend weight, or restores a
+// pose row. The three verbatim snapshots localize the first arm-pose owner to
+// the normal DAG or Player Weapon/Holster IK before any later Async/palette
+// experiment is considered.
+constexpr bool kEnableLegacyNadineMazurStockPosePipelineCensus = true;
 // REJECTED (aen): requiring the remapped Chloe Hands root before the nested
 // retarget capture made the promised source discriminator unreachable.
 constexpr bool kEnableLegacyNadineVirtualChloeGripSourceCensus = false;
@@ -2784,6 +2791,17 @@ static_assert(
          !kEnableLegacyNadineMazurRightHandPropRelay &&
          !kEnableLegacyNadineMazurChloeRightHandPropReference),
     "stock transition census must not coexist with an arm/pose mutation");
+static_assert(
+    !kEnableLegacyNadineMazurStockPosePipelineCensus ||
+        (kEnableLegacyNadineMazurStockTransitionCensus &&
+         !kEnableLegacyNadineMazurAuthoredPairRepair &&
+         !kEnableLegacyNadineMazurLateSteadyIkRepair &&
+         !kEnableLegacyNadineMazurTransientPostblendReplay &&
+         !kEnableLegacyNadineMazurTransientPostblendCensus &&
+         !kEnableLegacyNadineVirtualChloeGripSourceCensus &&
+         !kEnableLegacyNadineMazurDrawEndpointRepair &&
+         !kEnableLegacyNadineMazurSteadyHandsCommandCensus),
+    "stock pose pipeline census must own Perform/+0x408 read-only");
 // Build ada proved a repeatable first-Draw-good -> steady-broken transition,
 // followed by immediately broken later Draws. The animation layer has exact
 // create-new and loop-current paths while consuming its bounded transition
@@ -41763,9 +41781,11 @@ static_assert(legacy_nadine_weapon_partial_leg_clip_map_is_unique());
 constexpr std::uint32_t kWeaponPartialLayerId = 0xE2B990B9u;
 constexpr std::uint32_t kAnimStateLayerType = 2;
 constexpr std::uint32_t kWeaponPartialWeaponOutStateId = 0x7405AACBu;
+constexpr std::uint32_t kWeaponPartialGrabStateId = 0x28B0F93Bu;
 constexpr std::uint32_t kWeaponPartialDrawStateId = 0x1313FB4Eu;
 constexpr std::uint32_t kWeaponPartialNoWeaponStateId = 0x3889CC0Eu;
 constexpr std::uint32_t kWeaponPartialHolsterStateId = 0xDF5B68FCu;
+constexpr std::uint32_t kWeaponPartialHolsterNoWeaponStateId = 0xAD73C917u;
 constexpr std::size_t kMaxLiveWeaponPartialTracks = 64;
 constexpr std::size_t kMaxLiveWeaponPartialInstances = 64;
 constexpr std::size_t kMaxLiveWeaponPartialSnapshotNodes = 512;
@@ -42430,6 +42450,111 @@ std::atomic<std::uint64_t> g_weapon_partial_fade_trace_start_tick{0};
 std::atomic<std::uint64_t> g_weapon_partial_fade_trace_deadline_tick{0};
 std::atomic<std::uint64_t> g_weapon_partial_fade_trace_last_tick{0};
 
+struct WeaponPartialSuccessfulActionSeed {
+    bool valid = false;
+    std::uint8_t direction = 0;
+    void* fg_anim_data = nullptr;
+    void* weapon_partial_layer = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    std::uint32_t queue_sequence = 0;
+    int rifle_slot = -1;
+    std::uint64_t serial = 0;
+    ULONGLONG deadline_tick = 0;
+};
+
+SRWLOCK g_weapon_partial_successful_action_seed_lock = SRWLOCK_INIT;
+WeaponPartialSuccessfulActionSeed
+    g_weapon_partial_successful_action_seed{};
+std::uint64_t g_weapon_partial_successful_action_seed_serial = 0;
+
+bool seh_publish_weapon_partial_successful_action_seed(
+    void* layer, void* player,
+    const WeaponPartialTransitionLifecycleSnapshot& before,
+    const WeaponPartialTransitionLifecycleSnapshot& after,
+    const WeaponPartialTransitionPlayerSnapshot& player_state,
+    void* output_after, std::uint8_t result) {
+    __try {
+        std::uint8_t direction = 0;
+        if (after.current_state == kWeaponPartialGrabStateId &&
+            player_state.draw_state == 1) {
+            direction = 1;
+        } else if (after.current_state == kWeaponPartialHolsterStateId &&
+                   player_state.draw_state == 5) {
+            direction = 2;
+        } else {
+            return false;
+        }
+        if (result == 0 || !after.valid || after.current_instance == nullptr ||
+            output_after != after.current_instance ||
+            before.pending_count == 0 ||
+            after.pending_count >= before.pending_count ||
+            player == nullptr || layer == nullptr ||
+            readable_bytes(player) < 0x1D90) {
+            return false;
+        }
+        auto* const player_bytes = static_cast<const std::byte*>(player);
+        auto* const controller = *reinterpret_cast<void* const*>(
+            player_bytes + kPlayerWeaponControllerOffset);
+        void* weapon = nullptr;
+        int rifle_slot = -1;
+        if (controller == nullptr || readable_bytes(controller) < 0x138 ||
+            *reinterpret_cast<const std::uintptr_t*>(controller) !=
+                g_module + kPlayerWeaponControllerVtableRva ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(controller) + 0x108) != player ||
+            !seh_find_exact_controller_inventory_art_raw(
+                controller, kCoopRifleArtId, &weapon, &rifle_slot) ||
+            rifle_slot < 0 || player_state.requested_slot != rifle_slot ||
+            weapon == nullptr || readable_bytes(weapon) < 0x864 ||
+            *reinterpret_cast<const std::uintptr_t*>(weapon) !=
+                g_module + kProcessWeaponVtableRva ||
+            !seh_weapon_parent_resolves_to_owner(weapon, player)) {
+            return false;
+        }
+        const std::uint32_t player_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                player_bytes + kGameObjectRuntimeIdOffset);
+        const std::uint32_t weapon_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(weapon) +
+                kGameObjectRuntimeIdOffset);
+        void* const fg = *reinterpret_cast<void* const*>(
+            player_bytes + kPlayerFgAnimDataOffset);
+        if (player_runtime_id == 0 || weapon_runtime_id == 0 || fg == nullptr) {
+            return false;
+        }
+        WeaponPartialSuccessfulActionSeed seed{};
+        seed.valid = true;
+        seed.direction = direction;
+        seed.fg_anim_data = fg;
+        seed.weapon_partial_layer = layer;
+        seed.player_runtime_id = player_runtime_id;
+        seed.weapon_runtime_id = weapon_runtime_id;
+        seed.queue_sequence = before.queue_sequence;
+        seed.rifle_slot = rifle_slot;
+        seed.deadline_tick = GetTickCount64() + 6500;
+        AcquireSRWLockExclusive(
+            &g_weapon_partial_successful_action_seed_lock);
+        seed.serial = ++g_weapon_partial_successful_action_seed_serial;
+        g_weapon_partial_successful_action_seed = seed;
+        ReleaseSRWLockExclusive(
+            &g_weapon_partial_successful_action_seed_lock);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+WeaponPartialSuccessfulActionSeed
+copy_weapon_partial_successful_action_seed() {
+    WeaponPartialSuccessfulActionSeed seed{};
+    AcquireSRWLockShared(&g_weapon_partial_successful_action_seed_lock);
+    seed = g_weapon_partial_successful_action_seed;
+    ReleaseSRWLockShared(&g_weapon_partial_successful_action_seed_lock);
+    return seed;
+}
+
 void* seh_read_anim_state_layer_selected_instance(void** selected_instance_out) {
     if (selected_instance_out == nullptr) {
         return nullptr;
@@ -42473,6 +42598,10 @@ std::uint8_t __fastcall hooked_anim_state_layer_take_transitions(
         seh_read_anim_state_layer_selected_instance(selected_instance_out);
     const WeaponPartialTransitionPlayerSnapshot player_state =
         seh_capture_weapon_partial_transition_player(player);
+    const bool action_seeded =
+        seh_publish_weapon_partial_successful_action_seed(
+            layer, player, before, after, player_state,
+            output_after, result);
     if constexpr (kEnableWeaponPartialFadeTraceCensus) {
         const std::uint64_t now = GetTickCount64();
         g_weapon_partial_fade_trace_player.store(
@@ -42555,7 +42684,8 @@ std::uint8_t __fastcall hooked_anim_state_layer_take_transitions(
          << (after.current_instance != nullptr &&
                  output_after == after.current_instance
              ? 1 : 0)
-         << " afterValid=" << (after.valid ? 1 : 0);
+         << " afterValid=" << (after.valid ? 1 : 0)
+         << " actionSeed=" << (action_seeded ? 1 : 0);
     boot_log_line(line.str().c_str());
     return result;
 }
@@ -42764,7 +42894,8 @@ bool seh_capture_weapon_partial_fade_trace(
         for (std::uint32_t track_index = 0;
              track_index < output->captured_track_count; ++track_index) {
             void* const track_pointer = tracks[track_index];
-            if (track_pointer == nullptr) {
+            if (track_pointer == nullptr ||
+                readable_bytes(track_pointer) < 0x14) {
                 return false;
             }
             const auto* const track =
@@ -42796,6 +42927,7 @@ bool seh_capture_weapon_partial_fade_trace(
                  ++instance_index) {
                 void* const instance_pointer = instances[instance_index];
                 if (instance_pointer == nullptr ||
+                    readable_bytes(instance_pointer) < 0x191 ||
                     *reinterpret_cast<const std::uintptr_t*>(
                         instance_pointer) !=
                         g_module + kAnimStateInstanceVtableRva) {
@@ -55380,6 +55512,1430 @@ bool seh_find_exact_controller_inventory_art_raw(
         *slot_out = -1;
         return false;
     }
+}
+
+// AFX proved that the native WeaponPartial Draw and Holster states are live,
+// yet the user's elbows/hands still snap. AFY therefore observes the exact
+// local-pose bank at the two remaining synchronous owners. The wrappers below
+// call stock once, preserve RAX, and never write an animation command, weight,
+// pose row, controller field, or FgAnimData field.
+enum class LegacyNadineMazurStockPoseScopeResult : std::uint8_t {
+    kPrerequisite = 0,
+    kJobGate = 1,
+    kPlayer = 2,
+    kFg = 3,
+    kSkeleton = 4,
+    kWeapon = 5,
+    kTopology = 6,
+    kPose = 7,
+    kException = 8,
+    kAdmitted = 9,
+};
+
+enum : std::uint32_t {
+    kLegacyNadineMazurStockPoseDraw = 1u << 0,
+    kLegacyNadineMazurStockPosePut = 1u << 1,
+    kLegacyNadineMazurStockPoseCustom = 1u << 2,
+};
+
+struct LegacyNadineMazurStockPoseTopologySummary {
+    bool valid = false;
+    bool no_weapon_live = false;
+    std::uint32_t action_mask = 0;
+    std::uint32_t phase_bucket = 11;
+    std::uint64_t structure_hash = kAimPipelineFnvOffset;
+    std::uint64_t detail_hash = kAimPipelineFnvOffset;
+    std::uint64_t identity_hash = kAimPipelineFnvOffset;
+    std::uint64_t weight_bucket_hash = kAimPipelineFnvOffset;
+};
+
+struct LegacyNadineMazurStockPoseEpoch {
+    bool valid = false;
+    void* job = nullptr;
+    void* player = nullptr;
+    void* fg_anim_data = nullptr;
+    void* local_pose = nullptr;
+    void* target_skeleton = nullptr;
+    void* weapon = nullptr;
+    void* weapon_controller = nullptr;
+    void* weapon_partial_layer = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    std::uint32_t transition_sequence = 0;
+    std::uint32_t controller_state = 0xFFFFFFFFu;
+    int current_slot = -99;
+    int requested_slot = -99;
+    int rifle_slot = -1;
+    WeaponPartialFadeTraceSnapshot topology{};
+    LegacyNadineMazurStockPoseTopologySummary summary{};
+    std::array<std::byte, kMazurAuthoredPairPoseBytes> pose{};
+};
+
+struct LegacyNadineMazurStockPoseTicket {
+    bool valid = false;
+    LegacyNadineMazurStockPoseEpoch before{};
+    std::array<std::byte, kMazurAuthoredPairPoseBytes> after_perform{};
+};
+
+enum class LegacyNadineMazurStockPoseAction : std::uint8_t {
+    kNone = 0,
+    kDraw = 1,
+    kPut = 2,
+    kCustom = 3,
+};
+
+struct LegacyNadineMazurStockPoseSession {
+    bool valid = false;
+    bool exit_logged = false;
+    void* fg_anim_data = nullptr;
+    void* local_pose = nullptr;
+    void* target_skeleton = nullptr;
+    void* weapon_partial_layer = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    std::uint64_t serial = 0;
+    std::uint64_t action_seed_serial = 0;
+    ULONGLONG deadline_tick = 0;
+    LegacyNadineMazurStockPoseAction action =
+        LegacyNadineMazurStockPoseAction::kNone;
+    bool previous_valid = false;
+    ULONGLONG previous_tick = 0;
+    std::array<std::byte, kMazurAuthoredPairPoseBytes> previous_perform{};
+    std::array<std::byte, kMazurAuthoredPairPoseBytes> previous_player{};
+};
+
+struct LegacyNadineMazurStockPoseDelta {
+    std::uint32_t raw_rows = 0;
+    std::uint32_t semantic_rows = 0;
+    std::uint32_t service_only_rows = 0;
+    std::uint32_t quaternion_sign_only_rows = 0;
+    std::array<std::uint16_t, kMazurAuthoredPairC39JointCount> word_masks{};
+    float maximum_quaternion_degrees = 0.0F;
+    float maximum_translation_delta = 0.0F;
+    float maximum_component_delta = 0.0F;
+};
+
+LegacyNadineMazurAuthoredPairPerformFunction
+    g_original_perform_for_legacy_nadine_mazur_stock_pose_census = nullptr;
+std::atomic<bool> g_legacy_nadine_mazur_stock_pose_census_ready{false};
+thread_local LegacyNadineMazurStockPoseTicket
+    g_legacy_nadine_mazur_stock_pose_ticket{};
+SRWLOCK g_legacy_nadine_mazur_stock_pose_session_lock = SRWLOCK_INIT;
+LegacyNadineMazurStockPoseSession
+    g_legacy_nadine_mazur_stock_pose_session{};
+std::array<std::uint64_t, 96>
+    g_legacy_nadine_mazur_stock_pose_signatures{};
+std::size_t g_legacy_nadine_mazur_stock_pose_signature_count = 0;
+std::uint64_t g_legacy_nadine_mazur_stock_pose_serial = 0;
+std::atomic<std::uint32_t> g_legacy_nadine_mazur_stock_pose_rows{0};
+std::atomic<bool> g_legacy_nadine_mazur_stock_pose_saturated{false};
+std::atomic<std::uint64_t>
+    g_legacy_nadine_mazur_stock_pose_scope_rejects{0};
+
+const char* legacy_nadine_mazur_stock_pose_action_name(
+    LegacyNadineMazurStockPoseAction action) {
+    switch (action) {
+        case LegacyNadineMazurStockPoseAction::kDraw:
+            return "draw";
+        case LegacyNadineMazurStockPoseAction::kPut:
+            return "put";
+        case LegacyNadineMazurStockPoseAction::kCustom:
+            return "custom";
+        default:
+            return "none";
+    }
+}
+
+const char* legacy_nadine_mazur_stock_pose_scope_result_name(
+    LegacyNadineMazurStockPoseScopeResult result) {
+    switch (result) {
+        case LegacyNadineMazurStockPoseScopeResult::kPrerequisite:
+            return "prerequisite";
+        case LegacyNadineMazurStockPoseScopeResult::kJobGate:
+            return "job+0x14";
+        case LegacyNadineMazurStockPoseScopeResult::kPlayer:
+            return "player";
+        case LegacyNadineMazurStockPoseScopeResult::kFg:
+            return "fg";
+        case LegacyNadineMazurStockPoseScopeResult::kSkeleton:
+            return "skeleton";
+        case LegacyNadineMazurStockPoseScopeResult::kWeapon:
+            return "weapon";
+        case LegacyNadineMazurStockPoseScopeResult::kTopology:
+            return "topology";
+        case LegacyNadineMazurStockPoseScopeResult::kPose:
+            return "pose";
+        case LegacyNadineMazurStockPoseScopeResult::kException:
+            return "exception";
+        case LegacyNadineMazurStockPoseScopeResult::kAdmitted:
+            return "admitted";
+        default:
+            return "unknown";
+    }
+}
+
+bool seh_legacy_nadine_mazur_stock_pose_job_is_retained_player0(void* job) {
+    __try {
+        void* const player = retained_player_object(0);
+        if (job == nullptr || player == nullptr ||
+            readable_bytes(job) < 0x10 ||
+            readable_bytes(player) < kPlayerFgAnimDataOffset + sizeof(void*)) {
+            return false;
+        }
+        void* const fg = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(player) +
+            kPlayerFgAnimDataOffset);
+        return fg != nullptr &&
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(job) + 0x08) == fg;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+void log_legacy_nadine_mazur_stock_pose_scope_reject(
+    const char* stage, std::uint32_t stage_index, void* job,
+    LegacyNadineMazurStockPoseScopeResult result,
+    bool exact_target_already_known) {
+    if (result == LegacyNadineMazurStockPoseScopeResult::kAdmitted ||
+        stage_index >= 3 ||
+        (!exact_target_already_known &&
+         !seh_legacy_nadine_mazur_stock_pose_job_is_retained_player0(job))) {
+        return;
+    }
+    const std::uint32_t result_index =
+        static_cast<std::uint32_t>(result);
+    const std::uint32_t bit_index = stage_index * 16u + result_index;
+    if (bit_index >= 64) {
+        return;
+    }
+    const std::uint64_t bit = 1ull << bit_index;
+    if ((g_legacy_nadine_mazur_stock_pose_scope_rejects.fetch_or(
+             bit, std::memory_order_relaxed) & bit) != 0) {
+        return;
+    }
+    std::ostringstream line;
+    line << "NADINE-MAZUR-STOCK-C39-SCOPE stage="
+         << (stage != nullptr ? stage : "unknown")
+         << " result="
+         << legacy_nadine_mazur_stock_pose_scope_result_name(result)
+         << " job=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(job);
+    boot_log_line(line.str().c_str());
+}
+
+bool summarize_legacy_nadine_mazur_stock_pose_topology(
+    const WeaponPartialFadeTraceSnapshot& topology,
+    LegacyNadineMazurStockPoseTopologySummary* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    output->structure_hash = kAimPipelineFnvOffset;
+    output->detail_hash = kAimPipelineFnvOffset;
+    output->identity_hash = kAimPipelineFnvOffset;
+    output->weight_bucket_hash = kAimPipelineFnvOffset;
+    if (!topology.valid || topology.track_count == 0 ||
+        topology.track_count > 3 ||
+        topology.track_count != topology.captured_track_count) {
+        return false;
+    }
+    output->structure_hash = aim_pipeline_hash_word(
+        output->structure_hash, topology.track_count);
+    output->detail_hash = aim_pipeline_hash_word(
+        output->detail_hash, topology.track_count);
+    bool action_phase_seen = false;
+    std::uint32_t maximum_phase_bucket = 0;
+    std::array<std::uint32_t, 3> ordered_states{};
+    std::uint32_t ordered_state_count = 0;
+    for (std::uint32_t track_index = 0;
+         track_index < topology.captured_track_count; ++track_index) {
+        const auto& track = topology.tracks[track_index];
+        if (track.instance_count != 1 ||
+            track.instance_count != track.captured_instance_count) {
+            return false;
+        }
+        output->structure_hash = aim_pipeline_hash_word(
+            output->structure_hash, track.instance_count);
+        output->detail_hash = aim_pipeline_hash_word(
+            output->detail_hash, track.instance_count);
+        const std::uintptr_t track_pointer =
+            reinterpret_cast<std::uintptr_t>(track.track);
+        output->identity_hash = aim_pipeline_hash_word(
+            output->identity_hash,
+            static_cast<std::uint32_t>(track_pointer));
+        output->identity_hash = aim_pipeline_hash_word(
+            output->identity_hash,
+            static_cast<std::uint32_t>(track_pointer >> 32));
+        for (std::uint16_t instance_index = 0;
+             instance_index < track.captured_instance_count;
+             ++instance_index) {
+            const auto& instance = track.instances[instance_index];
+            if (ordered_state_count >= ordered_states.size()) {
+                return false;
+            }
+            ordered_states[ordered_state_count++] = instance.state_id;
+            const std::uintptr_t instance_pointer =
+                reinterpret_cast<std::uintptr_t>(instance.instance);
+            output->identity_hash = aim_pipeline_hash_word(
+                output->identity_hash,
+                static_cast<std::uint32_t>(instance_pointer));
+            output->identity_hash = aim_pipeline_hash_word(
+                output->identity_hash,
+                static_cast<std::uint32_t>(instance_pointer >> 32));
+            std::array<float, 7> dynamics{};
+            const std::array<std::uint32_t, 7> dynamic_bits{
+                instance.fade_in_remaining_bits,
+                instance.fade_in_duration_bits,
+                instance.fade_in_weight_bits,
+                instance.fade_out_remaining_bits,
+                instance.fade_out_duration_bits,
+                instance.fade_out_weight_bits,
+                instance.phase_bits};
+            std::memcpy(
+                dynamics.data(), dynamic_bits.data(),
+                dynamic_bits.size() * sizeof(std::uint32_t));
+            for (const float value : dynamics) {
+                if (!std::isfinite(value)) {
+                    return false;
+                }
+            }
+            if (dynamics[1] < 0.0F || dynamics[4] < 0.0F ||
+                dynamics[2] < -0.001F || dynamics[2] > 1.01F ||
+                dynamics[5] < -0.001F || dynamics[5] > 1.01F ||
+                dynamics[6] < 0.0F || dynamics[6] > 1.01F) {
+                return false;
+            }
+            const auto weight_bucket = [](float weight) {
+                const float bounded = std::clamp(weight, 0.0F, 1.0F);
+                return bounded >= 1.0F
+                    ? 10u
+                    : static_cast<std::uint32_t>(bounded * 10.0F);
+            };
+            output->weight_bucket_hash = aim_pipeline_hash_word(
+                output->weight_bucket_hash,
+                (track_index << 24) |
+                    (static_cast<std::uint32_t>(instance_index) << 16) |
+                    (weight_bucket(dynamics[2]) << 8) |
+                    weight_bucket(dynamics[5]));
+            std::uint32_t action_bit = 0;
+            switch (instance.state_id) {
+                case kWeaponPartialGrabStateId:
+                case kWeaponPartialDrawStateId:
+                case kWeaponPartialWeaponOutStateId:
+                    action_bit = kLegacyNadineMazurStockPoseDraw;
+                    break;
+                case kWeaponPartialHolsterStateId:
+                case kWeaponPartialHolsterNoWeaponStateId:
+                    action_bit = kLegacyNadineMazurStockPosePut;
+                    break;
+                case kMazurAuthoredPairStateId:
+                    action_bit = kLegacyNadineMazurStockPoseCustom;
+                    break;
+                case kWeaponPartialNoWeaponStateId:
+                    output->no_weapon_live = true;
+                    break;
+                default:
+                    return false;
+            }
+            output->action_mask |= action_bit;
+            output->structure_hash = aim_pipeline_hash_word(
+                output->structure_hash,
+                (track_index << 24) |
+                    (static_cast<std::uint32_t>(instance_index) << 16) |
+                    (instance.state_id & 0xFFFFu));
+            output->structure_hash = aim_pipeline_hash_word(
+                output->structure_hash, instance.state_id);
+            output->detail_hash = aim_pipeline_hash_word(
+                output->detail_hash, instance.state_id);
+            output->detail_hash = aim_pipeline_hash_word(
+                output->detail_hash, instance.fade_in_remaining_bits);
+            output->detail_hash = aim_pipeline_hash_word(
+                output->detail_hash, instance.fade_in_duration_bits);
+            output->detail_hash = aim_pipeline_hash_word(
+                output->detail_hash, instance.fade_in_weight_bits);
+            output->detail_hash = aim_pipeline_hash_word(
+                output->detail_hash, instance.fade_out_remaining_bits);
+            output->detail_hash = aim_pipeline_hash_word(
+                output->detail_hash, instance.fade_out_duration_bits);
+            output->detail_hash = aim_pipeline_hash_word(
+                output->detail_hash, instance.fade_out_weight_bits);
+            output->detail_hash = aim_pipeline_hash_word(
+                output->detail_hash, instance.phase_bits);
+            output->detail_hash = aim_pipeline_hash_word(
+                output->detail_hash, instance.flags);
+            float phase = 0.0F;
+            std::memcpy(&phase, &instance.phase_bits, sizeof(phase));
+            std::uint32_t bucket = 11;
+            if (std::isfinite(phase) && phase >= 0.0F) {
+                bucket = phase >= 1.0F
+                    ? 10u
+                    : static_cast<std::uint32_t>(phase * 10.0F);
+            }
+            output->weight_bucket_hash = aim_pipeline_hash_word(
+                output->weight_bucket_hash, bucket);
+            if (action_bit == 0) {
+                continue;
+            }
+            maximum_phase_bucket = action_phase_seen
+                ? std::max(maximum_phase_bucket, bucket)
+                : bucket;
+            action_phase_seen = true;
+        }
+    }
+    output->phase_bucket = action_phase_seen
+        ? maximum_phase_bucket
+        : 10u;
+    const auto matches_shape = [&ordered_states, ordered_state_count](
+                                   std::uint32_t count,
+                                   std::uint32_t state0,
+                                   std::uint32_t state1 = 0,
+                                   std::uint32_t state2 = 0) {
+        return ordered_state_count == count &&
+            ordered_states[0] == state0 &&
+            (count < 2 || ordered_states[1] == state1) &&
+            (count < 3 || ordered_states[2] == state2);
+    };
+    const bool exact_draw_shape =
+        matches_shape(1, kWeaponPartialGrabStateId) ||
+        matches_shape(
+            2, kWeaponPartialGrabStateId,
+            kWeaponPartialNoWeaponStateId) ||
+        matches_shape(1, kWeaponPartialDrawStateId) ||
+        matches_shape(
+            2, kWeaponPartialWeaponOutStateId,
+            kWeaponPartialDrawStateId) ||
+        matches_shape(
+            3, kWeaponPartialNoWeaponStateId,
+            kWeaponPartialWeaponOutStateId,
+            kWeaponPartialDrawStateId) ||
+        matches_shape(
+            2, kWeaponPartialNoWeaponStateId,
+            kWeaponPartialWeaponOutStateId);
+    const bool exact_put_shape =
+        matches_shape(
+            2, kWeaponPartialHolsterStateId,
+            kWeaponPartialNoWeaponStateId) ||
+        matches_shape(1, kWeaponPartialHolsterStateId) ||
+        matches_shape(
+            2, kWeaponPartialNoWeaponStateId,
+            kWeaponPartialHolsterNoWeaponStateId);
+    const bool exact_terminal_shape =
+        matches_shape(1, kWeaponPartialNoWeaponStateId);
+    if (!exact_draw_shape && !exact_put_shape && !exact_terminal_shape) {
+        return false;
+    }
+    if ((exact_draw_shape &&
+         output->action_mask != kLegacyNadineMazurStockPoseDraw) ||
+        (exact_put_shape &&
+         output->action_mask != kLegacyNadineMazurStockPosePut) ||
+        (exact_terminal_shape && output->action_mask != 0)) {
+        return false;
+    }
+    output->valid = true;
+    return true;
+}
+
+bool seh_capture_legacy_nadine_mazur_stock_pose_epoch(
+    void* job, LegacyNadineMazurStockPoseEpoch* output,
+    LegacyNadineMazurStockPoseScopeResult* result_out) {
+    if (output == nullptr || result_out == nullptr) {
+        return false;
+    }
+    *output = {};
+    *result_out = LegacyNadineMazurStockPoseScopeResult::kPrerequisite;
+    __try {
+        if (!kEnableLegacyNadineMazurStockPosePipelineCensus ||
+            !g_legacy_nadine_mazur_stock_pose_census_ready.load(
+                std::memory_order_acquire) ||
+            !g_state_net.enabled || !g_net_role_b || g_module == 0 ||
+            job == nullptr || readable_bytes(job) < 0x18) {
+            return false;
+        }
+        if (*reinterpret_cast<const std::uint8_t*>(
+                static_cast<const std::byte*>(job) + 0x14) != 0) {
+            *result_out = LegacyNadineMazurStockPoseScopeResult::kJobGate;
+            return false;
+        }
+        void* const player = retained_player_object(0);
+        std::uint32_t look = 0;
+        if (!player_object_stable(player) ||
+            readable_bytes(player) < 0x4014 ||
+            *reinterpret_cast<const std::uintptr_t*>(player) !=
+                g_module + kPlayerVtableRva ||
+            !player_screen_index_is(player, 0) ||
+            !seh_read_player_look(player, &look) ||
+            look != kLegacyNadineAttachTargetLookId) {
+            *result_out = LegacyNadineMazurStockPoseScopeResult::kPlayer;
+            return false;
+        }
+        auto* const player_bytes = static_cast<const std::byte*>(player);
+        const std::uint32_t player_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                player_bytes + kGameObjectRuntimeIdOffset);
+        auto* const fg = *reinterpret_cast<std::byte* const*>(
+            player_bytes + kPlayerFgAnimDataOffset);
+        if (player_runtime_id == 0 || fg == nullptr ||
+            fg != *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(job) + 0x08) ||
+            readable_bytes(fg) <
+                kFgAnimDataRetainedIdOffset + sizeof(std::uint32_t)) {
+            *result_out = LegacyNadineMazurStockPoseScopeResult::kFg;
+            return false;
+        }
+        auto* const owner_cell = *reinterpret_cast<std::byte* const*>(
+            fg + kFgAnimDataRetainedHandleOffset);
+        auto* const target_skeleton = *reinterpret_cast<std::byte* const*>(
+            fg + kFgAnimDataSkeletonOffset);
+        auto* const local_pose = *reinterpret_cast<std::byte* const*>(
+            fg + kFgAnimDataJointCacheLocalPoseOffset);
+        if (owner_cell == nullptr || readable_bytes(owner_cell) < 0x10 ||
+            *reinterpret_cast<void* const*>(owner_cell + 0x08) != player ||
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRetainedIdOffset) != player_runtime_id ||
+            target_skeleton == nullptr || readable_bytes(target_skeleton) < 0x48 ||
+            local_pose == nullptr || readable_bytes(local_pose) <
+                static_cast<std::size_t>(31) * kJointLocalPoseStride) {
+            *result_out = LegacyNadineMazurStockPoseScopeResult::kFg;
+            return false;
+        }
+        auto* const underlying_skeleton =
+            *reinterpret_cast<std::byte* const*>(target_skeleton + 0x40);
+        if (*reinterpret_cast<const std::uint32_t*>(
+                target_skeleton + 0x24) !=
+                kLegacyNadineTargetSkeletonArtId ||
+            *reinterpret_cast<const std::uint32_t*>(
+                target_skeleton + kSkeletonJointCountOffset) !=
+                kLegacyNadineSkeletonJointCount ||
+            underlying_skeleton == nullptr ||
+            readable_bytes(underlying_skeleton) < 0x12 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                underlying_skeleton + 0x04) !=
+                kLegacyNadineUnderlyingSkeletonId ||
+            *reinterpret_cast<const std::uint16_t*>(
+                underlying_skeleton + 0x10) !=
+                kLegacyNadineSkeletonJointCount) {
+            *result_out = LegacyNadineMazurStockPoseScopeResult::kSkeleton;
+            return false;
+        }
+        auto* const controller = *reinterpret_cast<void* const*>(
+            player_bytes + kPlayerWeaponControllerOffset);
+        void* weapon = nullptr;
+        int rifle_slot = -1;
+        int current_slot = -99;
+        int requested_slot = -99;
+        std::uint32_t controller_state = 0xFFFFFFFFu;
+        if (controller == nullptr || readable_bytes(controller) < 0x138 ||
+            *reinterpret_cast<const std::uintptr_t*>(controller) !=
+                g_module + kPlayerWeaponControllerVtableRva ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(controller) + 0x108) != player ||
+            !seh_find_exact_controller_inventory_art_raw(
+                controller, kCoopRifleArtId, &weapon, &rifle_slot) ||
+            !read_weapon_draw_state(
+                player, current_slot, controller_state) ||
+            (requested_slot = *reinterpret_cast<const std::int32_t*>(
+                 static_cast<const std::byte*>(controller) + 0x130),
+             requested_slot != rifle_slot) ||
+            weapon == nullptr || readable_bytes(weapon) < 0x864 ||
+            *reinterpret_cast<const std::uintptr_t*>(weapon) !=
+                g_module + kProcessWeaponVtableRva ||
+            !seh_weapon_parent_resolves_to_owner(weapon, player) ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(weapon) + 0x4E8) !=
+                player_runtime_id) {
+            *result_out = LegacyNadineMazurStockPoseScopeResult::kWeapon;
+            return false;
+        }
+        const std::uint32_t weapon_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(weapon) +
+                kGameObjectRuntimeIdOffset);
+        auto* const weapon_anim_control =
+            *reinterpret_cast<std::byte* const*>(player_bytes + 0x1DF0);
+        if (weapon_runtime_id == 0 || weapon_anim_control == nullptr ||
+            readable_bytes(weapon_anim_control) < 0x30 ||
+            *reinterpret_cast<const std::uintptr_t*>(weapon_anim_control) !=
+                g_module + kPlayerWeaponAnimControlVtableRva ||
+            *reinterpret_cast<void* const*>(weapon_anim_control + 0x10) !=
+                player ||
+            g_anim_control_find_active_type2_layer_by_id == nullptr) {
+            *result_out = LegacyNadineMazurStockPoseScopeResult::kTopology;
+            return false;
+        }
+        void* const anim_control = *reinterpret_cast<void* const*>(
+            weapon_anim_control + 0x08);
+        void* const layer = anim_control != nullptr
+            ? g_anim_control_find_active_type2_layer_by_id(
+                  anim_control, kWeaponPartialLayerId)
+            : nullptr;
+        const std::uint64_t now = GetTickCount64();
+        const std::uint64_t deadline =
+            g_weapon_partial_fade_trace_deadline_tick.load(
+                std::memory_order_acquire);
+        if (layer == nullptr ||
+            layer != reinterpret_cast<void*>(
+                g_weapon_partial_fade_trace_layer.load(
+                    std::memory_order_acquire)) ||
+            player != reinterpret_cast<void*>(
+                g_weapon_partial_fade_trace_player.load(
+                    std::memory_order_acquire)) ||
+            deadline == 0 || now > deadline) {
+            *result_out = LegacyNadineMazurStockPoseScopeResult::kTopology;
+            return false;
+        }
+        WeaponPartialFadeTraceSnapshot topology{};
+        LegacyNadineMazurStockPoseTopologySummary summary{};
+        if (!seh_capture_weapon_partial_fade_trace(layer, &topology) ||
+            !summarize_legacy_nadine_mazur_stock_pose_topology(
+                topology, &summary)) {
+            *result_out = LegacyNadineMazurStockPoseScopeResult::kTopology;
+            return false;
+        }
+        output->job = job;
+        output->player = player;
+        output->fg_anim_data = fg;
+        output->local_pose = local_pose;
+        output->target_skeleton = target_skeleton;
+        output->weapon = weapon;
+        output->weapon_controller = controller;
+        output->weapon_partial_layer = layer;
+        output->player_runtime_id = player_runtime_id;
+        output->weapon_runtime_id = weapon_runtime_id;
+        output->transition_sequence =
+            g_weapon_partial_fade_trace_sequence.load(
+                std::memory_order_acquire);
+        output->controller_state = controller_state;
+        output->current_slot = current_slot;
+        output->requested_slot = requested_slot;
+        output->rifle_slot = rifle_slot;
+        output->topology = topology;
+        output->summary = summary;
+        std::memcpy(
+            output->pose.data(),
+            local_pose +
+                kMazurAuthoredPairFirstC39Joint * kJointLocalPoseStride,
+            output->pose.size());
+        if (!valid_legacy_nadine_mazur_transient_pose(output->pose)) {
+            *output = {};
+            *result_out = LegacyNadineMazurStockPoseScopeResult::kPose;
+            return false;
+        }
+        if (*reinterpret_cast<void* const*>(
+                player_bytes + kPlayerFgAnimDataOffset) != fg ||
+            *reinterpret_cast<void* const*>(
+                fg + kFgAnimDataJointCacheLocalPoseOffset) != local_pose ||
+            *reinterpret_cast<const std::uint32_t*>(
+                player_bytes + kGameObjectRuntimeIdOffset) !=
+                player_runtime_id ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(weapon) +
+                kGameObjectRuntimeIdOffset) != weapon_runtime_id) {
+            *output = {};
+            *result_out = LegacyNadineMazurStockPoseScopeResult::kFg;
+            return false;
+        }
+        output->valid = true;
+        *result_out = LegacyNadineMazurStockPoseScopeResult::kAdmitted;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        *result_out = LegacyNadineMazurStockPoseScopeResult::kException;
+        return false;
+    }
+}
+
+bool legacy_nadine_mazur_stock_pose_epoch_matches(
+    const LegacyNadineMazurStockPoseEpoch& before,
+    const LegacyNadineMazurStockPoseEpoch& after) {
+    return before.valid && after.valid && before.job == after.job &&
+        before.player == after.player &&
+        before.fg_anim_data == after.fg_anim_data &&
+        before.local_pose == after.local_pose &&
+        before.target_skeleton == after.target_skeleton &&
+        before.weapon == after.weapon &&
+        before.weapon_controller == after.weapon_controller &&
+        before.weapon_partial_layer == after.weapon_partial_layer &&
+        before.player_runtime_id == after.player_runtime_id &&
+        before.weapon_runtime_id == after.weapon_runtime_id &&
+        before.transition_sequence == after.transition_sequence &&
+        before.controller_state == after.controller_state &&
+        before.current_slot == after.current_slot &&
+        before.requested_slot == after.requested_slot &&
+        before.rifle_slot == after.rifle_slot &&
+        before.summary.action_mask == after.summary.action_mask &&
+        before.summary.structure_hash == after.summary.structure_hash &&
+        before.summary.detail_hash == after.summary.detail_hash &&
+        before.summary.identity_hash == after.summary.identity_hash &&
+        before.summary.weight_bucket_hash ==
+            after.summary.weight_bucket_hash;
+}
+
+std::uint64_t hash_legacy_nadine_mazur_stock_pose(
+    const std::array<std::byte, kMazurAuthoredPairPoseBytes>& pose,
+    std::array<std::uint64_t, kMazurAuthoredPairC39JointCount>* row_hashes) {
+    std::uint64_t aggregate = kAimPipelineFnvOffset;
+    for (std::size_t row = 0;
+         row < kMazurAuthoredPairC39JointCount; ++row) {
+        std::uint64_t row_hash = kAimPipelineFnvOffset;
+        for (std::size_t word = 0; word < 12; ++word) {
+            std::uint32_t value = 0;
+            std::memcpy(
+                &value,
+                pose.data() + row * kJointLocalPoseStride +
+                    word * sizeof(value),
+                sizeof(value));
+            row_hash = aim_pipeline_hash_word(row_hash, value);
+            aggregate = aim_pipeline_hash_word(aggregate, value);
+        }
+        if (row_hashes != nullptr) {
+            (*row_hashes)[row] = row_hash;
+        }
+    }
+    return aggregate;
+}
+
+std::uint32_t legacy_nadine_mazur_stock_pose_changed_rows(
+    const std::array<std::byte, kMazurAuthoredPairPoseBytes>& left,
+    const std::array<std::byte, kMazurAuthoredPairPoseBytes>& right) {
+    std::uint32_t mask = 0;
+    for (std::size_t row = 0;
+         row < kMazurAuthoredPairC39JointCount; ++row) {
+        if (std::memcmp(
+                left.data() + row * kJointLocalPoseStride,
+                right.data() + row * kJointLocalPoseStride,
+                kJointLocalPoseStride) != 0) {
+            mask |= 1u << row;
+        }
+    }
+    return mask;
+}
+
+LegacyNadineMazurStockPoseDelta measure_legacy_nadine_mazur_stock_pose_delta(
+    const std::array<std::byte, kMazurAuthoredPairPoseBytes>& left,
+    const std::array<std::byte, kMazurAuthoredPairPoseBytes>& right) {
+    constexpr std::uint16_t kSemanticWords = 0x7F7u;
+    LegacyNadineMazurStockPoseDelta result{};
+    for (std::size_t row = 0;
+         row < kMazurAuthoredPairC39JointCount; ++row) {
+        std::array<std::uint32_t, 12> left_words{};
+        std::array<std::uint32_t, 12> right_words{};
+        std::memcpy(
+            left_words.data(),
+            left.data() + row * kJointLocalPoseStride,
+            kJointLocalPoseStride);
+        std::memcpy(
+            right_words.data(),
+            right.data() + row * kJointLocalPoseStride,
+            kJointLocalPoseStride);
+        std::uint16_t word_mask = 0;
+        for (std::size_t word = 0; word < 12; ++word) {
+            if (left_words[word] != right_words[word]) {
+                word_mask |= static_cast<std::uint16_t>(1u << word);
+            }
+        }
+        result.word_masks[row] = word_mask;
+        if (word_mask == 0) {
+            continue;
+        }
+        result.raw_rows |= 1u << row;
+        if ((word_mask & kSemanticWords) == 0) {
+            result.service_only_rows |= 1u << row;
+            continue;
+        }
+        constexpr std::uint16_t kQuaternionWords = 0x0F0u;
+        bool quaternion_sign_only =
+            (word_mask & kSemanticWords & ~kQuaternionWords) == 0 &&
+            (word_mask & kQuaternionWords) != 0;
+        if (quaternion_sign_only) {
+            for (std::size_t word = 4; word <= 7; ++word) {
+                if (right_words[word] !=
+                    (left_words[word] ^ 0x80000000u)) {
+                    quaternion_sign_only = false;
+                    break;
+                }
+            }
+        }
+        if (quaternion_sign_only) {
+            result.quaternion_sign_only_rows |= 1u << row;
+            continue;
+        }
+        result.semantic_rows |= 1u << row;
+        std::array<float, 12> left_values{};
+        std::array<float, 12> right_values{};
+        std::memcpy(left_values.data(), left_words.data(), kJointLocalPoseStride);
+        std::memcpy(right_values.data(), right_words.data(), kJointLocalPoseStride);
+        for (const std::size_t word :
+             std::array<std::size_t, 6>{0, 1, 2, 8, 9, 10}) {
+            if (std::isfinite(left_values[word]) &&
+                std::isfinite(right_values[word])) {
+                result.maximum_component_delta = std::max(
+                    result.maximum_component_delta,
+                    std::abs(right_values[word] - left_values[word]));
+            }
+        }
+        const float translation_x = right_values[8] - left_values[8];
+        const float translation_y = right_values[9] - left_values[9];
+        const float translation_z = right_values[10] - left_values[10];
+        if (std::isfinite(translation_x) &&
+            std::isfinite(translation_y) &&
+            std::isfinite(translation_z)) {
+            result.maximum_translation_delta = std::max(
+                result.maximum_translation_delta,
+                std::sqrt(
+                    translation_x * translation_x +
+                    translation_y * translation_y +
+                    translation_z * translation_z));
+        }
+        const float left_norm = std::sqrt(
+            left_values[4] * left_values[4] +
+            left_values[5] * left_values[5] +
+            left_values[6] * left_values[6] +
+            left_values[7] * left_values[7]);
+        const float right_norm = std::sqrt(
+            right_values[4] * right_values[4] +
+            right_values[5] * right_values[5] +
+            right_values[6] * right_values[6] +
+            right_values[7] * right_values[7]);
+        if (std::isfinite(left_norm) && std::isfinite(right_norm) &&
+            left_norm > 1.0e-6F && right_norm > 1.0e-6F) {
+            float dot =
+                (left_values[4] * right_values[4] +
+                 left_values[5] * right_values[5] +
+                 left_values[6] * right_values[6] +
+                 left_values[7] * right_values[7]) /
+                (left_norm * right_norm);
+            dot = std::clamp(std::abs(dot), 0.0F, 1.0F);
+            constexpr float kRadiansToDegrees = 57.29577951308232F;
+            result.maximum_quaternion_degrees = std::max(
+                result.maximum_quaternion_degrees,
+                2.0F * std::acos(dot) * kRadiansToDegrees);
+        }
+    }
+    return result;
+}
+
+void log_legacy_nadine_mazur_stock_pose_incomplete(const char* reason) {
+    static std::atomic<std::uint32_t> rows{0};
+    const std::uint32_t row = rows.fetch_add(1, std::memory_order_relaxed);
+    if (row >= 12) {
+        return;
+    }
+    std::ostringstream line;
+    line << "NADINE-MAZUR-STOCK-C39-INCOMPLETE row=" << row
+         << " reason=" << (reason != nullptr ? reason : "unknown");
+    boot_log_line(line.str().c_str());
+}
+
+bool prepare_legacy_nadine_mazur_stock_pose_log(
+    const LegacyNadineMazurStockPoseEpoch& epoch,
+    const std::array<std::byte, kMazurAuthoredPairPoseBytes>& current_perform,
+    const std::array<std::byte, kMazurAuthoredPairPoseBytes>& current_player,
+    LegacyNadineMazurStockPoseAction* action_out,
+    std::uint64_t* serial_out, bool* exit_out,
+    bool* previous_valid_out, ULONGLONG* delta_ms_out,
+    std::array<std::byte, kMazurAuthoredPairPoseBytes>* previous_perform_out,
+    std::array<std::byte, kMazurAuthoredPairPoseBytes>* previous_player_out) {
+    if (action_out == nullptr || serial_out == nullptr || exit_out == nullptr ||
+        previous_valid_out == nullptr || delta_ms_out == nullptr ||
+        previous_perform_out == nullptr || previous_player_out == nullptr) {
+        return false;
+    }
+    *action_out = LegacyNadineMazurStockPoseAction::kNone;
+    *serial_out = 0;
+    *exit_out = false;
+    *previous_valid_out = false;
+    *delta_ms_out = 0;
+    *previous_perform_out = {};
+    *previous_player_out = {};
+    LegacyNadineMazurStockPoseAction observed =
+        LegacyNadineMazurStockPoseAction::kNone;
+    const std::uint32_t direction_bits = epoch.summary.action_mask &
+        (kLegacyNadineMazurStockPoseDraw |
+         kLegacyNadineMazurStockPosePut);
+    if (direction_bits == kLegacyNadineMazurStockPoseDraw) {
+        observed = LegacyNadineMazurStockPoseAction::kDraw;
+    } else if (direction_bits == kLegacyNadineMazurStockPosePut) {
+        observed = LegacyNadineMazurStockPoseAction::kPut;
+    } else if (direction_bits != 0) {
+        return false;
+    }
+
+    bool should_log = false;
+    std::uint64_t signature = kAimPipelineFnvOffset;
+    const ULONGLONG now = GetTickCount64();
+    const WeaponPartialSuccessfulActionSeed action_seed =
+        copy_weapon_partial_successful_action_seed();
+    LegacyNadineMazurStockPoseAction seeded_action =
+        LegacyNadineMazurStockPoseAction::kNone;
+    if (action_seed.direction == 1) {
+        seeded_action = LegacyNadineMazurStockPoseAction::kDraw;
+    } else if (action_seed.direction == 2) {
+        seeded_action = LegacyNadineMazurStockPoseAction::kPut;
+    }
+    const bool seed_matches_epoch = action_seed.valid &&
+        action_seed.deadline_tick != 0 && now <= action_seed.deadline_tick &&
+        action_seed.fg_anim_data == epoch.fg_anim_data &&
+        action_seed.weapon_partial_layer == epoch.weapon_partial_layer &&
+        action_seed.player_runtime_id == epoch.player_runtime_id &&
+        action_seed.weapon_runtime_id == epoch.weapon_runtime_id &&
+        action_seed.queue_sequence == epoch.transition_sequence &&
+        action_seed.rifle_slot == epoch.rifle_slot;
+    AcquireSRWLockExclusive(
+        &g_legacy_nadine_mazur_stock_pose_session_lock);
+    auto& session = g_legacy_nadine_mazur_stock_pose_session;
+    if (session.valid &&
+        (session.deadline_tick == 0 || now > session.deadline_tick)) {
+        session = {};
+    }
+    const bool same_identity = session.valid &&
+        session.fg_anim_data == epoch.fg_anim_data &&
+        session.local_pose == epoch.local_pose &&
+        session.target_skeleton == epoch.target_skeleton &&
+        session.weapon_partial_layer == epoch.weapon_partial_layer &&
+        session.player_runtime_id == epoch.player_runtime_id &&
+        session.weapon_runtime_id == epoch.weapon_runtime_id;
+    if (observed != LegacyNadineMazurStockPoseAction::kNone) {
+        const bool controller_compatible =
+            (observed == LegacyNadineMazurStockPoseAction::kDraw &&
+             (epoch.controller_state == 1 || epoch.controller_state == 2)) ||
+            (observed == LegacyNadineMazurStockPoseAction::kPut &&
+             (epoch.controller_state == 5 || epoch.controller_state == 0));
+        const bool seed_allowed = seed_matches_epoch &&
+            seeded_action == observed;
+        const bool newer_seed = seed_allowed &&
+            (!same_identity || session.action_seed_serial !=
+                action_seed.serial);
+        if (!controller_compatible) {
+            if (same_identity) {
+                session = {};
+            }
+            ReleaseSRWLockExclusive(
+                &g_legacy_nadine_mazur_stock_pose_session_lock);
+            return false;
+        }
+        if (!same_identity || session.action != observed ||
+            session.exit_logged || newer_seed) {
+            if (!seed_allowed) {
+                if (same_identity) {
+                    session = {};
+                }
+                ReleaseSRWLockExclusive(
+                    &g_legacy_nadine_mazur_stock_pose_session_lock);
+                return false;
+            }
+            session = {};
+            session.valid = true;
+            session.fg_anim_data = epoch.fg_anim_data;
+            session.local_pose = epoch.local_pose;
+            session.target_skeleton = epoch.target_skeleton;
+            session.weapon_partial_layer = epoch.weapon_partial_layer;
+            session.player_runtime_id = epoch.player_runtime_id;
+            session.weapon_runtime_id = epoch.weapon_runtime_id;
+            session.serial = ++g_legacy_nadine_mazur_stock_pose_serial;
+            session.action_seed_serial = action_seed.serial;
+            session.deadline_tick = action_seed.deadline_tick;
+            session.action = observed;
+        }
+        *action_out = session.action;
+        *serial_out = session.serial;
+    } else if (same_identity && !session.exit_logged &&
+               epoch.summary.no_weapon_live) {
+        const bool exact_terminal =
+            (session.action == LegacyNadineMazurStockPoseAction::kDraw &&
+             epoch.controller_state == 2 &&
+             epoch.current_slot == epoch.rifle_slot) ||
+            (session.action == LegacyNadineMazurStockPoseAction::kPut &&
+             epoch.controller_state == 0 && epoch.current_slot < 0);
+        if (!exact_terminal || session.deadline_tick == 0 ||
+            now > session.deadline_tick) {
+            session = {};
+            ReleaseSRWLockExclusive(
+                &g_legacy_nadine_mazur_stock_pose_session_lock);
+            return false;
+        }
+        session.exit_logged = true;
+        *action_out = session.action;
+        *serial_out = session.serial;
+        *exit_out = true;
+    } else {
+        ReleaseSRWLockExclusive(
+            &g_legacy_nadine_mazur_stock_pose_session_lock);
+        return false;
+    }
+    if (session.previous_valid) {
+        *previous_valid_out = true;
+        *previous_perform_out = session.previous_perform;
+        *previous_player_out = session.previous_player;
+        *delta_ms_out = now >= session.previous_tick
+            ? now - session.previous_tick
+            : 0;
+    }
+    signature = aim_pipeline_hash_word(
+        signature, static_cast<std::uint32_t>(*serial_out));
+    signature = aim_pipeline_hash_word(
+        signature, static_cast<std::uint32_t>(*serial_out >> 32));
+    signature = aim_pipeline_hash_word(
+        signature, static_cast<std::uint32_t>(*action_out));
+    signature = aim_pipeline_hash_word(
+        signature, *exit_out ? 1u : 0u);
+    signature = aim_pipeline_hash_word(
+        signature, epoch.summary.phase_bucket);
+    signature = aim_pipeline_hash_word(
+        signature,
+        static_cast<std::uint32_t>(epoch.summary.structure_hash));
+    signature = aim_pipeline_hash_word(
+        signature,
+        static_cast<std::uint32_t>(epoch.summary.structure_hash >> 32));
+    signature = aim_pipeline_hash_word(
+        signature,
+        static_cast<std::uint32_t>(epoch.summary.weight_bucket_hash));
+    signature = aim_pipeline_hash_word(
+        signature,
+        static_cast<std::uint32_t>(
+            epoch.summary.weight_bucket_hash >> 32));
+    bool duplicate = false;
+    for (std::size_t index = 0;
+         index < g_legacy_nadine_mazur_stock_pose_signature_count; ++index) {
+        if (g_legacy_nadine_mazur_stock_pose_signatures[index] == signature) {
+            duplicate = true;
+            break;
+        }
+    }
+    if (!duplicate &&
+        g_legacy_nadine_mazur_stock_pose_signature_count <
+            g_legacy_nadine_mazur_stock_pose_signatures.size()) {
+        g_legacy_nadine_mazur_stock_pose_signatures[
+            g_legacy_nadine_mazur_stock_pose_signature_count++] = signature;
+        should_log = true;
+    }
+    if (should_log) {
+        session.previous_valid = true;
+        session.previous_tick = now;
+        session.previous_perform = current_perform;
+        session.previous_player = current_player;
+    }
+    ReleaseSRWLockExclusive(
+        &g_legacy_nadine_mazur_stock_pose_session_lock);
+    if (!should_log && !duplicate &&
+        !g_legacy_nadine_mazur_stock_pose_saturated.exchange(
+            true, std::memory_order_relaxed)) {
+        boot_log_line("NADINE-MAZUR-STOCK-C39 SATURATED signatures=96");
+    }
+    return should_log;
+}
+
+void log_legacy_nadine_mazur_stock_pose_pass(
+    const LegacyNadineMazurStockPoseTicket& ticket,
+    const LegacyNadineMazurStockPoseEpoch& after_player) {
+    LegacyNadineMazurStockPoseAction action =
+        LegacyNadineMazurStockPoseAction::kNone;
+    std::uint64_t serial = 0;
+    bool exit = false;
+    bool previous_valid = false;
+    ULONGLONG delta_ms = 0;
+    std::array<std::byte, kMazurAuthoredPairPoseBytes> previous_perform{};
+    std::array<std::byte, kMazurAuthoredPairPoseBytes> previous_player{};
+    if (!prepare_legacy_nadine_mazur_stock_pose_log(
+            after_player, ticket.after_perform, after_player.pose,
+            &action, &serial, &exit, &previous_valid, &delta_ms,
+            &previous_perform, &previous_player)) {
+        return;
+    }
+    const std::uint32_t row =
+        g_legacy_nadine_mazur_stock_pose_rows.fetch_add(
+            1, std::memory_order_relaxed);
+    if (row >= 64) {
+        if (!g_legacy_nadine_mazur_stock_pose_saturated.exchange(
+                true, std::memory_order_relaxed)) {
+            boot_log_line("NADINE-MAZUR-STOCK-C39 SATURATED rows=64");
+        }
+        return;
+    }
+    std::array<std::uint64_t, kMazurAuthoredPairC39JointCount> pre_rows{};
+    std::array<std::uint64_t, kMazurAuthoredPairC39JointCount> perform_rows{};
+    std::array<std::uint64_t, kMazurAuthoredPairC39JointCount> player_rows{};
+    const std::uint64_t pre_hash = hash_legacy_nadine_mazur_stock_pose(
+        ticket.before.pose, &pre_rows);
+    const std::uint64_t perform_hash = hash_legacy_nadine_mazur_stock_pose(
+        ticket.after_perform, &perform_rows);
+    const std::uint64_t player_hash = hash_legacy_nadine_mazur_stock_pose(
+        after_player.pose, &player_rows);
+    const std::uint32_t perform_changed =
+        legacy_nadine_mazur_stock_pose_changed_rows(
+            ticket.before.pose, ticket.after_perform);
+    const std::uint32_t player_changed =
+        legacy_nadine_mazur_stock_pose_changed_rows(
+            ticket.after_perform, after_player.pose);
+    const auto pre_to_perform =
+        measure_legacy_nadine_mazur_stock_pose_delta(
+            ticket.before.pose, ticket.after_perform);
+    const auto perform_to_player =
+        measure_legacy_nadine_mazur_stock_pose_delta(
+            ticket.after_perform, after_player.pose);
+    LegacyNadineMazurStockPoseDelta inter_perform{};
+    LegacyNadineMazurStockPoseDelta inter_player{};
+    if (previous_valid) {
+        inter_perform = measure_legacy_nadine_mazur_stock_pose_delta(
+            previous_perform, ticket.after_perform);
+        inter_player = measure_legacy_nadine_mazur_stock_pose_delta(
+            previous_player, after_player.pose);
+    }
+    std::ostringstream line;
+    line << "NADINE-MAZUR-STOCK-C39 row=" << row
+         << " serial=" << serial
+         << " action=" << legacy_nadine_mazur_stock_pose_action_name(action)
+         << " exit=" << (exit ? 1 : 0)
+         << " seq=" << after_player.transition_sequence
+         << " bucket=" << after_player.summary.phase_bucket
+         << " ctrl=" << after_player.current_slot << "/"
+         << after_player.requested_slot << "/"
+         << after_player.controller_state
+         << " rifleSlot=" << after_player.rifle_slot
+         << " fg=0x" << std::hex
+         << reinterpret_cast<std::uintptr_t>(after_player.fg_anim_data)
+         << ":" << after_player.player_runtime_id
+         << "/" << after_player.weapon_runtime_id
+         << " topology=0x" << after_player.summary.structure_hash
+         << "/" << after_player.summary.detail_hash
+         << "/" << after_player.summary.identity_hash
+         << "/" << after_player.summary.weight_bucket_hash
+         << " pose=0x" << pre_hash << "/" << perform_hash
+         << "/" << player_hash
+         << " changed=0x" << perform_changed << "/" << player_changed
+         << std::dec << " deltaMs=" << delta_ms
+         << " edgePerform=0x" << std::hex
+         << pre_to_perform.raw_rows << "/"
+         << pre_to_perform.semantic_rows << "/"
+         << pre_to_perform.service_only_rows << "/"
+         << pre_to_perform.quaternion_sign_only_rows << std::dec
+         << ":" << pre_to_perform.maximum_quaternion_degrees
+         << "/" << pre_to_perform.maximum_translation_delta
+         << "/" << pre_to_perform.maximum_component_delta
+         << " edgePlayer=0x" << std::hex
+         << perform_to_player.raw_rows << "/"
+         << perform_to_player.semantic_rows << "/"
+         << perform_to_player.service_only_rows << "/"
+         << perform_to_player.quaternion_sign_only_rows << std::dec
+         << ":" << perform_to_player.maximum_quaternion_degrees
+         << "/" << perform_to_player.maximum_translation_delta
+         << "/" << perform_to_player.maximum_component_delta
+         << " interPerform=0x" << std::hex
+         << inter_perform.raw_rows << "/"
+         << inter_perform.semantic_rows << "/"
+         << inter_perform.service_only_rows << "/"
+         << inter_perform.quaternion_sign_only_rows << std::dec
+         << ":" << inter_perform.maximum_quaternion_degrees
+         << "/" << inter_perform.maximum_translation_delta
+         << "/" << inter_perform.maximum_component_delta
+         << " interPlayer=0x" << std::hex
+         << inter_player.raw_rows << "/"
+         << inter_player.semantic_rows << "/"
+         << inter_player.service_only_rows << "/"
+         << inter_player.quaternion_sign_only_rows << std::dec
+         << ":" << inter_player.maximum_quaternion_degrees
+         << "/" << inter_player.maximum_translation_delta
+         << "/" << inter_player.maximum_component_delta;
+    boot_log_line(line.str().c_str());
+
+    std::ostringstream masks_line;
+    masks_line << "NADINE-MAZUR-STOCK-C39-MASKS row=" << row
+               << " serial=" << serial << " wordMasks=" << std::hex;
+    for (std::size_t index = 0;
+         index < pre_to_perform.word_masks.size(); ++index) {
+        if (index != 0) {
+            masks_line << ",";
+        }
+        masks_line << pre_to_perform.word_masks[index] << "/"
+                   << perform_to_player.word_masks[index] << "/"
+                   << inter_perform.word_masks[index] << "/"
+                   << inter_player.word_masks[index];
+    }
+    boot_log_line(masks_line.str().c_str());
+
+    std::ostringstream rows_line;
+    rows_line << "NADINE-MAZUR-STOCK-C39-ROWS row=" << std::dec << row
+              << " serial=" << serial << " pre=" << std::hex;
+    for (std::size_t index = 0; index < pre_rows.size(); ++index) {
+        if (index != 0) {
+            rows_line << ",";
+        }
+        rows_line << pre_rows[index];
+    }
+    rows_line << " perform=";
+    for (std::size_t index = 0; index < perform_rows.size(); ++index) {
+        if (index != 0) {
+            rows_line << ",";
+        }
+        rows_line << perform_rows[index];
+    }
+    rows_line << " player=";
+    for (std::size_t index = 0; index < player_rows.size(); ++index) {
+        if (index != 0) {
+            rows_line << ",";
+        }
+        rows_line << player_rows[index];
+    }
+    rows_line << " states=";
+    for (std::uint32_t track_index = 0;
+         track_index < after_player.topology.captured_track_count;
+         ++track_index) {
+        const auto& track = after_player.topology.tracks[track_index];
+        for (std::uint16_t instance_index = 0;
+             instance_index < track.captured_instance_count;
+             ++instance_index) {
+            const auto& instance = track.instances[instance_index];
+            rows_line << "t" << std::dec << track_index << "i"
+                      << instance_index << ":0x" << std::hex
+                      << instance.state_id << "@" << instance.phase_bits
+                      << ":" << instance.fade_in_weight_bits << "/"
+                      << instance.fade_out_weight_bits << ";";
+        }
+    }
+    boot_log_line(rows_line.str().c_str());
+}
+
+std::int64_t __fastcall
+hooked_perform_for_legacy_nadine_mazur_stock_pose_census(void* job) {
+    const auto original =
+        g_original_perform_for_legacy_nadine_mazur_stock_pose_census;
+    if (original == nullptr) {
+        return 0;
+    }
+    if (g_legacy_nadine_mazur_stock_pose_ticket.valid) {
+        log_legacy_nadine_mazur_stock_pose_incomplete("next-perform");
+        g_legacy_nadine_mazur_stock_pose_ticket = {};
+    }
+    LegacyNadineMazurStockPoseEpoch before{};
+    LegacyNadineMazurStockPoseScopeResult before_result{};
+    const bool admitted =
+        seh_capture_legacy_nadine_mazur_stock_pose_epoch(
+            job, &before, &before_result);
+    const std::int64_t result = original(job);
+    if (!admitted) {
+        log_legacy_nadine_mazur_stock_pose_scope_reject(
+            "pre-perform", 0, job, before_result, false);
+        return result;
+    }
+    LegacyNadineMazurStockPoseEpoch after{};
+    LegacyNadineMazurStockPoseScopeResult after_result{};
+    if (!seh_capture_legacy_nadine_mazur_stock_pose_epoch(
+            job, &after, &after_result)) {
+        log_legacy_nadine_mazur_stock_pose_scope_reject(
+            "post-perform", 1, job, after_result, true);
+        log_legacy_nadine_mazur_stock_pose_incomplete(
+            "post-perform-scope");
+        return result;
+    }
+    if (!legacy_nadine_mazur_stock_pose_epoch_matches(before, after)) {
+        log_legacy_nadine_mazur_stock_pose_incomplete(
+            "post-perform-identity-drift");
+        return result;
+    }
+    LegacyNadineMazurStockPoseTicket ticket{};
+    ticket.valid = true;
+    ticket.before = before;
+    ticket.after_perform = after.pose;
+    g_legacy_nadine_mazur_stock_pose_ticket = ticket;
+    return result;
+}
+
+std::int64_t __fastcall
+hooked_player_postblend_for_legacy_nadine_mazur_stock_pose_census(
+    void* player) {
+    LegacyNadineMazurAuthoredPairPostBlendFunction original = nullptr;
+    __try {
+        auto* const vtable = player != nullptr
+            ? *reinterpret_cast<void***>(player)
+            : nullptr;
+        if (vtable != nullptr) {
+            original = reinterpret_cast<
+                LegacyNadineMazurAuthoredPairPostBlendFunction>(
+                    vtable[0x408 / sizeof(void*)]);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        original = nullptr;
+    }
+    if (original == nullptr) {
+        return 0;
+    }
+    const LegacyNadineMazurStockPoseTicket ticket =
+        g_legacy_nadine_mazur_stock_pose_ticket;
+    g_legacy_nadine_mazur_stock_pose_ticket = {};
+    const std::int64_t result = original(player);
+    if (!ticket.valid) {
+        return result;
+    }
+    if (player != ticket.before.player) {
+        log_legacy_nadine_mazur_stock_pose_incomplete("postblend-owner");
+        return result;
+    }
+    LegacyNadineMazurStockPoseEpoch after{};
+    LegacyNadineMazurStockPoseScopeResult after_result{};
+    if (!seh_capture_legacy_nadine_mazur_stock_pose_epoch(
+            ticket.before.job, &after, &after_result)) {
+        log_legacy_nadine_mazur_stock_pose_scope_reject(
+            "post-player", 2, ticket.before.job, after_result, true);
+        log_legacy_nadine_mazur_stock_pose_incomplete(
+            "post-player-scope");
+        return result;
+    }
+    if (!legacy_nadine_mazur_stock_pose_epoch_matches(
+            ticket.before, after)) {
+        log_legacy_nadine_mazur_stock_pose_incomplete(
+            "post-player-identity-drift");
+        return result;
+    }
+    log_legacy_nadine_mazur_stock_pose_pass(ticket, after);
+    return result;
+}
+
+bool install_legacy_nadine_mazur_stock_pose_pipeline_census() {
+    g_legacy_nadine_mazur_stock_pose_census_ready.store(
+        false, std::memory_order_release);
+    g_anim_control_find_active_type2_layer_by_id =
+        reinterpret_cast<AnimControlFindActiveType2LayerByIdFunction>(
+            g_module + kAnimControlFindActiveType2LayerByIdRva);
+    std::uint8_t* perform_site = nullptr;
+    std::uint8_t* perform_relay = nullptr;
+    std::int32_t perform_displacement = 0;
+    std::uint8_t* postblend_site = nullptr;
+    std::uint8_t* postblend_relay = nullptr;
+    std::array<std::uint8_t, 6> postblend_patch{};
+    constexpr std::array<std::uint8_t, 6> kExpectedPostBlendCall{
+        0xFF, 0x90, 0x08, 0x04, 0x00, 0x00};
+    const bool preflight = prepare_plain_callsite_relay(
+            kAnimManagerPerformAnimBlendCallsiteRva,
+            kAnimManagerPerformAnimBlendRva,
+            reinterpret_cast<const void*>(
+                &hooked_perform_for_legacy_nadine_mazur_stock_pose_census),
+            perform_site, perform_relay, perform_displacement) &&
+        prepare_six_byte_indirect_callsite_relay(
+            kAnimManagerPlayerPostBlendCallsiteRva,
+            kExpectedPostBlendCall,
+            reinterpret_cast<const void*>(
+                &hooked_player_postblend_for_legacy_nadine_mazur_stock_pose_census),
+            postblend_site, postblend_relay, postblend_patch);
+    const auto free_relays = [&]() {
+        if (perform_relay != nullptr) {
+            VirtualFree(perform_relay, 0, MEM_RELEASE);
+        }
+        if (postblend_relay != nullptr) {
+            VirtualFree(postblend_relay, 0, MEM_RELEASE);
+        }
+    };
+    if (!preflight) {
+        free_relays();
+        boot_log_line(
+            "legacy-Nadine Mazur stock C39 pipeline census SKIPPED (callsite preflight)");
+        return false;
+    }
+    struct PatchSite {
+        std::uint8_t* address = nullptr;
+        std::size_t size = 0;
+        std::array<std::uint8_t, 6> stock{};
+        std::array<std::uint8_t, 6> patch{};
+    };
+    std::array<PatchSite, 2> sites{};
+    sites[0].address = perform_site;
+    sites[0].size = 5;
+    sites[1].address = postblend_site;
+    sites[1].size = 6;
+    for (auto& site : sites) {
+        std::memcpy(site.stock.data(), site.address, site.size);
+        std::memcpy(site.patch.data(), site.address, site.size);
+    }
+    sites[0].patch[0] = 0xE8;
+    std::memcpy(
+        sites[0].patch.data() + 1, &perform_displacement,
+        sizeof(perform_displacement));
+    sites[1].patch = postblend_patch;
+    g_original_perform_for_legacy_nadine_mazur_stock_pose_census =
+        reinterpret_cast<LegacyNadineMazurAuthoredPairPerformFunction>(
+            g_module + kAnimManagerPerformAnimBlendRva);
+
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        free_relays();
+        boot_log_line(
+            "legacy-Nadine Mazur stock C39 pipeline census SKIPPED (thread suspend)");
+        return false;
+    }
+    const std::size_t page_span = static_cast<std::size_t>(
+        (postblend_site + 6) - perform_site);
+    DWORD old_protection = 0;
+    if (!VirtualProtect(
+            perform_site, page_span, PAGE_EXECUTE_READWRITE,
+            &old_protection)) {
+        resume_suspended_process_threads(suspended_threads);
+        free_relays();
+        boot_log_line(
+            "legacy-Nadine Mazur stock C39 pipeline census SKIPPED (protect)");
+        return false;
+    }
+    const auto all_match = [&](bool patch) {
+        for (const auto& site : sites) {
+            const auto& expected = patch ? site.patch : site.stock;
+            if (std::memcmp(
+                    site.address, expected.data(), site.size) != 0) {
+                return false;
+            }
+        }
+        return true;
+    };
+    for (const auto& site : sites) {
+        std::memcpy(site.address, site.patch.data(), site.size);
+        FlushInstructionCache(GetCurrentProcess(), site.address, site.size);
+    }
+    bool installed = all_match(true);
+    bool rollback_verified = false;
+    if (!installed) {
+        for (const auto& site : sites) {
+            std::memcpy(site.address, site.stock.data(), site.size);
+            FlushInstructionCache(GetCurrentProcess(), site.address, site.size);
+        }
+        rollback_verified = all_match(false);
+    }
+    DWORD ignored = 0;
+    const bool protection_restored = VirtualProtect(
+        perform_site, page_span, old_protection, &ignored) != 0;
+    bool rollback_protection_restored = protection_restored;
+    if (!protection_restored) {
+        DWORD retry_old = 0;
+        if (VirtualProtect(
+                perform_site, page_span, PAGE_EXECUTE_READWRITE,
+                &retry_old)) {
+            for (const auto& site : sites) {
+                std::memcpy(site.address, site.stock.data(), site.size);
+                FlushInstructionCache(
+                    GetCurrentProcess(), site.address, site.size);
+            }
+            rollback_verified = all_match(false);
+            rollback_protection_restored = VirtualProtect(
+                perform_site, page_span, old_protection, &ignored) != 0;
+        } else {
+            rollback_protection_restored = false;
+        }
+        installed = false;
+    }
+    const bool ready = installed && protection_restored;
+    const bool safe_rollback = !installed && rollback_verified &&
+        rollback_protection_restored;
+    if (ready) {
+        g_legacy_nadine_mazur_stock_pose_census_ready.store(
+            true, std::memory_order_release);
+    }
+    resume_suspended_process_threads(suspended_threads);
+    if (safe_rollback) {
+        free_relays();
+    }
+    boot_log_line(
+        ready
+            ? "legacy-Nadine Mazur stock C39 pipeline census READY (pre/post Perform + post Player+0x408; read-only two-site transaction)"
+            : (safe_rollback
+                   ? "legacy-Nadine Mazur stock C39 pipeline census SKIPPED (verified rollback)"
+                   : "legacy-Nadine Mazur stock C39 pipeline census PARTIAL (pass-through; relays retained)"));
+    return ready;
 }
 
 void clear_local_nadine_mazur_weapon_palette_census_target() {
@@ -70964,12 +72520,17 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-25afx "
-        "(preserve afu cold; native WeaponPartial Draw/Holster visual exam; synthetic arm pair disabled)");
+        "TLL co-op runtime init 2026-08-26afy "
+        "(preserve afu cold; stock C39 pre/post Perform and Player+0x408 census)");
     if constexpr (kEnableLegacyNadineMazurStockTransitionCensus) {
         boot_log_line(
             "legacy-Nadine Mazur native transition census ACTIVE "
             "(stock WeaponPartial + postblend; synthetic pair/restore/late IK disabled)");
+    }
+    if constexpr (kEnableLegacyNadineMazurStockPosePipelineCensus) {
+        boot_log_line(
+            "legacy-Nadine Mazur stock C39 pipeline census ACTIVE "
+            "(pre/post Perform + post Player+0x408; read-only)");
     }
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
@@ -71492,6 +73053,17 @@ DWORD WINAPI install_hook(void*) {
             terminal_relay_ready
                 ? "legacy-Nadine terminal WeaponIK target relay READY (same-process Chloe; stock Solve/commit)"
                 : "legacy-Nadine terminal WeaponIK target relay SKIPPED (combined package)");
+    }
+    if constexpr (kEnableLegacyNadineMazurStockPosePipelineCensus &&
+                  !kEnableRejectedNadineWeaponRuntimeProbes) {
+        const bool pipeline_ready = state_net_started &&
+            weapon_partial_transition_lifecycle_ready &&
+            weapon_partial_fade_trace_ready &&
+            install_legacy_nadine_mazur_stock_pose_pipeline_census();
+        boot_log_line(
+            pipeline_ready
+                ? "legacy-Nadine Mazur AFY stock arm pipeline census READY (lifecycle + fade + C39 two-site read-only package)"
+                : "legacy-Nadine Mazur AFY stock arm pipeline census SKIPPED (combined package)");
     }
     // Install only after role, peer endpoint and the ARMP session epoch are
     // immutable.  The vtable CAS is the publication barrier seen by animation

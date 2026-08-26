@@ -29024,3 +29024,106 @@ Time-varying post-Perform rows that collapse after `+0x408` select stock
 WeaponIK/HolsterIK; already static/jumping post-Perform rows select the authored
 DAG/retarget/content; no delta at either seam moves the frontier to Async/final
 palette.  Missing same-pass stages are admission failure, not a visual result.
+
+### 2026-08-26 STATIC / IMPLEMENTED (`afy`): localize the stock arm snap between Perform and Player postblend
+
+`afx` proved that both native multi-frame action trees execute while the user's
+elbows and hands still snap, so `afy` is deliberately a read-only owner census,
+not another pose replacement. Three independent evidence classes earn the
+boundary. First, exact caller disassembly in
+`AnimManager_PerformBlendAndDispatchPostBlendJob 0x141A928F0` calls stock
+`AnimManager_PerformAnimBlend 0x141A92260` at `0x141A92905`, performs only
+Fg/retained-owner/TLS bookkeeping, then calls the resolved Player vtable slot
+`+0x408 = Player_PostAnimBlending_Async 0x1410EB6A0` at `0x141A929A1` on the
+same worker. Second, Perform consumes and publishes the local JointParams bank
+at `FgAnimData+0x100`; Player `+0x408` then runs WeaponIKFeather and the
+holster-specific `PlayerWeaponAnimControl_UpdateHolsterIk 0x14108ECE0 ->
+SolveArmIk 0x1418F0B60` against that same bank before the later Async job.
+Third, independent `afx` PID 17880 reached the exact Draw topology
+`28B0F93B -> 1313FB4E -> 7405AACB -> 3889CC0E` and Put topology
+`DF5B68FC -> AD73C917 -> 3889CC0E`, with successful consumed lifecycle
+requests and multi-sample phase/fade changes, while all custom pair/restore/
+late-IK mutations were absent and the user still saw a sharp handoff.
+
+The competing owners are now falsifiable. `H-Perform` says the native action
+DAG, retarget or content has already collapsed/jumped by the return from
+`0x141A92260`. `H-Player408` says the post-Perform pose remains time-varying and
+continuous, but same-pass WeaponIK/HolsterIK introduces the semantic jump.
+`H-later-Async/palette` says both captured streams remain continuous and the
+visible snap appears only after `0x141A929A1`. Packaging/admission failure is a
+fourth outcome and is never promoted to a visual conclusion. The two-site
+census can positively select Perform or Player `+0x408`; if both remain smooth,
+it only moves the frontier to a separately earned Async/final-palette census.
+
+Admission is tied to a real Mazur action rather than a stale visible state.
+The already-installed `AnimStateLayer_TakeTransitions` observer publishes an
+SRW-protected action seed only after stock returns nonzero, pending count is
+consumed, the returned instance equals the new current instance, and the state
+is exact Grab `28B0F93B` with controller state 1 or Holster `DF5B68FC` with
+state 5. Raw controller inventory membership must resolve the exact Mazur,
+`requestedSlot` must equal its slot, the ProcessWeapon parent must be the local
+role-B legacy Nadine, and Fg plus both runtime generations and queue sequence
+are carried into the seed. The logical session then spans Draw/WeaponOut or
+Holster/AD73 retasks and raw ProcessWeapon relocation, but resets on deadline,
+Fg/local-pose/skeleton/layer/generation drift or a newer action seed. A sole
+`3889CC0E` terminal is accepted only after that seed and only at Draw
+state 2/current Mazur or Put state 0/current negative; cold/pre-seed empty state
+cannot open a session.
+
+The observers patch only the direct E8 at `0x141A92905` and the exact six-byte
+indirect Player `+0x408` call at `0x141A929A1` in one suspended, single-page,
+verify-or-rollback transaction. The Perform wrapper preserves the exact
+`int64 __fastcall(void*)` RAX, snapshots C39 rows `19..30` before stock, calls
+stock once, then snapshots them again. The Player wrapper consumes the same TLS
+ticket, redispatches the current vtable slot once, preserves RAX and captures
+the third snapshot. The exact byte gate at `job+0x14` is read as a byte. Every
+stage revalidates Player/Fg/local allocation, ED25/C39/580 skeleton, exact Mazur
+inventory/parent/runtime identity, controller/current/requested/rifle slots,
+transition sequence, ordered track/instance pointers and raw phase/fade fields.
+Historical topology is fail-closed to at most three tracks, one instance per
+track and the exact observed ordered Draw/Put shapes.
+
+Each accepted snapshot preserves all 576 raw bytes but validates only the ten
+semantic floats per JointParams row: scale xyz, a finite nondegenerate unit
+quaternion, and translation xyz. Telemetry separates raw, semantic,
+service-W-lane and exact quaternion-sign-only row masks; records all twelve
+per-row word masks; and reports maximum quaternion angle, translation and
+non-quaternion component deltas for PRE->PERFORM, PERFORM->PLAYER and adjacent
+emitted samples. Ordered per-instance phase and both fade-weight buckets drive
+bounded emission, so an old phase-1 track cannot hide a changing overlap tail.
+Raw hashes, word masks and state topology are split into separately keyed
+`NADINE-MAZUR-STOCK-C39`, `-MASKS` and `-ROWS` lines so the fixed 1600-byte
+logger cannot truncate the evidence. Scope rejects and incomplete stages are
+bounded and explicit; saturation is inconclusive.
+
+The one-copy prediction is exact. A fresh process must boot `afy`, install the
+transition lifecycle and fade observers, install the two C39 callsite relays,
+and emit combined `legacy-Nadine Mazur AFY stock arm pipeline census READY`.
+Cold must retain the confirmed AFU back placement and complete
+`refresh=ok/1/1 ... authored=1/1/1`; no authored-pair restore or late-IK marker
+may appear. On exactly one Draw, wait, then one Put, complete three-line C39
+samples must cover both successful action seeds and their terminal shapes.
+An abrupt/high adjacent `interPerform` semantic/Q/T delta with zero or
+service/sign-only `edgePlayer` selects `H-Perform`. Smooth time-varying
+post-Perform rows followed by a same-pass semantic `edgePlayer` jump selects
+`H-Player408`. Smooth/equal semantic streams plus the same user-visible snap
+does **not** clear the pipeline; it selects the later Async/palette frontier.
+Missing seed/READY/stage, identity or topology drift, nonsemantic-only changes,
+truncation or saturation are admission-inconclusive. Draw and Put are judged
+separately. This run still exposes the known-broken steady stock grip and keeps
+the independently confirmed item/back correction, so the user judges only the
+elbow/hand transition. Grip and strap remain outside this exam.
+
+Fresh Release succeeds with `/O2 /Ob2 /DNDEBUG`. Source/object/DLL UTC are
+`07:50:48.568 / 07:51:36.003 / 07:51:36.095`; the DLL is `798208` bytes and
+SHA-256 is
+`64A5E94873B4101949688931902965C5CB324EFB725213A46272711A3E555652`.
+PE readback contains exact `2026-08-26afy`, `actionSeed=`, all three C39 line
+families, the two-site READY string and the combined AFY READY marker. No new
+engine function or data identity was discovered; the existing durable IDB
+names and comments at `0x141A92260`, `0x141A92905`, `0x141A929A1` and
+`0x1410EB6A0` already cover the seam, so no new IDB mutation is required.
+Live MCP readback resolves them as `AnimManager_PerformAnimBlend`, the two
+interior addresses of `AnimManager_PerformBlendAndDispatchPostBlendJob`, and
+`Player_PostAnimBlending_Async`. The PE contains neither authored-pair restore
+nor late-IK-applied markers.

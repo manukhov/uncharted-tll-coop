@@ -6038,6 +6038,47 @@ Keep the postblend preservation boundary; replace only its steady content.
       Player `+0x408` `0x141A929A1`, keyed to the exact Draw/Put states, to
       separate authored DAG/retarget from WeaponIK/HolsterIK and later Async.
 
+      STATIC / IMPLEMENTED (`afy`): exact same-pass read-only C39 owner census
+      is ready. The transition observer now publishes an SRW action seed only
+      after a successful consumed Grab/ctrl1 or Holster/ctrl5 transition whose
+      requested slot is the exact raw-inventory Mazur slot. The seed carries
+      Fg, player/weapon generations, layer, queue sequence and deadline; the
+      logical session survives raw ProcessWeapon relocation and action retasks,
+      but not Fg/local-pose/skeleton/layer/generation/timeout drift. Sole
+      `3889CC0E` is terminal only after the matching seed at Draw ctrl2/current
+      Mazur or Put ctrl0/current negative, so cold/pre-seed cannot contaminate
+      the census.
+
+      Two callsites are patched in one fail-closed transaction: Perform E8
+      `0x141A92905 -> 0x141A92260` and Player vslot+0x408 call
+      `0x141A929A1 -> 0x1410EB6A0`. The wrappers preserve RAX, call stock once,
+      and copy C39 rows19..30 PRE, POST_PERFORM and POST_PLAYER without writing
+      commands, weights or poses. Every stage revalidates exact role-B Nadine,
+      ED25/C39/580, Mazur inventory/parent/Fg/runtime IDs, controller/current/
+      requested/rifle slots, queue sequence and ordered <=3-track exact
+      Draw/Put topology. Raw/service/q-sign/semantic masks and Q/T deltas are
+      bucketed by every instance phase and fade weight; MAIN/MASKS/ROWS lines
+      are separately keyed below the 1600-byte logger limit.
+
+      Written prediction: require exact `afy`, successful `actionSeed=1`, both
+      observer installs, two-site census READY and combined AFY READY; preserve
+      cold `authored=1/1/1`; emit no authored-pair restore or late IK. Perform
+      semantic discontinuity with empty/service-only Player edge selects native
+      DAG/retarget/content. Smooth POST_PERFORM plus a same-pass semantic Player
+      edge selects WeaponIK/HolsterIK. Smooth/equal streams plus the user's same
+      snap is deliberately inconclusive here and moves only to later
+      Async/final-palette. Missing three-line samples, drift/reject, saturation
+      or nonsemantic-only changes are admission failures. One Draw, wait, one
+      Put; judge elbow/hand motion, not the known-broken steady grip or the
+      separately corrected rifle transform.
+
+      Fresh Release `/O2 /Ob2 /DNDEBUG`: source/object/DLL UTC
+      `07:50:48.568 / 07:51:36.003 / 07:51:36.095`, DLL `798208`, SHA-256
+      `64A5E94873B4101949688931902965C5CB324EFB725213A46272711A3E555652`.
+      PE contains exact afy/actionSeed/C39 MAIN-MASKS-ROWS/two-site and combined
+      READY markers. Existing durable IDB names/comments already cover all
+      engine seams; no new IDB mutation is required.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such
