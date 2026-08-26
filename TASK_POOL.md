@@ -6079,6 +6079,22 @@ Keep the postblend preservation boundary; replace only its steady content.
       READY markers. Existing durable IDB names/comments already cover all
       engine seams; no new IDB mutation is required.
 
+      RUNTIME INCONCLUSIVE (`afy`, PID 20380): packaging/cold and all 64 emitted
+      three-stage samples passed, but six successful seeds, zero terminal rows
+      and `SATURATED rows=64` violate the written whole-action admission. The
+      first Draw census stops at the omitted stock-live `11EE475B` continuation;
+      Put remains on `3889CC0E + AD73C917` with the older tail full-weight, so
+      the sole-empty exit rule never fires. Partial evidence is still durable:
+      Draw begins discontinuously in Perform before `+0x408` writes; Put has a
+      real `141.652 deg` post-Perform jump followed by a separate
+      quaternion-only `107.373 deg` Player rewrite on C39 `19..26`. Treat
+      Perform and Player postblend as co-writers, never suppress `+0x408` as a
+      sole fix, and do not advance to Async. Next trace the group-zero
+      `0x141A92637/0x141A92759 -> 0x141AB97C0` Process path and cmd27 export
+      `0x141ABAF3B..0x141ABAFB4`; repair the read-only admission with 11EE,
+      contribution-aware AD73 occlusion and per-action budgets before another
+      complete owner exam.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

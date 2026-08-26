@@ -29127,3 +29127,60 @@ Live MCP readback resolves them as `AnimManager_PerformAnimBlend`, the two
 interior addresses of `AnimManager_PerformBlendAndDispatchPostBlendJob`, and
 `Player_PostAnimBlending_Async`. The PE contains neither authored-pair restore
 nor late-IK-applied markers.
+
+### 2026-08-26 RUNTIME INCONCLUSIVE (`afy`, PID 20380): both synchronous arm owners write, but the bounded whole-action admission saturated
+
+The package and every emitted same-pass sample were valid. PID `20380` booted
+exact `afy` at log line `100159`, installed the transition/fade observers and
+the two-site C39 census at `100179/100226`, published combined READY at
+`100227`, and selected local role B at `100224`. The confirmed AFU cold path was
+unchanged: full native-back rows appear at `100235/100241`, and the deferred
+Mazur refresh completes `refresh=ok/1/1 ... authored=1/1/1` at `100242`. There
+are exactly 64 keyed MAIN/MASKS/ROWS triples, zero incomplete stages and no new
+exception, timeout or fatal row. No authored-pair restore or late-IK mutation
+ran.
+
+The written whole-action admission nevertheless failed. The process consumed
+six successful action seeds -- Draw at `100285/100506/100617` and Put at
+`100383/100593/100641` -- rather than the requested single pair, emitted no
+`exit=1` C39 row, and reached the global `SATURATED rows=64` marker at `100582`.
+The first Draw session stops when the stock-live q2 state `11EE475B` begins at
+`100341`; the AFY shape classifier labels that state Custom but omits it from
+the Draw continuation table. The complete captured Put prefix ends at
+`3889CC0E + AD73C917`, with the older AD73 tail still full-weight at `100498`;
+the current terminal rule requires sole `3889CC0E`, so it cannot close before a
+new seed. These are census-admission defects, not engine-pose results. Under the
+prewritten saturation/terminal rule, `afy` is therefore **RUNTIME
+INCONCLUSIVE** as a complete Draw/Put owner exam.
+
+The admitted prefixes still provide durable partial writer evidence. Draw
+serial 1 rows `0..12` have semantic Perform changes in `13/13` samples and zero
+Player-`+0x408` changes; the first large adjacent delta is already
+post-Perform at `100325` (`19.142 deg / 0.10378 translation`) and the switch to
+`1313FB4E` at `100333` remains post-Perform-only (`16.893 deg / 0.06657`). Draw
+serial 3 adds a real quaternion-only Player edge on only its last three samples,
+but at `100571` the temporal discontinuity already exists post-Perform:
+`interPerform == interPlayer = 67.638 deg / 0.298519`, while the same-pass
+Player edge is `10.9294 deg` on C39 rows `19..26`. Thus Player postblend is a
+co-writer, not the leading Draw owner in the captured prefix.
+
+Put serial 2 is equally nonexclusive. Perform changes semantic pose in all
+`32/32` samples; Player `+0x408` changes the first eight C39 rows in `23/32`
+samples and then becomes exactly zero for the last nine AD73-tail samples. At
+`100406`, the post-Perform stream already contains a real, non-q-sign
+`141.652 deg / 0.08055` discontinuity, after which `+0x408` adds a
+quaternion-only `107.373 deg` rewrite. This confirms synchronous co-ownership
+and rejects `Player+0x408` or later Async as the **sole** origin, but it does not
+authorize suppressing either writer. Historical exact Mazur evidence already
+maps the `+0x408` mask `19..26` to `WeaponIKFeather`; the separately measured
+Mazur holster reducer returned `valid=0, weight=0`, so do not promote the broad
+HolsterIK label without a new internal boundary.
+
+No pose mutation follows from this partial result. The next static frontier is
+inside Perform: trace the exact group-zero Build/Process path around
+`0x141A92637 -> 0x141A92759 -> AnimManager_ProcessAnimCmdListSegment
+0x141AB97C0` and distinguish a bad finalized WorkBuffer from the cmd27 export at
+`0x141ABAF3B..0x141ABAFB4`. Any follow-up census must also admit the observed
+`11EE475B` Draw continuation, treat stale older AD73 as occluded when the newest
+empty track is fully contributing, and budget Draw and Put independently. Do
+not move to Async or alter `+0x408` until the earlier Perform owner is resolved.
