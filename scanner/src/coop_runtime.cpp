@@ -2712,12 +2712,16 @@ constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
 // Runtime-confirmed 82e7b9e/adr two-hand baseline. Build aep retains it as the
 // exact fail-closed pose under the one-process semantic right-hand reference.
 constexpr bool kEnableLegacyNadineMazurAuthoredPairRepair = false;
-// Build afz repairs the exact one-sided WeaponPartial fade exposed by AFY.
-// s_no-weapon has an empty-pose root, so stock cmd7 otherwise copies the
-// action-only ValidBits at full strength regardless of the authored track
-// weight.  Fill only an empty track adjacent to a successfully seeded native
-// Draw/Put action; keep the older whole-list transition overlay disabled.
-constexpr bool kEnableLegacyNadineMazurEmptyTrackEndpointFiller = true;
+// RUNTIME ADMISSION FAILURE / STATIC REJECTED (afz, PID 12180). The inner
+// command context carries zero mode bytes at +0x10/+0x11, so the package made
+// no mutation. More importantly, AnimStateSnapshot_GenerateAnimCommands has
+// already emitted {left=0,right=out,out=out} before this filler boundary; for
+// an empty root stock ApplyBlend therefore materializes lane-zero JointParams
+// and ValidBits on its own. The base cmd13 merely repeats that copy, while the
+// pair branch is a separate unproven synthetic-pose replacement. Keep the
+// complete four-endpoint experiment parked; do not relax the context gate and
+// rerun it.
+constexpr bool kEnableLegacyNadineMazurEmptyTrackEndpointFiller = false;
 // The static Chloe right-hand reference never overlapped the steady authored
 // pair at the earlier Feather callsite (aep). Re-seed the persistent
 // Player+0x4308 JointSets only after the confirmed pair has been restored,
@@ -73430,8 +73434,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-26afz "
-        "(preserve afu cold; direction-aware WeaponPartial empty-endpoint fade)");
+        "TLL co-op runtime init 2026-08-26afz-rejected "
+        "(preserve afu cold; rejected empty-endpoint filler parked)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "

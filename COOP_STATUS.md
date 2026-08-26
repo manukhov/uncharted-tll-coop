@@ -29299,3 +29299,69 @@ True`. Restarted-MCP readback resolves
 `AnimJointProgramOp28_RefinePackedQuaternion 0x142193E90`, and independently
 returns the saved one-sided-ValidBits comment. Runtime remains untested until
 the repository handoff is committed and pushed.
+
+### 2026-08-26 RUNTIME ADMISSION FAILURE / STATIC REJECTED (`afz`, PID 12180): the empty-track endpoint premise is false
+
+PID `12180` booted exact `afz` at log line `100702`, installed the four-callsite
+package at `100766` and published combined READY at `100767`. The confirmed AFU
+cold path remained intact: native-back correction stayed full-weight/full-depth
+and the exact Mazur deferred refresh completed `refresh=ok/1/1 ...
+authored=1/1/1`. The action seed also worked exactly once per direction: Draw
+serial 1 at `100808` and Put serial 2 at `100851`.
+
+The endpoint package itself made **zero mutations**. All 31 bounded
+`NADINE-MAZUR-EMPTY-ENDPOINT` rows returned result `3` (`kContext`): ten Draw
+base/ingress rows, one unseeded steady-pair row, ten Put pair/ingress rows and
+ten Put base/egress rows. There is no result `1`/`2`, exception or saturation,
+and the required Draw pair/egress role never appears. The exact admission bug
+is not the inner context's `+0`: that field correctly carries the target
+skeleton. `CreateAnimCmdsForObject 0x141A8FCF0` supplies zero bytes at inner
+`+0x10/+0x11`, while
+`seh_capture_legacy_nadine_mazur_empty_track_insert` required `1/3`. The user's
+unchanged transition is therefore an admission failure, not a visual verdict
+on the proposed endpoint transform.
+
+Independent static correction rejects merely relaxing that guard and rerunning
+`afz`. On the admitted `context+0x1C != 0` path,
+`AnimStateSnapshot_GenerateAnimCommands 0x141AB6C40` already emits at
+`0x141AB6E48..0x141AB6E98` the exact cmd7
+`{left=0,right=output,out=output,mode=1,weight=layerWeight}` after each track
+root. `AnimCmdEvaluator_ApplyBlend 0x14217CF90` unions ValidBits and
+`AnimJointParams_BlendTransformsByValidBits 0x142188A30` copies left-only
+48-byte records. Thus an empty root's output already contains lane-zero
+JointParams and ValidBits before the outer track fold. The deferred base cmd13
+runs later and copies the same lane zero into that already materialized output;
+it is a semantic no-op for every valid row. The independently established
+Base+Hands lane already owns C39 arm rows `19..30`, so the outer action fold is
+a jointly-valid weighted blend, not the claimed full-strength one-sided copy.
+
+The synthetic pair branch is a different, still-unproven hypothesis. `adq`
+already showed that the same pair can be overwritten by stock Player postblend,
+and `afy` measured `+0x408` as a large secondary writer; transition frames do
+not earn the steady-only restore. Also, AFY's `87.6623` degree first-Put value
+was PRE(previous postblend)-to-current Perform with no inter-Perform predecessor,
+not an adjacent action-frame edge. The durable temporal anomaly is the later
+`141.652` degree inter-Perform jump inside unchanged `DF5B68FC + 3889CC0E`
+topology around phase `0.105 -> 0.116`.
+
+The corrected offline native decoder independently rejects a fractional sample
+or frame-boundary discontinuity in either known holster leaf. Across phase
+`0.09..0.13` at step `0.0001`, `HolsterChest 8DCA21F2` changes at most
+`0.023969 deg / 0.000083831 m` per step and `HolsterBack 11438F72` at most
+`0.012737 deg / 0.000082849 m`. Across the exact AFY interval
+`0.105178320 -> 0.115821490`, their maxima are respectively
+`2.550264 deg / 0.008920647 m` and `1.354684 deg / 0.008816858 m`; an exact
+epsilon crossing of phase `0.1` is below `0.000393 deg / 0.00000134 m`.
+Neither native leaf can produce the observed `141.652 deg / 0.0805504 m`.
+The remaining candidates are a live leaf/source or retarget-route switch and
+downstream command composition.
+
+Therefore the broad four-endpoint AFZ hypothesis is **STATIC REJECTED** and
+`kEnableLegacyNadineMazurEmptyTrackEndpointFiller` is parked. Do not repair its
+inner mode-byte check or rerun it. The next earned work is read-only inside
+Perform: correlate the successful exact Mazur action seed with the live cmd6
+clip/source pose, retarget result and the relevant cmd7 input/output lanes.
+Source discontinuity selects the action leaf/content; smooth source with a
+target jump selects retarget routing; smooth target input with a cmd7 output
+jump selects lane ancestry/blending. Player `+0x408`, the ProcessWeapon item
+clock and the confirmed AFU cold attachment remain unchanged.

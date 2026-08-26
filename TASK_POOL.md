@@ -6138,6 +6138,41 @@ Keep the postblend preservation boundary; replace only its steady content.
       `save_database returned True`; restarted-MCP readback resolves all three
       new functions and the one-sided-ValidBits comment.
 
+      RUNTIME ADMISSION FAILURE / STATIC REJECTED (`afz`, PID 12180): cold AFU
+      and the exact Draw/Put action seeds passed, but all 31 endpoint rows were
+      result `3` (`kContext`) and no command mutation occurred. The inner
+      context correctly carries the target skeleton at `+0`; its mode bytes at
+      `+0x10/+0x11` are `0/0`, not the outer context's `1/3`, so the wrapper
+      rejected ten Draw base/ingress, one steady pair, ten Put pair/ingress and
+      ten Put base/egress attempts. Required Draw pair/egress was absent.
+
+      Do not fix that guard and rerun. Static re-evaluation proves the premise
+      false: before the AFZ boundary, `AnimStateSnapshot_GenerateAnimCommands`
+      already emits `{0,out,out,mode1}` and stock ApplyBlend copies lane-zero
+      JointParams/ValidBits into an empty-root output. The later base cmd13 is
+      therefore redundant. Base+Hands already owns C39 `19..30`, so the outer
+      fade is jointly valid rather than a one-sided full copy. Pair endpoints
+      are a separate synthetic-pose hypothesis and remain unproven across the
+      measured Player `+0x408` co-writer. AFY's first-Put `87.6623 deg` was a
+      previous-postblend to current-Perform reset, not a temporal action edge;
+      retain only the same-topology `141.652 deg` inter-Perform anomaly near DF5
+      phase `0.105 -> 0.116`.
+
+      Dense native decoding closes the raw-clip interpolation competitor.
+      Across the exact `0.105178320 -> 0.115821490` AFY interval,
+      HolsterChest moves only `2.550264 deg / 0.008920647 m` and HolsterBack
+      `1.354684 deg / 0.008816858 m`; the epsilon crossing at phase `0.1` is
+      below `0.000393 deg / 0.00000134 m`. Neither can explain the measured
+      `141.652 deg / 0.0805504 m`; retain live leaf/retarget-route switching and
+      downstream command composition.
+
+      AFZ is parked in source. Next implement only a bounded read-only Perform
+      census keyed by the successful Mazur seed: capture the live cmd6 clip and
+      source pose, retarget result, and relevant cmd7 left/right/output lanes.
+      Source jump => leaf/content; smooth source plus target jump => retarget;
+      smooth target plus output jump => lane ancestry/blend. Do not alter
+      Player `+0x408`, the item clock, cold AFU attachment or steady pose.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such
