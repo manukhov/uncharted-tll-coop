@@ -6173,6 +6173,57 @@ Keep the postblend preservation boundary; replace only its steady content.
       smooth target plus output jump => lane ancestry/blend. Do not alter
       Player `+0x408`, the item clock, cold AFU attachment or steady pose.
 
+      STATIC / RUNTIME EXAM READY (`aga`): run one bounded
+      read-only five-site provenance census for the durable AFY Put edge; do not
+      revive AFZ or alter commands/poses/weights. The required pass-through
+      boundaries are Snapshot `0x14189EB17`, completed-list Process
+      `0x141A92759`, case-7 ApplyBlend `0x141ABA30A`, case-6 Retarget
+      `0x141AB9FC4`, and nested source Add `0x141937DBA`. Three independent
+      evidence types already earn this diagnostic: the AFY adjacent
+      same-topology `141.652 deg / 0.0805504 m` runtime edge; exact call-graph
+      plus cmd6/cmd7/retarget dataflow; and dense decoded HolsterChest/Back
+      motion of only `2.550264/1.354684 deg` across the same phase interval.
+
+      Admit only the first successful role-B retained-Player0 legacy-Nadine
+      ED25/C39 Mazur Put seed: stable Player/Fg/layer/weapon generations and
+      queue, controller 5, requested-slot equality plus raw Mazur inventory
+      membership, exact `track0=DF5B68FC` + `track1=3889CC0E`, finite phase
+      `0.08..0.14`, and exactly one Player cmd6 leaf plus one internal cmd7.
+      Require leaf tuple `0B/27E57F43/FD6DBE03/09A0`; capture Player source
+      rows21..32 with real embedded ValidBits and post-retarget C39 rows19..30
+      with the proven group-zero ValidBits slice. Capture at most 12 consecutive
+      complete samples with no phase-bucket dedup; compare each sample only with
+      its immediate complete predecessor at source, post-retarget,
+      action-snapshot, track-fold and WeaponPartial-terminal.
+      Bind one seed and fail closed on retask, identity drift, queue change,
+      generation gap or incomplete five-site correlation.
+
+      Competing predictions: an edge already in nested source selects
+      H-source/content; smooth source and an edge across Retarget selects
+      H-retarget; smooth source/retarget and the first edge at a unique case-7
+      stage selects H-cmd7/lane ancestry. Nested Add cannot name the upstream
+      decoder/opcode, and the Retarget bracket cannot name an individual mapping
+      helper; Player `+0x408`/Async remain outside this census. Require bounded
+      action-seed, SCOPE/PROVENANCE/LEAF/SOURCE/RETARGET/BLEND/ROWS/TEMPORAL,
+      five-site INSTALLED and combined READY markers plus exactly one EXIT.
+      Missing READY/correlation,
+      fewer than two adjacent samples, INCOMPLETE/exception/drift or cold AFU
+      regression are admission failure. Hitting 12 without closure must emit one
+      SATURATED and `EXIT result=inconclusive reason=max-samples`.
+
+      Final source/ABI/installer/telemetry reviews are GO. Frozen source SHA is
+      `D09FD33AD5878AB166DD145F35CC93E704E602BAA174CF1D0DE57ABAD4E86C98`;
+      Release DLL is `891392` bytes, SHA
+      `5E3F9B1B95434E5CE5CB39E4886125EB25467DC52CE076F61464ACF36B0CAA18`,
+      with source `12:29:43.447Z` < object `12:30:09.278Z` < DLL
+      `12:30:09.374Z`, x64 PE32+ and `/O2 /Ob2 /DNDEBUG`. Exact AGA/seed/five-site
+      SOURCE/RETARGET READY and bounded telemetry markers are present; AFZ,
+      authored-pair and late-IK mutation markers are absent. The sole IDB was
+      saved after the final label script (`1793/61/1`, `save_database returned
+      True`). One copy may now be launched. The user makes Mazur drawn, performs
+      exactly one Put and remains still through EXIT; the agent sends no game
+      input. Missing/inconclusive evidence remains admission failure.
+
   Strap is next after transition classification.  Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

@@ -1828,9 +1828,11 @@ FUNCTIONS = {
         "AnimStateSnapshot_GenerateAnimCommands",
         "Exact AnimStateSnapshot::GenerateAnimCommands source assertion. Resolves "
         "the root node from AnimStateInstance+0x130/+0x138 and invokes virtual "
-        "slot 14 with the caller-owned command-list record unchanged. Its only "
-        "direct callees are the node-heap resolver and assert helper; animation ids "
-        "were already remapped during SnapshotAnimState.",
+        "slot 14 with the caller-owned command-list record. When inner context+0x1C "
+        "is nonzero, it then emits the exact command-7 tail {left=0,right=output,"
+        "out=output}; this materializes lane-zero one-sided JointParams and ValidBits "
+        "even when the state root emitted no pose. Animation ids were already "
+        "remapped during SnapshotAnimState.",
     ),
     0x14172C370: (
         "AnimControl_CreateAnimCommands",
@@ -1890,9 +1892,14 @@ FUNCTIONS = {
         "AnimStateLayer_CreateAnimCommands",
         "Type-2 layer command generator. Reads tracks in reverse array order "
         "[count-1..0], so commands fold oldest to newest and track zero is the "
-        "final/current contributor. Walks active AnimStateInstances through "
-        "AnimStateSnapshot_GenerateAnimCommands and emits transition command 7 "
-        "from per-state track weight +0x158. Its terminal per-layer command 7 at "
+        "final/current contributor. In the exact two-track path array[1] (oldest) "
+        "generates first into lane 1 and array[0] (newest/current) generates second "
+        "into lane 2. With inner snapshot context byte +0x1C equal to 1, each "
+        "AnimStateSnapshot_GenerateAnimCommands call appends an internal command 7 "
+        "with left=0, right=output, out=output, the caller-supplied mode and that "
+        "snapshot's supplied track weight. The layer then appends the outer fold "
+        "left=1, right=2, out=1, mode=1, weight=newest/current AnimStateInstance+0x158. "
+        "Its terminal per-layer command 7 at "
         "0x14189EC8C..0x14189ECD6 is left=0, right=1, out=0, mode=1, weight=1; "
         "therefore a WeaponPartial layer can replace jointly valid base-pose rows. "
         "Its sole direct callee is AnimStateSnapshot_GenerateAnimCommands; it does "
@@ -3533,6 +3540,20 @@ FUNCTIONS = {
         "at +0x30, target skeleton group descriptor at +0x38, the current "
         "10-byte processing/allocation descriptor at +0x40, "
         "JointParams at +0x50 and matrix workspace at +0x58. "
+        "Command 2 constructs an ephemeral evaluator with SegmentContext* at +0x00, "
+        "the per-stream lane-pointer-array base at +0x08, the per-stream 16-byte "
+        "ValidBits-array base at +0x10, uint32 pointer-slot capacity at +0x18 (initialized to "
+        "twice command 2's logical-lane count), the current 10-byte descriptor "
+        "pointer at +0x20, uint16 group ordinal at +0x28 and uint8 allocated "
+        "logical-lane count at +0x2A. Descriptor word 0 is the JointParams count, "
+        "word 1 the rounded scalar count, byte 4 the stream-count/lane stride and "
+        "word 3 the first skeleton joint. The word-ordered parser reads the low "
+        "16 bits of each header as opcode and the high 16 bits as dword count, so "
+        "successive case-7 calls at 0x141ABA30A have the same ordinal as command 7 "
+        "records in the list. A command 7 is word0=0x00060007, word1=left lane, "
+        "word2=right lane, word3=output lane, word4=mode and word5=float weight "
+        "bits; the ApplyBlend call receives outputIsRight=(word3 == word2), so a "
+        "well-formed output must alias one of its two input lanes. "
         "Case 27 at 0x141ABAF3B..0x141ABAFB4 raw-copies three float4 rows per "
         "joint from finalized WorkBuffer+0x50 into the opcode's destination, "
         "which the normal builder points at FgAnimData+0x100. "
@@ -3574,7 +3595,11 @@ FUNCTIONS = {
         "RetargetPlugin_AddJointRetargetCommands",
         "Exact AddRetargetPlugin source assertion in nd-anim-plugins.cpp:181. "
         "Publishes the selected runtime retarget entry and its StringId joint map "
-        "into the animation command stream before target-pose evaluation.",
+        "into the animation command stream before target-pose evaluation. At the "
+        "nested callsite 0x141937DBA, SegmentContext+0x38 is the target group "
+        "descriptor, +0x40 is the current processing descriptor and +0x50 is the "
+        "evaluated source JointParams base. The source group's 128-bit ValidBits "
+        "follow the source pose at 48*(processing joint count+1).",
     ),
     0x141AE2A50: (
         "RetargetPlugin_ApplyJointRetargets",
@@ -3639,7 +3664,12 @@ FUNCTIONS = {
         "RetargetAnimUsingBatchMgr",
         "Exact RetargetAnimUsingBatchMgr source assertion in retarget-util.cpp:202. "
         "Evaluates an ArtItemAnim across source and target ArtItemSkeletons using a "
-        "SkelTable retarget entry and returns target JointParams/ValidBits buffers.",
+        "SkelTable retarget entry and returns target JointParams/ValidBits buffers "
+        "through arguments 7 and 8. It allocates the target ValidBits prefix first, "
+        "then returns JointParams after 16*target scalar-group-count bytes. The "
+        "caller at 0x141AB9FC4 immediately forwards those returned pointers to "
+        "AnimCmdEvaluator_CopyMaskedPose, so a post-call read at that exact E8 is "
+        "the bounded target-pose lifetime before work-buffer publication.",
     ),
     0x14217C7F0: (
         "AnimCmdEvaluator_ApplyAnimationDirect",
@@ -3651,20 +3681,39 @@ FUNCTIONS = {
         "AnimCmdEvaluator_CopyMaskedPose",
         "Copies masked JointParams and ValidBits into the current processing-group "
         "output. ProcessAnimCmdListSegment case 6 uses it to publish the pose returned "
-        "by RetargetAnimUsingBatchMgr into the same work buffer as direct evaluation.",
+        "by RetargetAnimUsingBatchMgr into the same work buffer as direct evaluation. "
+        "The selected ValidBits slice is base + 16*(target group descriptor uint16 "
+        "+0x4 + processing descriptor byte +0x5); for legacy-Nadine group zero both "
+        "offsets are authored zero, so the first 16-byte slice owns C39 group-zero "
+        "validity.",
     ),
     0x14217D940: (
         "AnimCmdEvaluator_ClearOutput",
         "Clears or invalidates a processing-group output slot when animation command "
         "evaluation cannot produce a valid pose.",
     ),
+    0x141AB7FE0: (
+        "AnimCmdEvaluator_IsLaneValidBitsEmpty",
+        "Returns true only when the selected logical lane has no set bits in any "
+        "of the per-stream 16-byte ValidBits records referenced by evaluator+0x10, using the "
+        "current descriptor's byte-4 stream count/lane stride. ProcessAnimCmdListSegment "
+        "case 7 tests word1 and then word2 with this helper; only when both inputs "
+        "are empty does it clear word3 and skip AnimCmdEvaluator_ApplyBlend.",
+    ),
     0x14217CF90: (
         "AnimCmdEvaluator_ApplyBlend",
-        "The ProcessAnimCmdListSegment case-7 consumer for command 0x60007. "
-        "Takes the emitted left/right output indices, output/mode and final float "
-        "weight, unions ValidBits into the output, then invokes the transform and "
-        "scalar pose-blend helpers. Mode 1 at weight 1 is right-over-left for every "
-        "joint valid in the right child. The "
+        "The ProcessAnimCmdListSegment case-7 consumer for command 0x00060007. "
+        "Its arguments map exactly as left=word1, right=word2, "
+        "outputIsRight=(word3 == word2), mode=word4 and weight=bitcast<float>(word5). "
+        "It therefore selects the right lane as destination only when outputIsRight "
+        "is true and otherwise selects the left lane; word3 is not passed as an "
+        "independent lane index and must alias one input in a well-formed command. "
+        "It indexes the lane-pointer array referenced by evaluator+0x08 and the "
+        "16-byte ValidBits array referenced by +0x10 by logical lane times descriptor "
+        "byte 4, unions validity "
+        "into the selected output, then invokes the transform and scalar pose-blend "
+        "helpers. Mode 1 at weight 1 is right-over-left for every joint valid in "
+        "the right child. The "
         "generator short-circuits weight <=0.0001 to child 0 and weight >=0.9999 "
         "to child 1 when endpoint evaluation is enabled.",
     ),
@@ -3673,8 +3722,10 @@ FUNCTIONS = {
         "Transform-record helper used by AnimCmdEvaluator_ApplyBlend. It "
         "interpolates only joints valid in both inputs; joints valid in just "
         "one input are copied as complete 48-byte records without applying the "
-        "cmd7 weight. This one-sided rule makes an empty animation-state track "
-        "an ineffective endpoint for WeaponPartial fades.",
+        "cmd7 weight. This rule alone does not make WeaponPartial's empty state "
+        "one-sided: AnimStateSnapshot_GenerateAnimCommands has already emitted its "
+        "{0,output,output} tail and copied lane-zero validity into that track before "
+        "the outer track fold.",
     ),
     0x142193E90: (
         "AnimJointProgramOp28_RefinePackedQuaternion",
@@ -3725,10 +3776,15 @@ FUNCTIONS = {
     ),
     0x14217C3A0: (
         "AnimCmdEvaluator_AllocateGroupLanes",
-        "Allocates and indexes the current 10-byte processing descriptor's "
-        "joint/scalar output lanes and ValidBits blocks. Word 0 supplies the "
-        "48-byte JointParams record count, word 1 the rounded scalar count, "
-        "byte 4 the lane multiplicity and word 3 the first skeleton joint. "
+        "Command 2 supplies the current descriptor pointer at evaluator+0x20 and "
+        "group ordinal at +0x28 before this helper allocates and indexes its "
+        "joint/scalar output lanes. It fills the per-stream lane-pointer array "
+        "referenced by +0x08 and 16-byte ValidBits blocks referenced by +0x10, "
+        "bounds pointer-slot writes by "
+        "the uint32 capacity at +0x18, and records the resulting allocated logical-"
+        "lane count at +0x2A. Descriptor word 0 supplies the 48-byte JointParams "
+        "record count, word 1 the rounded scalar count, byte 4 the stream-count/lane "
+        "stride and word 3 the first skeleton joint. "
         "This descriptor is distinct from the target skeleton group's "
         "workspace/parameter counts at SegmentContext+0x38.",
     ),

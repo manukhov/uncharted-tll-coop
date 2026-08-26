@@ -2750,6 +2750,12 @@ constexpr bool kEnableLegacyNadineMazurStockTransitionCensus = false;
 // the normal DAG or Player Weapon/Holster IK before any later Async/palette
 // experiment is considered.
 constexpr bool kEnableLegacyNadineMazurStockPosePipelineCensus = false;
+// Build aga is the bounded read-only discriminator after AFZ was rejected.
+// It correlates the successful native WeaponPartial action seed with the exact
+// two-track command provenance and captures C39 JointParams/ValidBits around
+// the internal snapshot blend, the outer track fold and the terminal
+// WeaponPartial fold. It never edits a command, lane, ValidBits word or pose.
+constexpr bool kEnableLegacyNadineMazurPerformBlendCensus = true;
 // REJECTED (aen): requiring the remapped Chloe Hands root before the nested
 // retarget capture made the promised source discriminator unreachable.
 constexpr bool kEnableLegacyNadineVirtualChloeGripSourceCensus = false;
@@ -2831,6 +2837,25 @@ static_assert(
          !kEnableLegacyNadineMazurChloeRightHandPropReference &&
          !kEnableLegacyNadineVirtualChloeGripSourceCensus),
     "afz empty-track filler must be the only arm-transition mutation");
+static_assert(
+    !kEnableLegacyNadineMazurPerformBlendCensus ||
+        (!kEnableLegacyNadineMazurAuthoredPairRepair &&
+         !kEnableLegacyNadineMazurEmptyTrackEndpointFiller &&
+         !kEnableLegacyNadineMazurLateSteadyIkRepair &&
+         !kEnableLegacyNadineMazurTransientPostblendReplay &&
+         !kEnableLegacyNadineMazurTransientPostblendCensus &&
+         !kEnableLegacyNadineMazurStockTransitionCensus &&
+         !kEnableLegacyNadineMazurStockPosePipelineCensus &&
+         !kEnableLegacyNadineIdleArmPoseRoundTrip &&
+         !kEnableLegacyNadineActiveWeaponGripOverlayRepair &&
+         !kEnableLegacyNadineMazurDrawEndpointRepair &&
+         !kEnableLegacyNadineWeaponIkGoalRelay &&
+         !kEnableLegacyNadineWeaponIkTerminalGoalRelay &&
+         !kEnableLegacyNadineWeaponIkFeatherSuppression &&
+         !kEnableLegacyNadineMazurRightHandPropRelay &&
+         !kEnableLegacyNadineMazurChloeRightHandPropReference &&
+         !kEnableLegacyNadineVirtualChloeGripSourceCensus),
+    "aga Perform blend census must be the sole arm-transition experiment");
 // Build ada proved a repeatable first-Draw-good -> steady-broken transition,
 // followed by immediately broken later Draws. The animation layer has exact
 // create-new and loop-current paths while consuming its bounded transition
@@ -2838,12 +2863,14 @@ static_assert(
 // never alter a request, instance, weight, or pose row in this census.
 constexpr bool kEnableWeaponPartialTransitionLifecycleCensus =
     kEnableLegacyNadineMazurStockTransitionCensus;
-// AFZ still needs the already-proven successful TakeTransitions seed, but not
-// either AFY observer stream.  Keep seed publication independently selectable
-// so disabling the census cannot silently widen filler admission.
+// AFZ and the read-only AGA Perform discriminator need the already-proven
+// successful TakeTransitions seed, but not either AFY observer stream. Keep
+// seed publication independently selectable so disabling a census cannot
+// silently widen admission.
 constexpr bool kEnableWeaponPartialSuccessfulActionSeed =
     kEnableWeaponPartialTransitionLifecycleCensus ||
-    kEnableLegacyNadineMazurEmptyTrackEndpointFiller;
+    kEnableLegacyNadineMazurEmptyTrackEndpointFiller ||
+    kEnableLegacyNadineMazurPerformBlendCensus;
 // Build add rejected both loop-current reuse and a missing second request.
 // The first custom Draw transition nevertheless starts from one track while
 // the repeated Draw starts from two. Sample the exact WeaponPartial track and
@@ -42893,7 +42920,7 @@ bool install_weapon_partial_transition_lifecycle_census() {
         protection_restored
             ? (kEnableWeaponPartialTransitionLifecycleCensus
                    ? "WeaponPartial transition lifecycle census installed (read-only new-vs-loop pre/post)"
-                   : "WeaponPartial successful action-seed hook installed (AFZ scope only; lifecycle logging disabled)")
+                   : "WeaponPartial successful action-seed hook installed (AGA/AFZ scope only; lifecycle logging disabled)")
             : "WeaponPartial transition lifecycle census installed (read-only; protection WARNING)");
     return protection_restored;
 }
@@ -49068,7 +49095,8 @@ bool seh_resolve_idle_arm_pose_owner_scope(
     void* player, std::uint32_t expected_screen,
     IdleArmPoseOwnerScope* output,
     IdleArmPoseAdmissionDiagnostic* diagnostic = nullptr,
-    bool allow_legacy_nadine_mazur_handoff = false) {
+    bool allow_legacy_nadine_mazur_handoff = false,
+    bool raw_inventory_only = false) {
     if (output == nullptr) {
         return false;
     }
@@ -49229,7 +49257,7 @@ bool seh_resolve_idle_arm_pose_owner_scope(
         }
         void* weapon = nullptr;
         int resolved_weapon_slot = weapon_slot;
-        if (steady_weapon_out) {
+        if (steady_weapon_out && !raw_inventory_only) {
             weapon = get_weapon_from_slot(player, weapon_slot);
         } else {
             void* const controller = *reinterpret_cast<void* const*>(
@@ -57849,6 +57877,2998 @@ bool install_legacy_nadine_mazur_stock_pose_pipeline_census() {
             : (safe_rollback
                    ? "legacy-Nadine Mazur stock C39 pipeline census SKIPPED (verified rollback)"
                    : "legacy-Nadine Mazur stock C39 pipeline census PARTIAL (pass-through; relays retained)"));
+    return ready;
+}
+
+// AGA keeps AFZ parked and observes only the stock command/evaluator path. The
+// first relay brackets each AnimStateSnapshot command interval, the second sees
+// the immutable completed list immediately before Process consumes it, the next
+// two bind an exact cmd6 Retarget call to its live source JointParams, and the
+// fifth captures the exact ApplyBlend inputs/outputs selected by TLS ordinal.
+// All five wrappers call stock exactly once and preserve its return value.
+constexpr std::uintptr_t kNadineMazurAgaProcessCallsiteRva = 0x1A92759;
+constexpr std::uintptr_t kNadineMazurAgaApplyBlendCallsiteRva = 0x1ABA30A;
+constexpr std::uintptr_t kNadineMazurAgaApplyBlendRva = 0x217CF90;
+constexpr std::size_t kNadineMazurAgaTargetBlendCount = 3;
+constexpr std::size_t kNadineMazurAgaMaxActionLeaves = 16;
+constexpr std::size_t kNadineMazurAgaPlayerFirstJoint = 21;
+constexpr std::size_t kNadineMazurAgaObservedJointCount = 12;
+constexpr float kNadineMazurAgaPutPhaseMinimum = 0.08F;
+constexpr float kNadineMazurAgaPutPhaseMaximum = 0.14F;
+constexpr std::uint32_t kNadineMazurAgaMaximumPutSamples = 12;
+static_assert(
+    kNadineMazurAgaObservedJointCount ==
+        kMazurAuthoredPairC39JointCount,
+    "AGA source and retarget observations must retain twelve narrow rows");
+
+using LegacyNadineMazurAgaSnapshotFunction =
+    LegacyNadineMazurTrackGenerateCommandsFunction;
+using LegacyNadineMazurAgaApplyBlendFunction = std::uint32_t*(__fastcall*)(
+    std::uint32_t*, void*, std::int32_t, std::int32_t, std::uint8_t,
+    std::int32_t, float);
+
+enum class LegacyNadineMazurAgaBlendStage : std::uint8_t {
+    kActionSnapshot = 0,
+    kTrackFold = 1,
+    kWeaponPartialTerminal = 2,
+};
+
+enum class LegacyNadineMazurAgaScopeResult : std::uint8_t {
+    kPrerequisite = 0,
+    kOwner = 1,
+    kLayer = 2,
+    kSeed = 3,
+    kIdentity = 4,
+    kTopology = 5,
+    kPose = 6,
+    kAdmitted = 7,
+    kException = 8,
+};
+
+void close_legacy_nadine_mazur_aga_after_scope_failure(
+    void* expected_target_skeleton,
+    LegacyNadineMazurAgaScopeResult result);
+
+struct LegacyNadineMazurAgaScope {
+    bool valid = false;
+    std::uint8_t direction = 0;
+    void* player = nullptr;
+    void* fg_anim_data = nullptr;
+    void* local_pose = nullptr;
+    void* target_skeleton = nullptr;
+    void* weapon = nullptr;
+    void* weapon_partial_layer = nullptr;
+    std::array<void*, 2> tracks{};
+    std::array<void*, 2> instances{};
+    std::array<std::uint32_t, 2> states{};
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    std::uint32_t queue_sequence = 0;
+    std::int32_t requested_slot = -1;
+    std::uint32_t action_state = 0;
+    std::uint32_t action_phase_bits = 0;
+    std::uint32_t native_weight_bits = 0;
+    std::uint32_t action_index = UINT32_MAX;
+    std::uint32_t empty_index = UINT32_MAX;
+    std::uint64_t action_seed_serial = 0;
+    ULONGLONG deadline_tick = 0;
+    int rifle_slot = -1;
+};
+
+struct LegacyNadineMazurAgaCommandRecordView {
+    bool valid = false;
+    std::uint32_t* words = nullptr;
+    std::uint32_t capacity = 0;
+    std::uint32_t word_count = 0;
+    std::uint32_t lane_or_pending_count = 0;
+    void* pending = nullptr;
+};
+
+struct LegacyNadineMazurAgaTrackInterval {
+    bool valid = false;
+    void* track = nullptr;
+    std::uint32_t track_index = UINT32_MAX;
+    std::uint32_t output_lane = UINT32_MAX;
+    std::uint32_t before_word = UINT32_MAX;
+    std::uint32_t after_word = UINT32_MAX;
+    std::uint32_t internal_blend_word = UINT32_MAX;
+    std::uint32_t internal_mode = 0;
+    std::uint32_t internal_weight_bits = 0;
+};
+
+struct LegacyNadineMazurAgaSession {
+    bool valid = false;
+    LegacyNadineMazurAgaScope scope{};
+    void* command_record = nullptr;
+    std::uint32_t* words = nullptr;
+    std::uint32_t capacity = 0;
+    std::array<LegacyNadineMazurAgaTrackInterval, 2> intervals{};
+    std::uint32_t next_snapshot_word = UINT32_MAX;
+    std::uint64_t generation = 0;
+};
+
+struct LegacyNadineMazurAgaSnapshotPending {
+    bool valid = false;
+    std::uint32_t track_index = UINT32_MAX;
+    std::uint32_t output_lane = UINT32_MAX;
+    std::uint32_t mode = 0;
+    std::uint32_t weight_bits = 0;
+    LegacyNadineMazurAgaCommandRecordView before{};
+    std::uint64_t generation = 0;
+};
+
+LegacyNadineMazurAgaSnapshotFunction
+    g_original_legacy_nadine_mazur_aga_snapshot = nullptr;
+ProcessAnimCmdListSegmentFunction
+    g_original_legacy_nadine_mazur_aga_process = nullptr;
+LegacyNadineMazurAgaApplyBlendFunction
+    g_original_legacy_nadine_mazur_aga_apply_blend = nullptr;
+std::atomic<bool> g_legacy_nadine_mazur_aga_ready{false};
+std::atomic<std::uint64_t> g_legacy_nadine_mazur_aga_generation{0};
+thread_local LegacyNadineMazurAgaSession
+    g_legacy_nadine_mazur_aga_session{};
+
+void log_legacy_nadine_mazur_aga_incomplete(const char* reason) {
+    static std::atomic<std::uint32_t> rows{0};
+    static std::atomic<bool> saturated{false};
+    const std::uint32_t row = rows.fetch_add(1, std::memory_order_relaxed);
+    if (row >= 32) {
+        if (!saturated.exchange(true, std::memory_order_relaxed)) {
+            boot_log_line("NADINE-MAZUR-AGA-INCOMPLETE SATURATED rows=32");
+        }
+        return;
+    }
+    std::ostringstream line;
+    line << "NADINE-MAZUR-AGA-INCOMPLETE row=" << row
+         << " reason=" << (reason != nullptr ? reason : "unknown");
+    boot_log_line(line.str().c_str());
+}
+
+const char* legacy_nadine_mazur_aga_scope_result_name(
+    LegacyNadineMazurAgaScopeResult result) {
+    switch (result) {
+        case LegacyNadineMazurAgaScopeResult::kPrerequisite:
+            return "prerequisite";
+        case LegacyNadineMazurAgaScopeResult::kOwner:
+            return "owner";
+        case LegacyNadineMazurAgaScopeResult::kLayer:
+            return "layer";
+        case LegacyNadineMazurAgaScopeResult::kSeed:
+            return "seed";
+        case LegacyNadineMazurAgaScopeResult::kIdentity:
+            return "identity";
+        case LegacyNadineMazurAgaScopeResult::kTopology:
+            return "topology";
+        case LegacyNadineMazurAgaScopeResult::kPose:
+            return "pose";
+        case LegacyNadineMazurAgaScopeResult::kAdmitted:
+            return "admitted";
+        case LegacyNadineMazurAgaScopeResult::kException:
+            return "exception";
+    }
+    return "unknown";
+}
+
+void log_legacy_nadine_mazur_aga_scope_reject(
+    LegacyNadineMazurAgaScopeResult result, const char* call_stage) {
+    static std::array<std::atomic<bool>, 9> logged{};
+    const std::size_t index = static_cast<std::size_t>(result);
+    if (index >= logged.size() ||
+        logged[index].exchange(true, std::memory_order_relaxed)) {
+        return;
+    }
+    const auto seed = copy_weapon_partial_successful_action_seed();
+    char line[384]{};
+    std::snprintf(
+        line, sizeof(line),
+        "NADINE-MAZUR-AGA-SCOPE stage=%s result=%s seed=%llu direction=%u queue=%u rifleSlot=%d playerGen=%u weaponGen=%u",
+        call_stage != nullptr ? call_stage : "unknown",
+        legacy_nadine_mazur_aga_scope_result_name(result),
+        static_cast<unsigned long long>(seed.serial),
+        static_cast<unsigned>(seed.direction), seed.queue_sequence,
+        seed.rifle_slot, seed.player_runtime_id, seed.weapon_runtime_id);
+    boot_log_line(line);
+}
+
+bool seh_read_legacy_nadine_mazur_aga_command_record(
+    void* command_record, LegacyNadineMazurAgaCommandRecordView* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (command_record == nullptr || readable_bytes(command_record) < 0x20) {
+            return false;
+        }
+        const auto* const record = static_cast<const std::byte*>(command_record);
+        output->words = *reinterpret_cast<std::uint32_t* const*>(record);
+        output->capacity = *reinterpret_cast<const std::uint32_t*>(
+            record + 0x08);
+        output->word_count = *reinterpret_cast<const std::uint32_t*>(
+            record + 0x0C);
+        output->lane_or_pending_count =
+            *reinterpret_cast<const std::uint32_t*>(record + 0x10);
+        output->pending = *reinterpret_cast<void* const*>(record + 0x18);
+        if (output->words == nullptr ||
+            (output->capacity != 1024 && output->capacity != 4096) ||
+            output->word_count < 8 ||
+            output->word_count > output->capacity ||
+            readable_bytes(output->words) <
+                static_cast<std::size_t>(output->capacity) *
+                    sizeof(std::uint32_t) ||
+            output->words[0] != 0x00020000u ||
+            output->words[2] != 0x00020001u ||
+            output->words[4] != 0x00040002u) {
+            *output = {};
+            return false;
+        }
+        output->valid = true;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+bool seh_select_legacy_nadine_mazur_aga_scope(
+    void* expected_target_skeleton, LegacyNadineMazurAgaScope* output,
+    LegacyNadineMazurAgaScopeResult* result_out = nullptr) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    if (result_out != nullptr) {
+        *result_out = LegacyNadineMazurAgaScopeResult::kPrerequisite;
+    }
+    __try {
+        if (!kEnableLegacyNadineMazurPerformBlendCensus ||
+            !g_legacy_nadine_mazur_aga_ready.load(
+                std::memory_order_acquire) ||
+            !g_state_net.enabled || !g_net_role_b ||
+            expected_target_skeleton == nullptr ||
+            g_anim_control_find_active_type2_layer_by_id == nullptr) {
+            return false;
+        }
+        if (result_out != nullptr) {
+            *result_out = LegacyNadineMazurAgaScopeResult::kOwner;
+        }
+        void* const player = retained_player_object(0);
+        IdleArmPoseOwnerScope owner{};
+        if (!seh_resolve_idle_arm_pose_owner_scope(
+                player, 0, &owner, nullptr, true, true) ||
+            owner.weapon_art_id != kCoopRifleArtId ||
+            !local_player_is_stationary_weapon_handoff(owner) ||
+            owner.fg_anim_data == nullptr || owner.local_pose == nullptr ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(owner.fg_anim_data) +
+                kFgAnimDataSkeletonOffset) !=
+                expected_target_skeleton) {
+            return false;
+        }
+
+        if (result_out != nullptr) {
+            *result_out = LegacyNadineMazurAgaScopeResult::kLayer;
+        }
+
+        const auto* const player_bytes = static_cast<const std::byte*>(player);
+        void* const weapon_anim_control = *reinterpret_cast<void* const*>(
+            player_bytes + 0x1DF0);
+        if (weapon_anim_control == nullptr ||
+            readable_bytes(weapon_anim_control) < 0x18 ||
+            *reinterpret_cast<const std::uintptr_t*>(weapon_anim_control) !=
+                g_module + kPlayerWeaponAnimControlVtableRva ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(weapon_anim_control) + 0x10) !=
+                player) {
+            return false;
+        }
+        void* const anim_control = *reinterpret_cast<void* const*>(
+            static_cast<const std::byte*>(weapon_anim_control) + 0x08);
+        void* const layer = anim_control != nullptr
+            ? g_anim_control_find_active_type2_layer_by_id(
+                  anim_control, kWeaponPartialLayerId)
+            : nullptr;
+        int owner_index = -1;
+        void* classified_player = nullptr;
+        if (layer == nullptr ||
+            !seh_classify_retained_legacy_nadine_weapon_partial_layer(
+                layer, &owner_index, &classified_player) ||
+            owner_index != 0 || classified_player != player) {
+            return false;
+        }
+
+        if (result_out != nullptr) {
+            *result_out = LegacyNadineMazurAgaScopeResult::kSeed;
+        }
+        const WeaponPartialSuccessfulActionSeed seed =
+            copy_weapon_partial_successful_action_seed();
+        const ULONGLONG now = GetTickCount64();
+        if (!seed.valid || seed.direction != 2 ||
+            seed.serial == 0 || seed.deadline_tick == 0 ||
+            now > seed.deadline_tick || seed.fg_anim_data != owner.fg_anim_data ||
+            seed.weapon_partial_layer != layer ||
+            seed.player_runtime_id == 0 || seed.weapon_runtime_id == 0 ||
+            seed.rifle_slot < 0 || owner.weapon_slot != seed.rifle_slot ||
+            owner.controller_state != 5 || readable_bytes(layer) < 0x4D8) {
+            return false;
+        }
+        if (result_out != nullptr) {
+            *result_out = LegacyNadineMazurAgaScopeResult::kIdentity;
+        }
+        void* const controller = *reinterpret_cast<void* const*>(
+            player_bytes + kPlayerWeaponControllerOffset);
+        if (controller == nullptr || readable_bytes(controller) < 0x134 ||
+            *reinterpret_cast<const std::uintptr_t*>(controller) !=
+                g_module + kPlayerWeaponControllerVtableRva ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(controller) + 0x108) != player ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(layer) + 0x4D0) !=
+                seed.queue_sequence ||
+            *reinterpret_cast<const std::int32_t*>(
+                static_cast<const std::byte*>(controller) + 0x130) !=
+                seed.rifle_slot) {
+            return false;
+        }
+        const std::uint32_t player_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                player_bytes + kGameObjectRuntimeIdOffset);
+        const std::uint32_t weapon_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(owner.weapon) +
+                kGameObjectRuntimeIdOffset);
+        if (player_runtime_id != seed.player_runtime_id ||
+            weapon_runtime_id != seed.weapon_runtime_id) {
+            return false;
+        }
+
+        if (result_out != nullptr) {
+            *result_out = LegacyNadineMazurAgaScopeResult::kTopology;
+        }
+        WeaponPartialFadeTraceSnapshot topology{};
+        if (!seh_capture_weapon_partial_fade_trace(layer, &topology) ||
+            !topology.valid || topology.track_count != 2 ||
+            topology.captured_track_count != 2) {
+            return false;
+        }
+        std::uint32_t action_index = UINT32_MAX;
+        std::uint32_t empty_index = UINT32_MAX;
+        for (std::uint32_t index = 0; index < 2; ++index) {
+            const auto& track = topology.tracks[index];
+            if (track.track == nullptr || track.instance_count != 1 ||
+                track.captured_instance_count != 1 ||
+                track.instances[0].instance == nullptr) {
+                return false;
+            }
+            const std::uint32_t state = track.instances[0].state_id;
+            if (state == kWeaponPartialNoWeaponStateId) {
+                if (empty_index != UINT32_MAX) {
+                    return false;
+                }
+                empty_index = index;
+            } else if (legacy_nadine_mazur_endpoint_action_state(
+                           seed.direction, state)) {
+                if (action_index != UINT32_MAX) {
+                    return false;
+                }
+                action_index = index;
+            } else {
+                return false;
+            }
+        }
+        if (action_index != 0 || empty_index != 1 ||
+            topology.tracks[action_index].instances[0].state_id !=
+                kWeaponPartialHolsterStateId) {
+            return false;
+        }
+        if (result_out != nullptr) {
+            *result_out = LegacyNadineMazurAgaScopeResult::kPose;
+        }
+        float action_phase = 0.0F;
+        float native_weight = 0.0F;
+        std::memcpy(
+            &action_phase,
+            &topology.tracks[action_index].instances[0].phase_bits,
+            sizeof(action_phase));
+        std::memcpy(
+            &native_weight,
+            &topology.tracks[0].instances[0].fade_in_weight_bits,
+            sizeof(native_weight));
+        if (!std::isfinite(action_phase) || action_phase < 0.0F ||
+            action_phase > 1.01F || !std::isfinite(native_weight) ||
+            native_weight < 0.0F || native_weight > 1.01F ||
+            readable_bytes(expected_target_skeleton) < 0x48 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(expected_target_skeleton) +
+                0x24) != kLegacyNadineTargetSkeletonArtId ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(expected_target_skeleton) +
+                kSkeletonJointCountOffset) !=
+                kLegacyNadineSkeletonJointCount) {
+            return false;
+        }
+
+        output->valid = true;
+        output->direction = seed.direction;
+        output->player = player;
+        output->fg_anim_data = owner.fg_anim_data;
+        output->local_pose = owner.local_pose;
+        output->target_skeleton = expected_target_skeleton;
+        output->weapon = owner.weapon;
+        output->weapon_partial_layer = layer;
+        output->player_runtime_id = player_runtime_id;
+        output->weapon_runtime_id = weapon_runtime_id;
+        output->queue_sequence = seed.queue_sequence;
+        output->requested_slot = seed.rifle_slot;
+        output->action_index = action_index;
+        output->empty_index = empty_index;
+        output->action_state =
+            topology.tracks[action_index].instances[0].state_id;
+        output->action_phase_bits =
+            topology.tracks[action_index].instances[0].phase_bits;
+        output->native_weight_bits =
+            topology.tracks[0].instances[0].fade_in_weight_bits;
+        output->action_seed_serial = seed.serial;
+        output->deadline_tick = seed.deadline_tick;
+        output->rifle_slot = seed.rifle_slot;
+        for (std::uint32_t index = 0; index < 2; ++index) {
+            output->tracks[index] = topology.tracks[index].track;
+            output->instances[index] =
+                topology.tracks[index].instances[0].instance;
+            output->states[index] =
+                topology.tracks[index].instances[0].state_id;
+        }
+        if (result_out != nullptr) {
+            *result_out = LegacyNadineMazurAgaScopeResult::kAdmitted;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        if (result_out != nullptr) {
+            *result_out = LegacyNadineMazurAgaScopeResult::kException;
+        }
+        return false;
+    }
+}
+
+bool legacy_nadine_mazur_aga_scope_matches(
+    const LegacyNadineMazurAgaScope& left,
+    const LegacyNadineMazurAgaScope& right) {
+    return left.valid && right.valid && left.direction == right.direction &&
+        left.player == right.player &&
+        left.fg_anim_data == right.fg_anim_data &&
+        left.local_pose == right.local_pose &&
+        left.target_skeleton == right.target_skeleton &&
+        left.weapon == right.weapon &&
+        left.weapon_partial_layer == right.weapon_partial_layer &&
+        left.tracks == right.tracks && left.instances == right.instances &&
+        left.states == right.states &&
+        left.player_runtime_id == right.player_runtime_id &&
+        left.weapon_runtime_id == right.weapon_runtime_id &&
+        left.queue_sequence == right.queue_sequence &&
+        left.requested_slot == right.requested_slot &&
+        left.action_state == right.action_state &&
+        left.action_phase_bits == right.action_phase_bits &&
+        left.native_weight_bits == right.native_weight_bits &&
+        left.action_index == right.action_index &&
+        left.empty_index == right.empty_index &&
+        left.action_seed_serial == right.action_seed_serial &&
+        left.deadline_tick == right.deadline_tick &&
+        left.rifle_slot == right.rifle_slot;
+}
+
+bool seh_matches_legacy_nadine_mazur_aga_inner_context(
+    void* context, const LegacyNadineMazurAgaScope& scope) {
+    __try {
+        if (!scope.valid || context == nullptr ||
+            readable_bytes(context) < 0x20) {
+            return false;
+        }
+        const auto* const bytes = static_cast<const std::byte*>(context);
+        return *reinterpret_cast<void* const*>(bytes) ==
+                scope.target_skeleton &&
+            *reinterpret_cast<void* const*>(bytes + 0x08) == nullptr &&
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x0C) == 0 &&
+            *reinterpret_cast<const std::uint8_t*>(bytes + 0x10) == 0 &&
+            *reinterpret_cast<const std::uint8_t*>(bytes + 0x11) == 0 &&
+            *reinterpret_cast<const std::uint8_t*>(bytes + 0x1C) == 1;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_find_legacy_nadine_mazur_aga_internal_blend(
+    const LegacyNadineMazurAgaCommandRecordView& after,
+    const LegacyNadineMazurAgaSnapshotPending& pending,
+    std::uint32_t* blend_word_out) {
+    if (blend_word_out == nullptr) {
+        return false;
+    }
+    *blend_word_out = UINT32_MAX;
+    __try {
+        if (!after.valid || !pending.valid ||
+            after.words != pending.before.words ||
+            after.capacity != pending.before.capacity ||
+            after.word_count <= pending.before.word_count ||
+            after.word_count > after.capacity) {
+            return false;
+        }
+        std::uint32_t cursor = pending.before.word_count;
+        std::uint32_t matching = 0;
+        while (cursor < after.word_count) {
+            const std::uint32_t header = after.words[cursor];
+            const std::uint32_t opcode = header & 0xFFFFu;
+            const std::uint32_t words = header >> 16;
+            if (words == 0 || words > after.word_count - cursor) {
+                return false;
+            }
+            if (opcode == kAnimCommandBlend &&
+                words == kAnimCommandWordCountBlend &&
+                after.words[cursor + 1] == 0 &&
+                after.words[cursor + 2] == pending.output_lane &&
+                after.words[cursor + 3] == pending.output_lane &&
+                after.words[cursor + 4] == pending.mode &&
+                after.words[cursor + 5] == pending.weight_bits) {
+                ++matching;
+                *blend_word_out = cursor;
+            }
+            cursor += words;
+        }
+        return cursor == after.word_count && matching == 1;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *blend_word_out = UINT32_MAX;
+        return false;
+    }
+}
+
+LegacyNadineMazurAgaSnapshotPending
+prepare_legacy_nadine_mazur_aga_snapshot(
+    void* track, void* create_context, void* command_record,
+    std::uint32_t output_lane, std::int32_t mode,
+    std::int32_t weight_bits,
+    std::int32_t track_index) {
+    LegacyNadineMazurAgaSnapshotPending pending{};
+    LegacyNadineMazurAgaCommandRecordView before{};
+    if (!seh_read_legacy_nadine_mazur_aga_command_record(
+            command_record, &before)) {
+        return pending;
+    }
+    auto& active = g_legacy_nadine_mazur_aga_session;
+    if (active.valid && active.command_record == command_record &&
+        active.words == before.words && active.intervals[0].valid &&
+        active.intervals[1].valid && track != active.scope.tracks[0] &&
+        track != active.scope.tracks[1] &&
+        active.next_snapshot_word == UINT32_MAX) {
+        active.next_snapshot_word = before.word_count;
+        return pending;
+    }
+    if (track_index < 0 || track_index > 1 ||
+        output_lane != (track_index == 1 ? 1u : 2u) ||
+        before.pending != before.words + 6 ||
+        before.lane_or_pending_count < output_lane ||
+        before.lane_or_pending_count >= kAnimWorkBufferLaneCapacity) {
+        return pending;
+    }
+
+    LegacyNadineMazurAgaScope current_scope{};
+    LegacyNadineMazurAgaScopeResult scope_result =
+        LegacyNadineMazurAgaScopeResult::kPrerequisite;
+    void* expected_skeleton = nullptr;
+    __try {
+        if (create_context != nullptr &&
+            readable_bytes(create_context) >= sizeof(void*)) {
+            expected_skeleton = *reinterpret_cast<void* const*>(
+                create_context);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        expected_skeleton = nullptr;
+    }
+    if (!seh_select_legacy_nadine_mazur_aga_scope(
+            expected_skeleton, &current_scope, &scope_result)) {
+        log_legacy_nadine_mazur_aga_scope_reject(
+            scope_result, "snapshot");
+        close_legacy_nadine_mazur_aga_after_scope_failure(
+            expected_skeleton, scope_result);
+        return pending;
+    }
+    if (current_scope.tracks[static_cast<std::size_t>(track_index)] != track) {
+        return pending;
+    }
+    if (!seh_matches_legacy_nadine_mazur_aga_inner_context(
+            create_context, current_scope)) {
+        log_legacy_nadine_mazur_aga_incomplete("snapshot-context");
+        return pending;
+    }
+    log_legacy_nadine_mazur_aga_scope_reject(
+        LegacyNadineMazurAgaScopeResult::kAdmitted, "snapshot");
+
+    if (!active.valid) {
+        if (track_index != 1) {
+            return pending;
+        }
+        active = {};
+        active.valid = true;
+        active.scope = current_scope;
+        active.command_record = command_record;
+        active.words = before.words;
+        active.capacity = before.capacity;
+        active.generation =
+            g_legacy_nadine_mazur_aga_generation.fetch_add(
+                1, std::memory_order_acq_rel) + 1;
+    } else if (!legacy_nadine_mazur_aga_scope_matches(
+                   active.scope, current_scope) ||
+               active.command_record != command_record ||
+               active.words != before.words ||
+               active.capacity != before.capacity ||
+               active.intervals[static_cast<std::size_t>(track_index)].valid ||
+               (track_index == 0 && !active.intervals[1].valid)) {
+        log_legacy_nadine_mazur_aga_incomplete("snapshot-generation-drift");
+        active = {};
+        return pending;
+    }
+
+    pending.valid = true;
+    pending.track_index = static_cast<std::uint32_t>(track_index);
+    pending.output_lane = output_lane;
+    pending.mode = static_cast<std::uint32_t>(mode);
+    pending.weight_bits = static_cast<std::uint32_t>(weight_bits);
+    pending.before = before;
+    pending.generation = active.generation;
+    return pending;
+}
+
+void finish_legacy_nadine_mazur_aga_snapshot(
+    void* track, void* command_record,
+    const LegacyNadineMazurAgaSnapshotPending& pending) {
+    if (!pending.valid) {
+        return;
+    }
+    auto& active = g_legacy_nadine_mazur_aga_session;
+    LegacyNadineMazurAgaCommandRecordView after{};
+    std::uint32_t internal_blend_word = UINT32_MAX;
+    const bool valid = active.valid &&
+        active.generation == pending.generation &&
+        active.command_record == command_record &&
+        active.scope.tracks[pending.track_index] == track &&
+        seh_read_legacy_nadine_mazur_aga_command_record(
+            command_record, &after) &&
+        after.pending == after.words + 6 &&
+        after.lane_or_pending_count >= pending.output_lane &&
+        after.lane_or_pending_count < kAnimWorkBufferLaneCapacity &&
+        seh_find_legacy_nadine_mazur_aga_internal_blend(
+            after, pending, &internal_blend_word);
+    if (!valid) {
+        log_legacy_nadine_mazur_aga_incomplete("snapshot-post-interval");
+        active = {};
+        return;
+    }
+    auto& interval = active.intervals[pending.track_index];
+    interval.valid = true;
+    interval.track = track;
+    interval.track_index = pending.track_index;
+    interval.output_lane = pending.output_lane;
+    interval.before_word = pending.before.word_count;
+    interval.after_word = after.word_count;
+    interval.internal_blend_word = internal_blend_word;
+    interval.internal_mode = pending.mode;
+    interval.internal_weight_bits = pending.weight_bits;
+}
+
+std::int64_t __fastcall hooked_legacy_nadine_mazur_aga_snapshot(
+    void* track, void* create_context, void* command_record,
+    std::uint32_t output_lane, std::int32_t mode,
+    std::int32_t weight_bits,
+    void* a7, std::int32_t track_index, void* a9) {
+    const auto original = g_original_legacy_nadine_mazur_aga_snapshot;
+    if (original == nullptr) {
+        return 0;
+    }
+    const auto pending = prepare_legacy_nadine_mazur_aga_snapshot(
+        track, create_context, command_record, output_lane, mode,
+        weight_bits, track_index);
+    const std::int64_t result = original(
+        track, create_context, command_record, output_lane, mode,
+        weight_bits, a7, track_index, a9);
+    finish_legacy_nadine_mazur_aga_snapshot(
+        track, command_record, pending);
+    return result;
+}
+
+struct LegacyNadineMazurAgaClipProvenance {
+    bool valid = false;
+    std::uint32_t word_offset = UINT32_MAX;
+    std::uint32_t opaque_word_04 = UINT32_MAX;
+    std::uint32_t output_lane = UINT32_MAX;
+    std::uint32_t phase_bits = 0;
+    void* clip = nullptr;
+    std::uint32_t clip_flags = 0;
+    std::uint32_t database_id = 0;
+    std::uint32_t underlying_skeleton_id = 0;
+    std::uint32_t clip_data_word_08 = 0;
+};
+
+struct LegacyNadineMazurAgaTargetBlend {
+    bool valid = false;
+    std::uint32_t word_offset = UINT32_MAX;
+    std::uint32_t blend_ordinal = UINT32_MAX;
+    std::array<std::uint32_t, kAnimCommandWordCountBlend> words{};
+};
+
+struct LegacyNadineMazurAgaPreparedProcess {
+    bool valid = false;
+    bool parser_valid = false;
+    bool budget_claimed = false;
+    std::uint32_t sample_index = UINT32_MAX;
+    std::uint32_t command_count = 0;
+    std::uint32_t blend_count = 0;
+    std::uint32_t lane_count = 0;
+    std::uint64_t command_hash = 0;
+    LegacyNadineMazurAgaSession session{};
+    std::array<LegacyNadineMazurAgaTargetBlend,
+               kNadineMazurAgaTargetBlendCount> targets{};
+    std::array<LegacyNadineMazurAgaClipProvenance,
+               kNadineMazurAgaMaxActionLeaves> action_leaves{};
+    std::uint32_t action_leaf_count = 0;
+    std::array<std::byte, kMazurAuthoredPairPoseBytes> fg_before{};
+};
+
+struct LegacyNadineMazurAgaLaneSnapshot {
+    bool valid = false;
+    std::uint32_t lane = UINT32_MAX;
+    std::uint32_t first_joint = UINT32_MAX;
+    std::uint32_t joint_count = 0;
+    std::uint8_t lane_stride = 0;
+    std::uint64_t valid_bits[2]{};
+    std::array<std::byte, kMazurAuthoredPairPoseBytes> pose{};
+};
+
+struct LegacyNadineMazurAgaStageSnapshot {
+    bool valid = false;
+    LegacyNadineMazurAgaBlendStage stage =
+        LegacyNadineMazurAgaBlendStage::kActionSnapshot;
+    std::uint32_t blend_ordinal = UINT32_MAX;
+    std::uint32_t left_lane = UINT32_MAX;
+    std::uint32_t right_lane = UINT32_MAX;
+    std::uint32_t destination_lane = UINT32_MAX;
+    std::uint32_t mode = 0;
+    std::uint32_t weight_bits = 0;
+    LegacyNadineMazurAgaLaneSnapshot left{};
+    LegacyNadineMazurAgaLaneSnapshot right{};
+    LegacyNadineMazurAgaLaneSnapshot destination_before{};
+    LegacyNadineMazurAgaLaneSnapshot destination_after{};
+};
+
+struct LegacyNadineMazurAgaSourceSnapshot {
+    bool source_valid = false;
+    bool retarget_valid = false;
+    std::uint32_t leaf_index = UINT32_MAX;
+    std::uint32_t sample_index = UINT32_MAX;
+    std::uint32_t phase_bits = 0;
+    std::uint32_t output_lane = UINT32_MAX;
+    std::uint32_t retarget_calls = 0;
+    std::uint32_t source_calls = 0;
+    std::uint32_t target_post_calls = 0;
+    std::uint32_t source_valid_mask = 0;
+    std::uint32_t target_valid_mask = 0;
+    std::uint16_t processing_joint_count = 0;
+    std::uint16_t processing_scalar_count = 0;
+    std::uint16_t processing_first_joint = 0;
+    std::uint8_t processing_lane_stride = 0;
+    std::uint8_t processing_valid_offset = 0xFF;
+    std::uint32_t target_group_word_04 = UINT32_MAX;
+    std::uint16_t target_group_workspace_count = 0;
+    std::uint16_t target_group_parameter_count = 0;
+    std::uint64_t generation = 0;
+    std::uint64_t source_valid_bits[2]{};
+    std::uint64_t target_valid_bits[2]{};
+    void* clip = nullptr;
+    void* retarget_entry = nullptr;
+    void* source_skeleton = nullptr;
+    void* target_skeleton = nullptr;
+    void* processing_descriptor = nullptr;
+    void* target_group_descriptor = nullptr;
+    std::array<std::byte, kMazurAuthoredPairPoseBytes> source_pose{};
+    std::array<std::byte, kMazurAuthoredPairPoseBytes> retarget_pose{};
+};
+
+struct LegacyNadineMazurAgaRetargetTls {
+    bool active = false;
+    std::uint32_t leaf_index = UINT32_MAX;
+    std::uint32_t sample_index = UINT32_MAX;
+    std::uint32_t phase_bits = 0;
+    std::uint64_t generation = 0;
+    void* clip = nullptr;
+    void* retarget_entry = nullptr;
+    void* source_skeleton = nullptr;
+    void* target_skeleton = nullptr;
+    void** output_pose_slot = nullptr;
+    void** output_valid_bits_slot = nullptr;
+};
+
+struct LegacyNadineMazurAgaProcessTls {
+    bool active = false;
+    bool ambiguous = false;
+    void* evaluator = nullptr;
+    std::uint32_t seen_blends = 0;
+    LegacyNadineMazurAgaPreparedProcess prepared{};
+    std::array<LegacyNadineMazurAgaStageSnapshot,
+               kNadineMazurAgaTargetBlendCount> stages{};
+    std::array<LegacyNadineMazurAgaSourceSnapshot,
+               kNadineMazurAgaMaxActionLeaves> sources{};
+};
+
+struct LegacyNadineMazurAgaPreviousSample {
+    bool valid = false;
+    std::uint32_t sample_index = UINT32_MAX;
+    std::uint32_t phase_bits = 0;
+    ULONGLONG tick = 0;
+    std::array<LegacyNadineMazurAgaStageSnapshot,
+               kNadineMazurAgaTargetBlendCount> stages{};
+    std::uint32_t action_leaf_count = 0;
+    std::array<LegacyNadineMazurAgaSourceSnapshot,
+               kNadineMazurAgaMaxActionLeaves> sources{};
+};
+
+struct LegacyNadineMazurAgaPutWindowState {
+    bool bound = false;
+    bool closed = false;
+    bool in_flight = false;
+    bool exit_logged = false;
+    bool saturation_logged = false;
+    std::uint64_t seed_serial = 0;
+    ULONGLONG deadline_tick = 0;
+    std::uint32_t queue_sequence = 0;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    void* player = nullptr;
+    void* weapon = nullptr;
+    void* fg_anim_data = nullptr;
+    void* local_pose = nullptr;
+    void* target_skeleton = nullptr;
+    void* weapon_partial_layer = nullptr;
+    int rifle_slot = -1;
+    std::array<void*, 2> tracks{};
+    std::array<void*, 2> instances{};
+    std::uint32_t reserved_count = 0;
+    std::uint32_t completed_count = 0;
+    std::uint32_t reserved_sample = UINT32_MAX;
+    std::uint64_t reserved_generation = 0;
+    std::uint32_t last_phase_bits = 0;
+    LegacyNadineMazurAgaPreviousSample previous{};
+};
+
+thread_local LegacyNadineMazurAgaProcessTls
+    g_legacy_nadine_mazur_aga_process_tls{};
+thread_local LegacyNadineMazurAgaRetargetTls
+    g_legacy_nadine_mazur_aga_retarget_tls{};
+SRWLOCK g_legacy_nadine_mazur_aga_budget_lock = SRWLOCK_INIT;
+LegacyNadineMazurAgaPutWindowState g_legacy_nadine_mazur_aga_put_window{};
+
+const char* legacy_nadine_mazur_aga_stage_name(
+    LegacyNadineMazurAgaBlendStage stage) {
+    switch (stage) {
+        case LegacyNadineMazurAgaBlendStage::kActionSnapshot:
+            return "action-snapshot";
+        case LegacyNadineMazurAgaBlendStage::kTrackFold:
+            return "track-fold";
+        case LegacyNadineMazurAgaBlendStage::kWeaponPartialTerminal:
+            return "weapon-partial-terminal";
+    }
+    return "unknown";
+}
+
+bool seh_capture_legacy_nadine_mazur_aga_clip_provenance(
+    const std::uint32_t* command, std::uint32_t word_offset,
+    LegacyNadineMazurAgaClipProvenance* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (command == nullptr || readable_bytes(command) <
+                kAnimCommandWordCountAnimation * sizeof(std::uint32_t) ||
+            command[0] != 0x00060006u) {
+            return false;
+        }
+        void* clip = nullptr;
+        std::memcpy(&clip, command + 2, sizeof(clip));
+        if (clip == nullptr || readable_bytes(clip) < 0x44) {
+            return false;
+        }
+        const auto* const clip_bytes = static_cast<const std::byte*>(clip);
+        void* const clip_data = *reinterpret_cast<void* const*>(
+            clip_bytes + 0x28);
+        if (clip_data == nullptr || readable_bytes(clip_data) < 0x0C) {
+            return false;
+        }
+        const auto* const clip_data_bytes =
+            static_cast<const std::byte*>(clip_data);
+        output->word_offset = word_offset;
+        output->opaque_word_04 = command[1];
+        output->output_lane = command[4];
+        output->phase_bits = command[5];
+        output->clip = clip;
+        output->clip_flags = *reinterpret_cast<const std::uint32_t*>(
+            clip_bytes + 0x24);
+        output->database_id =
+            *reinterpret_cast<const std::uint32_t*>(clip_bytes + 0x40);
+        output->underlying_skeleton_id =
+            *reinterpret_cast<const std::uint32_t*>(clip_data_bytes + 0x04);
+        output->clip_data_word_08 =
+            *reinterpret_cast<const std::uint32_t*>(clip_data_bytes + 0x08);
+        void* verified_clip = nullptr;
+        std::memcpy(&verified_clip, command + 2, sizeof(verified_clip));
+        output->valid =
+            verified_clip == clip && command[0] == 0x00060006u &&
+            output->opaque_word_04 == command[1] &&
+            output->output_lane == command[4] &&
+            output->phase_bits == command[5] &&
+            clip_data == *reinterpret_cast<void* const*>(clip_bytes + 0x28) &&
+            output->clip_flags ==
+                *reinterpret_cast<const std::uint32_t*>(clip_bytes + 0x24) &&
+            output->database_id ==
+                *reinterpret_cast<const std::uint32_t*>(clip_bytes + 0x40) &&
+            output->underlying_skeleton_id ==
+                *reinterpret_cast<const std::uint32_t*>(
+                    clip_data_bytes + 0x04) &&
+            output->clip_data_word_08 ==
+                *reinterpret_cast<const std::uint32_t*>(
+                    clip_data_bytes + 0x08);
+        return output->valid;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+bool legacy_nadine_mazur_aga_exact_player_leaf(
+    const LegacyNadineMazurAgaClipProvenance& leaf) {
+    return leaf.valid && leaf.clip != nullptr && leaf.clip_flags == 0x0Bu &&
+        leaf.database_id == kPlayerAnimationDatabaseId &&
+        leaf.underlying_skeleton_id == kPlayerAnimationSkeletonId &&
+        leaf.clip_data_word_08 == 0x000009A0u;
+}
+
+bool legacy_nadine_mazur_aga_scope_has_same_put_window_identity(
+    const LegacyNadineMazurAgaPutWindowState& state,
+    const LegacyNadineMazurAgaScope& scope) {
+    return state.bound && scope.valid && scope.direction == 2 &&
+        state.seed_serial == scope.action_seed_serial &&
+        state.queue_sequence == scope.queue_sequence &&
+        state.player_runtime_id == scope.player_runtime_id &&
+        state.weapon_runtime_id == scope.weapon_runtime_id &&
+        state.player == scope.player && state.weapon == scope.weapon &&
+        state.fg_anim_data == scope.fg_anim_data &&
+        state.local_pose == scope.local_pose &&
+        state.target_skeleton == scope.target_skeleton &&
+        state.weapon_partial_layer == scope.weapon_partial_layer &&
+        state.rifle_slot == scope.rifle_slot &&
+        state.deadline_tick == scope.deadline_tick &&
+        state.tracks == scope.tracks && state.instances == scope.instances;
+}
+
+struct LegacyNadineMazurAgaExitRecord {
+    bool valid = false;
+    bool complete = false;
+    std::uint64_t seed_serial = 0;
+    std::uint32_t samples = 0;
+    const char* reason = nullptr;
+};
+
+void bind_legacy_nadine_mazur_aga_put_window_locked(
+    LegacyNadineMazurAgaPutWindowState& state,
+    const LegacyNadineMazurAgaScope& scope) {
+    state = {};
+    state.bound = true;
+    state.seed_serial = scope.action_seed_serial;
+    state.deadline_tick = scope.deadline_tick;
+    state.queue_sequence = scope.queue_sequence;
+    state.player_runtime_id = scope.player_runtime_id;
+    state.weapon_runtime_id = scope.weapon_runtime_id;
+    state.player = scope.player;
+    state.weapon = scope.weapon;
+    state.fg_anim_data = scope.fg_anim_data;
+    state.local_pose = scope.local_pose;
+    state.target_skeleton = scope.target_skeleton;
+    state.weapon_partial_layer = scope.weapon_partial_layer;
+    state.rifle_slot = scope.rifle_slot;
+    state.tracks = scope.tracks;
+    state.instances = scope.instances;
+}
+
+void close_legacy_nadine_mazur_aga_put_window_locked(
+    LegacyNadineMazurAgaPutWindowState& state, bool complete,
+    const char* reason, LegacyNadineMazurAgaExitRecord* record) {
+    state.closed = true;
+    state.in_flight = false;
+    if (state.exit_logged || record == nullptr) {
+        return;
+    }
+    state.exit_logged = true;
+    record->valid = true;
+    record->complete = complete;
+    record->seed_serial = state.seed_serial;
+    record->samples = state.completed_count;
+    record->reason = reason;
+}
+
+void log_legacy_nadine_mazur_aga_exit(
+    const LegacyNadineMazurAgaExitRecord& record) {
+    if (!record.valid) {
+        return;
+    }
+    char line[320]{};
+    std::snprintf(
+        line, sizeof(line),
+        "NADINE-MAZUR-AGA-EXIT seed=%llu result=%s reason=%s samples=%u adjacent=%u",
+        static_cast<unsigned long long>(record.seed_serial),
+        record.complete ? "complete" : "inconclusive",
+        record.reason != nullptr ? record.reason : "unknown",
+        record.samples, record.samples > 0 ? record.samples - 1 : 0);
+    boot_log_line(line);
+}
+
+void close_legacy_nadine_mazur_aga_after_scope_failure(
+    void* expected_target_skeleton,
+    LegacyNadineMazurAgaScopeResult result) {
+    if (expected_target_skeleton == nullptr ||
+        result == LegacyNadineMazurAgaScopeResult::kPrerequisite ||
+        result == LegacyNadineMazurAgaScopeResult::kAdmitted) {
+        return;
+    }
+
+    const auto seed = copy_weapon_partial_successful_action_seed();
+    const ULONGLONG now = GetTickCount64();
+    LegacyNadineMazurAgaExitRecord exit{};
+    AcquireSRWLockExclusive(&g_legacy_nadine_mazur_aga_budget_lock);
+    auto& state = g_legacy_nadine_mazur_aga_put_window;
+    if (state.bound && !state.closed &&
+        state.target_skeleton == expected_target_skeleton) {
+        const bool deadline =
+            state.deadline_tick != 0 && now > state.deadline_tick;
+        const bool new_seed =
+            seed.valid && seed.serial != 0 && seed.serial != state.seed_serial;
+        const char* reason = "scope-drift";
+        switch (result) {
+            case LegacyNadineMazurAgaScopeResult::kOwner:
+                reason = "scope-owner";
+                break;
+            case LegacyNadineMazurAgaScopeResult::kLayer:
+                reason = "scope-layer";
+                break;
+            case LegacyNadineMazurAgaScopeResult::kSeed:
+                reason = "scope-seed";
+                break;
+            case LegacyNadineMazurAgaScopeResult::kIdentity:
+                reason = "scope-identity";
+                break;
+            case LegacyNadineMazurAgaScopeResult::kTopology:
+                reason = "scope-topology";
+                break;
+            case LegacyNadineMazurAgaScopeResult::kPose:
+                reason = "scope-pose";
+                break;
+            case LegacyNadineMazurAgaScopeResult::kException:
+                reason = "scope-exception";
+                break;
+            default:
+                break;
+        }
+        close_legacy_nadine_mazur_aga_put_window_locked(
+            state, false,
+            deadline ? "deadline" : (new_seed ? "new-seed" : reason),
+            &exit);
+        // The old seed's EXIT is already captured locally. A different seed
+        // may bind only on a later exact admitted sample; the failing call
+        // itself never reserves work or overwrites the old terminal row.
+        if (new_seed) {
+            state = {};
+        }
+    }
+    ReleaseSRWLockExclusive(&g_legacy_nadine_mazur_aga_budget_lock);
+    log_legacy_nadine_mazur_aga_exit(exit);
+}
+
+void close_legacy_nadine_mazur_aga_after_parser_failure(
+    const LegacyNadineMazurAgaSession& session) {
+    if (!session.valid || !session.scope.valid) {
+        return;
+    }
+    LegacyNadineMazurAgaExitRecord exit{};
+    const ULONGLONG now = GetTickCount64();
+    AcquireSRWLockExclusive(&g_legacy_nadine_mazur_aga_budget_lock);
+    auto& state = g_legacy_nadine_mazur_aga_put_window;
+    if (state.bound && !state.closed) {
+        if (legacy_nadine_mazur_aga_scope_has_same_put_window_identity(
+                state, session.scope)) {
+            close_legacy_nadine_mazur_aga_put_window_locked(
+                state, false, "sample-incomplete", &exit);
+        } else if (state.deadline_tick != 0 && now > state.deadline_tick) {
+            close_legacy_nadine_mazur_aga_put_window_locked(
+                state, false, "deadline", &exit);
+        } else if (state.seed_serial != session.scope.action_seed_serial) {
+            close_legacy_nadine_mazur_aga_put_window_locked(
+                state, false, "new-seed", &exit);
+        }
+    }
+    ReleaseSRWLockExclusive(&g_legacy_nadine_mazur_aga_budget_lock);
+    log_legacy_nadine_mazur_aga_exit(exit);
+}
+
+bool legacy_nadine_mazur_aga_claim_put_window_sample(
+    const LegacyNadineMazurAgaSession& session,
+    std::uint32_t* sample_index_out) {
+    if (sample_index_out == nullptr || !session.valid ||
+        session.scope.direction != 2) {
+        return false;
+    }
+    *sample_index_out = UINT32_MAX;
+    float phase = 0.0F;
+    std::memcpy(&phase, &session.scope.action_phase_bits, sizeof(phase));
+    if (!std::isfinite(phase)) {
+        return false;
+    }
+
+    const ULONGLONG now = GetTickCount64();
+    LegacyNadineMazurAgaExitRecord exit{};
+    AcquireSRWLockExclusive(&g_legacy_nadine_mazur_aga_budget_lock);
+    auto& state = g_legacy_nadine_mazur_aga_put_window;
+    bool defer_current_sample = false;
+    if (!state.bound) {
+        bind_legacy_nadine_mazur_aga_put_window_locked(
+            state, session.scope);
+    } else if (!legacy_nadine_mazur_aga_scope_has_same_put_window_identity(
+                   state, session.scope)) {
+        const bool new_seed =
+            state.seed_serial != session.scope.action_seed_serial;
+        const char* const reason =
+            state.deadline_tick != 0 && now > state.deadline_tick
+            ? "deadline"
+            : (new_seed
+                   ? "new-seed"
+                   : "identity-or-generation-drift");
+        close_legacy_nadine_mazur_aga_put_window_locked(
+            state, false, reason, &exit);
+        // Never overwrite the old seed's EXIT or revive the same seed after
+        // identity drift. A genuinely new seed may bind on its next exact
+        // sample, after this call has published the old seed's terminal row.
+        if (new_seed) {
+            state = {};
+        }
+        defer_current_sample = true;
+    }
+    if (!defer_current_sample && !state.closed && state.deadline_tick != 0 &&
+        now > state.deadline_tick) {
+        close_legacy_nadine_mazur_aga_put_window_locked(
+            state, false, "deadline", &exit);
+    } else if (!defer_current_sample && !state.closed &&
+               phase > kNadineMazurAgaPutPhaseMaximum) {
+        close_legacy_nadine_mazur_aga_put_window_locked(
+            state, state.completed_count >= 2, "phase-end", &exit);
+    } else if (!defer_current_sample && !state.closed &&
+               phase >= kNadineMazurAgaPutPhaseMinimum &&
+               !state.in_flight &&
+               state.reserved_count < kNadineMazurAgaMaximumPutSamples) {
+        if (state.previous.valid) {
+            float previous_phase = 0.0F;
+            std::memcpy(
+                &previous_phase, &state.previous.phase_bits,
+                sizeof(previous_phase));
+            if (!std::isfinite(previous_phase) || phase < previous_phase ||
+                session.generation != state.reserved_generation + 1) {
+                close_legacy_nadine_mazur_aga_put_window_locked(
+                    state, false, "identity-or-generation-drift", &exit);
+            }
+        }
+        if (!state.closed) {
+            state.in_flight = true;
+            state.reserved_sample = state.reserved_count++;
+            state.reserved_generation = session.generation;
+            *sample_index_out = state.reserved_sample;
+        }
+    } else if (!defer_current_sample && !state.closed &&
+               state.reserved_count >= kNadineMazurAgaMaximumPutSamples) {
+        close_legacy_nadine_mazur_aga_put_window_locked(
+            state, false, "max-samples", &exit);
+    }
+    const bool claimed = *sample_index_out != UINT32_MAX;
+    ReleaseSRWLockExclusive(&g_legacy_nadine_mazur_aga_budget_lock);
+    log_legacy_nadine_mazur_aga_exit(exit);
+    return claimed;
+}
+
+bool finish_legacy_nadine_mazur_aga_put_window_sample(
+    const LegacyNadineMazurAgaProcessTls& completed, bool complete,
+    LegacyNadineMazurAgaPreviousSample* previous_out) {
+    if (previous_out == nullptr) {
+        return false;
+    }
+    *previous_out = {};
+    const auto& prepared = completed.prepared;
+    const auto& scope = prepared.session.scope;
+    bool log_saturation = false;
+    bool committed = false;
+    LegacyNadineMazurAgaExitRecord exit{};
+    AcquireSRWLockExclusive(&g_legacy_nadine_mazur_aga_budget_lock);
+    auto& state = g_legacy_nadine_mazur_aga_put_window;
+    const bool reservation_matches = prepared.budget_claimed &&
+        legacy_nadine_mazur_aga_scope_has_same_put_window_identity(
+            state, scope) && state.in_flight &&
+        state.reserved_sample == prepared.sample_index &&
+        state.reserved_generation == prepared.session.generation;
+    if (reservation_matches) {
+        state.in_flight = false;
+        if (complete) {
+            *previous_out = state.previous;
+            state.previous.valid = true;
+            state.previous.sample_index = prepared.sample_index;
+            state.previous.phase_bits = scope.action_phase_bits;
+            state.previous.tick = GetTickCount64();
+            state.previous.stages = completed.stages;
+            state.previous.action_leaf_count =
+                completed.prepared.action_leaf_count;
+            state.previous.sources = completed.sources;
+            state.last_phase_bits = scope.action_phase_bits;
+            ++state.completed_count;
+            committed = true;
+            if (state.completed_count >= kNadineMazurAgaMaximumPutSamples &&
+                !state.saturation_logged) {
+                state.saturation_logged = true;
+                log_saturation = true;
+                close_legacy_nadine_mazur_aga_put_window_locked(
+                    state, false, "max-samples", &exit);
+                state.exit_logged = true;
+            }
+        } else {
+            close_legacy_nadine_mazur_aga_put_window_locked(
+                state, false, "sample-incomplete", &exit);
+        }
+    }
+    ReleaseSRWLockExclusive(&g_legacy_nadine_mazur_aga_budget_lock);
+    if (log_saturation) {
+        char line[192]{};
+        std::snprintf(
+            line, sizeof(line),
+            "NADINE-MAZUR-AGA-SATURATED seed=%llu samples=%u",
+            static_cast<unsigned long long>(scope.action_seed_serial),
+            kNadineMazurAgaMaximumPutSamples);
+        boot_log_line(line);
+    }
+    log_legacy_nadine_mazur_aga_exit(exit);
+    return committed;
+}
+
+bool seh_prepare_legacy_nadine_mazur_aga_process(
+    const std::uint32_t* commands, std::uint32_t command_word_count,
+    const void* context, std::uint32_t processing_group,
+    const LegacyNadineMazurAgaSession& session,
+    LegacyNadineMazurAgaPreparedProcess* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (!session.valid || !session.intervals[0].valid ||
+            !session.intervals[1].valid || commands == nullptr ||
+            processing_group != 0 || context == nullptr ||
+            command_word_count == 0 || command_word_count > 4096 ||
+            session.scope.action_index > 1 ||
+            session.scope.empty_index > 1 ||
+            session.scope.action_index == session.scope.empty_index) {
+            return false;
+        }
+        const auto& oldest = session.intervals[1];
+        const auto& newest = session.intervals[0];
+        if (oldest.output_lane != 1 || newest.output_lane != 2 ||
+            oldest.before_word >= oldest.after_word ||
+            oldest.after_word > newest.before_word ||
+            newest.before_word >= newest.after_word ||
+            newest.after_word >= command_word_count ||
+            oldest.internal_blend_word < oldest.before_word ||
+            oldest.internal_blend_word >= oldest.after_word ||
+            newest.internal_blend_word < newest.before_word ||
+            newest.internal_blend_word >= newest.after_word) {
+            return false;
+        }
+        LegacyNadineMazurAgaCommandRecordView record{};
+        if (!seh_read_legacy_nadine_mazur_aga_command_record(
+                session.command_record, &record) ||
+            record.words != commands || record.words != session.words ||
+            record.capacity != session.capacity ||
+            record.word_count != command_word_count ||
+            record.lane_or_pending_count != 0 || record.pending != nullptr) {
+            return false;
+        }
+        const AimJointBoundaryOwner owner =
+            probe_aim_joint_boundary_owner(context);
+        if (!owner.valid || owner.screen != 0 ||
+            owner.player != session.scope.player ||
+            owner.fg_anim_data != session.scope.fg_anim_data ||
+            owner.target_skeleton != session.scope.target_skeleton ||
+            retained_player_object(0) != session.scope.player) {
+            return false;
+        }
+        LegacyNadineMazurAgaScope current_scope{};
+        LegacyNadineMazurAgaScopeResult scope_result =
+            LegacyNadineMazurAgaScopeResult::kPrerequisite;
+        if (!seh_select_legacy_nadine_mazur_aga_scope(
+                session.scope.target_skeleton, &current_scope,
+                &scope_result)) {
+            log_legacy_nadine_mazur_aga_scope_reject(
+                scope_result, "process");
+            return false;
+        }
+        if (!legacy_nadine_mazur_aga_scope_matches(
+                session.scope, current_scope) ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(session.scope.fg_anim_data) +
+                kFgAnimDataJointCacheLocalPoseOffset) !=
+                session.scope.local_pose ||
+            readable_bytes(
+                static_cast<const std::byte*>(session.scope.local_pose) +
+                kMazurAuthoredPairFirstC39Joint * kJointLocalPoseStride) <
+                kMazurAuthoredPairPoseBytes) {
+            return false;
+        }
+
+        const std::uint32_t outer_word = newest.after_word;
+        const std::array<std::uint32_t, 6> expected_outer{{
+            0x00060007u, 1u, 2u, 1u, 1u,
+            session.scope.native_weight_bits}};
+        if (outer_word + expected_outer.size() > command_word_count ||
+            !std::equal(
+                expected_outer.begin(), expected_outer.end(),
+                commands + outer_word)) {
+            return false;
+        }
+        const auto& action_interval =
+            session.intervals[session.scope.action_index];
+        const std::uint32_t action_internal_word =
+            action_interval.internal_blend_word;
+        const std::array<std::uint32_t, 6> expected_internal{{
+            0x00060007u, 0u, action_interval.output_lane,
+            action_interval.output_lane, action_interval.internal_mode,
+            action_interval.internal_weight_bits}};
+        if (action_internal_word + expected_internal.size() >
+                command_word_count ||
+            !std::equal(
+                expected_internal.begin(), expected_internal.end(),
+                commands + action_internal_word)) {
+            return false;
+        }
+
+        std::uint32_t cursor = 0;
+        std::uint32_t command_position = 0;
+        std::uint32_t blend_ordinal = 0;
+        std::uint32_t finalizer_word = UINT32_MAX;
+        std::uint32_t finalizer_count = 0;
+        std::uint32_t terminal_word = UINT32_MAX;
+        std::uint32_t terminal_ordinal = UINT32_MAX;
+        std::uint32_t terminal_matches = 0;
+        std::uint32_t internal_matches = 0;
+        std::uint32_t outer_matches = 0;
+        std::uint32_t action_interval_blend_count = 0;
+        bool next_snapshot_is_boundary =
+            session.next_snapshot_word == UINT32_MAX;
+        std::uint64_t first_hash = kAimPipelineFnvOffset;
+        LegacyNadineMazurAgaPreparedProcess prepared{};
+        prepared.session = session;
+        prepared.lane_count = commands[6];
+        if (prepared.lane_count < 3 ||
+            prepared.lane_count > kAnimWorkBufferLaneCapacity) {
+            return false;
+        }
+        while (cursor < command_word_count) {
+            if (cursor == session.next_snapshot_word) {
+                next_snapshot_is_boundary = true;
+            }
+            const std::uint32_t header = commands[cursor];
+            const std::uint32_t opcode = header & 0xFFFFu;
+            const std::uint32_t words = header >> 16;
+            if (words == 0 || words > command_word_count - cursor) {
+                return false;
+            }
+            if ((opcode == kAnimCommandAnimation &&
+                 words != kAnimCommandWordCountAnimation) ||
+                (opcode == kAnimCommandBlend &&
+                 words != kAnimCommandWordCountBlend)) {
+                return false;
+            }
+            for (std::uint32_t word = 0; word < words; ++word) {
+                first_hash = aim_pipeline_hash_word(
+                    first_hash, commands[cursor + word]);
+            }
+            if (opcode == kAnimCommandFinalizeBlock) {
+                if (words != kAnimCommandWordCountFinalizeBlock) {
+                    return false;
+                }
+                if (finalizer_word == UINT32_MAX) {
+                    finalizer_word = cursor;
+                }
+                ++finalizer_count;
+            }
+            const std::uint32_t terminal_limit =
+                session.next_snapshot_word != UINT32_MAX
+                ? session.next_snapshot_word
+                : (finalizer_word != UINT32_MAX
+                       ? finalizer_word
+                       : command_word_count);
+            if (opcode == kAnimCommandAnimation &&
+                words == kAnimCommandWordCountAnimation &&
+                cursor >= action_interval.before_word &&
+                cursor < action_interval.after_word) {
+                if (prepared.action_leaf_count >=
+                    prepared.action_leaves.size() ||
+                    !seh_capture_legacy_nadine_mazur_aga_clip_provenance(
+                        commands + cursor, cursor,
+                        &prepared.action_leaves[
+                            prepared.action_leaf_count])) {
+                    return false;
+                }
+                if (prepared.action_leaves[
+                        prepared.action_leaf_count].output_lane >=
+                        prepared.lane_count ||
+                    !legacy_nadine_mazur_aga_exact_player_leaf(
+                        prepared.action_leaves[
+                            prepared.action_leaf_count])) {
+                    return false;
+                }
+                ++prepared.action_leaf_count;
+            }
+            if (opcode == kAnimCommandBlend &&
+                words == kAnimCommandWordCountBlend) {
+                if (cursor >= action_interval.before_word &&
+                    cursor < action_interval.after_word) {
+                    ++action_interval_blend_count;
+                }
+                if (cursor >= action_interval.before_word &&
+                    cursor < action_interval.after_word &&
+                    std::equal(
+                        expected_internal.begin(), expected_internal.end(),
+                        commands + cursor)) {
+                    ++internal_matches;
+                }
+                if (cursor >= oldest.before_word &&
+                    cursor < terminal_limit &&
+                    std::equal(
+                        expected_outer.begin(), expected_outer.end(),
+                        commands + cursor)) {
+                    ++outer_matches;
+                }
+                const bool exact_terminal = commands[cursor + 1] == 0 &&
+                    commands[cursor + 2] == 1 &&
+                    commands[cursor + 3] == 0 &&
+                    commands[cursor + 4] == 1 &&
+                    commands[cursor + 5] == 0x3F800000u;
+                if (cursor ==
+                        outer_word + kAnimCommandWordCountBlend &&
+                    cursor < terminal_limit &&
+                    exact_terminal) {
+                    ++terminal_matches;
+                    terminal_word = cursor;
+                    terminal_ordinal = blend_ordinal;
+                }
+                if (cursor == action_internal_word) {
+                    prepared.targets[0].valid = true;
+                    prepared.targets[0].word_offset = cursor;
+                    prepared.targets[0].blend_ordinal = blend_ordinal;
+                    std::copy_n(
+                        commands + cursor,
+                        kAnimCommandWordCountBlend,
+                        prepared.targets[0].words.begin());
+                }
+                if (cursor == outer_word) {
+                    prepared.targets[1].valid = true;
+                    prepared.targets[1].word_offset = cursor;
+                    prepared.targets[1].blend_ordinal = blend_ordinal;
+                    std::copy_n(
+                        commands + cursor,
+                        kAnimCommandWordCountBlend,
+                        prepared.targets[1].words.begin());
+                }
+                ++blend_ordinal;
+            }
+            ++command_position;
+            cursor += words;
+        }
+        if (cursor != command_word_count || !next_snapshot_is_boundary ||
+            finalizer_count != 1 || finalizer_word == UINT32_MAX ||
+            prepared.action_leaf_count != 1 ||
+            action_interval_blend_count != 1 || internal_matches != 1 ||
+            outer_matches != 1 || terminal_matches != 1 ||
+            terminal_word != outer_word + kAnimCommandWordCountBlend ||
+            terminal_word >= finalizer_word ||
+            terminal_ordinal == UINT32_MAX ||
+            (session.next_snapshot_word != UINT32_MAX &&
+             (session.next_snapshot_word <= terminal_word ||
+              session.next_snapshot_word >= finalizer_word)) ||
+            !prepared.targets[0].valid || !prepared.targets[1].valid) {
+            return false;
+        }
+        if (commands[terminal_word] != 0x00060007u) {
+            return false;
+        }
+        prepared.targets[2].valid = true;
+        prepared.targets[2].word_offset = terminal_word;
+        prepared.targets[2].blend_ordinal = terminal_ordinal;
+        std::copy_n(
+            commands + terminal_word, kAnimCommandWordCountBlend,
+            prepared.targets[2].words.begin());
+        if (!(prepared.targets[0].word_offset <
+                  prepared.targets[1].word_offset &&
+              prepared.targets[1].word_offset <
+                  prepared.targets[2].word_offset &&
+              prepared.targets[0].blend_ordinal <
+                  prepared.targets[1].blend_ordinal &&
+              prepared.targets[1].blend_ordinal <
+                  prepared.targets[2].blend_ordinal)) {
+            return false;
+        }
+        MemoryBarrier();
+        std::uint64_t second_hash = kAimPipelineFnvOffset;
+        for (std::uint32_t word = 0; word < command_word_count; ++word) {
+            second_hash = aim_pipeline_hash_word(
+                second_hash, commands[word]);
+        }
+        if (first_hash != second_hash) {
+            return false;
+        }
+        std::memcpy(
+            prepared.fg_before.data(),
+            static_cast<const std::byte*>(session.scope.local_pose) +
+                kMazurAuthoredPairFirstC39Joint * kJointLocalPoseStride,
+            prepared.fg_before.size());
+        if (!valid_legacy_nadine_mazur_transient_pose(
+                prepared.fg_before)) {
+            return false;
+        }
+        prepared.command_count = command_position;
+        prepared.blend_count = blend_ordinal;
+        prepared.command_hash = first_hash;
+        prepared.parser_valid = true;
+        if (!legacy_nadine_mazur_aga_claim_put_window_sample(
+                session, &prepared.sample_index)) {
+            *output = prepared;
+            return false;
+        }
+        prepared.budget_claimed = true;
+        prepared.valid = true;
+        *output = prepared;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        if (output->budget_claimed) {
+            LegacyNadineMazurAgaProcessTls failed{};
+            failed.prepared = *output;
+            LegacyNadineMazurAgaPreviousSample ignored{};
+            finish_legacy_nadine_mazur_aga_put_window_sample(
+                failed, false, &ignored);
+        }
+        *output = {};
+        return false;
+    }
+}
+
+bool valid_legacy_nadine_mazur_aga_pose_row(const std::byte* row_bytes) {
+    if (row_bytes == nullptr) {
+        return false;
+    }
+    std::array<float, 12> row{};
+    std::memcpy(row.data(), row_bytes, kJointLocalPoseStride);
+    return std::isfinite(row[0]) && std::isfinite(row[1]) &&
+        std::isfinite(row[2]) && std::isfinite(row[8]) &&
+        std::isfinite(row[9]) && std::isfinite(row[10]) &&
+        valid_network_orientation(row.data() + 4);
+}
+
+bool seh_capture_legacy_nadine_mazur_aga_retarget_post(
+    LegacyNadineMazurAgaSourceSnapshot* source,
+    void** output_pose_slot, void** output_valid_bits_slot) {
+    if (source == nullptr) {
+        return false;
+    }
+    source->retarget_valid = false;
+    source->target_valid_mask = 0;
+    source->target_valid_bits[0] = 0;
+    source->target_valid_bits[1] = 0;
+    __try {
+        const auto* const target_skeleton =
+            static_cast<const std::byte*>(source->target_skeleton);
+        const auto* const processing =
+            static_cast<const std::byte*>(source->processing_descriptor);
+        const auto* const target_group =
+            static_cast<const std::byte*>(source->target_group_descriptor);
+        if (target_skeleton == nullptr || processing == nullptr ||
+            target_group == nullptr || output_pose_slot == nullptr ||
+            output_valid_bits_slot == nullptr ||
+            readable_bytes(target_skeleton) < 0x48 ||
+            readable_bytes(processing) < 10 ||
+            readable_bytes(target_group) < 0x14 ||
+            readable_bytes(output_pose_slot) < sizeof(*output_pose_slot) ||
+            readable_bytes(output_valid_bits_slot) <
+                sizeof(*output_valid_bits_slot)) {
+            return false;
+        }
+        const auto* const underlying =
+            *reinterpret_cast<const std::byte* const*>(
+                target_skeleton + 0x40);
+        if (underlying == nullptr || readable_bytes(underlying) < 0x1A ||
+            *reinterpret_cast<const std::uint32_t*>(
+                target_skeleton + 0x24) !=
+                kLegacyNadineTargetSkeletonArtId ||
+            *reinterpret_cast<const std::uint32_t*>(underlying + 0x04) !=
+                kLegacyNadineUnderlyingSkeletonId ||
+            *reinterpret_cast<const std::uint16_t*>(underlying + 0x10) !=
+                kLegacyNadineSkeletonJointCount ||
+            *reinterpret_cast<const std::uint16_t*>(underlying + 0x18) != 8 ||
+            *reinterpret_cast<const std::uint16_t*>(target_group + 0x04) != 0 ||
+            *reinterpret_cast<const std::uint16_t*>(target_group + 0x10) !=
+                104 ||
+            *reinterpret_cast<const std::uint16_t*>(target_group + 0x12) !=
+                66 ||
+            *reinterpret_cast<const std::uint8_t*>(processing + 0x05) != 0) {
+            return false;
+        }
+        auto* const target_pose = static_cast<const std::byte*>(
+            *output_pose_slot);
+        auto* const target_valid_bits = static_cast<const std::uint64_t*>(
+            *output_valid_bits_slot);
+        if (target_pose == nullptr || target_valid_bits == nullptr ||
+            readable_bytes(target_pose) <
+                (kMazurAuthoredPairFirstC39Joint +
+                 kMazurAuthoredPairC39JointCount) *
+                    kJointLocalPoseStride ||
+            readable_bytes(target_valid_bits) <
+                2 * sizeof(std::uint64_t)) {
+            return false;
+        }
+        source->target_group_word_04 =
+            *reinterpret_cast<const std::uint16_t*>(target_group + 0x04);
+        source->target_group_workspace_count =
+            *reinterpret_cast<const std::uint16_t*>(target_group + 0x10);
+        source->target_group_parameter_count =
+            *reinterpret_cast<const std::uint16_t*>(target_group + 0x12);
+        source->target_valid_bits[0] = target_valid_bits[0];
+        source->target_valid_bits[1] = target_valid_bits[1];
+        std::memcpy(
+            source->retarget_pose.data(),
+            target_pose +
+                kMazurAuthoredPairFirstC39Joint * kJointLocalPoseStride,
+            source->retarget_pose.size());
+        bool valid_rows = true;
+        for (std::uint32_t index = 0;
+             index < kMazurAuthoredPairC39JointCount; ++index) {
+            const std::uint32_t joint =
+                static_cast<std::uint32_t>(
+                    kMazurAuthoredPairFirstC39Joint) + index;
+            if (!aim_finalizer_valid_bit(source->target_valid_bits, joint)) {
+                continue;
+            }
+            source->target_valid_mask |= 1u << index;
+            if (!valid_legacy_nadine_mazur_aga_pose_row(
+                    source->retarget_pose.data() +
+                        index * kJointLocalPoseStride)) {
+                valid_rows = false;
+            }
+        }
+        source->retarget_valid = valid_rows &&
+            source->target_valid_mask == 0xFFFu;
+        return source->retarget_valid;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        source->retarget_valid = false;
+        return false;
+    }
+}
+
+void* __fastcall hooked_legacy_nadine_mazur_aga_retarget(
+    void* clip, float phase, void* source_skeleton, void* target_skeleton,
+    int group, void* retarget_entry, void** output_pose,
+    void** output_valid_bits) {
+    const auto original = g_original_virtual_chloe_retarget;
+    if (original == nullptr) {
+        return nullptr;
+    }
+
+    const LegacyNadineMazurAgaRetargetTls previous =
+        g_legacy_nadine_mazur_aga_retarget_tls;
+    g_legacy_nadine_mazur_aga_retarget_tls = {};
+    auto& process = g_legacy_nadine_mazur_aga_process_tls;
+    std::uint32_t phase_bits = 0;
+    std::memcpy(&phase_bits, &phase, sizeof(phase_bits));
+    if (process.active) {
+        std::uint32_t matched_leaf = UINT32_MAX;
+        std::uint32_t matches = 0;
+        for (std::uint32_t index = 0;
+             index < process.prepared.action_leaf_count; ++index) {
+            const auto& leaf = process.prepared.action_leaves[index];
+            if (leaf.valid && leaf.clip == clip &&
+                leaf.phase_bits == phase_bits) {
+                matched_leaf = index;
+                ++matches;
+            }
+        }
+        if (matches > 1) {
+            process.ambiguous = true;
+        } else if (matches == 1) {
+            const auto& leaf = process.prepared.action_leaves[matched_leaf];
+            const auto& scope = process.prepared.session.scope;
+            const bool exact = group == 0 && clip != nullptr &&
+                legacy_nadine_mazur_aga_exact_player_leaf(leaf) &&
+                retarget_entry != nullptr && source_skeleton != nullptr &&
+                target_skeleton == scope.target_skeleton &&
+                process.prepared.sample_index != UINT32_MAX &&
+                virtual_chloe_source_skeleton_matches(
+                    source_skeleton, kPlayerAnimationDatabaseId,
+                    kPlayerAnimationSkeletonId) &&
+                virtual_chloe_source_skeleton_matches(
+                    target_skeleton, kLegacyNadineTargetSkeletonArtId,
+                    kLegacyNadineUnderlyingSkeletonId);
+            auto& source = process.sources[matched_leaf];
+            ++source.retarget_calls;
+            if (!exact || source.retarget_calls != 1) {
+                process.ambiguous = true;
+            } else {
+                source.leaf_index = matched_leaf;
+                source.sample_index = process.prepared.sample_index;
+                source.phase_bits = phase_bits;
+                source.output_lane = leaf.output_lane;
+                source.generation = process.prepared.session.generation;
+                source.clip = clip;
+                source.retarget_entry = retarget_entry;
+                source.source_skeleton = source_skeleton;
+                source.target_skeleton = target_skeleton;
+                auto& nested = g_legacy_nadine_mazur_aga_retarget_tls;
+                nested.active = true;
+                nested.leaf_index = matched_leaf;
+                nested.sample_index = process.prepared.sample_index;
+                nested.phase_bits = phase_bits;
+                nested.generation = process.prepared.session.generation;
+                nested.clip = clip;
+                nested.retarget_entry = retarget_entry;
+                nested.source_skeleton = source_skeleton;
+                nested.target_skeleton = target_skeleton;
+                nested.output_pose_slot = output_pose;
+                nested.output_valid_bits_slot = output_valid_bits;
+            }
+        }
+    }
+
+    void* const result = original(
+        clip, phase, source_skeleton, target_skeleton, group,
+        retarget_entry, output_pose, output_valid_bits);
+    __try {
+        const auto nested = g_legacy_nadine_mazur_aga_retarget_tls;
+        if (process.active && nested.active &&
+            nested.leaf_index < process.prepared.action_leaf_count &&
+            nested.leaf_index < process.sources.size()) {
+            auto& source = process.sources[nested.leaf_index];
+            const bool exact =
+                nested.sample_index == process.prepared.sample_index &&
+                nested.generation == process.prepared.session.generation &&
+                nested.clip == clip && nested.phase_bits == phase_bits &&
+                nested.retarget_entry == retarget_entry &&
+                nested.source_skeleton == source_skeleton &&
+                nested.target_skeleton == target_skeleton &&
+                nested.output_pose_slot == output_pose &&
+                nested.output_valid_bits_slot == output_valid_bits &&
+                source.leaf_index == nested.leaf_index &&
+                source.sample_index == nested.sample_index &&
+                source.generation == nested.generation &&
+                source.retarget_calls == 1 && source.source_calls == 1;
+            ++source.target_post_calls;
+            if (!exact || source.target_post_calls != 1) {
+                process.ambiguous = true;
+            } else {
+                seh_capture_legacy_nadine_mazur_aga_retarget_post(
+                    &source, output_pose, output_valid_bits);
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        process.ambiguous = true;
+    }
+    g_legacy_nadine_mazur_aga_retarget_tls = previous;
+    return result;
+}
+
+std::int64_t __fastcall
+hooked_legacy_nadine_mazur_aga_add_retarget_commands(
+    void* work_buffer, void* segment_context, void* retarget_entry,
+    void* source_program, void* source_skeleton, void* target_skeleton,
+    void* output_pose, void* output_valid_bits) {
+    const auto original = g_original_virtual_chloe_add_retarget_commands;
+    if (original == nullptr) {
+        return 0;
+    }
+    __try {
+        const auto nested = g_legacy_nadine_mazur_aga_retarget_tls;
+        auto& process = g_legacy_nadine_mazur_aga_process_tls;
+        if (nested.active && process.active &&
+            nested.leaf_index < process.prepared.action_leaf_count &&
+            nested.leaf_index < process.sources.size() &&
+            nested.sample_index == process.prepared.sample_index &&
+            nested.generation == process.prepared.session.generation &&
+            nested.retarget_entry == retarget_entry &&
+            nested.source_skeleton == source_skeleton &&
+            nested.target_skeleton == target_skeleton) {
+            auto& source = process.sources[nested.leaf_index];
+            const auto& leaf =
+                process.prepared.action_leaves[nested.leaf_index];
+            ++source.source_calls;
+            const bool exact = source.source_calls == 1 &&
+                source.retarget_calls == 1 &&
+                source.leaf_index == nested.leaf_index &&
+                source.sample_index == nested.sample_index &&
+                source.generation == nested.generation &&
+                source.phase_bits == nested.phase_bits &&
+                source.clip == nested.clip &&
+                source.retarget_entry == retarget_entry &&
+                source.source_skeleton == source_skeleton &&
+                source.target_skeleton == target_skeleton &&
+                leaf.valid && leaf.clip == nested.clip &&
+                leaf.phase_bits == nested.phase_bits &&
+                legacy_nadine_mazur_aga_exact_player_leaf(leaf) &&
+                virtual_chloe_source_skeleton_matches(
+                    source_skeleton, kPlayerAnimationDatabaseId,
+                    kPlayerAnimationSkeletonId);
+            if (!exact) {
+                process.ambiguous = true;
+            } else if (segment_context != nullptr &&
+                       readable_bytes(segment_context) >= 0x58) {
+                const auto* const segment =
+                    static_cast<const std::byte*>(segment_context);
+                const auto* const target_group_descriptor =
+                    *reinterpret_cast<const std::byte* const*>(
+                        segment + 0x38);
+                const auto* const processing_descriptor =
+                    *reinterpret_cast<const std::byte* const*>(
+                        segment + 0x40);
+                const auto* const source_pose =
+                    *reinterpret_cast<const std::byte* const*>(
+                        segment + 0x50);
+                if (target_group_descriptor != nullptr &&
+                    processing_descriptor != nullptr &&
+                    source_pose != nullptr &&
+                    readable_bytes(target_group_descriptor) >= 0x14 &&
+                    readable_bytes(processing_descriptor) >= 10) {
+                    source.processing_joint_count =
+                        *reinterpret_cast<const std::uint16_t*>(
+                            processing_descriptor);
+                    source.processing_scalar_count =
+                        *reinterpret_cast<const std::uint16_t*>(
+                            processing_descriptor + 0x02);
+                    source.processing_lane_stride =
+                        *reinterpret_cast<const std::uint8_t*>(
+                            processing_descriptor + 0x04);
+                    source.processing_valid_offset =
+                        *reinterpret_cast<const std::uint8_t*>(
+                            processing_descriptor + 0x05);
+                    source.processing_first_joint =
+                        *reinterpret_cast<const std::uint16_t*>(
+                            processing_descriptor + 0x06);
+                    source.processing_descriptor =
+                        const_cast<std::byte*>(processing_descriptor);
+                    source.target_group_descriptor =
+                        const_cast<std::byte*>(target_group_descriptor);
+                    const bool exact_processing =
+                        source.processing_joint_count == 66 &&
+                        source.processing_scalar_count == 27 &&
+                        source.processing_lane_stride == 2 &&
+                        source.processing_valid_offset == 0 &&
+                        source.processing_first_joint == 0;
+                    const std::size_t source_valid_bits_offset =
+                        kJointLocalPoseStride *
+                        (static_cast<std::size_t>(
+                             source.processing_joint_count) + 1);
+                    if (exact_processing &&
+                        readable_bytes(source_pose) >=
+                            source_valid_bits_offset +
+                                2 * sizeof(std::uint64_t)) {
+                        const auto* const source_valid_bits =
+                            reinterpret_cast<const std::uint64_t*>(
+                                source_pose + source_valid_bits_offset);
+                        source.source_valid_bits[0] = source_valid_bits[0];
+                        source.source_valid_bits[1] = source_valid_bits[1];
+                        std::memcpy(
+                            source.source_pose.data(),
+                            source_pose + kNadineMazurAgaPlayerFirstJoint *
+                                kJointLocalPoseStride,
+                            source.source_pose.size());
+                        bool valid_rows = true;
+                        for (std::uint32_t index = 0;
+                             index < kNadineMazurAgaObservedJointCount;
+                             ++index) {
+                            const std::uint32_t joint =
+                                static_cast<std::uint32_t>(
+                                    kNadineMazurAgaPlayerFirstJoint) + index;
+                            if (!aim_finalizer_valid_bit(
+                                    source.source_valid_bits, joint)) {
+                                continue;
+                            }
+                            source.source_valid_mask |= 1u << index;
+                            if (!valid_legacy_nadine_mazur_aga_pose_row(
+                                    source.source_pose.data() +
+                                        index * kJointLocalPoseStride)) {
+                                valid_rows = false;
+                            }
+                        }
+                        source.source_valid = valid_rows &&
+                            source.source_valid_mask == 0xFFFu;
+                    }
+                }
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        g_legacy_nadine_mazur_aga_process_tls.ambiguous = true;
+    }
+    return original(
+        work_buffer, segment_context, retarget_entry, source_program,
+        source_skeleton, target_skeleton, output_pose, output_valid_bits);
+}
+
+bool legacy_nadine_mazur_aga_sources_complete(
+    const LegacyNadineMazurAgaProcessTls& completed) {
+    if (completed.prepared.action_leaf_count != 1) {
+        return false;
+    }
+    for (std::uint32_t index = 0;
+         index < completed.prepared.action_leaf_count; ++index) {
+        const auto& source = completed.sources[index];
+        if (!source.source_valid || !source.retarget_valid ||
+            source.leaf_index != index ||
+            source.sample_index != completed.prepared.sample_index ||
+            source.generation != completed.prepared.session.generation ||
+            source.retarget_calls != 1 || source.source_calls != 1 ||
+            source.target_post_calls != 1) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool seh_capture_legacy_nadine_mazur_aga_lane(
+    void* evaluator, std::uint32_t lane,
+    LegacyNadineMazurAgaLaneSnapshot* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (evaluator == nullptr || lane >= kAnimWorkBufferLaneCapacity ||
+            readable_bytes(evaluator) < 0x2B) {
+            return false;
+        }
+        const auto* const bytes = static_cast<const std::byte*>(evaluator);
+        const auto* const lane_pointers =
+            *reinterpret_cast<const std::byte* const* const*>(bytes + 0x08);
+        const auto* const valid_bits =
+            *reinterpret_cast<const std::uint64_t* const*>(bytes + 0x10);
+        const auto* const group =
+            *reinterpret_cast<const std::uint16_t* const*>(bytes + 0x20);
+        const std::uint32_t pointer_slot_capacity =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x18);
+        const std::uint16_t group_ordinal =
+            *reinterpret_cast<const std::uint16_t*>(bytes + 0x28);
+        const std::uint8_t allocated_lanes =
+            *reinterpret_cast<const std::uint8_t*>(bytes + 0x2A);
+        if (lane_pointers == nullptr || valid_bits == nullptr ||
+            group == nullptr || readable_bytes(group) < 10 ||
+            group_ordinal != 0 || allocated_lanes == 0 ||
+            allocated_lanes > kAnimWorkBufferLaneCapacity ||
+            lane >= allocated_lanes || pointer_slot_capacity == 0 ||
+            pointer_slot_capacity >
+                kAnimWorkBufferLaneCapacity * 4) {
+            return false;
+        }
+        const std::uint32_t joint_count = group[0];
+        const std::uint32_t first_joint = group[3];
+        const std::uint8_t lane_stride =
+            *reinterpret_cast<const std::uint8_t*>(
+                reinterpret_cast<const std::byte*>(group) + 0x04);
+        if (joint_count != 66 || first_joint != 0 ||
+            lane_stride == 0 || lane_stride > 4) {
+            return false;
+        }
+        const std::size_t slot =
+            static_cast<std::size_t>(lane) * lane_stride;
+        if (slot >= pointer_slot_capacity ||
+            readable_bytes(lane_pointers) <
+                static_cast<std::size_t>(pointer_slot_capacity) *
+                    sizeof(*lane_pointers) ||
+            readable_bytes(valid_bits) <
+                static_cast<std::size_t>(pointer_slot_capacity) * 2 *
+                    sizeof(std::uint64_t)) {
+            return false;
+        }
+        const auto* const pose = lane_pointers[slot];
+        const auto* const lane_valid_bits = valid_bits + slot * 2;
+        if (pose == nullptr ||
+            readable_bytes(pose) <
+                static_cast<std::size_t>(joint_count) *
+                    kJointLocalPoseStride) {
+            return false;
+        }
+        output->lane = lane;
+        output->first_joint = first_joint;
+        output->joint_count = joint_count;
+        output->lane_stride = lane_stride;
+        output->valid_bits[0] = lane_valid_bits[0];
+        output->valid_bits[1] = lane_valid_bits[1];
+        std::memcpy(
+            output->pose.data(),
+            pose + kMazurAuthoredPairFirstC39Joint * kJointLocalPoseStride,
+            output->pose.size());
+        for (std::uint32_t index = 0;
+             index < kMazurAuthoredPairC39JointCount; ++index) {
+            const std::uint32_t joint =
+                static_cast<std::uint32_t>(
+                    kMazurAuthoredPairFirstC39Joint) + index;
+            if (aim_finalizer_valid_bit(output->valid_bits, joint) &&
+                !valid_legacy_nadine_mazur_aga_pose_row(
+                    output->pose.data() +
+                    index * kJointLocalPoseStride)) {
+                *output = {};
+                return false;
+            }
+        }
+        output->valid = true;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+std::uint32_t* __fastcall hooked_legacy_nadine_mazur_aga_apply_blend(
+    std::uint32_t* status, void* evaluator,
+    std::int32_t left_lane, std::int32_t right_lane,
+    std::uint8_t destination_is_right, std::int32_t mode, float weight) {
+    const auto original = g_original_legacy_nadine_mazur_aga_apply_blend;
+    if (original == nullptr) {
+        return status;
+    }
+    auto& tls = g_legacy_nadine_mazur_aga_process_tls;
+    LegacyNadineMazurAgaStageSnapshot* stage = nullptr;
+    std::uint32_t current_ordinal = UINT32_MAX;
+    std::uint32_t weight_bits = 0;
+    std::memcpy(&weight_bits, &weight, sizeof(weight_bits));
+    if (tls.active) {
+        current_ordinal = tls.seen_blends++;
+        if (current_ordinal >= tls.prepared.blend_count) {
+            tls.ambiguous = true;
+        }
+        for (std::size_t index = 0; index < tls.prepared.targets.size();
+             ++index) {
+            const auto& target = tls.prepared.targets[index];
+            if (target.blend_ordinal != current_ordinal) {
+                continue;
+            }
+            if (stage != nullptr || left_lane < 0 || right_lane < 0) {
+                tls.ambiguous = true;
+                stage = nullptr;
+                break;
+            }
+            const std::uint32_t destination_lane = destination_is_right != 0
+                ? static_cast<std::uint32_t>(right_lane)
+                : static_cast<std::uint32_t>(left_lane);
+            const bool exact =
+                target.valid &&
+                target.words[1] == static_cast<std::uint32_t>(left_lane) &&
+                target.words[2] == static_cast<std::uint32_t>(right_lane) &&
+                target.words[3] == destination_lane &&
+                target.words[4] == static_cast<std::uint32_t>(mode) &&
+                target.words[5] == weight_bits &&
+                destination_is_right ==
+                    static_cast<std::uint8_t>(
+                        target.words[3] == target.words[2]) &&
+                static_cast<std::uint32_t>(left_lane) <
+                    tls.prepared.lane_count &&
+                static_cast<std::uint32_t>(right_lane) <
+                    tls.prepared.lane_count &&
+                destination_lane < tls.prepared.lane_count;
+            if (!exact) {
+                tls.ambiguous = true;
+                break;
+            }
+            stage = &tls.stages[index];
+            stage->stage = static_cast<LegacyNadineMazurAgaBlendStage>(index);
+            stage->blend_ordinal = current_ordinal;
+            stage->left_lane = static_cast<std::uint32_t>(left_lane);
+            stage->right_lane = static_cast<std::uint32_t>(right_lane);
+            stage->destination_lane = destination_lane;
+            stage->mode = static_cast<std::uint32_t>(mode);
+            stage->weight_bits = weight_bits;
+            if ((tls.evaluator != nullptr && tls.evaluator != evaluator) ||
+                !seh_capture_legacy_nadine_mazur_aga_lane(
+                    evaluator, stage->left_lane, &stage->left) ||
+                !seh_capture_legacy_nadine_mazur_aga_lane(
+                    evaluator, stage->right_lane, &stage->right) ||
+                !seh_capture_legacy_nadine_mazur_aga_lane(
+                    evaluator, stage->destination_lane,
+                    &stage->destination_before)) {
+                tls.ambiguous = true;
+                stage = nullptr;
+            } else if (tls.evaluator == nullptr) {
+                tls.evaluator = evaluator;
+            }
+            break;
+        }
+    }
+    std::uint32_t* const result = original(
+        status, evaluator, left_lane, right_lane, destination_is_right,
+        mode, weight);
+    if (stage != nullptr) {
+        if (!seh_capture_legacy_nadine_mazur_aga_lane(
+                evaluator, stage->destination_lane,
+                &stage->destination_after)) {
+            tls.ambiguous = true;
+        } else {
+            stage->valid = true;
+        }
+    }
+    return result;
+}
+
+std::uint32_t legacy_nadine_mazur_aga_valid_mask(
+    const LegacyNadineMazurAgaLaneSnapshot& lane) {
+    if (!lane.valid) {
+        return 0;
+    }
+    std::uint32_t mask = 0;
+    for (std::uint32_t index = 0;
+         index < kMazurAuthoredPairC39JointCount; ++index) {
+        const std::uint32_t joint =
+            static_cast<std::uint32_t>(
+                kMazurAuthoredPairFirstC39Joint) + index;
+        if (aim_finalizer_valid_bit(lane.valid_bits, joint)) {
+            mask |= 1u << index;
+        }
+    }
+    return mask;
+}
+
+std::uint32_t legacy_nadine_mazur_aga_changed_rows_masked(
+    const std::array<std::byte, kMazurAuthoredPairPoseBytes>& left,
+    const std::array<std::byte, kMazurAuthoredPairPoseBytes>& right,
+    std::uint32_t valid_mask) {
+    return legacy_nadine_mazur_stock_pose_changed_rows(left, right) &
+        valid_mask & 0xFFFu;
+}
+
+LegacyNadineMazurStockPoseDelta
+measure_legacy_nadine_mazur_aga_pose_delta_masked(
+    const std::array<std::byte, kMazurAuthoredPairPoseBytes>& left,
+    const std::array<std::byte, kMazurAuthoredPairPoseBytes>& right,
+    std::uint32_t valid_mask) {
+    auto masked_left = left;
+    auto masked_right = right;
+    for (std::uint32_t row = 0;
+         row < kMazurAuthoredPairC39JointCount; ++row) {
+        if ((valid_mask & (1u << row)) == 0) {
+            std::memset(
+                masked_left.data() + row * kJointLocalPoseStride, 0,
+                kJointLocalPoseStride);
+            std::memset(
+                masked_right.data() + row * kJointLocalPoseStride, 0,
+                kJointLocalPoseStride);
+        }
+    }
+    return measure_legacy_nadine_mazur_stock_pose_delta(
+        masked_left, masked_right);
+}
+
+std::uint64_t hash_legacy_nadine_mazur_aga_pose_masked(
+    const std::array<std::byte, kMazurAuthoredPairPoseBytes>& pose,
+    std::uint32_t valid_mask,
+    std::array<std::uint64_t, kMazurAuthoredPairC39JointCount>* row_hashes) {
+    auto masked = pose;
+    for (std::uint32_t row = 0;
+         row < kMazurAuthoredPairC39JointCount; ++row) {
+        if ((valid_mask & (1u << row)) == 0) {
+            std::memset(
+                masked.data() + row * kJointLocalPoseStride, 0,
+                kJointLocalPoseStride);
+        }
+    }
+    return hash_legacy_nadine_mazur_stock_pose(masked, row_hashes);
+}
+
+void log_legacy_nadine_mazur_aga_source_sample(
+    const LegacyNadineMazurAgaProcessTls& tls) {
+    const auto& prepared = tls.prepared;
+    const auto& scope = prepared.session.scope;
+    bool logged = false;
+    for (std::uint32_t index = 0;
+         index < prepared.action_leaf_count; ++index) {
+        const auto& source = tls.sources[index];
+        if (source.retarget_calls == 0 && source.source_calls == 0) {
+            continue;
+        }
+        logged = true;
+        std::array<std::uint64_t, kMazurAuthoredPairC39JointCount>
+            row_hashes{};
+        const std::uint64_t pose_hash =
+            hash_legacy_nadine_mazur_aga_pose_masked(
+                source.source_pose, source.source_valid_mask, &row_hashes);
+        std::ostringstream line;
+        line << "NADINE-MAZUR-AGA-SOURCE seed="
+             << scope.action_seed_serial
+             << " generation=" << prepared.session.generation
+             << " sample=" << prepared.sample_index
+             << " leaf=" << index
+             << " result="
+             << (source.source_valid ? "complete" : "incomplete")
+             << " calls=" << source.retarget_calls << "/"
+             << source.source_calls
+             << " word=" << prepared.action_leaves[index].word_offset
+             << " outLane=" << source.output_lane
+             << " phaseBits=0x" << std::hex << source.phase_bits
+             << " sourceMask=0x" << source.source_valid_mask
+             << " sourceBits=" << source.source_valid_bits[0] << "/"
+             << source.source_valid_bits[1]
+             << " poseHash=0x" << pose_hash << std::dec
+             << " rows=" << kNadineMazurAgaPlayerFirstJoint << ".."
+             << (kNadineMazurAgaPlayerFirstJoint +
+                 kNadineMazurAgaObservedJointCount - 1)
+             << " descriptor=" << source.processing_joint_count << "/"
+             << source.processing_scalar_count << "/"
+             << static_cast<unsigned>(source.processing_lane_stride) << "/"
+             << static_cast<unsigned>(source.processing_valid_offset) << "/"
+             << source.processing_first_joint
+             << " retarget=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(source.retarget_entry)
+             << " skeletons=0x"
+             << reinterpret_cast<std::uintptr_t>(source.source_skeleton)
+             << "/0x"
+             << reinterpret_cast<std::uintptr_t>(source.target_skeleton);
+        boot_log_line(line.str().c_str());
+    }
+    if (!logged) {
+        std::ostringstream line;
+        line << "NADINE-MAZUR-AGA-SOURCE seed="
+             << scope.action_seed_serial
+             << " generation=" << prepared.session.generation
+             << " sample=" << prepared.sample_index
+             << " result=missing calls=0/0";
+        boot_log_line(line.str().c_str());
+    }
+}
+
+void log_legacy_nadine_mazur_aga_retarget_sample(
+    const LegacyNadineMazurAgaProcessTls& tls) {
+    const auto& prepared = tls.prepared;
+    const auto& scope = prepared.session.scope;
+    bool logged = false;
+    for (std::uint32_t index = 0;
+         index < prepared.action_leaf_count; ++index) {
+        const auto& source = tls.sources[index];
+        if (source.retarget_calls == 0 && source.target_post_calls == 0) {
+            continue;
+        }
+        logged = true;
+        std::array<std::uint64_t, kMazurAuthoredPairC39JointCount>
+            row_hashes{};
+        const std::uint64_t pose_hash =
+            hash_legacy_nadine_mazur_aga_pose_masked(
+                source.retarget_pose, source.target_valid_mask, &row_hashes);
+        std::ostringstream line;
+        line << "NADINE-MAZUR-AGA-RETARGET seed="
+             << scope.action_seed_serial
+             << " generation=" << prepared.session.generation
+             << " sample=" << prepared.sample_index
+             << " leaf=" << index
+             << " result="
+             << (source.retarget_valid ? "complete" : "incomplete")
+             << " calls=" << source.target_post_calls
+             << " word=" << prepared.action_leaves[index].word_offset
+             << " phaseBits=0x" << std::hex << source.phase_bits
+             << " targetMask=0x" << source.target_valid_mask
+             << " targetBits=" << source.target_valid_bits[0] << "/"
+             << source.target_valid_bits[1]
+             << " poseHash=0x" << pose_hash << std::dec
+             << " rows=" << kMazurAuthoredPairFirstC39Joint << ".."
+             << (kMazurAuthoredPairFirstC39Joint +
+                 kMazurAuthoredPairC39JointCount - 1)
+             << " targetGroup=" << source.target_group_word_04 << "/"
+             << source.target_group_workspace_count << "/"
+             << source.target_group_parameter_count
+             << " retarget=0x" << std::hex
+             << reinterpret_cast<std::uintptr_t>(source.retarget_entry)
+             << " skeletons=0x"
+             << reinterpret_cast<std::uintptr_t>(source.source_skeleton)
+             << "/0x"
+             << reinterpret_cast<std::uintptr_t>(source.target_skeleton);
+        boot_log_line(line.str().c_str());
+    }
+    if (!logged) {
+        std::ostringstream line;
+        line << "NADINE-MAZUR-AGA-RETARGET seed="
+             << scope.action_seed_serial
+             << " generation=" << prepared.session.generation
+             << " sample=" << prepared.sample_index
+             << " result=missing calls=0";
+        boot_log_line(line.str().c_str());
+    }
+}
+
+void log_legacy_nadine_mazur_aga_source_temporal(
+    const LegacyNadineMazurAgaProcessTls& tls,
+    const LegacyNadineMazurAgaPreviousSample& previous) {
+    if (!previous.valid) {
+        return;
+    }
+    const auto& prepared = tls.prepared;
+    const auto& scope = prepared.session.scope;
+    const std::uint32_t count = std::min(
+        prepared.action_leaf_count, previous.action_leaf_count);
+    const ULONGLONG now = GetTickCount64();
+    for (std::uint32_t index = 0; index < count; ++index) {
+        const auto& current = tls.sources[index];
+        const auto& prior = previous.sources[index];
+        if (!current.source_valid || !prior.source_valid ||
+            current.leaf_index != index || prior.leaf_index != index) {
+            continue;
+        }
+        const bool identity_changed = current.clip != prior.clip ||
+            current.output_lane != prior.output_lane ||
+            current.retarget_entry != prior.retarget_entry ||
+            current.source_skeleton != prior.source_skeleton ||
+            current.target_skeleton != prior.target_skeleton;
+        const std::uint32_t common =
+            current.source_valid_mask & prior.source_valid_mask & 0xFFFu;
+        const auto delta =
+            measure_legacy_nadine_mazur_aga_pose_delta_masked(
+                prior.source_pose, current.source_pose, common);
+        const std::uint32_t changed =
+            legacy_nadine_mazur_aga_changed_rows_masked(
+                prior.source_pose, current.source_pose, common);
+        std::ostringstream line;
+        line << "NADINE-MAZUR-AGA-SOURCE-TEMPORAL seed="
+             << scope.action_seed_serial
+             << " previousSample=" << previous.sample_index
+             << " sample=" << prepared.sample_index
+             << " deltaMs="
+             << (previous.tick <= now ? now - previous.tick : 0)
+             << " leaf=" << index
+             << " identityChanged=" << (identity_changed ? 1 : 0)
+             << " common=0x" << std::hex << common
+             << " changed=0x" << changed
+             << " validityDelta=0x"
+             << ((current.source_valid_mask &
+                  ~prior.source_valid_mask) & 0xFFFu)
+             << "/"
+             << ((prior.source_valid_mask &
+                  ~current.source_valid_mask) & 0xFFFu)
+             << std::dec
+             << " delta=" << delta.maximum_quaternion_degrees << "/"
+             << delta.maximum_translation_delta << "/"
+             << delta.maximum_component_delta;
+        boot_log_line(line.str().c_str());
+    }
+}
+
+void log_legacy_nadine_mazur_aga_retarget_temporal(
+    const LegacyNadineMazurAgaProcessTls& tls,
+    const LegacyNadineMazurAgaPreviousSample& previous) {
+    if (!previous.valid) {
+        return;
+    }
+    const auto& prepared = tls.prepared;
+    const auto& scope = prepared.session.scope;
+    const std::uint32_t count = std::min(
+        prepared.action_leaf_count, previous.action_leaf_count);
+    const ULONGLONG now = GetTickCount64();
+    for (std::uint32_t index = 0; index < count; ++index) {
+        const auto& current = tls.sources[index];
+        const auto& prior = previous.sources[index];
+        if (!current.retarget_valid || !prior.retarget_valid ||
+            current.leaf_index != index || prior.leaf_index != index) {
+            continue;
+        }
+        const bool identity_changed = current.clip != prior.clip ||
+            current.output_lane != prior.output_lane ||
+            current.retarget_entry != prior.retarget_entry ||
+            current.source_skeleton != prior.source_skeleton ||
+            current.target_skeleton != prior.target_skeleton;
+        const std::uint32_t common =
+            current.target_valid_mask & prior.target_valid_mask & 0xFFFu;
+        const auto delta =
+            measure_legacy_nadine_mazur_aga_pose_delta_masked(
+                prior.retarget_pose, current.retarget_pose, common);
+        const std::uint32_t changed =
+            legacy_nadine_mazur_aga_changed_rows_masked(
+                prior.retarget_pose, current.retarget_pose, common);
+        std::ostringstream line;
+        line << "NADINE-MAZUR-AGA-RETARGET-TEMPORAL seed="
+             << scope.action_seed_serial
+             << " previousSample=" << previous.sample_index
+             << " sample=" << prepared.sample_index
+             << " deltaMs="
+             << (previous.tick <= now ? now - previous.tick : 0)
+             << " leaf=" << index
+             << " identityChanged=" << (identity_changed ? 1 : 0)
+             << " common=0x" << std::hex << common
+             << " changed=0x" << changed
+             << " validityDelta=0x"
+             << ((current.target_valid_mask &
+                  ~prior.target_valid_mask) & 0xFFFu)
+             << "/"
+             << ((prior.target_valid_mask &
+                  ~current.target_valid_mask) & 0xFFFu)
+             << std::dec
+             << " delta=" << delta.maximum_quaternion_degrees << "/"
+             << delta.maximum_translation_delta << "/"
+             << delta.maximum_component_delta;
+        boot_log_line(line.str().c_str());
+    }
+}
+
+void log_legacy_nadine_mazur_aga_complete(
+    const LegacyNadineMazurAgaProcessTls& tls,
+    const LegacyNadineMazurAgaPreviousSample& previous) {
+    const auto& prepared = tls.prepared;
+    const auto& scope = prepared.session.scope;
+    float phase = 0.0F;
+    float native_weight = 0.0F;
+    std::memcpy(&phase, &scope.action_phase_bits, sizeof(phase));
+    std::memcpy(&native_weight, &scope.native_weight_bits,
+                sizeof(native_weight));
+    std::ostringstream provenance;
+    provenance << "NADINE-MAZUR-AGA-PROVENANCE seed="
+               << scope.action_seed_serial
+               << " generation=" << prepared.session.generation
+               << " direction=" << (scope.direction == 1 ? "draw" : "put")
+               << " state=0x" << std::hex << scope.action_state
+               << " phaseBits=0x" << scope.action_phase_bits
+               << " nativeWeightBits=0x" << scope.native_weight_bits
+               << " commandHash=0x" << prepared.command_hash << std::dec
+               << " phase=" << phase
+               << " nativeWeight=" << native_weight
+               << " sample=" << prepared.sample_index
+               << " queue=" << scope.queue_sequence
+               << " playerGen=" << scope.player_runtime_id
+               << " weaponGen=" << scope.weapon_runtime_id
+               << " actionTrack=" << scope.action_index
+               << " emptyTrack=" << scope.empty_index
+               << " states=0x" << std::hex << scope.states[0]
+               << "/0x" << scope.states[1]
+               << " tracks=0x"
+               << reinterpret_cast<std::uintptr_t>(scope.tracks[0])
+               << "/0x"
+               << reinterpret_cast<std::uintptr_t>(scope.tracks[1])
+               << " instances=0x"
+               << reinterpret_cast<std::uintptr_t>(scope.instances[0])
+               << "/0x"
+               << reinterpret_cast<std::uintptr_t>(scope.instances[1])
+               << std::dec
+               << " trackSourceLane="
+               << prepared.session.intervals[scope.action_index].output_lane
+               << " words=" << prepared.session.intervals[scope.action_index]
+                                      .before_word
+               << ".." << prepared.session.intervals[scope.action_index]
+                                      .after_word
+               << " commands=" << prepared.command_count
+               << " blends=" << prepared.blend_count
+               << " cmd6=" << prepared.action_leaf_count;
+    boot_log_line(provenance.str().c_str());
+    for (std::uint32_t index = 0; index < prepared.action_leaf_count;
+         ++index) {
+        const auto& leaf = prepared.action_leaves[index];
+        std::ostringstream leaf_line;
+        leaf_line << "NADINE-MAZUR-AGA-LEAF seed="
+                  << scope.action_seed_serial
+                  << " generation=" << prepared.session.generation
+                  << " sample=" << prepared.sample_index
+                  << " index=" << index
+                  << " word=" << leaf.word_offset
+                  << " opaque04=" << leaf.opaque_word_04
+                  << " outLane=" << leaf.output_lane
+                  << " clip=0x" << std::hex
+                  << reinterpret_cast<std::uintptr_t>(leaf.clip)
+                  << " flags=0x" << leaf.clip_flags
+                  << " database=0x" << leaf.database_id
+                  << " underlying=0x" << leaf.underlying_skeleton_id
+                  << " data08=0x" << leaf.clip_data_word_08
+                  << " phaseBits=0x" << leaf.phase_bits;
+        boot_log_line(leaf_line.str().c_str());
+    }
+
+    std::array<std::uint64_t, kMazurAuthoredPairC39JointCount>
+        baseline_rows{};
+    const std::uint64_t baseline_hash =
+        hash_legacy_nadine_mazur_stock_pose(
+            prepared.fg_before, &baseline_rows);
+    for (std::size_t stage_index = 0;
+         stage_index < tls.stages.size(); ++stage_index) {
+        const auto& stage = tls.stages[stage_index];
+        const std::uint32_t left_valid =
+            legacy_nadine_mazur_aga_valid_mask(stage.left);
+        const std::uint32_t right_valid =
+            legacy_nadine_mazur_aga_valid_mask(stage.right);
+        const std::uint32_t pre_valid =
+            legacy_nadine_mazur_aga_valid_mask(stage.destination_before);
+        const std::uint32_t post_valid =
+            legacy_nadine_mazur_aga_valid_mask(stage.destination_after);
+        std::array<std::uint64_t, kMazurAuthoredPairC39JointCount> left_rows{};
+        std::array<std::uint64_t, kMazurAuthoredPairC39JointCount> right_rows{};
+        std::array<std::uint64_t, kMazurAuthoredPairC39JointCount> pre_rows{};
+        std::array<std::uint64_t, kMazurAuthoredPairC39JointCount> post_rows{};
+        const std::uint64_t left_hash =
+            hash_legacy_nadine_mazur_aga_pose_masked(
+                stage.left.pose, left_valid, &left_rows);
+        const std::uint64_t right_hash =
+            hash_legacy_nadine_mazur_aga_pose_masked(
+                stage.right.pose, right_valid, &right_rows);
+        const std::uint64_t pre_hash =
+            hash_legacy_nadine_mazur_aga_pose_masked(
+                stage.destination_before.pose, pre_valid, &pre_rows);
+        const std::uint64_t post_hash =
+            hash_legacy_nadine_mazur_aga_pose_masked(
+                stage.destination_after.pose, post_valid, &post_rows);
+        const std::uint32_t in_call_valid = pre_valid & post_valid;
+        const std::uint32_t changed =
+            legacy_nadine_mazur_aga_changed_rows_masked(
+                stage.destination_before.pose,
+                stage.destination_after.pose, in_call_valid);
+        const std::uint32_t equals_left =
+            ~legacy_nadine_mazur_aga_changed_rows_masked(
+                stage.left.pose, stage.destination_after.pose,
+                left_valid & post_valid) & left_valid & post_valid & 0xFFFu;
+        const std::uint32_t equals_right =
+            ~legacy_nadine_mazur_aga_changed_rows_masked(
+                stage.right.pose, stage.destination_after.pose,
+                right_valid & post_valid) & right_valid & post_valid & 0xFFFu;
+        const auto in_call =
+            measure_legacy_nadine_mazur_aga_pose_delta_masked(
+                stage.destination_before.pose, stage.destination_after.pose,
+                in_call_valid);
+        const auto baseline_to_output =
+            measure_legacy_nadine_mazur_aga_pose_delta_masked(
+                prepared.fg_before, stage.destination_after.pose,
+                post_valid);
+        std::ostringstream line;
+        line << "NADINE-MAZUR-AGA-BLEND seed="
+             << scope.action_seed_serial
+             << " generation=" << prepared.session.generation
+             << " direction=" << (scope.direction == 1 ? "draw" : "put")
+             << " sample=" << prepared.sample_index
+             << " stage=" << legacy_nadine_mazur_aga_stage_name(stage.stage)
+             << " ordinal=" << stage.blend_ordinal
+             << " lanes=" << stage.left_lane << "/" << stage.right_lane
+             << "->" << stage.destination_lane
+             << " mode=" << stage.mode
+             << " weightBits=0x" << std::hex << stage.weight_bits
+             << " valid=0x" << left_valid << "/" << right_valid << "/"
+             << pre_valid << "/" << post_valid
+             << " validityDelta=" << (post_valid & ~pre_valid & 0xFFFu)
+             << "/" << (pre_valid & ~post_valid & 0xFFFu)
+             << " bits=" << stage.left.valid_bits[0] << "/"
+             << stage.left.valid_bits[1] << ":"
+             << stage.right.valid_bits[0] << "/"
+             << stage.right.valid_bits[1] << ":"
+             << stage.destination_before.valid_bits[0] << "/"
+             << stage.destination_before.valid_bits[1] << ":"
+             << stage.destination_after.valid_bits[0] << "/"
+             << stage.destination_after.valid_bits[1]
+             << " pose=" << baseline_hash << "/" << left_hash << "/"
+             << right_hash << "/" << pre_hash << "/" << post_hash
+             << " masks=" << changed << "/" << equals_left << "/"
+             << equals_right << std::dec
+             << " inCall=0x" << std::hex << in_call.raw_rows << "/"
+             << in_call.semantic_rows << "/" << in_call.service_only_rows
+             << "/" << in_call.quaternion_sign_only_rows << std::dec
+             << ":" << in_call.maximum_quaternion_degrees << "/"
+             << in_call.maximum_translation_delta << "/"
+             << in_call.maximum_component_delta
+             << " fgToOutput=0x" << std::hex
+             << baseline_to_output.raw_rows << "/"
+             << baseline_to_output.semantic_rows << "/"
+             << baseline_to_output.service_only_rows << "/"
+             << baseline_to_output.quaternion_sign_only_rows << std::dec
+             << ":" << baseline_to_output.maximum_quaternion_degrees << "/"
+             << baseline_to_output.maximum_translation_delta << "/"
+             << baseline_to_output.maximum_component_delta;
+        boot_log_line(line.str().c_str());
+
+        std::ostringstream rows;
+        rows << "NADINE-MAZUR-AGA-ROWS seed=" << scope.action_seed_serial
+             << " generation=" << prepared.session.generation
+             << " sample=" << prepared.sample_index
+             << " stage=" << legacy_nadine_mazur_aga_stage_name(stage.stage)
+             << " fg/left/right/pre/post=" << std::hex;
+        for (std::size_t index = 0; index < baseline_rows.size(); ++index) {
+            if (index != 0) {
+                rows << ",";
+            }
+            rows << baseline_rows[index] << "/" << left_rows[index] << "/"
+                 << right_rows[index] << "/" << pre_rows[index] << "/"
+                 << post_rows[index];
+        }
+        boot_log_line(rows.str().c_str());
+
+        if (previous.valid && stage_index < previous.stages.size() &&
+            previous.stages[stage_index].valid) {
+            const auto& prior = previous.stages[stage_index];
+            const std::uint32_t prior_left_valid =
+                legacy_nadine_mazur_aga_valid_mask(prior.left);
+            const std::uint32_t prior_right_valid =
+                legacy_nadine_mazur_aga_valid_mask(prior.right);
+            const std::uint32_t prior_output_valid =
+                legacy_nadine_mazur_aga_valid_mask(
+                    prior.destination_after);
+            const std::uint32_t left_common =
+                prior_left_valid & left_valid;
+            const std::uint32_t right_common =
+                prior_right_valid & right_valid;
+            const std::uint32_t output_common =
+                prior_output_valid & post_valid;
+            const auto inter_left =
+                measure_legacy_nadine_mazur_aga_pose_delta_masked(
+                    prior.left.pose, stage.left.pose, left_common);
+            const auto inter_right =
+                measure_legacy_nadine_mazur_aga_pose_delta_masked(
+                    prior.right.pose, stage.right.pose, right_common);
+            const auto inter_output =
+                measure_legacy_nadine_mazur_aga_pose_delta_masked(
+                    prior.destination_after.pose,
+                    stage.destination_after.pose, output_common);
+            std::ostringstream temporal;
+            temporal << "NADINE-MAZUR-AGA-TEMPORAL seed="
+                     << scope.action_seed_serial
+                     << " previousSample=" << previous.sample_index
+                     << " sample=" << prepared.sample_index
+                     << " deltaMs="
+                     << (previous.tick <= GetTickCount64()
+                             ? GetTickCount64() - previous.tick : 0)
+                     << " stage="
+                     << legacy_nadine_mazur_aga_stage_name(stage.stage)
+                     << " common=0x" << std::hex << left_common << "/"
+                     << right_common << "/" << output_common << std::dec
+                     << " left=" << inter_left.maximum_quaternion_degrees
+                     << "/" << inter_left.maximum_translation_delta
+                     << " right=" << inter_right.maximum_quaternion_degrees
+                     << "/" << inter_right.maximum_translation_delta
+                     << " output=" << inter_output.maximum_quaternion_degrees
+                     << "/" << inter_output.maximum_translation_delta
+                     << " validityDelta=0x" << std::hex
+                     << ((left_valid & ~prior_left_valid) & 0xFFFu) << "/"
+                     << ((right_valid & ~prior_right_valid) & 0xFFFu) << "/"
+                     << ((post_valid & ~prior_output_valid) & 0xFFFu)
+                     << ":"
+                     << ((prior_left_valid & ~left_valid) & 0xFFFu) << "/"
+                     << ((prior_right_valid & ~right_valid) & 0xFFFu) << "/"
+                     << ((prior_output_valid & ~post_valid) & 0xFFFu);
+            boot_log_line(temporal.str().c_str());
+        }
+    }
+}
+
+std::uint32_t __fastcall hooked_legacy_nadine_mazur_aga_process(
+    const std::uint32_t* commands, std::uint32_t command_word_count,
+    const void* context, std::uint32_t processing_group,
+    const void* callback_a5, const void* callback_a6,
+    const void* callback_a7) {
+    const auto original = g_original_legacy_nadine_mazur_aga_process;
+    if (original == nullptr) {
+        return 0;
+    }
+    auto& tls = g_legacy_nadine_mazur_aga_process_tls;
+    if (tls.active) {
+        tls.ambiguous = true;
+        return original(
+            commands, command_word_count, context, processing_group,
+            callback_a5, callback_a6, callback_a7);
+    }
+
+    LegacyNadineMazurAgaPreparedProcess prepared{};
+    bool candidate_consumed = false;
+    LegacyNadineMazurAgaSession candidate{};
+    auto& session = g_legacy_nadine_mazur_aga_session;
+    if (session.valid && processing_group == 0 &&
+        commands == session.words) {
+        candidate = session;
+        session = {};
+        candidate_consumed = true;
+        seh_prepare_legacy_nadine_mazur_aga_process(
+            commands, command_word_count, context, processing_group,
+            candidate, &prepared);
+    }
+    if (candidate_consumed && !prepared.valid && !prepared.parser_valid) {
+        log_legacy_nadine_mazur_aga_incomplete("process-parser-admission");
+        close_legacy_nadine_mazur_aga_after_parser_failure(candidate);
+    }
+    if (prepared.valid) {
+        tls = {};
+        tls.active = true;
+        tls.prepared = prepared;
+    }
+    const std::uint32_t result = original(
+        commands, command_word_count, context, processing_group,
+        callback_a5, callback_a6, callback_a7);
+    if (!prepared.valid) {
+        return result;
+    }
+    const LegacyNadineMazurAgaProcessTls completed = tls;
+    tls = {};
+    const bool sources_complete =
+        legacy_nadine_mazur_aga_sources_complete(completed);
+    bool complete = !completed.ambiguous && sources_complete &&
+        completed.seen_blends == completed.prepared.blend_count;
+    for (const auto& stage : completed.stages) {
+        complete = complete && stage.valid;
+    }
+    log_legacy_nadine_mazur_aga_source_sample(completed);
+    log_legacy_nadine_mazur_aga_retarget_sample(completed);
+    LegacyNadineMazurAgaPreviousSample previous{};
+    const bool committed = finish_legacy_nadine_mazur_aga_put_window_sample(
+        completed, complete, &previous);
+    if (complete && committed) {
+        log_legacy_nadine_mazur_aga_source_temporal(completed, previous);
+        log_legacy_nadine_mazur_aga_retarget_temporal(completed, previous);
+        log_legacy_nadine_mazur_aga_complete(completed, previous);
+    } else {
+        log_legacy_nadine_mazur_aga_incomplete(
+            completed.ambiguous
+                ? "apply-or-retarget-ambiguous"
+                : (!sources_complete
+                       ? "retarget-source-incomplete"
+                       : (complete
+                              ? "put-window-commit"
+                              : "apply-stage-incomplete")));
+    }
+    return result;
+}
+
+bool install_legacy_nadine_mazur_aga_perform_blend_census() {
+    g_legacy_nadine_mazur_aga_ready.store(
+        false, std::memory_order_release);
+    static_assert(
+        (kAnimStateLayerTrackGenerateCommandsCallsiteRva >> 12) !=
+            (kNadineMazurAgaProcessCallsiteRva >> 12) &&
+        (kAnimStateLayerTrackGenerateCommandsCallsiteRva >> 12) !=
+            (kNadineMazurAgaApplyBlendCallsiteRva >> 12) &&
+        (kAnimStateLayerTrackGenerateCommandsCallsiteRva >> 12) !=
+            (kProcessAnimCmdRetargetCallsiteRva >> 12) &&
+        (kAnimStateLayerTrackGenerateCommandsCallsiteRva >> 12) !=
+            (kRetargetPostPoseAddCallsiteRva >> 12) &&
+        (kNadineMazurAgaProcessCallsiteRva >> 12) !=
+            (kNadineMazurAgaApplyBlendCallsiteRva >> 12) &&
+        (kNadineMazurAgaProcessCallsiteRva >> 12) !=
+            (kProcessAnimCmdRetargetCallsiteRva >> 12) &&
+        (kNadineMazurAgaProcessCallsiteRva >> 12) !=
+            (kRetargetPostPoseAddCallsiteRva >> 12) &&
+        (kNadineMazurAgaApplyBlendCallsiteRva >> 12) !=
+            (kProcessAnimCmdRetargetCallsiteRva >> 12) &&
+        (kNadineMazurAgaApplyBlendCallsiteRva >> 12) !=
+            (kRetargetPostPoseAddCallsiteRva >> 12) &&
+        (kProcessAnimCmdRetargetCallsiteRva >> 12) !=
+            (kRetargetPostPoseAddCallsiteRva >> 12),
+        "AGA callsites must occupy five independently protected pages");
+
+    struct PreparedSite {
+        std::uint8_t* address = nullptr;
+        std::uint8_t* relay = nullptr;
+        std::int32_t displacement = 0;
+        std::array<std::uint8_t, 5> stock{};
+        std::array<std::uint8_t, 5> patch{};
+        DWORD old_protection = 0;
+        bool protection_changed = false;
+    };
+    constexpr std::array<std::uintptr_t, 5> kCallsites{{
+        kAnimStateLayerTrackGenerateCommandsCallsiteRva,
+        kNadineMazurAgaProcessCallsiteRva,
+        kProcessAnimCmdRetargetCallsiteRva,
+        kRetargetPostPoseAddCallsiteRva,
+        kNadineMazurAgaApplyBlendCallsiteRva,
+    }};
+    constexpr std::array<std::uintptr_t, 5> kTargets{{
+        kAnimStateSnapshotGenerateCommandsRva,
+        kProcessAnimCmdListSegmentRva,
+        kRetargetAnimUsingBatchMgrRva,
+        kRetargetPluginAddJointRetargetCommandsRva,
+        kNadineMazurAgaApplyBlendRva,
+    }};
+    const std::array<const void*, 5> hooks{{
+        reinterpret_cast<const void*>(
+            &hooked_legacy_nadine_mazur_aga_snapshot),
+        reinterpret_cast<const void*>(
+            &hooked_legacy_nadine_mazur_aga_process),
+        reinterpret_cast<const void*>(
+            &hooked_legacy_nadine_mazur_aga_retarget),
+        reinterpret_cast<const void*>(
+            &hooked_legacy_nadine_mazur_aga_add_retarget_commands),
+        reinterpret_cast<const void*>(
+            &hooked_legacy_nadine_mazur_aga_apply_blend),
+    }};
+    std::array<PreparedSite, kCallsites.size()> sites{};
+    const auto free_relays = [&]() {
+        for (auto& site : sites) {
+            if (site.relay != nullptr) {
+                VirtualFree(site.relay, 0, MEM_RELEASE);
+                site.relay = nullptr;
+            }
+        }
+    };
+    const auto clear_originals = [&]() {
+        g_original_legacy_nadine_mazur_aga_snapshot = nullptr;
+        g_original_legacy_nadine_mazur_aga_process = nullptr;
+        g_original_legacy_nadine_mazur_aga_apply_blend = nullptr;
+        g_original_virtual_chloe_retarget = nullptr;
+        g_original_virtual_chloe_add_retarget_commands = nullptr;
+    };
+
+    for (std::size_t index = 0; index < sites.size(); ++index) {
+        auto& site = sites[index];
+        if (!prepare_plain_callsite_relay(
+                kCallsites[index], kTargets[index], hooks[index],
+                site.address, site.relay, site.displacement)) {
+            free_relays();
+            clear_originals();
+            boot_log_line(
+                "legacy-Nadine Mazur AGA Perform discriminator SKIPPED (five-callsite preflight)");
+            return false;
+        }
+        std::memcpy(
+            site.stock.data(), site.address, site.stock.size());
+        site.patch = site.stock;
+        site.patch[0] = 0xE8;
+        std::memcpy(
+            site.patch.data() + 1, &site.displacement,
+            sizeof(site.displacement));
+    }
+
+    g_original_legacy_nadine_mazur_aga_snapshot =
+        reinterpret_cast<LegacyNadineMazurAgaSnapshotFunction>(
+            g_module + kAnimStateSnapshotGenerateCommandsRva);
+    g_original_legacy_nadine_mazur_aga_process =
+        reinterpret_cast<ProcessAnimCmdListSegmentFunction>(
+            g_module + kProcessAnimCmdListSegmentRva);
+    g_original_legacy_nadine_mazur_aga_apply_blend =
+        reinterpret_cast<LegacyNadineMazurAgaApplyBlendFunction>(
+            g_module + kNadineMazurAgaApplyBlendRva);
+    g_original_virtual_chloe_retarget =
+        reinterpret_cast<VirtualChloeRetargetFunction>(
+            g_module + kRetargetAnimUsingBatchMgrRva);
+    g_original_virtual_chloe_add_retarget_commands =
+        reinterpret_cast<VirtualChloeAddRetargetCommandsFunction>(
+            g_module + kRetargetPluginAddJointRetargetCommandsRva);
+    g_anim_control_find_active_type2_layer_by_id =
+        reinterpret_cast<AnimControlFindActiveType2LayerByIdFunction>(
+            g_module + kAnimControlFindActiveType2LayerByIdRva);
+
+    SuspendedProcessThreads suspended_threads{};
+    if (!suspend_other_process_threads(suspended_threads)) {
+        free_relays();
+        clear_originals();
+        boot_log_line(
+            "legacy-Nadine Mazur AGA Perform discriminator SKIPPED (thread suspend)");
+        return false;
+    }
+
+    bool suspended_preimage_matches = true;
+    for (const auto& site : sites) {
+        suspended_preimage_matches = suspended_preimage_matches &&
+            std::memcmp(
+                site.address, site.stock.data(), site.stock.size()) == 0;
+    }
+    if (!suspended_preimage_matches) {
+        resume_suspended_process_threads(suspended_threads);
+        free_relays();
+        clear_originals();
+        boot_log_line(
+            "legacy-Nadine Mazur AGA Perform discriminator SKIPPED (post-suspend preimage drift)");
+        return false;
+    }
+
+    bool protections_ready = true;
+    for (auto& site : sites) {
+        site.protection_changed = VirtualProtect(
+            site.address, site.patch.size(), PAGE_EXECUTE_READWRITE,
+            &site.old_protection) != 0;
+        protections_ready = protections_ready && site.protection_changed;
+    }
+    if (!protections_ready) {
+        bool protections_restored = true;
+        for (const auto& site : sites) {
+            if (!site.protection_changed) {
+                continue;
+            }
+            DWORD ignored = 0;
+            protections_restored = VirtualProtect(
+                site.address, site.patch.size(), site.old_protection,
+                &ignored) != 0 && protections_restored;
+        }
+        resume_suspended_process_threads(suspended_threads);
+        if (protections_restored) {
+            free_relays();
+            clear_originals();
+        }
+        boot_log_line(
+            protections_restored
+                ? "legacy-Nadine Mazur AGA Perform discriminator SKIPPED (protect)"
+                : "legacy-Nadine Mazur AGA Perform discriminator PARTIAL (protection WARNING; pass-through relays retained)");
+        return false;
+    }
+
+    for (const auto& site : sites) {
+        std::memcpy(
+            site.address, site.patch.data(), site.patch.size());
+        FlushInstructionCache(
+            GetCurrentProcess(), site.address, site.patch.size());
+    }
+    const auto all_match = [&](bool patched) {
+        for (const auto& site : sites) {
+            const auto& expected = patched ? site.patch : site.stock;
+            if (std::memcmp(
+                    site.address, expected.data(), expected.size()) != 0) {
+                return false;
+            }
+        }
+        return true;
+    };
+    bool installed = all_match(true);
+    bool rollback_verified = false;
+    if (!installed) {
+        for (const auto& site : sites) {
+            std::memcpy(
+                site.address, site.stock.data(), site.stock.size());
+            FlushInstructionCache(
+                GetCurrentProcess(), site.address, site.stock.size());
+        }
+        rollback_verified = all_match(false);
+    }
+
+    bool protections_restored = true;
+    for (const auto& site : sites) {
+        DWORD ignored = 0;
+        protections_restored = VirtualProtect(
+            site.address, site.patch.size(), site.old_protection,
+            &ignored) != 0 && protections_restored;
+    }
+    if (installed && !protections_restored) {
+        bool rollback_pages_ready = true;
+        for (const auto& site : sites) {
+            DWORD ignored = 0;
+            rollback_pages_ready = VirtualProtect(
+                site.address, site.patch.size(), PAGE_EXECUTE_READWRITE,
+                &ignored) != 0 && rollback_pages_ready;
+        }
+        if (rollback_pages_ready) {
+            for (const auto& site : sites) {
+                std::memcpy(
+                    site.address, site.stock.data(), site.stock.size());
+                FlushInstructionCache(
+                    GetCurrentProcess(), site.address, site.stock.size());
+            }
+            rollback_verified = all_match(false);
+        }
+        bool rollback_protections_restored = true;
+        for (const auto& site : sites) {
+            DWORD ignored = 0;
+            rollback_protections_restored = VirtualProtect(
+                site.address, site.patch.size(), site.old_protection,
+                &ignored) != 0 && rollback_protections_restored;
+        }
+        installed = false;
+        protections_restored = rollback_protections_restored;
+    }
+
+    const bool ready = installed && protections_restored;
+    const bool safe_rollback = !installed && rollback_verified &&
+        protections_restored;
+    if (ready) {
+        g_legacy_nadine_mazur_aga_ready.store(
+            true, std::memory_order_release);
+    }
+    resume_suspended_process_threads(suspended_threads);
+    if (safe_rollback) {
+        free_relays();
+        clear_originals();
+    }
+    boot_log_line(
+        ready
+            ? "legacy-Nadine Mazur AGA Perform discriminator INSTALLED (read-only five-site transaction)"
+            : (safe_rollback
+                   ? "legacy-Nadine Mazur AGA Perform discriminator SKIPPED (verified rollback)"
+                   : "legacy-Nadine Mazur AGA Perform discriminator PARTIAL (pass-through; relays retained)"));
     return ready;
 }
 
@@ -73434,8 +76454,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-26afz-rejected "
-        "(preserve afu cold; rejected empty-endpoint filler parked)");
+        "TLL co-op runtime init 2026-08-26aga "
+        "(read-only WeaponPartial Perform discriminator; AFZ parked)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "
@@ -73450,6 +76470,11 @@ DWORD WINAPI install_hook(void*) {
         boot_log_line(
             "legacy-Nadine Mazur stock C39 pipeline census ACTIVE "
             "(pre/post Perform + post Player+0x408; read-only)");
+    }
+    if constexpr (kEnableLegacyNadineMazurPerformBlendCensus) {
+        boot_log_line(
+            "legacy-Nadine Mazur AGA Perform blend census ACTIVE "
+            "(cmd6 Player SOURCE + C39 RETARGET + three exact ApplyBlend stages; read-only)");
     }
     if constexpr (kEnableEarlyLegacyNadineSpinePropAlias) {
         install_early_legacy_nadine_spine_prop_alias();
@@ -73972,6 +76997,16 @@ DWORD WINAPI install_hook(void*) {
             terminal_relay_ready
                 ? "legacy-Nadine terminal WeaponIK target relay READY (same-process Chloe; stock Solve/commit)"
                 : "legacy-Nadine terminal WeaponIK target relay SKIPPED (combined package)");
+    }
+    if constexpr (kEnableLegacyNadineMazurPerformBlendCensus &&
+                  !kEnableRejectedNadineWeaponRuntimeProbes) {
+        const bool aga_ready = state_net_started &&
+            weapon_partial_transition_lifecycle_ready &&
+            install_legacy_nadine_mazur_aga_perform_blend_census();
+        boot_log_line(
+            aga_ready
+                ? "legacy-Nadine Mazur AGA Perform blend census READY (successful action seed + read-only five-site SOURCE/RETARGET package)"
+                : "legacy-Nadine Mazur AGA Perform blend census SKIPPED (combined package)");
     }
     if constexpr (kEnableLegacyNadineMazurStockPosePipelineCensus &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {

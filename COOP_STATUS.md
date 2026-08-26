@@ -29365,3 +29365,132 @@ Source discontinuity selects the action leaf/content; smooth source with a
 target jump selects retarget routing; smooth target input with a cmd7 output
 jump selects lane ancestry/blending. Player `+0x408`, the ProcessWeapon item
 clock and the confirmed AFU cold attachment remain unchanged.
+
+### 2026-08-26 STATIC / RUNTIME EXAM READY (`aga`): five-site read-only Perform provenance census
+
+AFZ's rejected endpoint premise leaves one durable temporal fact to explain:
+AFY measured a `141.652 deg / 0.0805504 m` adjacent inter-Perform C39 edge while
+the Put topology remained exactly new/action track 0 `DF5B68FC` plus
+old/empty track 1 `3889CC0E`, from phase `0.105178320` to `0.115821490`.
+Player `+0x408` then made a separate quaternion-only rewrite, so it is a proven
+co-writer but not the sole origin of the earlier edge. AGA is therefore a
+read-only provenance census, not another endpoint, weight, clock or pose repair.
+
+The census boundary has more than the required three independent evidence
+types. First, the confirmed AFY runtime rows provide a same-topology,
+same-action adjacent-frame discontinuity inside Perform. Second, the static
+call graph orders five exact E8 boundaries in the same command path:
+`AnimStateLayer_CreateAnimCommands` Snapshot `0x14189EB17`, completed immutable
+list Process `0x141A92759`, case-7 ApplyBlend `0x141ABA30A`, case-6 Retarget
+`0x141AB9FC4`, and nested source-side retarget-plugin Add `0x141937DBA`.
+Third, disassembly/dataflow exposes the cmd6 source/workbuffer, retarget
+source/target skeleton and JointParams, and cmd7 left/right/output lanes plus
+ValidBits at those boundaries; pointer/range identity and ordered command
+ordinals can correlate them without editing the list. Fourth, corrected dense
+native decoding eliminates the two authored Holster leaves as the jump source:
+over the exact AFY interval `HolsterChest 8DCA21F2` moves only
+`2.550264 deg / 0.008920647 m`, and `HolsterBack 11438F72` only
+`1.354684 deg / 0.008816858 m`; an epsilon crossing at phase `0.1` is below
+`0.000393 deg / 0.00000134 m`.
+
+The competitors are deliberately narrower than “Perform is bad.”
+**H-source/content** predicts that the nested `0x141937DBA` source JointParams
+already contain the first adjacent discontinuity. **H-retarget** predicts a
+smooth source-side sequence but a discontinuous result across the enclosing
+`0x141AB9FC4` case-6 call. **H-cmd7/lane-ancestry** predicts smooth source and
+retarget output, followed by the first discontinuity at one uniquely mapped
+`0x141ABA30A` case-7 ordinal, either the action-snapshot blend, outer track fold
+or terminal WeaponPartial fold. **H-admission/ambiguous** covers a missing or
+non-unique five-site chain, an identity/queue/topology change or a temporal gap;
+it authorizes no owner claim. Later Player `+0x408` and Async remain outside
+this discriminator and cannot be promoted or suppressed by it.
+
+The exact planned package has five pass-through wrappers. Snapshot
+`0x14189EB17` records each command interval; Process `0x141A92759` validates and
+parses the exact completed immutable words pointer/count and maps saved
+intervals to ordered global opcodes; ApplyBlend `0x141ABA30A` captures the three
+selected case-7 lane states before and after stock; Retarget `0x141AB9FC4`
+captures the returned target pose before `CopyMaskedPose`; nested Add
+`0x141937DBA` captures the source pose and real embedded ValidBits used by that
+conversion. The exact DF5 path is deliberately narrowed further to one cmd6
+leaf and one internal cmd7. Its live leaf must match the shipped Player tuple
+`flags=0B, database=27E57F43, underlying=FD6DBE03, dataWord08=09A0`; source
+rows are Player `21..32`, while the post-retarget rows are legacy-Nadine C39
+`19..30`. Group-zero validity is accepted only after runtime revalidation of
+the exact target and processing descriptors that make the returned first
+16-byte ValidBits slice group zero. Every wrapper must call stock exactly once,
+preserve its ABI/return value, and perform no command,
+ValidBits, pose, controller, item-clock or attachment write. The five byte
+patches must install as one suspended verify-or-rollback transaction and may
+publish combined READY only after exact byte readback and protection restore.
+
+Admission is intentionally one narrow Put window. Bind only the first
+successful exact Mazur Put seed for role-B retained Player0 legacy Nadine
+ED25/C39; require stable Player/Fg/layer/weapon identities and generations,
+current queue sequence, controller state 5, requested-slot equality and raw
+inventory membership of the same Mazur. The topology must stay exactly
+`track0=DF5B68FC` action and `track1=3889CC0E` empty. Collect only finite phase
+`0.08..0.14`, with no phase-bucket deduplication, for at most 12 consecutive
+complete samples. Sample zero is a baseline; every later sample compares only
+the immediately preceding complete sample at source, post-retarget,
+action-snapshot, track-fold and WeaponPartial-terminal stages. A clip/route
+identity change is an explicit temporal result rather than a skipped row. A
+generation gap, retask or partial five-site tuple closes the seed instead of
+silently rebasing the predecessor.
+
+Expected bounded telemetry is the successful `WEAPON-PARTIAL-ACTION-SEED`,
+five-site package `INSTALLED` plus combined AGA `READY`, then
+`NADINE-MAZUR-AGA-SCOPE`, `...-PROVENANCE`, `...-LEAF`, `...-SOURCE`,
+`...-RETARGET`, `...-BLEND`, `...-ROWS` and adjacent source/retarget/blend
+`...-TEMPORAL` rows keyed by seed/sample/phase and exact command ordinal. One
+terminal `NADINE-MAZUR-AGA-EXIT` must report either a
+complete phase exit with at least two adjacent samples or an explicit
+`result=inconclusive reason=...`. Reaching 12 samples without a closed result
+must emit exactly one `NADINE-MAZUR-AGA-SATURATED` and an inconclusive
+`reason=max-samples` EXIT. `NADINE-MAZUR-AGA-INCOMPLETE`, exception, missing
+READY, missing source/retarget/Apply correlation, fewer than two adjacent
+samples, identity/queue/topology drift or cold AFU regression are admission or
+package failure, never a negative visual result.
+
+The written discriminator is falsifiable. An adjacent edge already present at
+`0x141937DBA` selects H-source/content; smooth nested source followed by an edge
+across `0x141AB9FC4` selects H-retarget; smooth source and retarget followed by
+the first edge at one `0x141ABA30A` stage selects H-cmd7/lane-ancestry. Smooth
+complete rows at all three boundaries despite the user's snap leave this
+package inconclusive and move only to the already-known later co-writer path.
+The nested Add boundary cannot identify which decoder/opcode produced a bad
+source pose, and the enclosing Retarget boundary cannot identify an individual
+joint-mapping helper; either positive result earns a narrower static follow-up,
+not an immediate mutation.
+
+The frozen implementation passed two independent strict reviews. The final
+source SHA-256 is
+`D09FD33AD5878AB166DD145F35CC93E704E602BAA174CF1D0DE57ABAD4E86C98`.
+Release freshness is source `12:29:43.447Z`, object `12:30:09.278Z`, DLL
+`12:30:09.374Z`; the x64 PE32+ DLL is `891392` bytes with SHA-256
+`5E3F9B1B95434E5CE5CB39E4886125EB25467DC52CE076F61464ACF36B0CAA18`
+and was built with `/O2 /Ob2 /DNDEBUG`. PE readback contains exact `aga`,
+successful-action-seed, five-site `INSTALLED`, combined SOURCE/RETARGET `READY`,
+SCOPE/PROVENANCE/LEAF/SOURCE/RETARGET/BLEND/ROWS/TEMPORAL/EXIT/SATURATED and
+INCOMPLETE telemetry. It contains no AFZ endpoint, AFY C39, authored-pair,
+late-IK or paired-endpoint READY marker. All five wrappers call stock exactly
+once, preserve ABI/return values and perform no animation-state mutation.
+
+The final fail-closed review also proves that a bound window emits exactly one
+inconclusive EXIT on Owner/Layer/Seed/Identity/Topology/Pose/exception loss,
+cannot rebind the same drifted seed, defers a genuinely new seed until a later
+exact sample, and accepts the WeaponPartial terminal only at the command exactly
+six words after the outer fold. Healthy foreign Snapshot tracks pass global
+scope selection and are discarded by exact track mismatch without closing the
+window. The IDB label script was applied to the sole `ida/tll.i64`; local log
+`.codex/ida_apply_aga_final.log` records `1793 functions, 61 data names, 1
+function types` and `save_database returned True`, and MCP readback uses the
+saved database. `git diff --check` is clean apart from expected LF/CRLF notices;
+the scanner project defines no CTest tests.
+
+The earned exam is one copy only. The user supplies all game input: in a fresh
+role-B Nadine process, make the Mazur drawn, perform exactly one Put and then
+remain still until AGA emits EXIT; no second Draw/Put is part of the scenario.
+This entry makes no runtime owner claim yet. Missing READY, any incomplete or
+inconclusive EXIT, or failure to reproduce the visual snap invalidates the
+exam; a complete adjacent trace classifies only the earliest measured owner.
