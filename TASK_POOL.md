@@ -42,9 +42,11 @@
       separation for every weapon mesh. A successful exact frame row plus
       residual clipping requires an art-specific follow-up, not a universal
       offset or reopening the parked animation task.
-- [ ] Earn any placement mutation with the normal static evidence quota,
+- [x] Earn this AD-parent mutation with the normal static evidence quota,
       competing explanations and a written visual prediction. Keep the
       appearance-1 limit of one game copy; the user performs all game input.
+      Fresh `agb` PID `20364` is injected as role B after commit/push; the
+      per-art visual result is pending, not CONFIRMED by startup markers.
 - [x] Park animation/steady-grip work, AGA admission repair and provenance
       exams, Draw-speed investigation and the strap at the user's request.
       They are not prerequisites for this placement task. AGA PID `15572` is

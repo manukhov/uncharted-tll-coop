@@ -29903,3 +29903,12 @@ plus persistent visible clipping reject **sufficiency for that art**, not the
 unchanged binding or an absent hook; record that model for a separately earned
 geometry correction. Missing rows or `BACK-SKIP` are admission-only. Do not
 claim all remaining weapons fixed from a build, a marker, or a single model.
+
+Runtime package prepared: one fresh `tll.exe`, PID `20364`, was launched and
+injected after `8a107b1` was pushed with a clean worktree. The PID-specific
+log contains exact `2026-08-27agb` at line `101102`, the new other-weapon
+`19BB` installation at `101118`, and role B/local Nadine at `101163`.
+The process remains responsive. This confirms package installation only;
+per-art placement and Mazur/P99 regression checks await the user's gameplay
+and visual report. No gameplay input was sent, no second copy was launched,
+and no visual finding is promoted to CONFIRMED by this handoff.
