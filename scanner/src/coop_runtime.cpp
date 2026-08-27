@@ -25,6 +25,7 @@
 #include "nadine_back_clearance.h"
 #include "nadine_back_clearance_profiles.h"
 #include "nadine_holster_binding.h"
+#include "nadine_pistol_grip_policy.h"
 
 // ============================================================================
 //  FILE MAP (search "=====  <TITLE>" to jump). Sections in source order:
@@ -2640,6 +2641,12 @@ constexpr float kLegacyNadineP99HipBackMeters = 0.02F;
 // resolver mutation and its hot-path diagnostics out while the local-only
 // HandFix/IK presentation owner is traced downstream.
 constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
+// Pose-node type-1 overlays are materialized before the ordinary timing-id
+// resolver. Keep the rejected abk resolver mutation off: this separate repair
+// skips only source-proven pistol grip additives while the node is constructed.
+constexpr bool kEnableLegacyNadinePistolPoseGripRepair = true;
+static_assert(!kEnableLegacyNadinePistolPoseGripRepair ||
+              !kEnableLegacyNadineActiveWeaponGripOverlayRepair);
 // Builds ack/acl installed the exact TransformState row-skip boundary, but two
 // bounded exams produced live owner0 copy markers and zero skip markers.  The
 // custom-pair Player fields are transition-time request storage, not a proven
@@ -4479,7 +4486,8 @@ void resume_suspended_process_threads(SuspendedProcessThreads& threads) {
     }
 }
 
-bool suspend_other_process_threads(SuspendedProcessThreads& out) {
+bool suspend_other_process_threads(
+    SuspendedProcessThreads& out, DWORD extra_access = 0) {
     const DWORD process_id = GetCurrentProcessId();
     const DWORD current_thread_id = GetCurrentThreadId();
     HANDLE const snapshot =
@@ -4502,7 +4510,7 @@ bool suspend_other_process_threads(SuspendedProcessThreads& out) {
                 break;
             }
             HANDLE const thread = OpenThread(
-                THREAD_SUSPEND_RESUME, FALSE, entry.th32ThreadID);
+                THREAD_SUSPEND_RESUME | extra_access, FALSE, entry.th32ThreadID);
             if (thread == nullptr) {
                 complete = false;
                 break;
@@ -45179,6 +45187,679 @@ bool install_legacy_nadine_active_weapon_grip_overlay_repair() {
     return installed;
 }
 
+// =====  SOURCE-PROVEN PISTOL POSE OVERLAYS (not the outer timing resolver)
+// SnapshotAnimNodeAnimation owns the source before type-1 rows create child
+// nodes and before ResolveClip caches their pointers. Never identify a pistol
+// from a terminal B8/6823 clip alone: many other weapons reach those clips.
+constexpr std::uintptr_t kPistolGripSnapshotCallbackRva = 0x1919F60u;
+constexpr std::uintptr_t kPistolGripFindOverlayRowRva = 0x17FA6E0u;
+
+struct PistolGripOverlayCursor {
+    std::uint32_t source = 0;
+    std::int32_t set_index = -1;
+    std::int32_t row_index = -1;
+    std::uint32_t padding_0c = 0;
+    const std::byte* row = nullptr;
+    std::uint8_t kind = 0;
+    std::uint8_t flags = 0;
+    std::array<std::byte, 6> padding_1a{};
+};
+static_assert(sizeof(PistolGripOverlayCursor) == 0x20);
+static_assert(offsetof(PistolGripOverlayCursor, row) == 0x10);
+static_assert(offsetof(PistolGripOverlayCursor, kind) == 0x18);
+
+using PistolGripSnapshotCallbackFunction = std::uint32_t(__fastcall*)(
+    void*, void*, void*, void*);
+using PistolGripFindOverlayRowFunction = PistolGripOverlayCursor*(__fastcall*)(
+    void*, PistolGripOverlayCursor*, const PistolGripOverlayCursor*);
+PistolGripSnapshotCallbackFunction g_original_pistol_grip_snapshot = nullptr;
+PistolGripFindOverlayRowFunction g_original_pistol_grip_find_row = nullptr;
+std::atomic<bool> g_pistol_pose_grip_hooks_ready{false};
+
+struct PistolGripSnapshotTls {
+    void* snapshot = nullptr;
+    void* context = nullptr;
+    void* state = nullptr;
+    bool active = false;
+};
+thread_local PistolGripSnapshotTls g_pistol_grip_snapshot_tls{};
+
+struct PistolGripScope {
+    void* snapshot = nullptr;
+    void* context = nullptr;
+    void* state = nullptr;
+    void* player = nullptr;
+    void* controller = nullptr;
+    void* instance = nullptr;
+    void* layer = nullptr;
+    void* control = nullptr;
+    void* fg = nullptr;
+    void* skeleton = nullptr;
+    void* weapon = nullptr;
+    void* weapon_set = nullptr;
+    void* sets = nullptr;
+    void* values = nullptr;
+    std::uint32_t player_id = 0;
+    std::uint32_t weapon_id = 0;
+    std::uint32_t art = 0;
+    std::uint32_t layer_id = 0;
+    std::uint32_t overlay_hash = 0;
+    std::uint8_t set_count = 0;
+    int weapon_slot = -1;
+    bool master = false;
+    bool operator==(const PistolGripScope&) const = default;
+};
+
+bool seh_read_pistol_grip_scope(
+    const PistolGripSnapshotTls& tls, PistolGripScope* scope,
+    std::uint32_t* stage) {
+    if (scope == nullptr || stage == nullptr) {
+        return false;
+    }
+    *scope = {};
+    *stage = 0;
+    __try {
+        if (!tls.active || !g_state_net.enabled || !g_net_role_b ||
+            !g_pistol_pose_grip_hooks_ready.load(std::memory_order_acquire) ||
+            tls.state == nullptr || tls.context == nullptr ||
+            readable_bytes(tls.context) < 0x32 ||
+            *reinterpret_cast<void* const*>(tls.context) != tls.state) {
+            return false;
+        }
+        *stage = 1;
+        void* const player = retained_player_object(0);
+        std::uint32_t look = 0;
+        if (player == nullptr || !player_object_stable(player) ||
+            !player_screen_index_is(player, 0) ||
+            !seh_read_player_look(player, &look) ||
+            look != kLegacyNadineAttachTargetLookId) {
+            return false;
+        }
+        auto* const player_bytes = static_cast<std::byte*>(player);
+        scope->player = player;
+        scope->player_id = *reinterpret_cast<const std::uint32_t*>(
+            player_bytes + kGameObjectRuntimeIdOffset);
+        *stage = 2;
+        auto* const fg = *reinterpret_cast<std::byte**>(
+            player_bytes + kPlayerFgAnimDataOffset);
+        if (scope->player_id == 0 || fg == nullptr ||
+            readable_bytes(fg) < kFgAnimDataRetainedIdOffset + 4) {
+            return false;
+        }
+        auto* const owner_cell = *reinterpret_cast<std::byte* const*>(
+            fg + kFgAnimDataRetainedHandleOffset);
+        auto* const skeleton = *reinterpret_cast<std::byte**>(
+            fg + kFgAnimDataSkeletonOffset);
+        if (owner_cell == nullptr || readable_bytes(owner_cell) < 0x10 ||
+            *reinterpret_cast<void* const*>(owner_cell + 8) != player ||
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRetainedIdOffset) != scope->player_id ||
+            skeleton == nullptr || readable_bytes(skeleton) < 0x48 ||
+            *reinterpret_cast<const std::uint32_t*>(skeleton + 0x24) !=
+                kLegacyNadineTargetSkeletonArtId ||
+            *reinterpret_cast<const std::uint32_t*>(
+                skeleton + kSkeletonJointCountOffset) !=
+                kLegacyNadineSkeletonJointCount) {
+            return false;
+        }
+        auto* const raw_skeleton = *reinterpret_cast<std::byte**>(
+            skeleton + 0x40);
+        if (raw_skeleton == nullptr || readable_bytes(raw_skeleton) < 0x12 ||
+            *reinterpret_cast<const std::uint32_t*>(raw_skeleton + 4) !=
+                kLegacyNadineUnderlyingSkeletonId ||
+            *reinterpret_cast<const std::uint16_t*>(raw_skeleton + 0x10) !=
+                kLegacyNadineSkeletonJointCount) {
+            return false;
+        }
+        scope->fg = fg;
+        scope->skeleton = skeleton;
+        *stage = 3;
+        const auto snapshot_address =
+            reinterpret_cast<std::uintptr_t>(tls.snapshot);
+        if (snapshot_address < 0x90) {
+            return false;
+        }
+        auto* const instance = reinterpret_cast<std::byte*>(
+            snapshot_address - 0x90);
+        if (readable_bytes(instance) < 0x1C0 ||
+            *reinterpret_cast<const std::uintptr_t*>(instance) !=
+                g_module + kAnimStateInstanceVtableRva) {
+            return false;
+        }
+        auto* const layer = *reinterpret_cast<std::byte**>(instance + 0x60);
+        auto* const context = static_cast<std::byte*>(tls.context);
+        if (layer == nullptr || readable_bytes(layer) < 0x508 ||
+            *reinterpret_cast<const std::uintptr_t*>(layer) !=
+                g_module + kAnimStateLayerVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(layer + 8) != 2 ||
+            *reinterpret_cast<void* const*>(context + 0x10) !=
+                *reinterpret_cast<void* const*>(instance + 0x140) ||
+            *reinterpret_cast<void* const*>(context + 0x18) !=
+                *reinterpret_cast<void* const*>(instance + 0x178) ||
+            *reinterpret_cast<void* const*>(context + 0x28) !=
+                *reinterpret_cast<void* const*>(layer + 0x40)) {
+            return false;
+        }
+        *stage = 4;
+        auto* const control = *reinterpret_cast<std::byte**>(
+            player_bytes + kPlayerUpperStateOwnerOffset);
+        if (control == nullptr || readable_bytes(control) < 0x68) {
+            return false;
+        }
+        const auto registry_count = *reinterpret_cast<const std::uint32_t*>(
+            control + 0x28);
+        auto* const registry = *reinterpret_cast<std::byte**>(control + 0x30);
+        if (registry_count == 0 || registry_count > 128 || registry == nullptr ||
+            readable_bytes(registry) < 0x20ULL * registry_count) {
+            return false;
+        }
+        std::uint32_t layer_matches = 0;
+        for (std::uint32_t i = 0; i < registry_count; ++i) {
+            auto* const record = registry + 0x20ULL * i;
+            if (*reinterpret_cast<void* const*>(record + 8) == layer) {
+                if (record[0x14] == std::byte{0}) {
+                    return false;
+                }
+                ++layer_matches;
+                scope->layer_id = *reinterpret_cast<const std::uint32_t*>(
+                    record);
+            }
+        }
+        if (layer_matches != 1) {
+            return false;
+        }
+        *stage = 5;
+        auto* const wrapper = *reinterpret_cast<std::byte**>(
+            control + kPlayerUpperOwnerOverlayWrapperOffset);
+        if (wrapper == nullptr || readable_bytes(wrapper) < sizeof(void*)) {
+            return false;
+        }
+        void* const master = *reinterpret_cast<void* const*>(wrapper);
+        if (master == nullptr ||
+            *reinterpret_cast<void* const*>(layer + 0x18) != master) {
+            return false;
+        }
+        scope->master = tls.state == master;
+        if (!scope->master) {
+            const auto count = *reinterpret_cast<const std::uint32_t*>(
+                layer + 0x500);
+            auto* const tracks = *reinterpret_cast<std::byte***>(
+                layer + 0x4F8);
+            if (count == 0 || count > 64 || tracks == nullptr ||
+                readable_bytes(tracks) < sizeof(void*) * count) {
+                return false;
+            }
+            std::uint32_t matches = 0;
+            for (std::uint32_t i = 0; i < count; ++i) {
+                auto* const track = tracks[i];
+                if (track != nullptr && readable_bytes(track) >= 0x18 &&
+                    *reinterpret_cast<void* const*>(track + 8) == tls.state) {
+                    ++matches;
+                }
+            }
+            if (matches != 1) {
+                return false;
+            }
+        }
+        // CreateOrFade publishes the track before snapshotting, but publishes
+        // the new instance afterwards. Requiring instance membership here
+        // would miss the first Draw. No pointer tags or cross-frame cache.
+        *stage = 6;
+        auto* const state = static_cast<std::byte*>(tls.state);
+        if (readable_bytes(state) < 0x28) {
+            return false;
+        }
+        const auto count = *reinterpret_cast<const std::uint8_t*>(state + 0x24);
+        auto* const sets = *reinterpret_cast<std::byte***>(state + 8);
+        auto* const values = *reinterpret_cast<std::uint32_t**>(state + 0x10);
+        if (count == 0 || sets == nullptr || values == nullptr ||
+            readable_bytes(sets) < sizeof(void*) * count ||
+            readable_bytes(values) < sizeof(std::uint32_t) * count) {
+            return false;
+        }
+        std::uint32_t weapon_sets = 0;
+        for (std::uint32_t i = 0; i < count; ++i) {
+            auto* const set = sets[i];
+            if (set == nullptr) {
+                continue;
+            }
+            if (readable_bytes(set) < 0x28) {
+                return false;
+            }
+            // CommitResolvedKnowledgeRecordIntoSinkSlot selects one value per
+            // category. Validate the weapon-art category, not merely the
+            // presence of a pistol elsewhere in the owner's inventory.
+            if (*reinterpret_cast<const std::uint32_t*>(set + 0x0C) !=
+                0x0EB87B1Eu) {
+                continue;
+            }
+            const auto selector = *reinterpret_cast<const std::uint32_t*>(
+                set + 0x18);
+            const auto id = *reinterpret_cast<const std::uint32_t*>(set + 0x10);
+            if (!coop::pistol_grip::supported_art(selector) ||
+                *reinterpret_cast<const std::uint32_t*>(set + 0x14) !=
+                    0xCDE4B742u ||
+                id != coop::pistol_grip::expected_weapon_set(selector) ||
+                values[i] != id) {
+                return false;
+            }
+            ++weapon_sets;
+            scope->art = selector;
+            scope->weapon_set = set;
+        }
+        if (weapon_sets != 1) {
+            return false;
+        }
+        *stage = 7;
+        auto* const controller = *reinterpret_cast<std::byte**>(
+            player_bytes + kPlayerWeaponControllerOffset);
+        if (controller == nullptr || readable_bytes(controller) < 0x110 ||
+            *reinterpret_cast<const std::uintptr_t*>(controller) !=
+                g_module + kPlayerWeaponControllerVtableRva ||
+            *reinterpret_cast<void* const*>(controller + 0x108) != player) {
+            return false;
+        }
+        scope->weapon_slot = find_weapon_slot_by_art_id(player, scope->art);
+        void* const weapon = scope->weapon_slot >= 0
+            ? get_weapon_from_slot(player, scope->weapon_slot) : nullptr;
+        if (weapon == nullptr || readable_bytes(weapon) < 0x864 ||
+            *reinterpret_cast<const std::uintptr_t*>(weapon) !=
+                g_module + kProcessWeaponVtableRva ||
+            weapon_art_id_from_object(weapon) != scope->art ||
+            !seh_weapon_parent_resolves_to_owner(weapon, player)) {
+            return false;
+        }
+        scope->weapon_id = *reinterpret_cast<const std::uint32_t*>(
+            static_cast<const std::byte*>(weapon) + kGameObjectRuntimeIdOffset);
+        if (scope->weapon_id == 0) {
+            return false;
+        }
+        scope->snapshot = tls.snapshot;
+        scope->context = tls.context;
+        scope->state = tls.state;
+        scope->controller = controller;
+        scope->instance = instance;
+        scope->layer = layer;
+        scope->control = control;
+        scope->weapon = weapon;
+        scope->sets = sets;
+        scope->values = values;
+        scope->set_count = count;
+        scope->overlay_hash = *reinterpret_cast<const std::uint32_t*>(state);
+        *stage = 8;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_read_pistol_grip_row(
+    void* state, const PistolGripOverlayCursor& cursor, std::uint32_t art,
+    coop::pistol_grip::RowEvidence* evidence) {
+    if (evidence == nullptr) {
+        return false;
+    }
+    *evidence = {};
+    __try {
+        if (cursor.row == nullptr) {
+            return cursor.source == 0 && cursor.set_index == -1 &&
+                cursor.row_index == -1 && cursor.kind == 0 && cursor.flags == 0;
+        }
+        if (state == nullptr || readable_bytes(state) < 0x28 ||
+            cursor.set_index < 0 || cursor.row_index < 0) {
+            return false;
+        }
+        const auto* const bytes = static_cast<const std::byte*>(state);
+        const auto count = *reinterpret_cast<const std::uint8_t*>(bytes + 0x24);
+        auto* const sets = *reinterpret_cast<std::byte* const* const*>(bytes + 8);
+        auto* const values = *reinterpret_cast<const std::uint32_t* const*>(
+            bytes + 0x10);
+        if (cursor.set_index >= count || sets == nullptr || values == nullptr ||
+            readable_bytes(sets) < sizeof(void*) * count ||
+            readable_bytes(values) < sizeof(std::uint32_t) * count) {
+            return false;
+        }
+        auto* const set = sets[cursor.set_index];
+        if (set == nullptr || readable_bytes(set) < 0x28) {
+            return false;
+        }
+        const auto rows_count = *reinterpret_cast<const std::uint32_t*>(set + 8);
+        auto* const rows = *reinterpret_cast<const std::byte* const*>(set);
+        auto* const sources = *reinterpret_cast<const std::uint32_t* const*>(
+            set + 0x20);
+        const auto row_index = static_cast<std::uint32_t>(cursor.row_index);
+        if (rows_count == 0 || rows_count > 4096 || row_index >= rows_count ||
+            rows == nullptr || sources == nullptr ||
+            readable_bytes(rows) < 0x28ULL * rows_count ||
+            readable_bytes(sources) < sizeof(std::uint32_t) * rows_count ||
+            cursor.row != rows + 0x28ULL * row_index ||
+            sources[row_index] != cursor.source ||
+            *reinterpret_cast<const std::uint32_t*>(cursor.row) != cursor.source) {
+            return false;
+        }
+        evidence->art_id = art;
+        evidence->set_id = *reinterpret_cast<const std::uint32_t*>(set + 0x10);
+        evidence->selector = *reinterpret_cast<const std::uint32_t*>(set + 0x18);
+        if (values[cursor.set_index] != evidence->set_id) {
+            return false;
+        }
+        evidence->source = cursor.source;
+        evidence->target = *reinterpret_cast<const std::uint32_t*>(cursor.row + 4);
+        std::memcpy(evidence->payload.data(), cursor.row + 8, 7 * sizeof(std::uint32_t));
+        evidence->type = static_cast<std::uint8_t>(cursor.row[0x24]);
+        evidence->byte25 = static_cast<std::uint8_t>(cursor.row[0x25]);
+        evidence->flags = *reinterpret_cast<const std::uint16_t*>(cursor.row + 0x26);
+        evidence->cursor_kind = cursor.kind;
+        evidence->cursor_flags = cursor.flags;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_pistol_grip_row_is_unique(
+    const PistolGripScope& scope, const coop::pistol_grip::RowEvidence& row) {
+    __try {
+        auto* const sets = static_cast<std::byte**>(scope.sets);
+        auto* const values = static_cast<const std::uint32_t*>(scope.values);
+        std::uint32_t set_matches = 0;
+        std::uint32_t row_matches = 0;
+        for (std::uint32_t i = 0; i < scope.set_count; ++i) {
+            auto* const set = sets[i];
+            if (set == nullptr) {
+                continue;
+            }
+            if (readable_bytes(set) < 0x28) {
+                return false;
+            }
+            if (*reinterpret_cast<const std::uint32_t*>(set + 0x10) != row.set_id ||
+                *reinterpret_cast<const std::uint32_t*>(set + 0x18) != row.selector) {
+                continue;
+            }
+            if (values[i] != row.set_id) {
+                return false;
+            }
+            const std::uint32_t expected_category =
+                row.set_id == coop::pistol_grip::kCampaignChloeSetId
+                    ? 0x675A8F15u : 0x0EB87B1Eu;
+            if (*reinterpret_cast<const std::uint32_t*>(set + 0x0C) !=
+                    expected_category ||
+                *reinterpret_cast<const std::uint32_t*>(set + 0x14) !=
+                    0xCDE4B742u) {
+                return false;
+            }
+            ++set_matches;
+            const auto count = *reinterpret_cast<const std::uint32_t*>(set + 8);
+            auto* const rows = *reinterpret_cast<const std::byte* const*>(set);
+            auto* const sources = *reinterpret_cast<const std::uint32_t* const*>(set + 0x20);
+            if (count == 0 || count > 4096 || rows == nullptr || sources == nullptr ||
+                readable_bytes(rows) < 0x28ULL * count ||
+                readable_bytes(sources) < sizeof(std::uint32_t) * count) {
+                return false;
+            }
+            for (std::uint32_t j = 0; j < count; ++j) {
+                if (sources[j] == row.source &&
+                    *reinterpret_cast<const std::uint32_t*>(rows + 0x28ULL * j + 4) ==
+                        row.target) {
+                    ++row_matches;
+                }
+            }
+        }
+        return set_matches == 1 && row_matches == 1;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_advance_pistol_grip_cursor(
+    void* state, const PistolGripOverlayCursor& input,
+    PistolGripOverlayCursor* output) {
+    __try {
+        if (g_original_pistol_grip_find_row == nullptr || output == nullptr ||
+            g_original_pistol_grip_find_row(state, output, &input) != output) {
+            return false;
+        }
+        return output->row == nullptr ||
+            (output->source == input.source &&
+             (output->set_index > input.set_index ||
+              (output->set_index == input.set_index &&
+               output->row_index > input.row_index)));
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_copy_pistol_grip_cursor(
+    PistolGripOverlayCursor* output, const PistolGripOverlayCursor* input) {
+    __try {
+        if (output == nullptr || input == nullptr ||
+            readable_bytes(output) < sizeof(*output) ||
+            readable_bytes(input) < sizeof(*input)) {
+            return false;
+        }
+        std::memcpy(output, input, sizeof(*output));
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool is_pistol_grip_pose_row_caller(std::uintptr_t caller) {
+    return caller == 0x1918CECu || caller == 0x1919871u ||
+        caller == 0x1919AFEu || caller == 0x1919C6Bu;
+}
+
+PistolGripOverlayCursor* __fastcall hooked_pistol_grip_find_row(
+    void* state, PistolGripOverlayCursor* output,
+    const PistolGripOverlayCursor* input) {
+    const auto caller_address = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    const auto caller_rva = caller_address >= g_module ? caller_address - g_module : 0;
+    auto* const result = g_original_pistol_grip_find_row != nullptr
+        ? g_original_pistol_grip_find_row(state, output, input) : output;
+    const PistolGripSnapshotTls tls = g_pistol_grip_snapshot_tls;
+    if (result != output || output == nullptr || !tls.active || tls.state != state ||
+        !is_pistol_grip_pose_row_caller(caller_rva) ||
+        !g_pistol_pose_grip_hooks_ready.load(std::memory_order_acquire)) {
+        return result;
+    }
+    PistolGripOverlayCursor first{};
+    coop::pistol_grip::RowEvidence row{};
+    if (!seh_copy_pistol_grip_cursor(&first, output) || first.row == nullptr ||
+        !seh_read_pistol_grip_row(state, first, 0, &row) || row.type != 1 ||
+        (row.target != 0xB8FC6B25u && row.target != 0x1CB03721u &&
+         row.target != 0x68238D0Bu)) {
+        return result;
+    }
+    PistolGripScope scope{};
+    std::uint32_t stage = 0;
+    if (!seh_read_pistol_grip_scope(tls, &scope, &stage)) {
+        // Scope diagnostics are bounded and only emitted after the retained
+        // local legacy-look check. A zero skip count is not a visual success.
+        if (stage >= 2) {
+            static std::atomic<std::uint32_t> rejected{0};
+            if (rejected.fetch_add(1, std::memory_order_relaxed) < 24) {
+                char line[256]{};
+                std::snprintf(line, sizeof(line),
+                    "NADINE-PISTOL-GRIP-POSE-SCOPE-REJECT stage=%u source=0x%08X target=0x%08X callerRva=0x%llX mutation=0",
+                    stage, row.source, row.target,
+                    static_cast<unsigned long long>(caller_rva));
+                write_log_line(line);
+            }
+        }
+        return result;
+    }
+    row.art_id = scope.art;
+    const auto first_kind = coop::pistol_grip::classify_row(row);
+    if (first_kind == coop::pistol_grip::GripRowKind::kNone) {
+        return result;
+    }
+    const auto first_row = row;
+    PistolGripOverlayCursor selected = first;
+    std::uint32_t skipped = 0;
+    // Keep the caller's first native output untouched throughout the search.
+    // A failed read, ambiguity, non-progress or limit falls back to that exact
+    // native result, not a partially filtered cursor or a manually null row.
+    while (coop::pistol_grip::classify_row(row) !=
+           coop::pistol_grip::GripRowKind::kNone) {
+        if (skipped >= 8 || !seh_pistol_grip_row_is_unique(scope, row)) {
+            return result;
+        }
+        PistolGripOverlayCursor next{};
+        if (!seh_advance_pistol_grip_cursor(state, selected, &next) ||
+            !seh_read_pistol_grip_row(state, next, scope.art, &row)) {
+            return result;
+        }
+        selected = next;
+        ++skipped;
+    }
+    PistolGripScope fresh{};
+    if (!seh_read_pistol_grip_scope(tls, &fresh, &stage) || fresh != scope ||
+        !seh_copy_pistol_grip_cursor(output, &selected)) {
+        return result;
+    }
+    // Separate the observational budget by controller state so a pre-Draw
+    // cache build cannot consume every later WeaponOut/aiming sample.
+    int current = -99;
+    std::uint32_t draw_state = 0;
+    const bool draw_readable = read_weapon_draw_state(scope.player, current, draw_state);
+    const std::size_t state_bucket = !draw_readable ? 4 :
+        (draw_state == 0 ? 0 : (draw_state == 1 ? 1 :
+         (draw_state == 2 ? 2 : (draw_state == 4 ? 3 : 4))));
+    static std::array<
+        std::array<std::array<std::atomic<std::uint32_t>, 5>, 5>, 2> logged{};
+    const std::size_t art_index = scope.art == coop::pistol_grip::kP99ArtId ? 0 : 1;
+    const auto kind_index = static_cast<std::size_t>(first_kind);
+    const auto sequence = logged[art_index][kind_index][state_bucket].fetch_add(
+        1, std::memory_order_relaxed);
+    if (sequence < 8) {
+        std::ostringstream line;
+        line << "NADINE-PISTOL-GRIP-POSE-SKIP kind="
+             << coop::pistol_grip::row_kind_name(first_kind)
+             << " art=0x" << std::hex << scope.art
+             << " source=0x" << first_row.source << " target=0x" << first_row.target
+             << " set=0x" << first_row.set_id << " selector=0x" << first_row.selector
+             << " callerRva=0x" << caller_rva
+             << " playerId=0x" << scope.player_id << " weaponId=0x" << scope.weapon_id
+             << " layer=0x" << scope.layer_id
+             << " snapshot=0x" << reinterpret_cast<std::uintptr_t>(scope.snapshot)
+             << " state=0x" << reinterpret_cast<std::uintptr_t>(scope.state)
+             << std::dec << " owner=0 role=B master=" << (scope.master ? 1 : 0)
+             << " slot=" << scope.weapon_slot << " current=" << current
+             << " drawState=" << draw_state << " drawReadable=" << (draw_readable ? 1 : 0)
+             << " rowsSkipped=" << skipped << " stockCalls=" << (skipped + 1)
+             << " sequence=" << sequence << " type0Preserved=1 clocksStock=1 ikStock=1";
+        write_log_line(line.str().c_str());
+    }
+    return result;
+}
+
+bool seh_bind_pistol_grip_snapshot_tls(void* context, void** state) {
+    __try {
+        if (context == nullptr || state == nullptr || readable_bytes(context) < 0x32) {
+            return false;
+        }
+        *state = *reinterpret_cast<void* const*>(context);
+        return *state != nullptr;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+std::uint32_t __fastcall hooked_pistol_grip_snapshot(
+    void* snapshot, void* descriptor, void* context, void* metadata) {
+    const PistolGripSnapshotTls previous = g_pistol_grip_snapshot_tls;
+    PistolGripSnapshotTls next{};
+    next.snapshot = snapshot;
+    next.context = context;
+    next.active = g_pistol_pose_grip_hooks_ready.load(std::memory_order_acquire) &&
+        seh_bind_pistol_grip_snapshot_tls(context, &next.state);
+    // Shadow even an ineligible nested callback; it must never inherit its
+    // parent's permission. __finally also restores the scope during unwinding.
+    g_pistol_grip_snapshot_tls = next;
+    std::uint32_t result = UINT32_MAX;
+    __try {
+        if (g_original_pistol_grip_snapshot != nullptr) {
+            result = g_original_pistol_grip_snapshot(snapshot, descriptor, context, metadata);
+        }
+    } __finally {
+        g_pistol_grip_snapshot_tls = previous;
+    }
+    return result;
+}
+
+bool install_legacy_nadine_pistol_pose_grip_repair() {
+    constexpr std::array<std::uint8_t, 15> kFindPrologue{
+        0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x6C,
+        0x24, 0x10, 0x48, 0x89, 0x74, 0x24, 0x18};
+    // Stop before mov EAX,[RDX]: the generic trampoline's absolute jump back
+    // uses RAX. Including that load would destroy the node type ID before the
+    // native registry lookup. At +0x0D the original instruction reloads EAX.
+    constexpr std::array<std::uint8_t, 13> kSnapshotPrologue{
+        0x40, 0x53, 0x55, 0x41, 0x54, 0x41, 0x56, 0x41, 0x57,
+        0x48, 0x83, 0xEC, 0x50};
+    g_pistol_pose_grip_hooks_ready.store(false, std::memory_order_release);
+    auto* const find_target = reinterpret_cast<std::uint8_t*>(
+        g_module + kPistolGripFindOverlayRowRva);
+    auto* const snapshot_target = reinterpret_cast<std::uint8_t*>(
+        g_module + kPistolGripSnapshotCallbackRva);
+    if (std::memcmp(find_target, kFindPrologue.data(), kFindPrologue.size()) != 0 ||
+        std::memcmp(snapshot_target, kSnapshotPrologue.data(),
+                    kSnapshotPrologue.size()) != 0) {
+        boot_log_line("legacy-Nadine pistol pose grip repair SKIPPED (prologue)");
+        return false;
+    }
+    SuspendedProcessThreads suspended{};
+    if (!suspend_other_process_threads(suspended, THREAD_GET_CONTEXT)) {
+        boot_log_line("legacy-Nadine pistol pose grip repair SKIPPED (thread suspend)");
+        return false;
+    }
+    bool safe_to_patch =
+        std::memcmp(find_target, kFindPrologue.data(), kFindPrologue.size()) == 0 &&
+        std::memcmp(snapshot_target, kSnapshotPrologue.data(),
+                    kSnapshotPrologue.size()) == 0;
+    for (std::size_t i = 0; safe_to_patch && i < suspended.count; ++i) {
+        CONTEXT context{};
+        context.ContextFlags = CONTEXT_CONTROL;
+        if (!GetThreadContext(suspended.handles[i], &context)) {
+            safe_to_patch = false;
+            break;
+        }
+        const auto rip = static_cast<std::uintptr_t>(context.Rip);
+        const auto find_begin = reinterpret_cast<std::uintptr_t>(find_target);
+        const auto snapshot_begin = reinterpret_cast<std::uintptr_t>(snapshot_target);
+        if ((rip >= find_begin && rip < find_begin + kFindPrologue.size()) ||
+            (rip >= snapshot_begin && rip < snapshot_begin + kSnapshotPrologue.size())) {
+            safe_to_patch = false;
+        }
+    }
+    if (!safe_to_patch) {
+        resume_suspended_process_threads(suspended);
+        boot_log_line("legacy-Nadine pistol pose grip repair SKIPPED (live entry/context)");
+        return false;
+    }
+    // No logging or caller execution between patching and original-pointer
+    // publication. A thread already inside either overwritten span aborts the
+    // whole installation instead of resuming into the middle of a new jump.
+    g_original_pistol_grip_find_row = reinterpret_cast<PistolGripFindOverlayRowFunction>(
+        install_fire_gate_detour(
+            kPistolGripFindOverlayRowRva, kFindPrologue.data(), kFindPrologue.size(),
+            reinterpret_cast<void*>(&hooked_pistol_grip_find_row),
+            "local Nadine source-proven pistol pose rows"));
+    g_original_pistol_grip_snapshot = reinterpret_cast<PistolGripSnapshotCallbackFunction>(
+        install_fire_gate_detour(
+            kPistolGripSnapshotCallbackRva, kSnapshotPrologue.data(), kSnapshotPrologue.size(),
+            reinterpret_cast<void*>(&hooked_pistol_grip_snapshot),
+            "local Nadine pistol snapshot ownership"));
+    const bool ready = g_original_pistol_grip_find_row != nullptr &&
+        g_original_pistol_grip_snapshot != nullptr;
+    g_pistol_pose_grip_hooks_ready.store(ready, std::memory_order_release);
+    resume_suspended_process_threads(suspended);
+    boot_log_line(ready
+        ? "legacy-Nadine pistol pose grip repair READY (P99/B6; source-proven type1 rows; type0/IK/clocks/attachments stock)"
+        : "legacy-Nadine pistol pose grip repair PARTIAL (mutation disabled)");
+    return ready;
+}
+
 std::uint32_t grip_snapshot_weight_bucket(float weight) {
     if (!std::isfinite(weight)) {
         return 6;
@@ -77232,8 +77913,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-27agc "
-        "(Type95/M30 model-scoped back clearance; other frames retained; Mazur/P99 unchanged; animations parked)");
+        "TLL co-op runtime init 2026-08-27agd "
+        "(source-proven P99/B6 pose grip; AGC back profiles retained; holsters/IK/animation clocks unchanged)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "
@@ -77407,6 +78088,10 @@ DWORD WINAPI install_hook(void*) {
     if constexpr (kEnableLegacyNadineActiveWeaponGripOverlayRepair &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         install_legacy_nadine_active_weapon_grip_overlay_repair();
+    }
+    if constexpr (kEnableLegacyNadinePistolPoseGripRepair &&
+                  !kEnableRejectedNadineWeaponRuntimeProbes) {
+        install_legacy_nadine_pistol_pose_grip_repair();
     }
     if constexpr ((kEnableLegacyNadineMazurDrawEndpointRepair ||
                    kEnableLegacyNadineMazurSteadyHandsCommandCensus) &&

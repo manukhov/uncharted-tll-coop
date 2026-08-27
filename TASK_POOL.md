@@ -15,20 +15,31 @@
       AGC back-placement package unchanged and do not infer a visual verdict
       from the priority change. Pistol grip is reopened; Mazur grip, Draw/Put
       timing and strap experiments remain parked.
-- [ ] Resolve the exact affected pistol/art and its authored pose/target
-      owner. The last AGC log includes P99 `8075397D` and `B6B0DD17` swaps;
-      the historical `acg/aci` proof is P99-only, not a blanket statement about
-      every pistol. Preserve the accepted P99 hip/cold/axis placement.
-- [ ] Trace the upstream arm/hand producer and close three independent static
-      evidence kinds before a mutation or fresh exam. P99 `aci` rejects an
-      owner-specific ProcessWeapon local offset at `141ED19BB`; `acg` leaves
-      upstream composed pose/target ownership open. Do not repeat rejected
-      `abw/aby` late row/palette copies, `abm` Feather suppression or the
-      provenance-losing final-clip replacement.
-- [ ] Implement and verify the narrow pistol-only correction, keep all back
-      attachments and animation clocks unchanged, label/save the single IDB,
-      commit and immediately push. A fresh one-copy exam needs an explicit
-      prediction and only the user may perform gameplay input.
+- [x] Recover the two exact pistol arts in the last AGC log: P99 `8075397D`
+      and `B6B0DD17` (`pistol-upgrade`, Colt-1911 asset). The user has not
+      named which has the bad grip; AGD explicitly covers both, not all arts.
+      Historical `acg/aci` evidence stays P99-only. Preserve the P99 hip.
+- [x] Close source-proven pose materialization at `141919F60 -> 141918C30`:
+      ordinary `1417F9F00` skips type1 and does not exclude these flags-zero
+      pose rows. Exact factory/vtable/dataflow, disk source/mask/counterpart,
+      and fresh instance/layer/track ownership meet the static quota. Native
+      Player/Chloe retarget is valid; group mismatch alone is not the defect.
+      The actual visual hypothesis is an unneeded Chloe grip additive.
+- [x] Implement AGD as native row-cursor advancement for 75 exact rows / 148
+      P99/B6 combinations before cache creation. Preserve B6 D350->9A type0,
+      state-mode rows, all IK/clocks/attachments and parked Mazur work. Pass
+      three CTest targets, 13/13 policy cases with 10417 checks, and existing
+      33/33 +21/21 back suites. Independent review closed the callback RAX
+      clobber (13-byte span) and installation race (suspend/RIP check/publish).
+- [x] Save the single IDB with 1802 function /62 data /1 type labels and
+      `save_database returned True`; record source/DLL hashes and verify
+      readback before committing/pushing the package and launching one copy.
+- [ ] Run the written AGD one-copy exam and obtain the user's exact pistol
+      and visible grip verdict with matching source-proven applied rows.
+      Build/READY is not confirmation. No marker => admission/path failure;
+      marker plus wrong grip => insufficient additive removal / later owner.
+      Do not repeat late copies, Feather suppression, numeric guessed offsets
+      or terminal B8 pointer replacement. No gameplay input by the agent.
 
 ## PARKED: remaining Nadine weapon back-placement validation (2026-08-27)
 

@@ -30284,3 +30284,179 @@ frontier is the semantic arm/hand producer before the final pose, with the
 documented rejected copy/suppression/clip-substitution boundaries still closed.
 No code change, restart or input was made to address grip while recording
 this priority. Static owner tracing and per-art identity are the next steps.
+
+### 2026-08-27 STATIC / IMPLEMENTED (`agd`): preserve pistol-specific poses before Chloe grip additives become cached nodes
+
+The new request reopens pistol grip only. The last played AGC session contains
+P99 `8075397D` and `B6B0DD17`; no new screenshot identifies which pistol the
+user means. The latter is the ordinary `pistol-upgrade` art, with model
+`34CFA5B9 colt-1911-pistol` (this is an asset name, not a verified UI label).
+AGD explicitly covers these two arts and no others. AGC back profiles, accepted
+P99 hip/cold/axis placement, Mazur grip, Draw/Put timing and strap work are
+unchanged. This section is not a visual success claim.
+
+**New boundary, not a repeat of the rejected outer-resolver repair.**
+`AnimOverlayState_ResolveAnimationId 1417F9F00` handles type 0 and grouped
+types 2/3/4; it skips type 1/5. `TransformState 1418B2A40` uses cursor mode 1.
+The grip rows below have flags zero and require cursor mode 0. Consequently
+the old P99 `D350A452 -> D350A452` result at caller `1418B2945` remains valid
+but cannot exclude a separate pose child. Likewise, the old `ack/acl` state-row
+callers do not cover these pose rows. Do not re-enable either rejected hook.
+
+Three independent evidence kinds close the new seam:
+
+1. **Graph, factory string and vtable.** Registration `1400EDBC0` binds the
+   `anim-node-animation` callback `141919F60`; `SelectRootNodeIndex 1418B2EF0`
+   dispatches type-registry `+10`. The callback's source assertion is
+   `SnapshotAnimNodeAnimation`; it invokes Animation vslot `+48 -> 141917D00`
+   and then `14191A124 -> 141918C30` before vslot `+50` resolves/caches the
+   clip. An initializer's direct id is not the completed pose tree.
+2. **Disassembly and dataflow.** `141918C30` handles the actual pose rows.
+   Type 0 writes target to node `+44` at `141919B28`, then searches that target
+   again at `141919C66`. Type 1 creates a Blend with recursively processed
+   original and target children (`14191922F/14191938F/1419193D4`). Native
+   `FindMatchingRow 1417FA6E0` consumes a 32-byte cursor: source `+0`, set/row
+   indices `+4/+8`, returned row `+10`, mode `+18`, flags `+19`. Matching is
+   `cursor+18 == bool(row+26 & 2)`. Passing the returned cursor back advances
+   past that row; it does not alter shared data or restart at a new source.
+3. **Independent asset counterpart and masks.** Campaign-Chloe player-mesh
+   object `4C9FB65C`, selector `3F334972`, contains `D350A452 -> B8FC6B25`
+   at raw `E25F8` and 72 distinct pistol-aim sources to `68238D0B` at
+   `E2620..E3138`. These are type 1, flags 0, byte `+25=0`, and all seven
+   DWORDs `+08..20=0`. None of those sources/targets occurs in shipped
+   vill-Nadine object **`6567DEA7`**, selector **`41666B5A`** (the latter is
+   a selector, not its object id). The checked-in pure policy records every
+   aim source explicitly; this is not a terminal-clip allowlist.
+
+The two pistol poses must remain distinct. P99's weapon-specific object is
+`43DC560C`, selector `8075397D`, with eight reload rows. B6's object is
+`926FDDA0`, selector `B6B0DD17`, with 150 rows. Its raw `35EB8` type-0 row is
+`D350A452 -> 9A64704F p1h-burst-fingers`; preserve it. Only its flags-zero
+type-1 rows `36C78: 9A64704F -> B8FC6B25` and
+`36CA0: 522E6370 p-burst-aim-hands -> 1CB03721` are filtered. The B6
+aim-state rows `3C347132/A1B17699 -> 522E6370`, flags 2, remain native.
+If common Chloe D350 is encountered before the B6 type-0 row, native cursor
+advancement retains that later type 0; if type 0 comes first, the next lookup
+retains source 9A. The common Chloe rows are admitted for both exact pistol
+arts to avoid depending on set order. In total: 75 exact authored rows,
+148 allowed art/row combinations.
+
+Full-group audit prevents another misleading comparison. Player D350/9A use
+source skeleton `FD6DBE03`, database `27E57F43`, eight ANIM groups, group0
+`[30,32]` and group7's 19 right fingers. Player 522E has group0 `[29..32]`
+and all 38 group7 fingers. Chloe B8/1CB/6823 use `4B0F5DE3/6C2B2396`,
+seven ANIM groups, group0 `[39,41]` or `[38..41]` and group2 fingers. All are
+single-sample clips. Decoded P99 versus Colt right fingers differ by up to
+35.649369 degrees on the same Player skeleton: substituting P99 for Colt
+would erase real authored content. Chloe finger translations are zero/additive;
+raw Player-versus-Chloe quaternion differences are not final target-pose errors.
+
+**Competing explanations and limits.** The hypothesis under test is an
+unneeded Chloe-specific grip additive on legacy Nadine, absent from the shipped
+Nadine player-mesh counterpart, not an invalid animation format. Native retarget
+is valid for both sources: Player row124 and Chloe row157 use the same 74-entry
+StringId map, distinct profiles/scales (`E51542CA/0.9` versus `FC34096C/0.965`),
+and no optional arm/leg IK. All 38 finger names are covered; Nadine stores them
+in group1 `104..141` with a different order. `DoJointRetarget 141AE2100` uses
+reference-pose composition for finger/palm mode1, not raw copying; attachment
+props use mode3. Thus **Hdifferent-group-implies-broken-retarget is STATIC
+REJECTED**. The P99 `aci` identity weapon-local transform remains P99-only
+evidence; B6's local attachment is not promoted to confirmed identity.
+**Hlater-arm/IK/merge** and a B6-specific weapon-local issue remain visual
+competitors if the source-proven skip executes but grip stays wrong. No new
+numeric wrist offset, raw pose copy, Feather suppression or profile change is
+introduced.
+
+The native NPC Elena pistol pair was audited as a separate alternative, not
+adopted. Its typed runtime retarget pair is `46622D19 -> ED25C708` (raw base
+resource ids `D0B04A60 -> C67A06F1` resolve through ArtItemSkeleton `+24`).
+Clips `4CAA7420/036F20E5/5E67B1FA` own group1 fingers, but their complete
+composition and resource lifetime have not earned a donor injection. Normal
+clip resolution only searches registered art groups. Login `1417C9070` and
+logout `1417C93F0` change epoch `1438401BC`; that counter is not a residency
+pin. AGD loads no package and retains no clip/retarget pointer across frames.
+
+**Implementation and ownership.** The new callback wrapper establishes a
+thread-local scope for each invocation, including shadowing ineligible nested
+callbacks, and restores it through `__finally`. The global Find hook filters
+only pose returns `1918CEC/1919871/1919AFE/1919C6B`; its diagnostic and
+TransformState/ordinary-resolver callers remain untouched. Admission proves
+role B, retained stable screen0 legacy Nadine, generation-correct Fg owner,
+exact target `ED25C708/C39CA709/580`, snapshot `instance+90`, instance vtable
+and owning layer `+60`, unique enabled layer in the current Player `+1A0`
+registry, matching context/remap/parameter pointers, and master or unique live
+owning-track overlay. No address-only tags are used. First-track publication
+`1418A2B97/2B9A` precedes snapshot creation, while instance insertion
+`1418A2CF1` follows it: requiring live instance membership would miss Draw.
+Layer activation precedes the first snapshot; initial factory vslot `+60`
+only resets state. Native `14189D80A -> 1418A4A50` unconditionally resets
+instance root `+138=-1` at `1418A4AC7`, before the phase path builds it again.
+
+The current overlay must contain exactly one weapon-art category `0EB87B1E`,
+owner `CDE4B742`, with the exact supported set/selector and mirrored value id.
+The corresponding inventory ProcessWeapon must be same-owner and
+generation-valid under the exact PlayerWeaponController. Row pointer/index,
+source array, set/value, unique matching row, full zero tail/type/flags and
+explicit source whitelist are rechecked. Controller current-slot and Draw
+state are **telemetry only**, not premature cache-admission gates. Native
+category assignment replaces one weapon set with another; ambiguous/different
+weapon categories fall through stock.
+
+After the first stock Find result, filtering advances only stack-local cursors.
+The caller's original output remains unchanged until every advance, uniqueness
+check and final fresh-owner comparison succeeds. Fault, ambiguity, no progress
+or the eight-row bound preserves the first native result. Native type-0/variant
+ordering, IK, clocks, attachment records and body pose are not edited. Logs are
+bounded separately by art/grip-kind/controller-state so pre-Draw samples cannot
+consume the later WeaponOut/aim observation budget.
+
+Independent review caught and corrected two pre-runtime installation defects.
+The callback detour must copy **13 bytes**, stopping before `mov EAX,[RDX]`:
+the generic trampoline's RAX jump-back would corrupt that type id with an
+18-byte span. Find's 15-byte span is safe. Installation suspends the other
+threads, rechecks both prologues, rejects any suspended RIP inside either
+overwritten span, and publishes both original pointers and the ready flag
+before resuming. A partial installation has mutation disabled. No game was
+used to discover either defect.
+
+Release build and all three CTest targets pass. Direct suites report
+`13/13`, **10417 checks** for the new policy, and unchanged back suites
+`33/33` plus `21/21`. The policy tests cover all 148 positive combinations,
+exact 72-source asset order/uniqueness, other weapon/source/set/selector
+rejections, each payload/flag field, preserved type0 and state-mode rows.
+The single IDB save reports `1802 functions, 62 data names, 1 function types`
+and `save_database returned True` in `.codex/ida_apply_agd_pistol.log`;
+restarted MCP readback and frozen package hashes are recorded below.
+
+**Falsifiable one-copy AGD exam.** User loads local Nadine, draws the affected
+pistol, holds still, then aims, lowers and holsters it. Agent sends no gameplay
+input. Boot must show `2026-08-27agd` and the complete pistol-pose package
+`READY`. Drawn/aiming samples must emit `NADINE-PISTOL-GRIP-POSE-SKIP` for
+the exact art and source/set/target above, owner0/roleB, with only the four
+pose callers. For P99 expect the D350 right-hand row and a covered aim-family
+row; for B6 expect 9A and/or 522E plus any applicable common row. No such
+mutation may occur for Mazur, other arts, Chloe, role A or owner1. The pistol
+must visibly sit in the right grip with appropriate fingers/support hand;
+hip/back attachment and Draw/Put timing must remain unchanged. Correct markers
+plus unchanged/broken grip reject this additive removal as sufficient and
+select a later pose/attachment competitor. No markers is an admission/path
+failure, not proof of a visual fix; do not widen the guard blindly. A crash,
+jerk or collateral weapon/animation regression rejects the package. The next
+required evidence is the user's actual pistol and visual verdict with the
+matching applied rows, not successful build or installation alone.
+
+Frozen AGD package (Release, 2026-08-27):
+
+- `scanner/src/coop_runtime.cpp` SHA256
+  `975A669E269A20DBE260501C4D943EBCA83205E597CDD7B9E2EA271237E25E97`.
+- `scanner/src/nadine_pistol_grip_policy.h` SHA256
+  `6F6CEAC238B4DC2D589DB00CD98E2B12BBE8596C828310C3194A729DBAF742DE`.
+- `scanner/tests/nadine_pistol_grip_policy_tests.cpp` SHA256
+  `5D34B1AF618141EB20B3F6B287A38B856CDC4E9C3596C50B599F0352C62722B5`.
+- `scanner/build/tll_coop_runtime.dll`: 818176 bytes, SHA256
+  `2D3D238498BCF2898E84FDABA8841CB18E0CB1037E29C9C77029D255E9908ED0`.
+
+Restarted MCP (PID14696) resolves all eight newly named functions at their
+original addresses. Complete xref readback for `141918C30` retains the four
+recursive calls and the exact factory call `14191A124`; the new registry-epoch
+name is present in `LoginArtGroup`. No runtime result has been recorded yet.

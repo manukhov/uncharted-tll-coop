@@ -8,6 +8,87 @@ import idc
 
 
 FUNCTIONS = {
+    0x1418A4A50: (
+        "AnimStateInstance_ResetSnapshotRoot",
+        "Resolves instance+0x138 through its heap at +0x130 (or uses the null "
+        "node), calls the resolved node's +0x78 slot when present, then "
+        "unconditionally writes instance+0x138=-1 at 0x1418A4AC7. Later "
+        "instance+0x194 handling only controls parameter cleanup, not this "
+        "invalidation. PhaseUpdateInstances calls here at 0x14189D80A before "
+        "0x14189D824 rebuilds the active instance snapshot. Node-local pose "
+        "overlay admission is therefore revisited by the native phase path; "
+        "a filtered graph need not be retained in a mod-owned cache.",
+    ),
+    # --- 2026-08-27: retarget compatibility and resident-asset lifetime ---
+    0x1417C9070: (
+        "AnimMasterTable_LoginArtGroup",
+        "Exact AnimMasterTable::LoginArtGroup assertion. Registers a unique "
+        "art-group id/pointer in the 0x10-byte table at 0x143840200, notifies "
+        "animation-table listeners, and increments the registry epoch at "
+        "0x1438401BC (write 0x1417C9185). Clip lookup only searches these "
+        "registered groups; it is not itself a resource load or pin.",
+    ),
+    0x1417C93F0: (
+        "AnimMasterTable_LogoutArtGroup",
+        "Notifies animation-table listeners around removal of every matching "
+        "art-group pointer from the 0x143840200 table using swap-last "
+        "compaction, updates count 0x1438401C8, and increments registry epoch "
+        "0x1438401BC at 0x1417C94A0. An epoch check detects registry changes "
+        "but does not hold a cached clip or skeleton resident.",
+    ),
+    0x141AE1F10: (
+        "RetargetPlugin_DecodePackedReferenceLocator",
+        "Decodes one 14-byte reference locator containing half-float "
+        "translation and quaternion components into the runtime locator and "
+        "normalizes the quaternion. DoJointRetarget calls it for the two "
+        "reference locators at retarget-joint record +0 and +0xE.",
+    ),
+    0x141AE2100: (
+        "RetargetPlugin_DoJointRetarget",
+        "Exact DoJointRetarget source assertion. Decodes the source/target "
+        "reference locators and selects correction by record+0x2C mode. "
+        "Mode 1 includes relative-reference composition (Transform_Compose "
+        "at 0x141AE27FE), not a raw quaternion copy; mode 3 copies source "
+        "S/T/Q at 0x141AE28F3. Player and Chloe finger/palm maps can therefore "
+        "both reach Nadine through their authored retarget entries despite "
+        "different processing-group indices and reference poses.",
+    ),
+    # --- 2026-08-27: node-local pose overlays before clip caching ---
+    0x1400EDBC0: (
+        "AnimSnapshotNodeAnimation_RegisterSnapshotCallback",
+        "Hashes the authored type string anim-node-animation and calls the "
+        "snapshot-node registrar at 0x141935150 with the animation class id "
+        "and callback 0x141919F60. SelectRootNodeIndex dispatches this callback "
+        "through +0x10 of the matching 0x18-byte type-registry entry.",
+    ),
+    0x141919F60: (
+        "AnimSnapshotNodeAnimation_SnapshotWithPoseOverlays",
+        "Source assertion identifies SnapshotAnimNodeAnimation. Arguments are "
+        "snapshot, authored node descriptor, SnapshotContext, and output flags; "
+        "returns a node index or -1. Creates an Animation node, checks its RTTI "
+        "class, and invokes vslot +0x48 (0x141917D00) at 0x14191A0DA. When "
+        "context+0 carries an AnimOverlayState, initializes a 32-byte cursor "
+        "from node+0x44 with indices -1 and selector mode zero, then calls "
+        "ApplyPoseOverlayRows at 0x14191A124. This occurs before the node's "
+        "vslot +0x50 resolves and caches its clip; the initial direct id is "
+        "not proof that no type-1 pose child is subsequently materialized.",
+    ),
+    0x141918C30: (
+        "AnimSnapshotNodeAnimation_ApplyPoseOverlayRows",
+        "Recursive node-local pose consumer: arguments are snapshot, node "
+        "index, 32-byte overlay cursor, SnapshotContext, and output flags. "
+        "Searches context+0 through FindMatchingRow at 0x141918CE7. Type 0 "
+        "writes row+4 to node+0x44 at 0x141919B28 and searches the new source "
+        "again at 0x141919C66. Type 1 creates a Blend: original-source child "
+        "recurses with the returned cursor at 0x14191922F, target Animation "
+        "child is initialized at 0x14191938F and recurses with a fresh target "
+        "cursor at 0x1419193D4. Thus type-0 replacement can precede type-1 "
+        "pose materialization, unlike ResolveAnimationId, which skips type 1. "
+        "Additional variant searches call FindMatchingRow at 0x14191986C and "
+        "0x141919AF9; 0x141919D78 is diagnostic only. Final AnimSetRemap at "
+        "0x141919CE7 writes node+0x44/+0x48/+0x4C while preserving source "
+        "+0x40, before ResolveClip caches node+0x50.",
+    ),
     # --- 2026-08-26: native animation opcode-28 offline parity ---
     0x140128020: (
         "InitializeAnimJointProgramOpcode28PermutationRows",
@@ -141,7 +222,14 @@ FUNCTIONS = {
     0x1418A27C0: (
         "AnimStateLayer_CreateOrFadeStateInstance",
         "Direct state-fade path. Either logs and loops the current matching "
-        "instance or allocates/inserts a new state instance and logs Setting state.",
+        "instance or allocates/inserts a new state instance and logs Setting "
+        "state. A fresh track is published into layer+0x4F8 at 0x1418A2B97 "
+        "and layer+0x500 is incremented at 0x1418A2B9A before snapshot creation "
+        "through 0x1418A2CBE -> 0x1418A4030 -> 0x1418A4670. The first track "
+        "uses layer+0x18 master overlays; other tracks use track+0x8. The new "
+        "instance itself is only inserted into the track at 0x1418A2CF1, "
+        "after snapshot creation: live track membership is available during "
+        "pose-node construction, but live instance membership is not yet.",
     ),
     0x1418A3820: (
         "AnimStateLayer_UpdateBlendWeights",
@@ -769,8 +857,10 @@ FUNCTIONS = {
         "AnimationDatabase_ResolveClipWithOverlays",
         "Resolves an input animation StringId through the per-instance "
         "AnimOverlayState first, then through AnimSetRemap_ResolveAnimationId, "
-        "and finally looks up the resulting clip in AnimationDatabase. This "
-        "establishes the execution order of player-mesh overlay rows.",
+        "and finally looks up the resulting clip in AnimationDatabase. Its "
+        "ordinary resolver handles type-0 and grouped type-2/3/4 remaps, not "
+        "type-1/5 pose or state children. A direct result here does not rule "
+        "out the separate node-local pose-overlay path at 0x141918C30.",
     ),
     0x1417F92A0: (
         "AnimOverlays_NotifyDcUpdated",
@@ -796,10 +886,14 @@ FUNCTIONS = {
     ),
     0x1417F9F00: (
         "AnimOverlayState_ResolveAnimationId",
-        "Executes authored anim-overlay remaps. Repeatedly finds a matching 0x28 "
-        "row, replaces the current animation id with row+0x4, handles grouped "
-        "variants and row flags, and follows chains up to 100 steps. Its cycle "
-        "diagnostic explicitly reports the input animation and overlay-set id.",
+        "Ordinary animation-id resolver: type-0 rows replace the current id "
+        "with row+0x4; types 2/3/4 choose grouped variants. Other types, "
+        "including type 1 and 5, advance the cursor without replacing the id. "
+        "Follows remap chains up to 100 steps and diagnoses cycles by input "
+        "animation and overlay-set id. It does not materialize pose children: "
+        "that is the separate 0x141918C30 consumer, while state children are "
+        "handled by AnimStateSnapshot_TransformState. Therefore an unchanged "
+        "outer id is not evidence that type-1 pose rows were absent.",
     ),
     0x1417FA3C0: (
         "AnimOverlayState_SelectVariant",
@@ -1643,7 +1737,9 @@ FUNCTIONS = {
         "Activates a preallocated inactive 0x20-byte registry descriptor of the "
         "requested object type. Prefers a matching channel id, otherwise claims "
         "a free id-zero descriptor; writes descriptor id/context and active byte "
-        "+0x14 before returning the typed object.",
+        "+0x14 before returning the typed object. The active-byte writes at "
+        "0x14172A3EA/0x14172A45C precede EnsureFloatAnimStateLayer returning "
+        "to the first CreateOrFadeStateInstance call at 0x14172A834.",
     ),
     0x14172A910: (
         "AnimParamRegistry_EnsureFloatAnimStateLayer",
@@ -1671,7 +1767,11 @@ FUNCTIONS = {
         "AnimStateLayer_Construct",
         "Constructs the type-2 AnimStateLayer, installs its RTTI-backed vtable, "
         "binds the shared authored parameter wrapper at +0x530, and allocates "
-        "AnimStateInstance tracks through the independently asserted allocator.",
+        "AnimStateInstance tracks through the independently asserted allocator. "
+        "The vtable is 0x142B0ABB0: initial slot +0x60 -> 0x14189C8B0 -> "
+        "slot +0x38 -> 0x14189C860 only resets layer state through "
+        "0x14189C760; it does not construct a pose snapshot before the "
+        "AnimControl layer-registry record is activated.",
     ),
     0x1418B3E70: (
         "AnimStateInstance_Construct",
@@ -1682,13 +1782,22 @@ FUNCTIONS = {
         "AnimStateInstance_InitializeAuthoredBuffers",
         "Initializes one preconstructed AnimStateInstance: allocates its authored "
         "parameter destination wrapper at +0x178 and sets +0x190 bit 0x20 from "
-        "the layer record's authored copy-parameters byte.",
+        "the layer record's authored copy-parameters byte. At 0x1418B3F44 "
+        "stores argument 2 as the owning AnimStateLayer pointer at instance+0x60; "
+        "the constructor caller 0x14189BFFD passes that layer in RDX. Stores "
+        "the AnimSet pointer at instance+0x140. These back-pointers are already "
+        "initialized when instance+0x90 is passed to snapshot-node creation.",
     ),
     0x1418B24F0: (
         "AnimStateSnapshot_SnapshotAnimState",
         "Source assertion identifies AnimStateSnapshot::SnapshotAnimState. Copies "
         "the 0x80-byte state snapshot to instance+0x90, resolves the state id at "
         "+0x98 into authored callbacks/flags, and selects the root snapshot node. "
+        "Its local SnapshotContext contains a4 overlays at +0, a5 overlays at "
+        "+8, a6 AnimSet/remap at +0x10, a7 parameter-wrapper pointer at +0x18, "
+        "a9 transition context at +0x20, and a8 context at +0x28. The first "
+        "SelectRootNodeIndex call at 0x1418B287B can dispatch animation callback "
+        "0x141919F60 and its node-local pose-row consumer 0x141918C30. "
         "Before the ordinary animation-id resolver, call 0x1418B28B3 invokes "
         "AnimStateSnapshot_TransformState to materialize type-1/type-5 overlay "
         "rows as snapshot blend nodes keyed by the state id at snapshot+0x8. "
@@ -1721,18 +1830,27 @@ FUNCTIONS = {
     ),
     0x1417FA6E0: (
         "AnimOverlayState_FindMatchingRow",
-        "Walks the AnimOverlayState set array for the source id and mirror bit "
-        "in a 32-byte cursor. Cursor +4/+8 are the last set/row indices and "
-        "+0x10 is the returned 0x28-byte row pointer; passing the returned "
-        "cursor back advances to the next matching row. TransformState uses "
-        "this twice at 0x1418B2AFE/0x1418B2E93 to materialize every type-1/5 "
-        "row, which is the exact boundary for the scoped legacy-Nadine Mazur "
-        "56C57AD2 to E117618A row skip.",
+        "Arguments are AnimOverlayState, output cursor, const input cursor; "
+        "returns the output pointer without modifying the input or rows. The "
+        "32-byte cursor has source id +0, last set/row indices +4/+8, returned "
+        "0x28-byte row pointer +0x10, selector mode +0x18, and returned "
+        "bool(row flags & 4) at +0x19. Matching requires cursor+0x18 == "
+        "bool(row+0x26 & 2); do not infer a universal mirror meaning. Passing "
+        "the returned cursor back advances past that row and preserves later "
+        "matches. Pose consumer 0x141918C30 initially uses mode 0 and calls "
+        "here at 0x141918CE7/0x14191986C/0x141919AF9/0x141919C66; its "
+        "0x141919D78 call is diagnostic. TransformState uses mode 1 at "
+        "0x1418B2AFE/0x1418B2E93, so those state-row callsites do not cover "
+        "flags-zero type-1 pose overlays.",
     ),
     0x1418B2EF0: (
         "AnimStateSnapshot_SelectRootNodeIndex",
         "Selects the root node index later stored at AnimStateInstance+0x138; "
-        "the index is relative to the instance SnapshotNodeHeap at +0x130.",
+        "the index is relative to the instance SnapshotNodeHeap at +0x130. "
+        "Matches the authored node type against the 0x18-byte registry at "
+        "0x14387FD20 and dispatches registry-entry+0x10 with snapshot, "
+        "descriptor, SnapshotContext, and output flags. The anim-node-animation "
+        "entry invokes 0x141919F60, including its early pose-overlay pass.",
     ),
     0x1418C2F90: (
         "SnapshotNodeHeap_ResolveNodeByIndex",
@@ -1804,7 +1922,9 @@ FUNCTIONS = {
         "zero keys; otherwise it calls AnimSetRemap and stores the receiver "
         "lookup keys. The shared default/idle Hands descriptor can therefore "
         "materialize either direct Player 7FB80CC8/0/0 or Chloe "
-        "7D11D4FD/ED25C708/C39CA709.",
+        "7D11D4FD/ED25C708/C39CA709. When context+0 is nonnull, the factory "
+        "callback subsequently invokes 0x141918C30: the direct id observed "
+        "at this initializer is not yet the final pose child graph.",
     ),
     0x141917A30: (
         "AnimSnapshotNodeLeaf_RefreshBreadth",
@@ -2161,7 +2281,12 @@ FUNCTIONS = {
         "Refreshes instance+0x90 from the selected state snapshot, evaluates the "
         "optional anim-state-dtgroup-func at +0xC0, and forwards its third "
         "AnimOverlayState argument unchanged into "
-        "AnimStateSnapshot_SnapshotAnimState for animation resolution.",
+        "AnimStateSnapshot_SnapshotAnimState for animation resolution. At "
+        "0x1418A46D0 supplies the same overlay as a4/a5, *(instance+0x140) "
+        "as a6, and *(instance+0x178) as a7; the latter is the parameter "
+        "wrapper pointer, not the address of the +0x178 field. Consequently "
+        "the animation factory's snapshot argument is instance+0x90, while "
+        "instance+0x60 already identifies its owning layer.",
     ),
     0x14172B3E0: (
         "AnimControl_FindActiveType2LayerById",
@@ -12449,6 +12574,13 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x1438401BC: (
+        "g_AnimMasterTableArtGroupRegistryEpoch",
+        "Animation art-group registry change counter, incremented by "
+        "LoginArtGroup at 0x1417C9185 and LogoutArtGroup at 0x1417C94A0. "
+        "Useful for invalidating resource lookup caches, not a residency pin "
+        "or a substitute for the native unload/scheduling lifetime barrier.",
+    ),
     0x14386FD00: (
         "g_AuthoredTransformPointerTable",
         "Shared inline qword pointer table indexed by an owner's authored key at "
