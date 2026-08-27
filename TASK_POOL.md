@@ -34,7 +34,11 @@
 - [x] Save the single IDB with 1802 function /62 data /1 type labels and
       `save_database returned True`; record source/DLL hashes and verify
       readback before committing/pushing the package and launching one copy.
-- [ ] Run the written AGD one-copy exam and obtain the user's exact pistol
+- [x] Push AGD package `22b1b68`, then start/inject exactly PID10780. Boot
+      `101610`, package READY `101628`, role B/local Nadine `101673` in the
+      gameplay log. No input by the agent; no second game. Initial slice
+      through `101675` is installation only, without an applied grip row.
+- [ ] Complete the written AGD one-copy exam and obtain the user's exact pistol
       and visible grip verdict with matching source-proven applied rows.
       Build/READY is not confirmation. No marker => admission/path failure;
       marker plus wrong grip => insufficient additive removal / later owner.

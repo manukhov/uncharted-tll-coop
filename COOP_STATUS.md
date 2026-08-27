@@ -30460,3 +30460,22 @@ Restarted MCP (PID14696) resolves all eight newly named functions at their
 original addresses. Complete xref readback for `141918C30` retains the four
 recursive calls and the exact factory call `14191A124`; the new registry-epoch
 name is present in `LoginArtGroup`. No runtime result has been recorded yet.
+
+### 2026-08-27 RUNTIME INSTALLED / VISUAL PENDING (`agd`, PID10780)
+
+After package commit `22b1b68` was pushed, the one-copy preflight found no
+existing `tll.exe`. `launch_coop.ps1 -Count 1 -SettleSeconds 14` started and
+injected exactly PID10780. The only running game uses the expected installation
+path. Initial `reports/locomotion_hook.log` rows show:
+
+- `101610`: exact boot marker `2026-08-27agd`;
+- `101628`: the complete new pistol-pose package reports `READY`;
+- `101673`: role B, local Nadine; initial startup slice ends at `101675`.
+
+This confirms launch/injection/installation only. That initial slice has no
+`NADINE-PISTOL-GRIP-POSE-SKIP` sample and no new visual verdict. The user was
+given the short draw / idle / aim / lower / holster scenario; the agent sent
+no gameplay input and did not open a second game. Next: correlate the user's
+actual pistol and grip screenshot/verdict with this PID's source-proven applied
+rows (and any scope-reject stage). Do not mark grip fixed from `READY` or
+infer an AGC back-placement verdict from this pistol test.
