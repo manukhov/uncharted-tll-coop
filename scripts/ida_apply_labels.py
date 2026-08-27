@@ -8,6 +8,91 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-08-27: native NPC pistol composition, not a Player donor ---
+    0x1405AAC40: (
+        "AiWeaponController_RefreshWeaponLayersAndHands",
+        "AiWeaponController vtable 0x1429673C8 slot +0x38; constructor "
+        "0x1405A9AE0 installs this exact RTTI-backed table. Reads controller+8 "
+        "owner and owner+0x1A0 animation tree, refreshes weapon-partial and "
+        "weapon-additive controls, then resolves hands/hands-high tokens at "
+        "controller+0x5D0/+0x5F0 through 0x141729BE0. On a changed resolved "
+        "animation id, updates the selected layer through 0x141894550 and "
+        "0x141896A40. This is NPC layer lifecycle, not a final bone-pose writer "
+        "or a proven Player pistol repair boundary.",
+    ),
+    0x14051B370: (
+        "NpcAnimOverlay_SelectWeaponUpDown",
+        "Operation identity only; declaring controller class is not resolved. "
+        "Requires controller+0x9C enabled and an owner+0x1A0 -> +0x60 overlay "
+        "sink. Uses owner virtual +0x7F8 and 0x142144F80 to build weapon-up-down "
+        "keys for no-weapon/up/down. Argument values 0/1/2 select those records; "
+        "the resolved record is committed through 0x1417F9150 at 0x14051B487. "
+        "Also forwards a separate up-state scalar. Data references include "
+        "0x14295C7D8 and 0x142D47F58/6C/7C; these are not a closed RTTI witness.",
+    ),
+    # --- 2026-08-27: distinguish pistol distal pose from native IK limits ---
+    0x14181D030: (
+        "JointSet_InitializeReferencePoseAndLimits",
+        "Allocates the wrapper at JointSet+0x28 and its +0x20 array of "
+        "0x90-byte records (count JointSet+0x12). Root reference is identity; "
+        "other records take T/Q from the current receiver: JointSet+8 owner, "
+        "owner+0x1A8 Fg, Fg+0x20 raw skeleton, relative table +0x20, "
+        "0x30-byte rows indexed by JointSet+0x18. Copies raw row+0x20 T and "
+        "row+0x10 Q into record+0x10/+0x20. Resolves the named limit profile, "
+        "allocates its per-joint limit arrays and forces RefreshAuthoredJointLimits. "
+        "WeaponIKFeatherInfo calls here for both receiver arm JointTrees.",
+    ),
+    0x14181D4A0: (
+        "JointSet_RefreshAuthoredJointLimits",
+        "Refreshes the generation-aware profile wrapper at JointSet+0x28; "
+        "when forced or debug refresh is active, matches authored 0x48-byte "
+        "profile rows to receiver semantic joint names and updates the "
+        "0x90-byte limit records. Does not replace the initialized reference "
+        "T/Q. WeaponIKFeather_Apply calls here at 0x1418F27FB; refresh is not "
+        "proof that the later Jacobian iteration enables either limit branch.",
+    ),
+    0x1418C9FF0: (
+        "JointLimits_ApplyJointLimit",
+        "Exact joint-limits.cpp JointLimits::ApplyJointLimit assertion. "
+        "Applies a limit to the supplied joint set/record. JacobianSolver_Iterate "
+        "reaches this only through nonnull instance+0x10 external limits or "
+        "instance+0x440 profile limits; the common WeaponIKFeather solve "
+        "initializes both sources to null.",
+    ),
+    0x1418CCC20: (
+        "JacobianSolver_BeginSolve",
+        "Exact jacobian-ik.cpp BeginSolve(JacobianIkInstance*,JacobianDebugInfo*) "
+        "source assertion. Prepares a solver context from the current JointSet "
+        "and solver map; reads the optional profile pointer at instance+0x440. "
+        "WeaponIKFeather_SolveWeaponFeatherIk calls at 0x1418F3141 after "
+        "zeroing both optional limit-source pointers in each fresh instance.",
+    ),
+    0x1418CC700: (
+        "JacobianSolver_Iterate",
+        "Computes and applies a Jacobian step to the context's current "
+        "JointSet/map. Optional post-step limit application checks instance+0x10 "
+        "at 0x1418CCB43, otherwise instance+0x440 at 0x1418CCBA8; both null "
+        "skips JointLimits_ApplyJointLimit. This excludes a hidden limit clamp "
+        "in the common Feather solve, not all effects of the profile on "
+        "solver-map DOF and step weights.",
+    ),
+    0x1419184E0: (
+        "AnimSnapshotNodeAnimation_HasAdditiveRawFlag",
+        "Animation vtable 0x142B14D68 slot +0xA0. Returns true exactly when "
+        "cached clip node+0x50 exists and its raw ANIM (clip+0x28) has header "
+        "+0x20 bit 0x02 set. The overlay row's type1 alone does not establish "
+        "additivity; Blend resolves its mode from this predicate on its children.",
+    ),
+    0x14191E050: (
+        "AnimSnapshotNodeBlend_ResolveChildrenAndBlendMode",
+        "Blend vtable 0x142B15218 slot +0x50. Resolves both child indices "
+        "+0x40/+0x44 via child vslot +0x50, then queries each +0xA0 predicate. "
+        "Writes mode at node+0x4C: 1 if right is not additive, 2 if only right "
+        "is additive, 6 if both are additive; node+0x48 flag 0x10 forces mode1. "
+        "Node+0x48 is flags, not the mode. GenerateAnimCommands 0x14191E5F0 "
+        "emits node+0x4C in command7. Type1 pose rows can therefore produce "
+        "normal masked or additive blends depending on the resolved children.",
+    ),
     0x1418A4A50: (
         "AnimStateInstance_ResetSnapshotRoot",
         "Resolves instance+0x138 through its heap at +0x130 (or uses the null "
@@ -1652,7 +1737,12 @@ FUNCTIONS = {
         "WeaponIKFeather_SolveWeaponFeatherIk",
         "Exact armik.cpp WeaponIKFeather::SolveWeaponFeatherIk assertion. "
         "Consumes the paired left/right JointSets and solver maps; it is not "
-        "safe to suppress or substitute only one hand independently.",
+        "safe to suppress or substitute only one hand independently. Fresh "
+        "Jacobian instances explicitly clear external limits +0x10 at "
+        "0x1418F30F6 and profile limits +0x440 at 0x1418F3112 before BeginSolve "
+        "0x1418F3141 and Iterate 0x1418F32FF. Therefore neither optional "
+        "post-iteration JointLimits_ApplyJointLimit branch executes here; "
+        "the authored profile can still influence solver-map DOF/step weights.",
     ),
     # --- 2026-07-13: native pickup gesture controller ---
     0x140F49300: (

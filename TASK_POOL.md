@@ -48,15 +48,26 @@
       targets pass. P99 hip, AGC back profiles, stock IK/clocks and parked
       Mazur work are unchanged. PID10780 has ended; do not relaunch a rollback
       as though it were a new grip fix.
+- [x] Audit the enabled P99 writers and native IK reference/limit paths. No
+      reachable Mazur-to-P99 leak was found in the checked branches; holster
+      adjustments do not admit rightHand. Native look rebuild replaces the
+      Fg before rebuilding Feather; its common Jacobian solve disables both
+      optional post-step limit branches. This does not exclude map DOF/weights
+      or prove every possible mod lifecycle correct. Record the exact native
+      NPC coupled arm/hand block and distinguish type1 from additive raw flags.
 - [ ] Obtain a close grip screenshot to distinguish weapon-to-palm placement,
-      finger pose and support-arm position. In parallel, audit enabled P99
-      writers and native arm/hand composition without guessing offsets. The
+      finger pose and support-arm position. Under the measured P99 controls,
+      the rightPalm28-to-rightProp30 relative frame is invariant under Feather's
+      proximal writes; trace that distal frame/fingers if the pistol itself
+      sits wrong, or the left relative target if the support arm is wrong. The
       admitted AGD failure excludes additive removal as sufficient, not every
       role of those clips. Repeating the full vill-Nadine player-mesh swap is
       also barred by the earlier admitted `zh` failure. Do not repeat late
       copies, Feather suppression or terminal B8 pointer replacement. A new
       mutation still needs three independent evidence types and a distinct
-      written prediction; no gameplay input by the agent.
+      written prediction; no gameplay input by the agent. NPC CF9A's outer
+      type5 callback semantics and resource lifetime are still incomplete:
+      its coupled pair is not yet a safe Player donor/switch.
 
 ## PARKED: remaining Nadine weapon back-placement validation (2026-08-27)
 

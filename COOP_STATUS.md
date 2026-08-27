@@ -30529,3 +30529,133 @@ correlate the exact visible failure, and earn a distinct static hypothesis.
 Do not reopen the already admitted `zh` full player-mesh swap, `abm` blanket
 Feather suppression, `abw/aby` late pose copies or `aci` P99 weapon-local
 offset as sufficient fixes. All remain rejected at their measured boundaries.
+
+### 2026-08-27 STATIC after AGD: separate distal grip, support-arm target and native IK limits
+
+**Enabled-mod audit.** A bounded source review found no reachable older Mazur
+arm/hand mutation admitting the local P99. Pair/Draw-endpoint/Feather/late-IK/
+transient/roundtrip experiments and their installers are disabled. The active
+Mazur frame/ticket paths require art `33E29A1B`; the other-weapon frame path
+explicitly excludes P99 `8075397D`. P99 hip selection changes only a generic
+holster request; the axis correction requires the selected `pistolHolster`
+record on `r_leg_holster`, not `rightHand`. Cold rebind requires inactive
+state/current slot; deferred refresh revalidates state, Fg, owner/weapon runtime
+ids and endpoint, clearing a pending item on scope drift. P99/Mazur have separate
+pending entries. Attach-table repairs append holster records without rewriting
+the existing rightHand record. The checked common pose relays mutate owner1;
+local owner0's LegIK path is capture-only. This is a bounded negative audit,
+not a proof of the correct visual grip or of every possible mod lifecycle.
+
+**Native receiver reference, not a hidden Chloe clamp.**
+`JointSet_InitializeReferencePoseAndLimits 14181D030` allocates JointSet `+28`
+wrapper and its `+20` array of `0x90`-byte records. Non-root reference T/Q come
+from the current receiver: JointSet `+8` owner -> `+1A8` Fg -> `+20` raw
+skeleton, raw `+20` relative table, `0x30`-byte rows indexed by JointSet `+18`.
+The root reference is identity. `JointSet_RefreshAuthoredJointLimits
+14181D4A0` refreshes named constraints, not these reference T/Q values.
+
+Three independent evidence kinds close the native lifecycle alternative:
+exact memory writes above; the Player factory vslot `+6F0 -> 1410DE740`
+(qword `142A4C6D8`); and both normal initialization and ChangeLook graphs.
+`Player_ChangeLookId 1410FE840` releases old Fg at `1410FEA2D/FEA39`, clears
+`+1A8` at `FEA3E`, initializes/publishes new Fg at `FEB03/FEB09`, and only
+then constructs/publishes Feather at `1410FF16D/FF173`. Initial creation has
+the independent `1410DCF6F -> 1410DD0DB` ordering. Fg initialization writes
+the new raw skeleton at `1418C4875`. Thus the normal look-rebuild path does
+not preserve old Chloe joint indices/reference; this is not a blanket claim
+about arbitrary mod-owned mutations outside that path.
+
+The shared `*player-ik-arm*` profile is also not evidence of a Chloe-specific
+post-step clamp. `WeaponIKFeather_SolveWeaponFeatherIk 1418F2E50` constructs
+fresh Jacobian instances and explicitly zeros external limits `+10` at
+`1418F30F6` and profile limits `+440` at `1418F3112`, before
+`JacobianSolver_BeginSolve 1418CCC20` (`1418F3141`).
+`JacobianSolver_Iterate 1418CC700` (`1418F32FF`) can reach
+`JointLimits_ApplyJointLimit 1418C9FF0` only through the nonnull `+10` branch
+at `1418CCB43` or `+440` branch at `1418CCBA8`. Both are disabled here.
+Source assertions identify BeginSolve and JointLimits::ApplyJointLimit;
+callers and exact field writes independently agree. **Hhidden-post-iteration
+Chloe-limit-clamp is STATIC REJECTED at this common Feather path.** The
+profile can still define solver-map DOF/step weights; it is not unused.
+
+**The useful next invariant.** In the measured P99 `acg/aci` conditions
+(selector1, animScale1, identity weapon-local binding), Feather changes C39
+`19..26` while local palms/props `27..30` remain unchanged. All of the right
+palm28-to-rightProp30 relative transform is downstream of those common ancestor
+changes, so that relative frame is invariant under this proximal IK work.
+P99 follows rightProp30. A pistol-to-right-palm error therefore points to the
+distal authored/retargeted pose or fingers/skin at this boundary, not a guessed
+shoulder/elbow correction. A support-arm error instead retains the terminal
+left goal `Compose(rightProp, Relative(leftProp,leftWrist))` and its solve as
+competitors. These are conditional ownership statements, not a numeric repair
+or a proof that no later writer exists. The user's current text alone does
+not distinguish the symptoms. Compare semantic relative frames through the
+full composition, not isolated local quaternions: palm/finger retarget mode1
+uses reference composition (`141AE27FE`), while prop mode3 copies source S/T/Q
+(`141AE28F3..28FC`). Both are authored rules, not inherently invalid modes.
+
+**Native NPC alternative: coupled composition exists, Player boundary remains unproven.**
+In `dc1.psarc:anim-overlays-nadine.bin`, object `CF9A713E` at record `1410`,
+owner `C7E2539B`, category `D862A057`, selector `99C2B773`, has table `E680`
+with 145 rows. The idle chain is:
+
+- row4 `E720`: `791687E5 weapon-grip -> 4CAA7420`, type0;
+- row7 `E798`: `41C84248 -> 0AB53DD8`, type0;
+- source `0AB53DD8`: row9 `E7E8` type5/tree `146D0`, row10 `E810`
+  type5/tree `14830` (both weight callback `14860`), row11 `E838` type6,
+  row12 `E860 -> 791687E5` type1, row13 `E888 -> 036F20E5` type1.
+
+All these row flags are zero. The second source `BFD2C610` has the corresponding
+rows15..19 at `E8D8/E900/E928/E950/E978`. The recursive original-branch
+processing in `141918C30` gives inner composition
+`Blend(Blend(original, arms), hand)`, not hand then arms. Type6 introduces
+InstanceZero on the left; the two type5 wrappers remain part of the result.
+For lowered weapons, object `4A407DE0@A98`, weapon-up-down/down, row2 `2460`
+maps `036F20E5 -> 5E67B1FA`. `NpcAnimOverlay_SelectWeaponUpDown 14051B370`
+commits this category through `1417F9150` at `14051B487`; its operation is
+identified, but its declaring controller class/RTTI remains unresolved. These
+are NPC categories, not Player player-mesh aliases.
+
+All three NPC clips are in `actor77.psarc:anim-elena-combat-dlc.pak`, source
+database/raw skeleton `46622D19/8592680F`, one sample. `4CAA7420@621480`
+owns group0 right palm28/prop30 and group1's 19 right fingers, but no shoulder,
+elbow or wrist. `036F20E5@5FFD00` and `5E67B1FA@5FEFC0` own group0 both
+arms `19..30` and all 38 group1 fingers. The inner hand layer overlaps and
+refines the arm layer; their masks are not disjoint. The proven Elena->Nadine
+native retarget does not permit a raw ordinal pose copy.
+
+**Type1 is not synonymous with additive.** Animation vtable `142B14D68`
+`+A0 -> 1419184E0` tests cached clip `+28` raw ANIM header `+20 & 2`.
+Blend vtable `142B15218` `+50 -> 14191E050` resolves both children and writes
+node `+4C` mode1 for nonadditive right, mode2 for additive right/nonadditive
+left, mode6 for both additive; node `+48 & 10` forces mode1. `+48` is flags,
+not the mode; `14191E5F0` emits `+4C` in command7. The three NPC clips have
+raw header `0000`, so their type1 hand/arm layers are normal masked blends.
+AGD terminology is independently verified rather than inferred from row type:
+in `actor77.psarc:anim-player-movement.pak`, B8/1CB/6823 raw offsets
+`1F61A60/1D9E100/1D9ECC0` all have `+20=0002`, source `4B0F5DE3`.
+The preserved D350/9A/522E at `1F4AF40/1F3D150/1D56A00` all have `0000`,
+source `FD6DBE03`. All six are single-sample clips.
+
+**Unclosed gaps, no new runtime authorization.** NPC type5 nodes `146D0/14830`
+have type `E9BE9118` and parameters `7DEF3764/574A3F7D`; callback `14860`
+uses code `14E50`, pool `14E90`, pool/call-ID `4D8DA2F9`. Its callee identity,
+the wrappers' full semantics and dependence on NPC context are not yet resolved.
+The native hands lifecycle uses AiWeaponController vtable `1429673C8`
+`+38 -> RefreshWeaponLayersAndHands 1405AAC40`, controller token `+5D0`,
+`141729BE0 -> 141894550`, and the `anim-npc` tree built by `141DE36E0`.
+That is not a demonstrated Player selector. Snapshot/job resource residency
+is also unproven; ResolveClip and a login/logout epoch do not load or pin a
+donor. No NPC clip/pair, mode, IK scalar, transform or game state was changed.
+
+**Handoff.** The single `ida/tll.i64` is saved with the nine new function names
+above and the expanded common-Feather comment: `1811 functions, 62 data names,
+1 function types`, `save_database returned True`, in
+`.codex/ida_apply_age_pistol_static_final.log`. Restarted read-only MCP resolves
+all nine names at their original addresses; xrefs retain the exact Feather
+refresh call `1418F27FB`, Animation additive slot `142B14E08`, and AI hands
+slot `142967400`. Runtime source/DLL remain the frozen, tested `age` rollback
+above. No new game exam has been prepared or launched. Next required input is
+a close pistol-grip image; subsequent static work must follow the right distal
+frame/fingers or the left support target as appropriate, while NPC context and
+resource-lifetime gaps remain explicit.
