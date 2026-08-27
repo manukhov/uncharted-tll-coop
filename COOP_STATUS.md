@@ -30479,3 +30479,53 @@ no gameplay input and did not open a second game. Next: correlate the user's
 actual pistol and grip screenshot/verdict with this PID's source-proven applied
 rows (and any scope-reject stage). Do not mark grip fixed from `READY` or
 infer an AGC back-placement verdict from this pistol test.
+
+### 2026-08-27 RUNTIME REJECTED for visual sufficiency (`agd`, PID10780); safe rollback `age`
+
+The user reports **"Все еще держит не так как надо"**. The completed PID10780
+slice identifies the tested art as P99 `8075397D` and proves that the actual
+pose-row mutation, not merely its installer, executed:
+
+- `101697/101719/101724/101726/101728`: five
+  `NADINE-PISTOL-GRIP-POSE-SKIP kind=pistol-right-hand` rows, exact
+  `D350A452 -> B8FC6B25`, set `4C9FB65C`, selector `3F334972`, caller
+  `1918CEC`, layer `E2B990B9`, current slot0, WeaponOut/state2.
+- `101701/101706/101722/101725/101727`: five `pistol-aim-hands` skips,
+  sources `2E7D04E7/9DCD31BC -> 68238D0B`, the same exact set/selector,
+  caller `1919C6B`, layer `7339D08C`, current slot0, aiming/state4.
+- Every sample has owner0/roleB, master1, playerId `4B2`, weaponId `4B6`,
+  `rowsSkipped=1`, `stockCalls=2`, `type0Preserved=1`, `clocksStock=1`,
+  `ikStock=1`. Fresh snapshots/states are represented, not just a pre-Draw
+  callback. This PID has no scope-reject or B6 applied row.
+
+The written negative prediction is met: **removing these source-proven Chloe
+type-1 additives is insufficient to repair the P99 grip**. This is not an
+admission failure and must not trigger guard widening or another unchanged
+AGD test. The result does not show that the additives have no effect, identify
+the first bad arm/finger writer, or establish a B6 verdict. A close screenshot
+has been requested to separate weapon-to-palm, finger and support-arm defects;
+the earlier Type95 screenshot shows a back attachment, not this pistol grip.
+
+Build `2026-08-27age` sets `kEnableLegacyNadinePistolPoseGripRepair=false`,
+so neither AGD detour is installed. It also leaves the old ordinary-resolver
+repair disabled. The source-policy tests and correct IDB names for the native
+pose consumers are retained as evidence, not as a successful visual repair.
+No native function identity was invalidated or newly claimed, so this rollback
+requires no new IDB rename. P99 hip/cold/axis placement, AGC Type95/M30 back
+profiles, stock IK/animation clocks and parked Mazur grip/Draw/Put/strap work
+are unchanged. The other-weapon visual verdict remains deferred.
+
+Release build and all three CTest targets pass. Frozen rollback:
+
+- `scanner/src/coop_runtime.cpp` SHA256
+  `130FC4F1BEF16E43F1F3CA7BCEC931E79185B3C768945A7CB60DBC07BCD44EA5`.
+- `scanner/build/tll_coop_runtime.dll`: 808960 bytes, SHA256
+  `47D32E91701267B6AD959258B84B48A555AB02F6D6223DE7E2D8E320E27B5FD7`.
+
+The read-only process check found no running `tll.exe`; PID10780 had already
+ended. No restart, injection or game input was performed for this rollback.
+Next: audit the still-enabled P99 writers and native arm/hand composition,
+correlate the exact visible failure, and earn a distinct static hypothesis.
+Do not reopen the already admitted `zh` full player-mesh swap, `abm` blanket
+Feather suppression, `abw/aby` late pose copies or `aci` P99 weapon-local
+offset as sufficient fixes. All remain rejected at their measured boundaries.

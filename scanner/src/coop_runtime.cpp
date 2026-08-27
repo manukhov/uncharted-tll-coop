@@ -2641,10 +2641,11 @@ constexpr float kLegacyNadineP99HipBackMeters = 0.02F;
 // resolver mutation and its hot-path diagnostics out while the local-only
 // HandFix/IK presentation owner is traced downstream.
 constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
-// Pose-node type-1 overlays are materialized before the ordinary timing-id
-// resolver. Keep the rejected abk resolver mutation off: this separate repair
-// skips only source-proven pistol grip additives while the node is constructed.
-constexpr bool kEnableLegacyNadinePistolPoseGripRepair = true;
+// Build agd reached the source-proven P99 type-1 grip rows in both WeaponOut
+// and aim, but the user's grip remained wrong. Removing the Chloe additives
+// is therefore insufficient, not an admission failure. Keep this experiment
+// and the rejected abk resolver mutation off; do not widen either boundary.
+constexpr bool kEnableLegacyNadinePistolPoseGripRepair = false;
 static_assert(!kEnableLegacyNadinePistolPoseGripRepair ||
               !kEnableLegacyNadineActiveWeaponGripOverlayRepair);
 // Builds ack/acl installed the exact TransformState row-skip boundary, but two
@@ -77913,8 +77914,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-27agd "
-        "(source-proven P99/B6 pose grip; AGC back profiles retained; holsters/IK/animation clocks unchanged)");
+        "TLL co-op runtime init 2026-08-27age "
+        "(failed AGD pistol pose filter disabled; AGC back profiles retained; holsters/IK/animation clocks unchanged)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "

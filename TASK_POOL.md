@@ -38,12 +38,25 @@
       `101610`, package READY `101628`, role B/local Nadine `101673` in the
       gameplay log. No input by the agent; no second game. Initial slice
       through `101675` is installation only, without an applied grip row.
-- [ ] Complete the written AGD one-copy exam and obtain the user's exact pistol
-      and visible grip verdict with matching source-proven applied rows.
-      Build/READY is not confirmation. No marker => admission/path failure;
-      marker plus wrong grip => insufficient additive removal / later owner.
-      Do not repeat late copies, Feather suppression, numeric guessed offsets
-      or terminal B8 pointer replacement. No gameplay input by the agent.
+- [x] Close AGD's P99 exam as REJECTED for visual sufficiency. The user says
+      "Все еще держит не так как надо". PID10780 has five exact D350->B8 skips
+      in WeaponOut/state2 and five aim-family->6823 skips in state4, all P99
+      `8075397D`, owner0/roleB/current0. This is not an admission failure.
+      B6 has no applied sample in this PID and remains visually untested.
+- [x] Disable the failed pose-row filter in safe build `age`; retain its
+      source-proven static findings and pure tests. Release and all three CTest
+      targets pass. P99 hip, AGC back profiles, stock IK/clocks and parked
+      Mazur work are unchanged. PID10780 has ended; do not relaunch a rollback
+      as though it were a new grip fix.
+- [ ] Obtain a close grip screenshot to distinguish weapon-to-palm placement,
+      finger pose and support-arm position. In parallel, audit enabled P99
+      writers and native arm/hand composition without guessing offsets. The
+      admitted AGD failure excludes additive removal as sufficient, not every
+      role of those clips. Repeating the full vill-Nadine player-mesh swap is
+      also barred by the earlier admitted `zh` failure. Do not repeat late
+      copies, Feather suppression or terminal B8 pointer replacement. A new
+      mutation still needs three independent evidence types and a distinct
+      written prediction; no gameplay input by the agent.
 
 ## PARKED: remaining Nadine weapon back-placement validation (2026-08-27)
 
