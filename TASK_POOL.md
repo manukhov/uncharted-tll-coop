@@ -53,6 +53,12 @@
       IDB and freeze source/header/DLL hashes in `COOP_STATUS.md`. The final
       DLL is 808960 bytes, SHA256
       `CA3CC112FC97D493950F11029C7E04065799948E2AD4484D3758AAD54F790882`.
+- [x] Start exactly one fresh AGC exam after `dc88630` was committed/pushed.
+      PID `18892` has boot tag at log `101321`, frame hook at `101337`,
+      Type95/M30 profile marker at `101338`, and role B/local Nadine at
+      `101383`. No OTHER-WEAPON row was present in the initial bounded slice
+      through `101385`. This is installation only; user holster checks and
+      matching per-art applied rows are the next required evidence.
 - [ ] Verify the holstered positions of the other eligible weapons on local
       legacy Nadine against the written per-art prediction, without regressing
       the user-confirmed Mazur back placement or confirmed P99 behavior.
@@ -71,8 +77,8 @@
       Fresh `agb` PID `20364` was injected as role B after commit/push; its
       Type 95 failure is now recorded and that process has ended. The new
       `agc` quota uses exact call/vslot/data/mesh evidence, not the old startup
-      markers. Launch only its fresh, tested, committed and pushed package;
-      user input and per-art visual validation remain outstanding.
+      markers. Its fresh, tested, committed/pushed package is now in PID
+      `18892`; user input and per-art visual validation remain outstanding.
 - [x] Park animation/steady-grip work, AGA admission repair and provenance
       exams, Draw-speed investigation and the strap at the user's request.
       They are not prerequisites for this placement task. AGA PID `15572` is

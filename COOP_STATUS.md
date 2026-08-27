@@ -30242,3 +30242,27 @@ No AGC game had been started during these build/static checks. After the
 commit and immediate push, the next action is the one-copy exam above, not
 another analysis launch. Installation alone will remain distinct from the
 user's pending per-model visual verdict.
+
+#### AGC one-copy exam prepared: PID 18892, visual result pending
+
+After implementation commit `dc88630` and its successful immediate push to
+`origin/master`, preflight found zero `tll.exe` processes, the expected game
+version `1.4.21058.0`, and exact frozen source/DLL hashes above. The existing
+log ended at line `101320` / byte offset `20281668`.
+
+`scripts/launch_coop.ps1 -Count 1 -SettleSeconds 14` launched only PID `18892`
+at `2026-08-27 21:43:06 +03:00`; the injector reported the runtime DLL loaded
+and exited successfully. The fresh bounded log slice `101321..101385` has:
+
+- `101321`: exact `2026-08-27agc` boot tag, PID 18892;
+- `101337`: other-weapon authored back-frame hook installed at `141ED19BB`;
+- `101338`: Type95/M30 candidates and their exact art/model/depth marker;
+- `101383`: `co-op role = B (player 2, local Nadine)`.
+
+The process check found exactly that one game copy. This slice has no new
+OTHER-WEAPON correction rows yet and is **installation evidence only**. It
+does not confirm Type 95, M30, secondary continuity or the rest of the catalog.
+The user was given the rear/side holster scenario above; no menu/save/weapon,
+camera or other gameplay input was sent by the agent. Await that per-art
+visual verdict and its matching `applied` row before accepting either numeric
+profile. Mazur/P99 remain controls; the animation task stays parked.
