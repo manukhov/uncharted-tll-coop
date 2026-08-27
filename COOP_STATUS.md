@@ -1,5 +1,14 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
+## Current user priority (2026-08-27)
+
+Correct the holstered positions of all other weapons on local legacy Nadine's
+back so they do not sink into her body. Preserve the user-confirmed Mazur back
+placement and the confirmed P99 behavior. Animation/grip work, the AGA
+provenance census, Draw-speed investigation and the strap are **PARKED** by the
+user; do not resume them as prerequisites for this placement task. The detailed
+AGA admission result and priority handoff are recorded at the end of this file.
+
 ## 2026-07-15 production hot-path cleanup — build **cp**
 
 **STATIC / runtime pending:** Composer's melee work ended at the confirmed stable
@@ -29494,3 +29503,40 @@ remain still until AGA emits EXIT; no second Draw/Put is part of the scenario.
 This entry makes no runtime owner claim yet. Missing READY, any incomplete or
 inconclusive EXIT, or failure to reproduce the visual snap invalidates the
 exam; a complete adjacent trace classifies only the earliest measured owner.
+
+### 2026-08-27 RUNTIME ADMISSION FAILURE (`aga`, PID 15572): no complete provenance sample
+
+The PID `15572` run produced eight successful action seeds in total: four Draw
+and four Put; the first Put was seed `2`. The AGA census emitted `32`
+`NADINE-MAZUR-AGA-INCOMPLETE` rows: `3` parser failures and `29`
+`snapshot-context` failures. It emitted zero SOURCE, RETARGET, BLEND or EXIT
+rows. Thus the required adjacent five-site chain and terminal window result
+are absent. Classify this run as **ADMISSION FAILURE**, not as a negative result
+for any measured pose owner and not as a successful repair.
+
+The user separately reports that Put looks normal while Draw is accelerated.
+Keep that visual observation distinct from the unusable AGA census. Neither
+the visual report nor the incomplete rows identify a source-content, retarget,
+cmd7/lane-ancestry, Player postblend or clock cause. The run also contains more
+actions than the written one-Put scenario; this is a scenario deviation, not
+evidence that the extra actions caused the admission failure. No causal claim
+is earned, and no animation or timing mutation follows from this result.
+
+### 2026-08-27 USER PRIORITY: remaining weapon back placement; animations parked
+
+The user explicitly asks to defer the animation work and repair the positions
+of all other weapons so they no longer sink into Nadine's back. This is the
+active appearance-1 task. Preserve the confirmed Mazur cold/holstered
+attachment and P99 behavior; do not replace those accepted per-weapon paths
+with an unvalidated universal offset.
+
+AGA admission repair, further Draw/Put provenance exams, Draw-speed changes,
+steady grip and strap work are **PARKED** until explicitly reopened. The
+`kEnableLegacyNadineMazurPerformBlendCensus` flag is now `false`, which also
+disables its otherwise-unneeded successful-action seed stream; no animation
+or timing field is changed. The next
+step is a static inventory of the remaining weapon arts and their native
+holster locator/transform routes, followed by a narrowly scoped placement
+change that leaves Mazur and P99 untouched. Runtime remains limited to one
+copy of `tll.exe`, only after the normal static evidence quota and written
+prediction; all gameplay input remains with the user.

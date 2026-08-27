@@ -9,7 +9,22 @@
 - синхронизация всего состояния и всех действий игроков;
 - синхронизация противников только после игроков.
 
-## P0 CURRENT: locate the final rendered Nadine arm-pose owner (2026-08-11)
+## P0 CURRENT: correct remaining Nadine weapon back placement (2026-08-27)
+
+- [ ] Correct the holstered positions of all other weapons on local legacy
+      Nadine so they do not sink into her back. Start with the remaining weapon
+      arts and their native holster locator/transform routes; preserve the
+      user-confirmed Mazur back placement and confirmed P99 behavior.
+- [ ] Earn any placement mutation with the normal static evidence quota,
+      competing explanations and a written visual prediction. Keep the
+      appearance-1 limit of one game copy; the user performs all game input.
+- [x] Park animation/steady-grip work, AGA admission repair and provenance
+      exams, Draw-speed investigation and the strap at the user's request.
+      They are not prerequisites for this placement task. AGA PID `15572` is
+      an admission failure, not a causal animation result; see the terminal
+      AGA entry below and `COOP_STATUS.md`.
+
+## PARKED: locate the final rendered Nadine arm-pose owner (2026-08-11; parked 2026-08-27)
 
 - [x] Reject the local-only presentation candidates that do not own the final
       drawn pose: holster/back transforms, the flashlight/debug kill switch,
@@ -6224,11 +6239,26 @@ Keep the postblend preservation boundary; replace only its steady content.
       exactly one Put and remains still through EXIT; the agent sends no game
       input. Missing/inconclusive evidence remains admission failure.
 
-  Strap is next after transition classification.  Do not re-enable the rejected
+      RUNTIME ADMISSION FAILURE (`aga`, PID 15572; audited 2026-08-27): eight
+      successful seeds cover four Draw and four Put actions; the first Put is
+      seed `2`. All `32` INCOMPLETE rows are admission failures (`3` parser,
+      `29` snapshot-context); SOURCE, RETARGET, BLEND and EXIT each have zero
+      rows. There is no complete adjacent five-site provenance result. The
+      user reports Put normal and Draw accelerated, but this observation does
+      not select a causal owner. The extra actions deviate from the planned
+      single-Put scenario without proving the cause of the missing trace.
+
+      USER PRIORITY (2026-08-27): park AGA admission repair, further animation
+      exams, Draw-speed changes and steady grip. Active work is correcting all
+      remaining holstered weapon positions on Nadine's back while preserving
+      the confirmed Mazur and P99 paths. Do not repair AGA or rerun it as part
+      of that placement task.
+
+  Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such
-      authored subtree.  The next admissible work is a Chloe guide-locator
-      capture/provider audit, not visibility forcing.
+      authored subtree. If explicitly reopened, its next admissible work is a
+      Chloe guide-locator capture/provider audit, not visibility forcing.
 
 ## Rule
 

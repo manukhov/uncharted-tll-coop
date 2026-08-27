@@ -2750,12 +2750,11 @@ constexpr bool kEnableLegacyNadineMazurStockTransitionCensus = false;
 // the normal DAG or Player Weapon/Holster IK before any later Async/palette
 // experiment is considered.
 constexpr bool kEnableLegacyNadineMazurStockPosePipelineCensus = false;
-// Build aga is the bounded read-only discriminator after AFZ was rejected.
-// It correlates the successful native WeaponPartial action seed with the exact
-// two-track command provenance and captures C39 JointParams/ValidBits around
-// the internal snapshot blend, the outer track fold and the terminal
-// WeaponPartial fold. It never edits a command, lane, ValidBits word or pose.
-constexpr bool kEnableLegacyNadineMazurPerformBlendCensus = true;
+// PARKED by the user on 2026-08-27 with the Draw/Put investigation. The AGA
+// PID15572 census failed admission and did not classify a pose owner. Keep its
+// read-only action seed/provenance machinery disabled during other-weapon
+// back-placement work; do not repair or rerun it as a placement prerequisite.
+constexpr bool kEnableLegacyNadineMazurPerformBlendCensus = false;
 // REJECTED (aen): requiring the remapped Chloe Hands root before the nested
 // retarget capture made the promised source discriminator unreachable.
 constexpr bool kEnableLegacyNadineVirtualChloeGripSourceCensus = false;
