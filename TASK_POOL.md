@@ -9,7 +9,28 @@
 - синхронизация всего состояния и всех действий игроков;
 - синхронизация противников только после игроков.
 
-## P0 CURRENT: correct remaining Nadine weapon back placement (2026-08-27)
+## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
+
+- [x] Follow the user's new request, "Почини хват пистолета". Leave the
+      AGC back-placement package unchanged and do not infer a visual verdict
+      from the priority change. Pistol grip is reopened; Mazur grip, Draw/Put
+      timing and strap experiments remain parked.
+- [ ] Resolve the exact affected pistol/art and its authored pose/target
+      owner. The last AGC log includes P99 `8075397D` and `B6B0DD17` swaps;
+      the historical `acg/aci` proof is P99-only, not a blanket statement about
+      every pistol. Preserve the accepted P99 hip/cold/axis placement.
+- [ ] Trace the upstream arm/hand producer and close three independent static
+      evidence kinds before a mutation or fresh exam. P99 `aci` rejects an
+      owner-specific ProcessWeapon local offset at `141ED19BB`; `acg` leaves
+      upstream composed pose/target ownership open. Do not repeat rejected
+      `abw/aby` late row/palette copies, `abm` Feather suppression or the
+      provenance-losing final-clip replacement.
+- [ ] Implement and verify the narrow pistol-only correction, keep all back
+      attachments and animation clocks unchanged, label/save the single IDB,
+      commit and immediately push. A fresh one-copy exam needs an explicit
+      prediction and only the user may perform gameplay input.
+
+## PARKED: remaining Nadine weapon back-placement validation (2026-08-27)
 
 - [x] Complete the read-only remaining-weapon registry and authored-binding
       audit. Ordinary `weapon-art.bin` has 38 `targSpineProp AD047A` arts

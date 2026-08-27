@@ -30266,3 +30266,21 @@ The user was given the rear/side holster scenario above; no menu/save/weapon,
 camera or other gameplay input was sent by the agent. Await that per-art
 visual verdict and its matching `applied` row before accepting either numeric
 profile. Mazur/P99 remain controls; the animation task stays parked.
+
+### 2026-08-27 CURRENT PRIORITY: local Nadine pistol grip; AGC visual validation deferred
+
+The user now requests "Почини хват пистолета". This explicitly reopens the
+pistol grip/arm-pose task only. Leave the AGC Type95/M30 back profiles and
+accepted P99 holster placement unchanged; Mazur grip, Draw/Put timing and the
+strap remain parked. The switch is not a successful or failed visual verdict
+for AGC, and no such result is promoted from its installation markers.
+
+Recover the exact pistol and upstream authored target/pose owner first.
+The last PID18892 gameplay log includes P99 `8075397D` and `B6B0DD17` swaps;
+the user has not supplied a new grip screenshot or an explicit art/name.
+The previous `acg/aci` diagnostics establish P99's shared Feather controls and
+identity ProcessWeapon correction, not all pistol models. Their remaining
+frontier is the semantic arm/hand producer before the final pose, with the
+documented rejected copy/suppression/clip-substitution boundaries still closed.
+No code change, restart or input was made to address grip while recording
+this priority. Static owner tracing and per-art identity are the next steps.
