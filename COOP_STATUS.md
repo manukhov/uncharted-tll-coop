@@ -29912,3 +29912,45 @@ The process remains responsive. This confirms package installation only;
 per-art placement and Mazur/P99 regression checks await the user's gameplay
 and visual report. No gameplay input was sent, no second copy was launched,
 and no visual finding is promoted to CONFIRMED by this handoff.
+
+### 2026-08-27 RUNTIME REJECTED (`agb`, PID 20364): authored frame alone does not clear Type 95 from Nadine's back
+
+The user supplied a rear-view screenshot of Type 95 sinking almost entirely
+inside Nadine's torso and reported the same problem with other weapons.
+The exact pictured weapon is the QBZ-95 art `0x27617D0D`; no other specific
+model is visually identified by that report. This rejects **visual sufficiency
+of the marker-only correction for Type 95**, not admission of the new path.
+
+PID `20364` loaded the frozen `2026-08-27agb` package (`locomotion_hook.log`
+line `101102`), installed the `141ED19BB` correction (`101118`) and selected
+role B/local Nadine (`101163`). Type 95 reaches the full steady correction at
+line `101302`: owner/weapon generations `1249/2088`, inventory/current/state
+`1/-1/0`, selected `39:16/AD047A`, actual authored ID `AD047A`, donor `30:18`,
+`admission=6 reason=2 weight=1 stock=1 primaryPreserved=1 clearance=stock`.
+The stock return transform is present. An absent hook, failed art lookup,
+wrong selected-record admission or incomplete Put weight therefore does not
+explain this specific visual failure.
+
+The bounded PID audit contains 34 deduplicated successful OTHER-WEAPON rows:
+11 for QBZ-95 (10 active Put buckets plus one full row), and 23 for art
+`3019CBEE` (18 active Put buckets plus five full rows at `101257`, `101259`,
+`101264`, `101267`, `101320`). All 34 have `admission=6`, `stock=1`, unchanged
+primary binding and `clearance=stock`; there are no BACK-SKIP, active Draw or
+terminal rows. These counts are diagnostic buckets, not callback or completed
+cycle counts. The `3019CBEE` rows establish admission, not a separately
+identified visual success or failure. No Draw/terminal claim is earned.
+
+The same PID has 16 full Mazur rows with `correctionWeight=1 depth=1:0.05`
+and a successful exact-binding refresh (`101181`). This is the accepted
+control, not permission to copy a five-centimetre constant to forty models.
+The other-weapon path intentionally supplies only the authored parent frame;
+its post-stock finish contains no added body-back clearance.
+
+Next: resolve the body-facing support of Type 95 and the other binding/model
+families, and prove any proposed numeric clearance against their actual
+composed geometry. Compare a post-`141ED0A70` translation-only correction
+with the competing secondary/depenetration and downstream jiggle explanations.
+Do not reopen the parked animation/strap task or alter Mazur/P99. No new game
+was launched, no reinjection occurred and no gameplay input was sent while
+recording this result. A fresh exam requires its own static quota and written
+per-art prediction; the old package is not now CONFIRMED by its markers.
