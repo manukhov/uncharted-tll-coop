@@ -57,13 +57,20 @@ FUNCTIONS = {
         "LongGunJiggle_UpdateFromAttachmentTransform",
         "LongGunJiggle vslot +0x10. Composes the selected attachment transform "
         "into the jiggle reference and advances displacement/angular state only "
-        "while the object is enabled.",
+        "while the object is enabled. At 0x141F7E3E8 it composes the current "
+        "input with jiggle+0x10 and immediately stores reference +0x30/+0x40; "
+        "it does not re-resolve the old selected record. A constant world "
+        "translation supplied after 0x141ED0A70 therefore reaches the current "
+        "reference; a changing translation can still excite native inertia.",
     ),
     0x141F7E9B0: (
         "LongGunJiggle_GetTransform",
         "LongGunJiggle vslot +0x20. Builds the transform consumed by "
         "NdAttachableObject_UpdateSelectedAttachmentTransform from the current "
-        "reference plus jiggle angular/displacement state.",
+        "reference plus jiggle angular/displacement state. Composition at "
+        "0x141F7EA5E uses reference +0x30/+0x40 and dynamic +0x80/+0x90. "
+        "Together with vslot +0x10 this preserves a constant world translation "
+        "in both endpoints of the later interpolation at 0x141ED15DA.",
     ),
     0x141F7EA80: (
         "LongGunJiggle_SetEnabledAndReset",
@@ -1129,7 +1136,13 @@ FUNCTIONS = {
         "ProcessWeapon_Initialize at 0x14150F6AF. Reads the object-init "
         "descriptor at context+0x28, resolves WeaponArtDef state, and delegates "
         "the shared parent/attachment setup to NdAttachableObject_Init at "
-        "0x1414FB4C2.",
+        "0x1414FB4C2. DWORD weapon+0x4B0 is the saved selected model StringId, "
+        "not a pointer or weapon type. It is cleared at 0x1414FAF85; the "
+        "ArtDef+0x18 model string (nonempty +0x20 override in online mode) "
+        "resolves to the same DWORD stored in init-descriptor+0x50 and "
+        "weapon+0x4B0 at 0x1414FB41E, then supplied to resource lookup at "
+        "0x1414FB42E. Use live owner/Fg/resource generations together with "
+        "this selector; it alone does not prove a current rendered mesh.",
     ),
     0x1418B7060: (
         "AttachSystem_ResolveRecordTransform",
@@ -1173,7 +1186,13 @@ FUNCTIONS = {
         "+0x5F0/+0x5F4. The sole caller is the direct E8 at 0x141ED19BB in "
         "NdAttachableObject_ResolveSelectedAttachmentTransform. This is the "
         "narrow authored-frame correction seam, but its output is still upstream "
-        "of LongGunJiggle inside vslot +0x7B8 and is not the final local pose.",
+        "of LongGunJiggle inside vslot +0x7B8 and is not the final local pose. "
+        "The +0x5F0 >= 0.001 branch at 0x141ED0F79..0x141ED0F8D leads to "
+        "world-pivot interpolation at 0x141ED126A; below that threshold the "
+        "parent/primary/inverse-rig result returns directly. An output-only "
+        "world translation after this call bypasses that already-completed "
+        "blend. Runtime +0x510/+0x520 is not the authored secondary endpoint "
+        "used by PlayerWeaponController_BlendSlotToSecondaryHolsterBinding.",
     ),
     0x141ED2060: (
         "NdAttachableObject_UpdateAnimatingLayersAndPublish",
@@ -10901,11 +10920,33 @@ FUNCTIONS = {
         "endpoint array. Primary+0 is the id, +0x10/+0x20 its transform, "
         "+0x30/+0x38 optional secondary T/Q pointers and +0x40 the scalar; "
         "secondary transform pointers are not alternative endpoint records. "
+        "At 0x1414FE621/62A each secondary component defaults to the primary "
+        "T/Q; 0x1414FE63C/643 replaces Q only for nonnull primary+0x38, "
+        "and 0x1414FE647/64E replaces T only for nonnull primary+0x30. "
+        "Thus absent optional T/Q is valid component-wise primary fallback "
+        "(including both-null M30/Ruger), not an absent secondary output. "
         "Non-generic targSpineProp (Mazur and other long guns, not P99) "
         "bypasses the character gun_holster* scan. "
         "The controller copies the primary transform to weapon+0x4F0/+0x500. "
         "A later +0x7A8 selected-id redirect does not rebuild this art-specific "
-        "primary transform for the replacement endpoint.",
+        "primary transform for the replacement endpoint. The secondary output "
+        "at +0x30/+0x40 is consumed by 0x1410A9490 as a +0x600/+0x610 local "
+        "blend target when both long-gun slots are occupied; it is distinct "
+        "from ApplyLocalAttachmentCorrection's +0x510/+0x520 depenetration.",
+    ),
+    0x1410A9490: (
+        "PlayerWeaponController_BlendSlotToSecondaryHolsterBinding",
+        "STATIC: resolves the incoming inventory slot through exact "
+        "PlayerWeaponController vslot +0xB0 (0x1410A1F90), builds its holster "
+        "binding and requires the actual selected attachment id to match. "
+        "At 0x1410A9533 it calls ProcessWeapon vslot +0x7A8 (0x141ED0580) "
+        "with that same id, copies the builder's secondary output +0x30/+0x40 "
+        "to weapon+0x600/+0x610, snapshots primary +0x4F0/+0x500 into "
+        "+0x620/+0x630 and seeds duration/progress 0.2/0 at 0x1410A9557. "
+        "The sole calling function RebindWeaponToHolster invokes it at "
+        "0x1410A9A85 and 0x1410A9A92 for occupied slots 17 and 1. This is "
+        "the dual-long-gun local endpoint blend, not runtime world-pivot "
+        "depenetration at +0x510/+0x520/+0x5F0.",
     ),
     0x1410CDF90: (
         "Player_SetupAttachSystemFromLookData",

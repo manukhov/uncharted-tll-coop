@@ -22,6 +22,9 @@
 #include "coop_protocol.h"
 #include "coop_runtime_offsets.h"
 #include "nadine_back_frame_policy.h"
+#include "nadine_back_clearance.h"
+#include "nadine_back_clearance_profiles.h"
+#include "nadine_holster_binding.h"
 
 // ============================================================================
 //  FILE MAP (search "=====  <TITLE>" to jump). Sections in source order:
@@ -69337,10 +69340,13 @@ struct NadineOtherWeaponBackScope {
     std::uint32_t capacity = 0;
     std::uint32_t count = 0;
     std::uint32_t selected_id = 0;
+    std::uint32_t model_id = 0;
     std::uint32_t progress_bits = 0;
+    std::int32_t weapon_rig_joint = -1;
     std::uint8_t selected_index = 0xFF;
     std::int16_t selected_joint = -1;
     std::array<std::uint32_t, 16> binding_bits{};
+    std::array<std::uint32_t, 8> blend_target_bits{};
 };
 
 struct NadineOtherWeaponBackArt {
@@ -69350,6 +69356,8 @@ struct NadineOtherWeaponBackArt {
     const std::byte* primary = nullptr;
     std::uint32_t primary_id = 0;
     std::array<std::uint32_t, 8> authored_binding_bits{};
+    std::array<std::uint32_t, 8> secondary_binding_bits{};
+    bool secondary_available = false;
 };
 
 // Reacquire every weak cell on each callback. No ProcessWeapon/Player/table
@@ -69444,6 +69452,12 @@ bool seh_read_nadine_other_weapon_back_scope(
         scope->rig = *reinterpret_cast<void* const*>(scope->table + 0x10);
         scope->selected_index =
             *reinterpret_cast<const std::uint8_t*>(bytes + 0x688);
+        scope->weapon_rig_joint =
+            *reinterpret_cast<const std::int32_t*>(bytes + 0x68C);
+        // ProcessWeaponBase_Init stores the selected model StringId here at
+        // 1414FB41E, after the current-mode +18/+20 authored model selection.
+        scope->model_id =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x4B0);
         if (scope->capacity == 0 || scope->capacity > 256 ||
             scope->count == 0 || scope->count > scope->capacity ||
             scope->records == nullptr || scope->rig == nullptr ||
@@ -69472,9 +69486,49 @@ bool seh_read_nadine_other_weapon_back_scope(
             scope->owner, &observation.current_slot,
             &observation.controller_state, nullptr);
         std::memcpy(scope->binding_bits.data(), bytes + 0x4F0, 64);
+        if (observation.duration_bits ==
+                coop::nadine_back::kSecondaryBackDurationBits) {
+            std::memcpy(scope->blend_target_bits.data(), bytes + 0x600, 32);
+        }
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *scope = {};
+        return false;
+    }
+}
+
+bool read_nadine_other_weapon_secondary_component(
+    const void* source, std::uint32_t* four_words) {
+    // Called only from the separate secondary-reader SEH boundary below.
+    if (source == nullptr || readable_bytes(source) < 16) return false;
+    std::memcpy(four_words, source, 16);
+    return true;
+}
+
+bool seh_read_nadine_other_weapon_secondary_binding(
+    const std::byte* primary,
+    const std::array<std::uint32_t, 8>& authored_primary,
+    std::array<std::uint32_t, 8>* effective_secondary) {
+    if (primary == nullptr || effective_secondary == nullptr) return false;
+    __try {
+        const void* const optional_translation =
+            *reinterpret_cast<void* const*>(primary + 0x30);
+        const void* const optional_rotation =
+            *reinterpret_cast<void* const*>(primary + 0x38);
+        std::array<std::uint32_t, 8> candidate{};
+        if (!coop::nadine_back::resolve_secondary_binding(
+                authored_primary, optional_translation, optional_rotation,
+                read_nadine_other_weapon_secondary_component, candidate)) {
+            return false;
+        }
+        NadineAttachTransform32 transform{};
+        std::memcpy(&transform, candidate.data(), 32);
+        if (!raw_attach_transform_valid(&transform)) return false;
+        *effective_secondary = candidate;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        // Even a fault after the readability check denies ONLY secondary
+        // admission; it must not erase an already validated primary capture.
         return false;
     }
 }
@@ -69540,7 +69594,17 @@ bool seh_read_nadine_other_weapon_back_art(
                     capture->primary + 0x10, 32);
         NadineAttachTransform32 binding{};
         std::memcpy(&binding, capture->authored_binding_bits.data(), 32);
-        return raw_attach_transform_valid(&binding);
+        if (!raw_attach_transform_valid(&binding)) return false;
+        // 1414FE621..64E defaults secondary T/Q independently to the primary
+        // components, replacing only nonnull authored pointers. M30 has no
+        // optional components but still gets this effective target at +600.
+        // A present unreadable/invalid component must NOT fall back; it denies
+        // only secondary admission, not the valid ordinary primary path.
+        capture->secondary_available =
+            seh_read_nadine_other_weapon_secondary_binding(
+                capture->primary, capture->authored_binding_bits,
+                &capture->secondary_binding_bits);
+        return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *capture = {};
         return false;
@@ -69553,6 +69617,7 @@ bool same_nadine_other_weapon_back_scope(
     return a.weapon == b.weapon && a.owner == b.owner &&
         a.controller == b.controller && a.table == b.table &&
         a.records == b.records && a.rig == b.rig &&
+        a.model_id == b.model_id && a.weapon_rig_joint == b.weapon_rig_joint &&
         a.capacity == b.capacity && a.count == b.count &&
         a.selected_id == b.selected_id && a.selected_index == b.selected_index &&
         a.selected_joint == b.selected_joint &&
@@ -69573,11 +69638,17 @@ struct NadineOtherWeaponBackCorrection {
     std::int16_t donor_joint = -1;
     std::array<std::uint32_t, 8> input_bits{};
     std::array<std::uint32_t, 8> authored_frame_bits{};
+    std::array<std::uint32_t, 8> stock_output_bits{};
+    std::array<std::uint32_t, 4> body_world_quaternion_bits{};
+    coop::nadine_back::AuthoredClearanceProfile clearance_profile{};
+    std::array<float, 3> body_back_delta{};
     std::uint8_t admission_stage = 0;
     bool resolved = false;
     bool stock_verified = false;
     bool primary_preserved = false;
     bool phase_committed = false;
+    bool depth_applied = false;
+    bool depth_rejected = false;
 };
 
 SRWLOCK g_nadine_other_weapon_back_lock = SRWLOCK_INIT;
@@ -69702,6 +69773,7 @@ bool seh_resolve_nadine_other_weapon_back_frame(
         if (!seh_read_nadine_other_weapon_back_scope(weapon, &after) ||
             !same_nadine_other_weapon_back_scope(scope, after) ||
             scope.binding_bits != after.binding_bits ||
+            scope.blend_target_bits != after.blend_target_bits ||
             scope.observation.duration_bits != after.observation.duration_bits ||
             scope.progress_bits != after.progress_bits ||
             scope.observation.to_back != after.observation.to_back ||
@@ -69712,6 +69784,8 @@ bool seh_resolve_nadine_other_weapon_back_frame(
             capture->art.descriptor != art_after.descriptor ||
             capture->art.primary != art_after.primary ||
             capture->art.authored_binding_bits != art_after.authored_binding_bits ||
+            capture->art.secondary_available != art_after.secondary_available ||
+            capture->art.secondary_binding_bits != art_after.secondary_binding_bits ||
             raw_resolve_attach_joint(scope.table, kSpinedJointNameId) != spined ||
             *reinterpret_cast<const std::uint32_t*>(donor + 0x20) !=
                 kLegacyNadineSpinedIdentityAttachId ||
@@ -69721,7 +69795,25 @@ bool seh_resolve_nadine_other_weapon_back_frame(
             return false;
         }
         capture->admission_stage = 4;
+        // 1410A9490 seeds 0.2/0 only for the two long-gun slots and copies
+        // the effective secondary (including primary fallback) to +600.
+        // It is a back-to-back local blend, not a Draw/Put of the parent marker.
+        // The peer's later Draw/removal must not revoke this subject's endpoint.
+        after.observation.secondary_back_blend_admitted =
+            after.observation.duration_bits ==
+                coop::nadine_back::kSecondaryBackDurationBits &&
+            (after.observation.inventory_slot == 1 ||
+             after.observation.inventory_slot == 17) &&
+            after.observation.selected_back &&
+            capture->art.secondary_available &&
+            after.blend_target_bits == capture->art.secondary_binding_bits;
         capture->scope = after;
+        if (after.weapon_rig_joint == 0) {
+            capture->clearance_profile =
+                coop::nadine_back::select_authored_clearance_profile(
+                    after.observation.identity.art, after.model_id,
+                    capture->art.authored_binding_bits);
+        }
         AcquireSRWLockExclusive(&g_nadine_other_weapon_back_lock);
         capture->decision = coop::nadine_back::prepare(
             g_nadine_other_weapon_back_ledger, after.observation);
@@ -69762,6 +69854,46 @@ bool seh_resolve_nadine_other_weapon_back_frame(
     }
 }
 
+bool seh_apply_nadine_other_weapon_back_depth(
+    void* output, NadineOtherWeaponBackCorrection* capture) {
+    if (output == nullptr || capture == nullptr || capture->scope.owner == nullptr) {
+        return false;
+    }
+    __try {
+        const auto* owner = static_cast<const std::byte*>(capture->scope.owner);
+        std::array<float, 4> parent{};
+        std::array<float, 4> local_root{};
+        std::array<float, 4> body_world{};
+        std::memcpy(parent.data(), owner + 0x120, sizeof(parent));
+        std::memcpy(local_root.data(), owner + 0x140, sizeof(local_root));
+        // Validate each factor, not only their product: reciprocal corrupt
+        // scales must not hide behind an accidentally unit-length product.
+        if (!valid_network_orientation(parent.data()) ||
+            !valid_network_orientation(local_root.data())) {
+            return false;
+        }
+        multiply_quaternions_xyzw(parent.data(), local_root.data(), body_world.data());
+        std::memcpy(capture->body_world_quaternion_bits.data(), body_world.data(),
+                    sizeof(body_world));
+        std::array<float, 8> stock{};
+        std::memcpy(stock.data(), output, sizeof(stock));
+        coop::nadine_back::ClearanceResult adjusted{};
+        if (!coop::nadine_back::apply_body_back_clearance(
+                stock, body_world, capture->clearance_profile.depth_meters,
+                capture->decision.weight, adjusted)) {
+            return false;
+        }
+        // The native result is world-space here. Do not write weapon+130,
+        // authored bindings, animation endpoints, quaternions or jiggle state.
+        std::memcpy(output, adjusted.output.data(), sizeof(adjusted.output));
+        capture->body_back_delta = adjusted.body_back_delta;
+        capture->depth_applied = true;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 bool seh_finish_nadine_other_weapon_back_frame(
     void* weapon, void* output, std::int64_t stock_result,
     NadineOtherWeaponBackCorrection* capture) {
@@ -69773,7 +69905,11 @@ bool seh_finish_nadine_other_weapon_back_frame(
             !raw_attach_transform_valid(
                 static_cast<const NadineAttachTransform32*>(output)) ||
             !seh_read_nadine_other_weapon_back_scope(weapon, &after) ||
-            !same_nadine_other_weapon_back_scope(capture->scope, after)) {
+            !same_nadine_other_weapon_back_scope(capture->scope, after) ||
+            capture->scope.observation.duration_bits != after.observation.duration_bits ||
+            capture->scope.progress_bits != after.progress_bits ||
+            capture->scope.observation.to_back != after.observation.to_back ||
+            capture->scope.blend_target_bits != after.blend_target_bits) {
             cancel_nadine_other_weapon_back_decision(*capture);
             return false;
         }
@@ -69786,6 +69922,39 @@ bool seh_finish_nadine_other_weapon_back_frame(
             return false;
         }
         capture->stock_verified = true;
+        std::memcpy(capture->stock_output_bits.data(), output, 32);
+        const bool has_depth_profile = capture->clearance_profile.id !=
+            coop::nadine_back::ClearanceProfileId::kNone;
+        if (has_depth_profile ||
+            capture->scope.observation.secondary_back_blend_admitted) {
+            NadineOtherWeaponBackArt art_after{};
+            if (!seh_read_nadine_other_weapon_back_art(
+                    after.observation.identity.art, &art_after) ||
+                capture->art.registry != art_after.registry ||
+                capture->art.definition != art_after.definition ||
+                capture->art.descriptor != art_after.descriptor ||
+                capture->art.primary != art_after.primary ||
+                capture->art.authored_binding_bits != art_after.authored_binding_bits ||
+                capture->art.secondary_available != art_after.secondary_available ||
+                capture->art.secondary_binding_bits != art_after.secondary_binding_bits) {
+                cancel_nadine_other_weapon_back_decision(*capture);
+                return false;
+            }
+        }
+        if (has_depth_profile) {
+            if (capture->decision.weight == 0.0F) {
+                // A terminal hand endpoint needs no heading/depth operation.
+                // Do not revoke a proven terminal phase for an optional body
+                // quaternion read which cannot change this exact zero result.
+                capture->depth_applied = true;
+            } else {
+                capture->depth_rejected =
+                    !seh_apply_nadine_other_weapon_back_depth(output, capture);
+            }
+        }
+        // Depth failure leaves the fresh marker/stock result untouched. It is
+        // not a loss of the already verified identity/selected-frame/clock
+        // evidence, so it cannot revoke a Draw token and create a later pop.
         if (capture->decision.token != 0) {
             AcquireSRWLockExclusive(&g_nadine_other_weapon_back_lock);
             capture->phase_committed = coop::nadine_back::commit(
@@ -69822,6 +69991,12 @@ void log_nadine_other_weapon_back_frame_once(
     mix(bucket);
     mix(capture.stock_verified ? 1u : 0u);
     mix(capture.phase_committed ? 1u : 0u);
+    mix(scope.model_id);
+    mix(static_cast<std::uint32_t>(scope.weapon_rig_joint));
+    mix(static_cast<unsigned>(capture.clearance_profile.id));
+    mix(capture.depth_applied ? 1u : 0u);
+    mix(capture.depth_rejected ? 1u : 0u);
+    mix(observation.secondary_back_blend_admitted ? 1u : 0u);
     mix(std::min(capture.decision.terminal_ordinal, 2u));
     static std::array<std::array<std::atomic<std::uint64_t>, 192>, 4> seen{};
     const std::size_t art_bucket =
@@ -69833,13 +70008,15 @@ void log_nadine_other_weapon_back_frame_once(
     line << (capture.resolved
                  ? "NADINE-OTHER-WEAPON-BACK art=0x"
                  : "NADINE-OTHER-WEAPON-BACK-SKIP art=0x") << std::hex
-         << observation.identity.art << " weapon=0x"
+         << observation.identity.art << " model=0x" << scope.model_id
+         << " weapon=0x"
          << observation.raw_weapon << " player=0x"
          << reinterpret_cast<std::uintptr_t>(scope.owner) << " fg=0x"
          << observation.identity.fg << " records=0x"
          << reinterpret_cast<std::uintptr_t>(scope.records) << std::dec
          << " generation=" << observation.identity.owner_generation << "/"
          << observation.identity.weapon_generation
+         << " rigJoint=" << scope.weapon_rig_joint
          << " slot/current/state=" << observation.inventory_slot << "/"
          << observation.current_slot << "/" << observation.controller_state
          << " selected=" << static_cast<unsigned>(scope.selected_index) << ":"
@@ -69849,6 +70026,9 @@ void log_nadine_other_weapon_back_frame_once(
          << capture.donor_joint
          << " admission=" << static_cast<unsigned>(capture.admission_stage)
          << " reason=" << static_cast<unsigned>(capture.decision.reason)
+         << " clockBits=0x" << std::hex << observation.duration_bits << "/0x"
+         << scope.progress_bits << std::dec
+         << " secondaryBack=" << (observation.secondary_back_blend_admitted ? 1 : 0)
          << " weight=" << capture.decision.weight
          << " terminal=" << (capture.decision.terminal_hold ? 1 : 0) << "/"
          << capture.decision.terminal_ordinal
@@ -69856,13 +70036,32 @@ void log_nadine_other_weapon_back_frame_once(
          << " stock=" << (capture.stock_verified ? 1 : 0)
          << " primaryPreserved=" << (capture.primary_preserved ? 1 : 0)
          << " phaseCommitted=" << (capture.phase_committed ? 1 : 0)
-         << " clearance=stock"
+         << " clearanceMode="
+         << (capture.clearance_profile.id == coop::nadine_back::ClearanceProfileId::kNone
+                 ? "marker-only"
+                 : (capture.depth_rejected ? "reject"
+                    : (capture.depth_applied
+                           ? (capture.decision.weight == 0.0F ? "zero-weight" : "applied")
+                           : "unapplied")))
+         << " profile=" << static_cast<unsigned>(capture.clearance_profile.id)
+         << " depth=" << (capture.depth_applied ? 1 : 0) << ":"
+         << capture.clearance_profile.depth_meters
+         << " bodyBack=" << capture.body_back_delta[0] << ","
+         << capture.body_back_delta[1] << "," << capture.body_back_delta[2]
          << std::hex << " input=";
     for (const auto bits : capture.input_bits) line << bits << ",";
     line << " authoredFrame=";
     for (const auto bits : capture.authored_frame_bits) line << bits << ",";
     line << " binding=";
     for (std::size_t i = 0; i < 8; ++i) line << scope.binding_bits[i] << ",";
+    line << " stockOutput=";
+    for (const auto bits : capture.stock_output_bits) line << bits << ",";
+    line << " bodyQ=";
+    for (const auto bits : capture.body_world_quaternion_bits) line << bits << ",";
+    if (observation.secondary_back_blend_admitted) {
+        line << " secondaryTarget=";
+        for (const auto bits : scope.blend_target_bits) line << bits << ",";
+    }
     line << " output=";
     for (const auto bits : output_bits) line << bits << ",";
     boot_log_line(line.str().c_str());
@@ -70195,6 +70394,11 @@ bool install_nadine_local_transform_probe() {
             "legacy-Nadine other-weapon authored back-frame correction installed "
             "at 0x141ED19BB (current primary+selected targSpineProp; "
             "per-art binding and non-back endpoints unchanged; separate item ledger)");
+        boot_log_line(
+            "legacy-Nadine Type95/M30 back-clearance candidates enabled "
+            "(art 0x27617D0D; model 0xA99E5C9F; exact P3; rig root 0; "
+            "0.136m; art 0x3019CBEE; model 0x3D6F8C72; exact P1; 0.063m; "
+            "post-stock weighted depth; animation clocks unchanged)");
     }
     g_nadine_local_transform_probe_ready.store(
         true, std::memory_order_release);
@@ -77028,8 +77232,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-27agb "
-        "(other-weapon authored back frames; Mazur/P99 preserved; animations parked)");
+        "TLL co-op runtime init 2026-08-27agc "
+        "(Type95/M30 model-scoped back clearance; other frames retained; Mazur/P99 unchanged; animations parked)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "

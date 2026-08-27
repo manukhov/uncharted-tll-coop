@@ -77,4 +77,23 @@ if(BUILD_TESTING)
         )
     endif()
     add_test(NAME nadine_back_frame_policy COMMAND tll_nadine_back_frame_policy_tests)
+
+    add_executable(
+        tll_nadine_back_clearance_tests
+        tests/nadine_back_clearance_tests.cpp
+    )
+    target_include_directories(tll_nadine_back_clearance_tests PRIVATE src)
+    target_compile_features(tll_nadine_back_clearance_tests PRIVATE cxx_std_20)
+    if(MSVC)
+        target_compile_options(
+            tll_nadine_back_clearance_tests
+            PRIVATE /W4 /permissive- /EHsc
+        )
+    else()
+        target_compile_options(
+            tll_nadine_back_clearance_tests
+            PRIVATE -Wall -Wextra -Wpedantic
+        )
+    endif()
+    add_test(NAME nadine_back_clearance COMMAND tll_nadine_back_clearance_tests)
 endif()

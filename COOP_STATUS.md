@@ -29954,3 +29954,291 @@ Do not reopen the parked animation/strap task or alter Mazur/P99. No new game
 was launched, no reinjection occurred and no gameplay input was sent while
 recording this result. A fresh exam requires its own static quota and written
 per-art prediction; the old package is not now CONFIRMED by its markers.
+
+#### STATIC: the safe clearance seam is post-stock world translation; secondary and jiggle are separate mechanisms
+
+The candidate correction is a separate other-weapon-only translation of the
+successful `141ED0A70` return, before its caller continues. It preserves output
+Y, position-W and quaternion bitwise, adds only horizontal body-back X/Z and
+uses the existing independent item-phase weight. No amount is established by
+this seam analysis alone. Mazur's implementation and constant stay unchanged.
+
+Three independent evidence kinds close this boundary:
+
+1. **Call graph:** the sole E8 call remains `141ED19BB`; `141ED19C0..D1`
+   copies its returned transform without another attachment-record resolve.
+   `141ED1380` subsequently runs jiggle and converts world to parent-local at
+   `141ED16FD/1718`; `141ED287B/288F` composes/publishes the world result again.
+2. **Field operations:** `141ED0F79..8D` gates the separate runtime world-pivot
+   blend on `weapon+5F0 >= 0.001`, with interpolation at `141ED126A`.
+   Below the threshold the parent/primary/inverse-rig transform returns
+   directly. A translation added to the input parent can be weakened by that
+   blend; an output translation is after it. Do not write a world delta
+   directly into the later parent-local `weapon+130`.
+3. **Concrete RTTI/vslots:** `LongGunJiggle` vtable `142A9AF48`, slot `+10`,
+   resolves to `141F7E370`; its compose at `141F7E3E8` updates current reference
+   `+30/+40` from the passed attachment frame and local `+10`. Slot `+20`
+   resolves to `141F7E9B0`, which composes reference and `+80/+90` at
+   `141F7EA5E`. Consequently both endpoints of `141ED15DA` inherit a constant
+   world delta: `lerp(A+delta,B+delta)=lerp(A,B)+delta`. Native changing-delta
+   inertia remains possible and must not be reset by the correction.
+
+The competing claim that Type 95's **authored secondary** cancels the parent
+confuses distinct fields. `WeaponHolster_BuildBinding 1414FE540` places the
+secondary at output `+30/+40`. The previously unnamed `1410A9490` is now
+identified as `PlayerWeaponController_BlendSlotToSecondaryHolsterBinding`:
+its only caller is `RebindWeaponToHolster`, at `1410A9A85/1410A9A92`, for the
+two occupied long-gun slots 17 and 1. Controller vtable `142A47F90 +B0`
+contains `1410A1F90` (GetWeaponBySlot), and ProcessWeapon `142A9BF48 +7A8`
+contains `141ED0580`. The helper checks actual selected id, selects that same
+id, copies builder secondary `+30` into `weapon+600/+610`, snapshots current
+primary into `+620/+630`, and writes the exact `0.2/0` clock at `1410A9557`.
+These caller, field-copy and concrete-vslot proofs distinguish it from
+runtime depenetration `+510/+520/+5F0`. Neither mechanism should be disabled.
+
+Thus missing clearance remains the placement candidate; permanent jiggle
+reset to the old spineb record is rejected structurally. The later optional
+Animating-layer rewrite at `141ED2721/2741` still exists, so graph closure is
+not a substitute for visible final placement. The remaining pre-exam work is
+quantitative body-overlap geometry, not another animation-owner experiment.
+
+The standalone `scanner/src/nadine_back_clearance.h` implements only this
+transactional math, with **no weapon distances and no runtime caller yet**.
+It validates stock/world orientation and finite depth/weight, normalizes only
+a local copy of the body quaternion, computes horizontal X/Z in double, and
+checks finite float range before publishing a local candidate. Failure leaves
+the result unchanged; Y/W/Q are copied as bytes. A zero weight/depth is the
+exact stock transform. It never accumulates a previous corrected output.
+The Release test executable reports `16/16`; the unchanged item-policy suite
+reports `27/27`; both CTest targets pass. This validates code properties, not
+the remaining geometric distance or a visual fix. No runtime DLL was replaced
+and no game was started by these standalone tests.
+
+### 2026-08-27 STATIC / IMPLEMENTED (`agc`): exact Type 95 and M30 model/profile clearance; numerical sufficiency remains a visual hypothesis
+
+#### Model ownership and geometry, not a shared arbitrary rifle offset
+
+Type 95 art `27617D0D` is normal-registry slot 15, key `51F0`, value `4870`,
+ArtDef `F2B0`. Its `+18/+20` model strings both point to `1BCD3`,
+`qbz-95-rifle`, StringId `A99E5C9F`; primary descriptor `15848`, binding
+`19C60`, is exactly P3. `ProcessWeaponBase_Init 1414FAF40` clears DWORD
+`weapon+4B0` at `1414FAF85`, chooses the normal `+18` or online nonempty `+20`
+model, and stores the resulting StringId to init-descriptor `+50` and
+`weapon+4B0` at `1414FB41E`. The same ID is passed to the resource lookup at
+`1414FB42E`. This field is a saved selected-model ID, not a pointer or weapon
+type; the existing live owner/Fg/generation/resource guards remain necessary.
+
+The PAK chain independently connects that ID to the measured geometry:
+`PACKAGE_ITEM_LOOKUP 43D40 -> row 43D78 (A99E5C9F) -> ARTGROUP_DATA 43700`;
+same-name `FOREGROUND_SECTION_2 43DA0` names `pmCollection0.qbz-95-rifle` and
+skeleton `DFCE7D05`. `GEOMETRY_1 43960 -> collection table 41BF0 ->
+418A0/41930/419C0` reaches exactly mesh headers
+`411C8/41278/41328/413D8`. Mesh-array pointers address header+8. Thus the
+measurement is not inferred merely from an art type or similar asset name.
+
+`actor77.psarc/rifle-base.pak` has raw skeleton `34C0`, 22 named joints,
+name table `3FF8`; joint 0 is `root 19D64D2A`. Its default local at `3540`
+and inverse bind at `39E0` are exact identity. All three QBZ LODs reference
+this skeleton. The validated HALF4 streams contain 22940 vertices, of which
+22442 have only positive joint-0 influence with total weight 65535. The
+remaining animated parts are deliberately excluded from the rigid support
+claim. No separate per-mesh transform exists in the audited mesh headers.
+
+`scripts/nadine_other_weapon_clearance_audit.py` reuses the existing PSARC,
+PAK and retail Transform_Compose readers without extracting files or opening
+a game process. It validates art/model/primary words and the complete typed
+QBZ ownership chain, transforms the strict-root vertices by the exact
+Chloe marker and P3, and restricts them to the anatomical pelvis-to-neck
+interval `[-32.647633,14.318607]` cm relative to spined. A 2-D barycentric
+triangle lookup against 26017 body/shirt triangles measures body-overlap
+depth, not a raw model width or a whole-barrel extremum.
+
+The candidate is differential: `0.05 + deficit(weapon) - deficit(Mazur)`.
+It gives Type 95 **12.764830 cm** on the bind-body axis and **13.516403 cm**
+on the separately captured accepted-Mazur axis, with 0.751574 cm spread.
+Both retain Mazur at exactly 5 cm by calibration. Repeating the lookup with
+1.25 cm and 2.5 cm grid cells does not change these displayed results; the
+grid accelerates triangle lookup, not geometric sampling. The selected
+candidate is the rounded-up maximum, **0.136 m**, only for exact Type 95/P3.
+
+This is **not** an absolute live-torso clearance proof. Every selected torso
+vertex has mixed skin weights, and the torso proxy itself leaves accepted
+Mazur at `-1.945259/-3.612483` cm proxy clearance despite its confirmed good
+visual result. Two axes are not a full pose envelope, and root vertex queries
+do not cover all animated parts or every triangle interior. Therefore the
+number is a bounded, reproducible **HYPOTHESIS**, not a CONFIRMED fit. Both
+continued clipping and an excessive visible gap must reject its sufficiency.
+
+The static audit also corrects a tempting model alias: `3019CBEE` is
+`ruger-semiauto-rifle` / model `3D6F8C72` (the earlier M30), **not FAL**.
+The measured FAL DLC is `C14CB0B7` / `CA03E178`. Equal P1 bindings do not make
+their meshes interchangeable. No FAL distance is applied to the logged M30.
+Shotgun's bounded 22-joint parse also misses three unclassified mesh headers;
+its preliminary support result is not whole-model coverage.
+
+The M30 follow-up measures **its actual Ruger** independently. ArtDef `E3D0`
+has model strings at `1B942`, model ID `3D6F8C72`. Its typed package lookup
+`43D40 -> 43D78 -> ARTGROUP_DATA 435A0`, geometry `43AA0`, collection table
+`41D10` and collections `419C0/41A50/41AE0` own all six mesh headers
+`40CC0/40D70/40E20/40ED0/40F80/41030`. All LODs name common skeleton
+`DFCE7D05`; 11726 of 13502 vertices are strict root 0, with no mixed weights.
+The same anatomical method gives **6.272113 / 4.864946 cm**, a 1.407167 cm
+spread; the rounded-up candidate is **0.063 m**. It has the same explicit
+proxy/pose limitations as Type 95 and is not assigned by P1 equality alone.
+
+#### Mutation and continuity contract
+
+The numeric profile requires art `27617D0D`, saved model `A99E5C9F`, all eight
+exact authored P3 words, selected/authored AD and `weapon+68C == 0`, in addition
+to AGB's owner, Fg, generation, inventory, table and donor guards. A second,
+separate M30 profile requires `3019CBEE`, `3D6F8C72`, exact P1 and the same
+root-zero guard. Other arts, models and bindings retain AGB marker-only behavior; Mazur and
+P99 are still rejected before this separate path. There is no universal
+remaining-weapon number or new shared attachment-record mutation.
+
+After the original call returns the exact output pointer, the finish stage
+rechecks scope/model/rig, duration/progress/direction, primary binding and the
+measured resource fingerprint. It retains the original output for diagnostics
+and adds only `bodyBack * profileDepth * decision.weight` in world X/Z through the
+transactional helper. Parent and local-root quaternions are validated
+separately before multiplication. Output Y/W/Q, bindings, selection, clocks,
+animation endpoints, arm pose and jiggle state remain unchanged. A zero
+weight skips the optional body read entirely. A failed depth calculation
+leaves the fresh stock/marker result intact and logs `clearanceMode=reject`;
+it does not revoke an otherwise valid Draw/terminal proof and create a later
+full-weight return. Genuine scope/resource/clock admission loss still revokes
+that weapon's phase as before.
+
+The newly resolved `1410A9490` supplies one additional legitimate clock:
+back-to-back secondary holster positioning, `0.2/0`, for slots 1/17. It must
+not transiently drop the parent marker/depth to stock. An exact selected-AD
+subject in one of those slots, a valid effective secondary, and byte-identical
+`+600/+610` secondary target admit the separate `kSecondaryBackBlend` reason.
+The effective target follows the builder's exact component-wise fallback:
+`1414FE621/62A` initialize T/Q from primary `+10/+20`, `1414FE63C/643` replace
+Q only for nonnull optional `+38`, and `1414FE647/64E` replace T only for
+nonnull optional `+30`. M30/Ruger has both optional pointers null, so its
+effective secondary is the primary, not an unavailable target. A present but
+unreadable/invalid component cannot fall back; it denies secondary admission
+without rejecting an otherwise valid ordinary primary/marker path. The
+earlier both-pointers-required candidate was caught and corrected statically
+before any AGC launch; it would have dropped M30's correction during `0.2`.
+Optional pointer/content reads have a separate SEH boundary, so a fault after
+the readability check also cannot erase the already validated primary. The
+production component resolver publishes its local 32-byte candidate only
+after every present component was read; transform validation remains in the
+runtime wrapper before secondary admission.
+Its weight remains 1, it clears only that subject's old Draw phase and creates
+no Draw token. Unknown `0.2` tuples remain rejected. The peer's later Draw or
+departure does not revoke this subject's persistent native endpoint; no peer
+pointer is retained. Native duration/progress/endpoint values are never
+written. This closes the added frame/depth discontinuity, not the parked
+animation-speed task or the visual fit of every secondary model profile.
+
+Diagnostics now distinguish marker-only, zero-weight, applied, rejected and
+unapplied clearance, with actual art/model/root index, profile, clock bits,
+secondary proof, delta, body quaternion and same-callback stock/final outputs.
+`stock=1` alone cannot certify depth success, especially if a later resource
+recheck failed. A valid numerical row must additionally have
+`clearanceMode=applied profile=1 depth=1:0.136` for Type 95 or
+`profile=2 depth=1:0.063` for M30, and the expected weight.
+
+#### Written one-copy exam and rejection criteria
+
+The exam is earned by three independent static evidence kinds: (1) exact
+call/dataflow and field-copy operations at `141ED19BB/141ED0A70` proving a
+translation-only output boundary after depenetration; (2) concrete
+ProcessWeapon/LongGunJiggle slots proving downstream use of that frame;
+(3) authored string/data references and typed model/skin/mesh ownership
+proving which geometry and P3/P1 binding were measured. The accepted Mazur
+seam and Type 95's fully admitted but visually failed AGB result are separate
+structural/runtime controls. The numeric distance remains the declared
+falsifiable hypothesis; the quota does not promote it to visual success.
+
+Competitors are distinguished explicitly: absent hook/art admission is already
+rejected for AGB Type 95; permanent jiggle cancellation is rejected by the
+concrete reference writes; treating authored secondary as runtime
+depenetration is rejected by the separate field-copy owner. The remaining
+numeric competitors are insufficient clearance versus excessive separation,
+both judged on visible placement after exact successful correction rows.
+
+After the frozen Release package, tests, IDB save/readback and commit/push,
+launch one fresh copy only. The user selects Type 95, holsters it and checks
+the rear/side placement, then does the same with M30 if available. The agent
+does not select weapons, load saves, send input or steer the camera. This is
+not an arm-pose/provenance census and requires no AGA EXIT or second game.
+
+For Type 95 expect exact art/model/root `27617D0D/A99E5C9F/0`, profile 1,
+selected/authored AD, `admission=6 weight=1 stock=1 primaryPreserved=1`,
+`clearanceMode=applied depth=1:0.136`; M30 must instead name
+`3019CBEE/3D6F8C72/0`, profile 2 and `depth=1:0.063`. Within each row the
+stock/final Y/W/Q words must match, and the horizontal output difference
+must equal the logged body-back delta within world-float precision. The rifle
+body should be outside the torso without an excessive floating gap. Successful
+rows plus either persistent penetration or excessive separation reject that
+model's numeric sufficiency; missing/wrong-model/marker-only/reject rows are
+admission-only. Do not retune bindings or reopen parked animation work from
+an admission failure.
+
+Native Draw/Put, if exercised, must scale only this frame/depth correction;
+terminal weight zero must retain the exact stock hand endpoint. A positively
+admitted back-to-back `0.2` row must stay full-weight throughout that item
+clock, not drop its parent basis. These are code/static continuity requirements,
+not claims that all transition cases were observed in the old run. Mazur/P99
+must retain their accepted placement; any regression rejects the package.
+All other models still require their own coverage and visual result.
+
+#### Frozen AGC Release package and pre-exam verification
+
+The final Release build and both CTest targets pass. Direct executable output
+is `nadine_back_frame_policy: 33/33` and `nadine_back_clearance: 21/21`.
+The added secondary tests call the production resolver for all four optional
+T/Q combinations, exact target words including signed zero, and four
+present-but-unreadable cases. Failed reads, including one after a successful
+translation read, must leave the published output and primary unchanged.
+The first Release run exposed a fixture pointer-identity mismatch between
+constexpr arrays in the table and inside a lambda; explicit source-pointer
+aliases captured by value fixed that test fixture. Production resolution and
+assertions were not weakened. Hardware-fault isolation itself is the reviewed
+SEH wrapper, not a claim that the pure test generated a game-memory fault.
+
+Working-file SHA256 values used for the final package:
+
+- `scanner/src/coop_runtime.cpp`:
+  `61012199F89FA61FE266327344340F8D574A6D26C40EF6309344DEB7A4C21739`.
+- `scanner/src/nadine_back_frame_policy.h`:
+  `5B1F98614998FB28177BC5A165B637C454480F9BDD5242EF84E8E48A9DF63524`.
+- `scanner/src/nadine_back_clearance.h`:
+  `C9BD6E1FEF70A81B4335E631C9A56200081A16BB7D4B5D910CF4EF969B341D6C`.
+- `scanner/src/nadine_back_clearance_profiles.h`:
+  `2F988EF35457699BEF427721D3C71290E4D04C863702E90722D0A93B1C638B21`.
+- `scanner/src/nadine_holster_binding.h`:
+  `E897B2A26E393288F1AF1491AAA2C7A2DA9F6271296788831FA52DE740A447DC`.
+- `scripts/nadine_other_weapon_clearance_audit.py`:
+  `5D0D7DA41B2BF4AE962E229B08429B7F89FC3DB5C6EE30D57B8DDC1A279E1EE6`.
+- `scanner/build/tll_coop_runtime.dll` (ignored, 808960 bytes):
+  `CA3CC112FC97D493950F11029C7E04065799948E2AD4484D3758AAD54F790882`.
+
+The source timestamp is `18:34:48.7421000Z`, the final new production header
+is `18:35:15.9303426Z`, the object is `18:37:29.7942515Z`, and the final DLL
+is `18:40:29.9611201Z` on 2026-08-27. PE readback contains the exact
+`2026-08-27agc` boot tag, Type95/M30 profile marker and new clearance/secondary
+diagnostics, and contains no old `2026-08-27agb` boot tag.
+
+Independent reviews closed model/art/profile isolation and the optional
+secondary-reader fallback/SEH gap. Text comparison against `7e58c7a` verifies
+the Mazur frame resolver, depth function and transition frame function, and
+the P99 native holster append function are unchanged. AGA perform-blend
+census remains disabled; this package does not reopen arm/grip/strap/timing.
+
+The single `ida/tll.i64` was saved after stopping MCP: final local output
+`.codex/ida_apply_agc_secondary.log` records `1794 functions, 61 data names,
+1 function types` and `save_database returned True`. IDB timestamp is
+`18:35:20.9627739Z`, size 794492231 bytes. MCP was restarted on that same
+database; readback resolves the new `1410A9490` name and the exact independent
+T/Q fallback comment on `WeaponHolster_BuildBinding 1414FE540`.
+
+No AGC game had been started during these build/static checks. After the
+commit and immediate push, the next action is the one-copy exam above, not
+another analysis launch. Installation alone will remain distinct from the
+user's pending per-model visual verdict.

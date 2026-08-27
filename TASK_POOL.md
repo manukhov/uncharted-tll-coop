@@ -35,22 +35,44 @@
       Mazur's 5 cm clearance to other model geometry. Source and DLL hashes,
       static competitors and the exact one-copy prediction are recorded in
       the final `agb` section of `COOP_STATUS.md`.
+- [x] Record the fully admitted AGB Type 95 visual failure, separate authored
+      secondary holster binding from runtime depenetration, and prove the
+      post-stock translation seam. Add a reproducible root-only/anatomical
+      torso-overlap audit with explicit mixed-skin proxy limitations.
+- [x] Implement `agc` exact art/model/authored-primary/root-zero profiles:
+      Type 95 `27617D0D/A99E5C9F/P3`, candidate 0.136 m; M30/Ruger
+      `3019CBEE/3D6F8C72/P1`, candidate 0.063 m. These are separately
+      calibrated hypotheses, not visual confirmation or universal offsets.
+      Preserve Mazur/P99 and every binding/clock/pose. Exact native secondary
+      back-to-back `0.2` stays full-weight without gaining Draw authority;
+      its effective target includes native per-component primary fallback
+      for missing secondary T/Q (both are absent for M30/Ruger).
+- [x] Pass the final AGC Release build, both CTest targets and direct suites
+      `33/33` policy / `21/21` clearance, including production secondary
+      fallback and failed-read regression tests. Save/read back the single
+      IDB and freeze source/header/DLL hashes in `COOP_STATUS.md`. The final
+      DLL is 808960 bytes, SHA256
+      `CA3CC112FC97D493950F11029C7E04065799948E2AD4484D3758AAD54F790882`.
 - [ ] Verify the holstered positions of the other eligible weapons on local
       legacy Nadine against the written per-art prediction, without regressing
       the user-confirmed Mazur back placement or confirmed P99 behavior.
       `agb` Type 95/QBZ-95 `27617D0D` is **REJECTED for visual sufficiency**:
       the user's screenshot still shows penetration, despite exact full
       `admission=6 weight=1 stock=1 primaryPreserved=1` at PID20364 log line
-      `101302`. This is not an admission failure. Resolve projected model
-      support and a separately proven body-back clearance; preserve every
-      primary/secondary binding and keep animation/strap work parked. Other
-      models remain individually unvalidated; do not infer a universal offset.
+      `101302`. This is not an admission failure. Next exam is `agc`, requiring
+      exact applied profile/depth rows AND visible separation for Type 95 and
+      M30 without excessive floating gaps. Other models remain individually
+      unvalidated; do not infer a universal offset or use FAL geometry for
+      Ruger/M30. The written prediction and rejection criteria are in the
+      final `agc` section of `COOP_STATUS.md`.
 - [x] Earn this AD-parent mutation with the normal static evidence quota,
       competing explanations and a written visual prediction. Keep the
       appearance-1 limit of one game copy; the user performs all game input.
       Fresh `agb` PID `20364` was injected as role B after commit/push; its
-      Type 95 failure is now recorded. No new launch is earned merely by the
-      successful admission markers; the geometry follow-up needs a new quota.
+      Type 95 failure is now recorded and that process has ended. The new
+      `agc` quota uses exact call/vslot/data/mesh evidence, not the old startup
+      markers. Launch only its fresh, tested, committed and pushed package;
+      user input and per-art visual validation remain outstanding.
 - [x] Park animation/steady-grip work, AGA admission repair and provenance
       exams, Draw-speed investigation and the strap at the user's request.
       They are not prerequisites for this placement task. AGA PID `15572` is

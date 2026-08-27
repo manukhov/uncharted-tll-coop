@@ -619,6 +619,164 @@ bool invalidation_prevents_stale_commit_without_touching_new_tokens() {
     return true;
 }
 
+Observation secondary_back(Observation observation, float progress) {
+    observation.duration_bits = policy::kSecondaryBackDurationBits;
+    observation.progress = progress;
+    observation.secondary_back_blend_admitted = true;
+    return observation;
+}
+
+bool admitted_secondary_blend_stays_full_for_the_whole_clock() {
+    for (const int slot : {1, 17}) {
+        for (const float progress : {0.0F, 0.25F, 0.5F, 1.0F, 1.01F}) {
+            for (const bool stale_to_back : {false, true}) {
+                for (const std::uint32_t state : {0u, 1u, 2u, 4u, 5u}) {
+                    Ledger ledger{};
+                    Observation observation = secondary_back(weapon(slot), progress);
+                    observation.to_back = stale_to_back;
+                    observation.controller_state = state;
+                    observation.current_slot = slot;
+                    observation.controller_read = false;
+                    const Decision result = policy::prepare(ledger, observation);
+                    CHECK(result.disposition == Disposition::kFull);
+                    CHECK(result.reason == Reason::kSecondaryBackBlend);
+                    CHECK(result.weight == 1.0F && result.token == 0);
+                    CHECK(!result.terminal_hold && result.phase == Phase::kEmpty);
+                    CHECK(ledger.serial == 0);
+                    CHECK(ledger.slots[slot].phase == Phase::kEmpty);
+                }
+            }
+        }
+    }
+    return true;
+}
+
+bool secondary_blend_clears_each_draw_phase_without_reserving() {
+    for (const Phase phase : {
+            Phase::kPendingDraw, Phase::kActiveDrawSeen, Phase::kTerminalHold}) {
+        Ledger ledger{};
+        const Observation active = draw(weapon(1), 0.6F);
+        const Decision pending = policy::prepare(ledger, active);
+        CHECK(pending.token != 0);
+        if (phase != Phase::kPendingDraw) {
+            CHECK(policy::commit(ledger, active, pending.token));
+        }
+        if (phase == Phase::kTerminalHold) {
+            Observation terminal = active;
+            terminal.duration_bits = 0;
+            terminal.progress = 1.0F;
+            CHECK(policy::prepare(ledger, terminal).terminal_hold);
+        }
+        CHECK(ledger.slots[1].phase == phase);
+        CHECK(commit_draw(ledger, draw(weapon(17), 0.4F)));
+        const std::uint64_t serial_before = ledger.serial;
+        const Decision result =
+            policy::prepare(ledger, secondary_back(active, 0.5F));
+        CHECK(result.disposition == Disposition::kFull && result.weight == 1.0F);
+        CHECK(result.reason == Reason::kSecondaryBackBlend && result.token == 0);
+        CHECK(ledger.serial == serial_before);
+        CHECK(ledger.slots[1].phase == Phase::kEmpty);
+        CHECK(ledger.slots[17].phase == Phase::kActiveDrawSeen);
+        CHECK(!policy::commit(ledger, active, pending.token));
+    }
+    return true;
+}
+
+bool secondary_terminal_remains_full_without_draw_authority() {
+    Ledger ledger{};
+    Observation observation = draw(weapon(1), 0.7F);
+    CHECK(commit_draw(ledger, observation));
+    observation = secondary_back(observation, 0.5F);
+    CHECK(policy::prepare(ledger, observation).weight == 1.0F);
+    observation.duration_bits = 0;
+    observation.secondary_back_blend_admitted = false;
+    observation.raw_weapon += 0x4000;
+    for (const float stale_progress : {
+            1.0F, 0.0F, std::numeric_limits<float>::quiet_NaN()}) {
+        observation.progress = stale_progress;
+        const Decision result = policy::prepare(ledger, observation);
+        CHECK(result.disposition == Disposition::kFull && result.weight == 1.0F);
+        CHECK(result.reason == Reason::kColdBack);
+        CHECK(!result.terminal_hold && result.token == 0);
+        CHECK(ledger.slots[1].phase == Phase::kEmpty);
+    }
+    return true;
+}
+
+bool secondary_blend_cannot_commit_a_draw_ticket() {
+    Ledger ledger{};
+    const Observation secondary = secondary_back(weapon(1), 0.5F);
+    const Decision result = policy::prepare(ledger, secondary);
+    CHECK(result.token == 0 && ledger.serial == 0);
+    CHECK(!policy::commit(ledger, secondary, result.token));
+    CHECK(!policy::commit(ledger, secondary, 123u));
+    const Observation active = draw(weapon(1), 0.5F);
+    const Decision pending = policy::prepare(ledger, active);
+    CHECK(pending.token != 0);
+    CHECK(!policy::commit(ledger, secondary, pending.token));
+    CHECK(ledger.slots[1].phase == Phase::kEmpty);
+
+    // A stale admission boolean cannot reinterpret the separate 0.1 Draw clock.
+    Observation next_draw = active;
+    next_draw.secondary_back_blend_admitted = true;
+    const Decision next = policy::prepare(ledger, next_draw);
+    CHECK(next.disposition == Disposition::kWeighted);
+    CHECK(next.reason == Reason::kActiveDraw && near(next.weight, 0.5F));
+    CHECK(next.token > pending.token);
+    CHECK(policy::commit(ledger, next_draw, next.token));
+    return true;
+}
+
+bool admitted_secondary_invalid_progress_fails_stock_and_clears() {
+    for (const float progress : {
+            -0.01F, 1.0101F, std::numeric_limits<float>::quiet_NaN(),
+            std::numeric_limits<float>::infinity(),
+            -std::numeric_limits<float>::infinity()}) {
+        Ledger ledger{};
+        CHECK(commit_draw(ledger, draw(weapon(1), 0.5F)));
+        CHECK(commit_draw(ledger, draw(weapon(17), 0.4F)));
+        const Decision result =
+            policy::prepare(ledger, secondary_back(weapon(1), progress));
+        CHECK(result.disposition == Disposition::kStock);
+        CHECK(result.reason == Reason::kMalformedProgress && result.token == 0);
+        CHECK(ledger.slots[1].phase == Phase::kEmpty);
+        CHECK(ledger.slots[17].phase == Phase::kActiveDrawSeen);
+    }
+    return true;
+}
+
+bool unadmitted_or_nonback_secondary_clock_grants_no_authority() {
+    for (const float progress : {0.0F, 0.5F, 1.0F}) {
+        Ledger ledger{};
+        CHECK(commit_draw(ledger, draw(weapon(1), 0.4F)));
+        Observation observation = secondary_back(weapon(1), progress);
+        observation.secondary_back_blend_admitted = false;
+        const Decision result = policy::prepare(ledger, observation);
+        CHECK(result.disposition == Disposition::kStock);
+        CHECK(result.reason == Reason::kMalformedDuration);
+        CHECK(ledger.slots[1].phase == Phase::kEmpty && result.token == 0);
+    }
+    Ledger ledger{};
+    CHECK(commit_draw(ledger, draw(weapon(1), 0.4F)));
+    Observation observation = secondary_back(weapon(1), 0.5F);
+    observation.selected_back = false;
+    Decision result = policy::prepare(ledger, observation);
+    CHECK(result.disposition == Disposition::kStock);
+    CHECK(result.reason == Reason::kSelectedOther);
+    CHECK(ledger.slots[1].phase == Phase::kEmpty && result.token == 0);
+    observation.selected_back = true;
+    observation.duration_bits = policy::kSecondaryBackDurationBits + 1u;
+    result = policy::prepare(ledger, observation);
+    CHECK(result.disposition == Disposition::kStock);
+    CHECK(result.reason == Reason::kMalformedDuration);
+    observation.duration_bits = policy::kSecondaryBackDurationBits;
+    observation.inventory_slot = -1;
+    result = policy::prepare(ledger, observation);
+    CHECK(result.disposition == Disposition::kStock);
+    CHECK(result.reason == Reason::kInvalidScope && result.token == 0);
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -650,6 +808,12 @@ int main() {
         incomplete_failure_capture_invalidates_by_raw_only,
         incomplete_unmatched_evidence_cannot_clear_by_slot_or_partial_identity,
         invalidation_prevents_stale_commit_without_touching_new_tokens,
+        admitted_secondary_blend_stays_full_for_the_whole_clock,
+        secondary_blend_clears_each_draw_phase_without_reserving,
+        secondary_terminal_remains_full_without_draw_authority,
+        secondary_blend_cannot_commit_a_draw_ticket,
+        admitted_secondary_invalid_progress_fails_stock_and_clears,
+        unadmitted_or_nonback_secondary_clock_grants_no_authority,
     };
     unsigned failures = 0;
     for (const auto test : tests) {

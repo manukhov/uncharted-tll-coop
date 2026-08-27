@@ -14,6 +14,7 @@ namespace coop::nadine_back {
 
 inline constexpr std::size_t kInventorySlots = 23;
 inline constexpr std::uint32_t kNativeDurationBits = 0x3DCCCCCDu;
+inline constexpr std::uint32_t kSecondaryBackDurationBits = 0x3E4CCCCDu;
 
 struct Identity {
     std::uintptr_t fg = 0;
@@ -35,6 +36,9 @@ struct Observation {
     bool to_back = false;
     bool selected_back = false;
     bool controller_read = false;
+    // Runtime proved the subject's exact secondary endpoint and owned
+    // dual-slot back-binding path. Duration 0.2 alone grants no authority.
+    bool secondary_back_blend_admitted = false;
 };
 
 enum class Phase : std::uint8_t {
@@ -79,6 +83,7 @@ enum class Reason : std::uint8_t {
     kMalformedDuration,
     kMalformedProgress,
     kTokenExhausted,
+    kSecondaryBackBlend,
 };
 
 struct Decision {
@@ -229,6 +234,22 @@ inline Decision prepare(Ledger& ledger, const Observation& observation) noexcept
         result.reason = Reason::kActiveDraw;
         result.token = state.serial;
         result.phase = state.phase;
+        return result;
+    }
+
+    if (observation.duration_bits == kSecondaryBackDurationBits &&
+        observation.secondary_back_blend_admitted) {
+        // Both endpoints belong on the back. Native +4F0/+500 interpolation
+        // continues untouched underneath a constant authored parent/depth.
+        // This supersedes Draw authority but never creates a Draw ticket.
+        state = {};
+        if (!valid_progress(observation.progress)) {
+            result.reason = Reason::kMalformedProgress;
+            return result;
+        }
+        result.disposition = Disposition::kFull;
+        result.weight = 1.0F;
+        result.reason = Reason::kSecondaryBackBlend;
         return result;
     }
 
