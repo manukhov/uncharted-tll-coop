@@ -21,6 +21,7 @@
 
 #include "coop_protocol.h"
 #include "coop_runtime_offsets.h"
+#include "nadine_back_frame_policy.h"
 
 // ============================================================================
 //  FILE MAP (search "=====  <TITLE>" to jump). Sections in source order:
@@ -2595,6 +2596,10 @@ constexpr bool kEnableLegacyNadineMazurNativeBackFrame = false;
 // authored spined-relative marker only for local legacy-Nadine Mazur output.
 constexpr bool kEnableLegacyNadineMazurAuthoredBackFrame = true;
 constexpr float kLegacyNadineMazurBackDepthMeters = 0.05F;
+// Other weapons are admitted by their current authored primary holster ID,
+// not by the old relay art whitelist or weapon-type names. Keep the confirmed
+// Mazur/P99 branches and every non-targSpineProp endpoint independent.
+constexpr bool kEnableLegacyNadineOtherWeaponBackFrame = true;
 // Build afp is the accepted 82e7b9e-compatible back attachment: the authored
 // frame reaches 0x141ED19BB directly at full weight. Builds afr..aft added a
 // second Draw/Put weighting gate here; aft then reached stock +0x7B8 and the
@@ -69321,6 +69326,548 @@ void log_nadine_mazur_back_frame_once(
     boot_log_line(line.str().c_str());
 }
 
+struct NadineOtherWeaponBackScope {
+    coop::nadine_back::Observation observation{};
+    void* weapon = nullptr;
+    void* owner = nullptr;
+    void* controller = nullptr;
+    std::byte* table = nullptr;
+    std::byte* records = nullptr;
+    void* rig = nullptr;
+    std::uint32_t capacity = 0;
+    std::uint32_t count = 0;
+    std::uint32_t selected_id = 0;
+    std::uint32_t progress_bits = 0;
+    std::uint8_t selected_index = 0xFF;
+    std::int16_t selected_joint = -1;
+    std::array<std::uint32_t, 16> binding_bits{};
+};
+
+struct NadineOtherWeaponBackArt {
+    void* registry = nullptr;
+    const std::byte* definition = nullptr;
+    const std::byte* descriptor = nullptr;
+    const std::byte* primary = nullptr;
+    std::uint32_t primary_id = 0;
+    std::array<std::uint32_t, 8> authored_binding_bits{};
+};
+
+// Reacquire every weak cell on each callback. No ProcessWeapon/Player/table
+// pointer is a persistent identity: retail can relocate all three together.
+// This also runs for rightHand callbacks, so the separate item-phase ledger
+// observes the real selector exit without touching the Mazur latch.
+bool seh_read_nadine_other_weapon_back_scope(
+    void* weapon, NadineOtherWeaponBackScope* scope) {
+    if (scope == nullptr) return false;
+    *scope = {};
+    __try {
+        if (!g_net_role_b || weapon == nullptr || g_module == 0 ||
+            readable_bytes(weapon) < 0x8F5) {
+            return false;
+        }
+        const auto* const bytes = static_cast<const std::byte*>(weapon);
+        const std::uint32_t art =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x860);
+        if (*reinterpret_cast<const std::uintptr_t*>(bytes) !=
+                g_module + kProcessWeaponVtableRva ||
+            art == 0 || art == kCoopRifleArtId || art == kCoopPistolArtId) {
+            return false;
+        }
+        auto& observation = scope->observation;
+        observation.identity.art = art;
+        observation.identity.weapon_generation =
+            *reinterpret_cast<const std::uint32_t*>(
+                bytes + kGameObjectRuntimeIdOffset);
+        observation.identity.owner_generation =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x4E8);
+        const auto* const handle =
+            *reinterpret_cast<const std::byte* const*>(bytes + 0x4E0);
+        if (observation.identity.weapon_generation == 0 ||
+            observation.identity.owner_generation == 0 || handle == nullptr ||
+            readable_bytes(handle) < 0x10) {
+            return false;
+        }
+        scope->owner = *reinterpret_cast<void* const*>(handle + 8);
+        if (scope->owner == nullptr ||
+            scope->owner != retained_player_object(0) ||
+            readable_bytes(scope->owner) < kPlayerWeaponControllerOffset + 8 ||
+            !player_object_stable(scope->owner) ||
+            !player_screen_index_is(scope->owner, 0)) {
+            return false;
+        }
+        const auto* const owner = static_cast<const std::byte*>(scope->owner);
+        if (*reinterpret_cast<const std::uint32_t*>(
+                owner + kGameObjectRuntimeIdOffset) !=
+                observation.identity.owner_generation ||
+            *reinterpret_cast<const std::uint32_t*>(owner + 0x170) !=
+                kLegacyNadineAttachTargetLookId ||
+            !seh_weapon_parent_resolves_to_owner(weapon, scope->owner) ||
+            !seh_read_exact_player_weapon_controller(
+                scope->owner, &scope->controller)) {
+            return false;
+        }
+        void* inventory_weapon = nullptr;
+        if (!seh_find_exact_controller_inventory_art_raw(
+                scope->controller, art, &inventory_weapon,
+                &observation.inventory_slot) || inventory_weapon != weapon) {
+            return false;
+        }
+        const auto* const fg =
+            *reinterpret_cast<const std::byte* const*>(bytes + 0x1A8);
+        if (fg == nullptr ||
+            readable_bytes(fg) < kFgAnimDataRetainedIdOffset + 4) {
+            return false;
+        }
+        const auto* const fg_handle =
+            *reinterpret_cast<const std::byte* const*>(
+                fg + kFgAnimDataRetainedHandleOffset);
+        if (fg_handle == nullptr || readable_bytes(fg_handle) < 0x10 ||
+            *reinterpret_cast<void* const*>(fg_handle + 8) != weapon ||
+            *reinterpret_cast<const std::uint32_t*>(
+                fg + kFgAnimDataRetainedIdOffset) !=
+                observation.identity.weapon_generation) {
+            return false;
+        }
+        observation.identity.fg = reinterpret_cast<std::uintptr_t>(fg);
+        observation.raw_weapon = reinterpret_cast<std::uintptr_t>(weapon);
+        scope->weapon = weapon;
+        scope->table = *reinterpret_cast<std::byte* const*>(owner + 0x1E0);
+        if (scope->table == nullptr || readable_bytes(scope->table) < 0x18) {
+            return false;
+        }
+        scope->capacity =
+            *reinterpret_cast<const std::uint32_t*>(scope->table);
+        scope->count =
+            *reinterpret_cast<const std::uint32_t*>(scope->table + 4);
+        scope->records =
+            *reinterpret_cast<std::byte* const*>(scope->table + 8);
+        scope->rig = *reinterpret_cast<void* const*>(scope->table + 0x10);
+        scope->selected_index =
+            *reinterpret_cast<const std::uint8_t*>(bytes + 0x688);
+        if (scope->capacity == 0 || scope->capacity > 256 ||
+            scope->count == 0 || scope->count > scope->capacity ||
+            scope->records == nullptr || scope->rig == nullptr ||
+            readable_bytes(scope->rig) < 0x20 ||
+            (scope->selected_index != 0xFF &&
+             scope->selected_index >= scope->count) ||
+            readable_bytes(scope->records) < scope->count * 48ull) {
+            return false;
+        }
+        if (scope->selected_index != 0xFF) {
+            const auto* const selected = scope->records +
+                static_cast<std::size_t>(scope->selected_index) * 48;
+            scope->selected_id =
+                *reinterpret_cast<const std::uint32_t*>(selected + 0x20);
+            scope->selected_joint =
+                *reinterpret_cast<const std::int16_t*>(selected + 0x24);
+        }
+        observation.selected_back = scope->selected_id == kTargSpinePropAttachId;
+        observation.duration_bits =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x640);
+        std::memcpy(&scope->progress_bits, bytes + 0x644, 4);
+        std::memcpy(&observation.progress, &scope->progress_bits, 4);
+        observation.to_back =
+            *reinterpret_cast<const std::uint8_t*>(bytes + 0x8F4) != 0;
+        observation.controller_read = seh_read_idle_arm_pose_weapon_state(
+            scope->owner, &observation.current_slot,
+            &observation.controller_state, nullptr);
+        std::memcpy(scope->binding_bits.data(), bytes + 0x4F0, 64);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *scope = {};
+        return false;
+    }
+}
+
+bool seh_read_nadine_other_weapon_back_art(
+    std::uint32_t art, NadineOtherWeaponBackArt* capture) {
+    if (capture == nullptr) return false;
+    *capture = {};
+    __try {
+        if (g_module == 0 || art == 0 || art == kCoopRifleArtId ||
+            art == kCoopPistolArtId) {
+            return false;
+        }
+        using RegistryFunction = void*(__fastcall*)();
+        using LookupFunction = void*(__fastcall*)(void*, std::uint32_t);
+        // This accessor chooses the active offline/online resource generation.
+        // Never cache its returned pointers, or use the old diagnostic list
+        // reader: descriptor+0 is NOT a primary-binding count.
+        capture->registry = reinterpret_cast<RegistryFunction>(
+            g_module + kGetCachedWeaponArtDefsHashRegistryRva)();
+        const auto* const registry =
+            static_cast<const std::byte*>(capture->registry);
+        if (registry == nullptr || readable_bytes(registry) < 0x18) {
+            return false;
+        }
+        const std::uint32_t count =
+            *reinterpret_cast<const std::uint32_t*>(registry);
+        const void* const keys =
+            *reinterpret_cast<void* const*>(registry + 8);
+        const void* const values =
+            *reinterpret_cast<void* const*>(registry + 0x10);
+        // LookupRegistryRecordPointerById performs id % count before probing.
+        if (count == 0 || count > 65536 || keys == nullptr || values == nullptr ||
+            readable_bytes(keys) < count * sizeof(std::uint32_t) ||
+            readable_bytes(values) < count * sizeof(void*)) {
+            return false;
+        }
+        capture->definition = static_cast<const std::byte*>(
+            reinterpret_cast<LookupFunction>(
+                g_module + kLookupRegistryRecordPointerByIdRva)(
+                capture->registry, art));
+        if (capture->definition == nullptr ||
+            readable_bytes(capture->definition) < 0xE0) {
+            return false;
+        }
+        capture->descriptor =
+            *reinterpret_cast<const std::byte* const*>(
+                capture->definition + 0xD8);
+        if (capture->descriptor == nullptr ||
+            readable_bytes(capture->descriptor) < 0x18) {
+            return false;
+        }
+        capture->primary = *reinterpret_cast<const std::byte* const*>(
+            capture->descriptor + 8);
+        if (capture->primary == nullptr ||
+            readable_bytes(capture->primary) < 0x44) {
+            return false;
+        }
+        capture->primary_id =
+            *reinterpret_cast<const std::uint32_t*>(capture->primary);
+        if (capture->primary_id != kTargSpinePropAttachId) return false;
+        std::memcpy(capture->authored_binding_bits.data(),
+                    capture->primary + 0x10, 32);
+        NadineAttachTransform32 binding{};
+        std::memcpy(&binding, capture->authored_binding_bits.data(), 32);
+        return raw_attach_transform_valid(&binding);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *capture = {};
+        return false;
+    }
+}
+
+bool same_nadine_other_weapon_back_scope(
+    const NadineOtherWeaponBackScope& a,
+    const NadineOtherWeaponBackScope& b) {
+    return a.weapon == b.weapon && a.owner == b.owner &&
+        a.controller == b.controller && a.table == b.table &&
+        a.records == b.records && a.rig == b.rig &&
+        a.capacity == b.capacity && a.count == b.count &&
+        a.selected_id == b.selected_id && a.selected_index == b.selected_index &&
+        a.selected_joint == b.selected_joint &&
+        a.observation.identity.fg == b.observation.identity.fg &&
+        a.observation.identity.art == b.observation.identity.art &&
+        a.observation.identity.owner_generation ==
+            b.observation.identity.owner_generation &&
+        a.observation.identity.weapon_generation ==
+            b.observation.identity.weapon_generation &&
+        a.observation.inventory_slot == b.observation.inventory_slot;
+}
+
+struct NadineOtherWeaponBackCorrection {
+    NadineOtherWeaponBackScope scope{};
+    NadineOtherWeaponBackArt art{};
+    coop::nadine_back::Decision decision{};
+    std::uint8_t donor_index = 0xFF;
+    std::int16_t donor_joint = -1;
+    std::array<std::uint32_t, 8> input_bits{};
+    std::array<std::uint32_t, 8> authored_frame_bits{};
+    std::uint8_t admission_stage = 0;
+    bool resolved = false;
+    bool stock_verified = false;
+    bool primary_preserved = false;
+    bool phase_committed = false;
+};
+
+SRWLOCK g_nadine_other_weapon_back_lock = SRWLOCK_INIT;
+coop::nadine_back::Ledger g_nadine_other_weapon_back_ledger{};
+
+void invalidate_nadine_other_weapon_back_scope(
+    void* weapon, const NadineOtherWeaponBackCorrection& capture) {
+    auto observation = capture.scope.observation;
+    if (observation.raw_weapon == 0) {
+        observation.raw_weapon = reinterpret_cast<std::uintptr_t>(weapon);
+    }
+    AcquireSRWLockExclusive(&g_nadine_other_weapon_back_lock);
+    coop::nadine_back::invalidate(
+        g_nadine_other_weapon_back_ledger, observation);
+    ReleaseSRWLockExclusive(&g_nadine_other_weapon_back_lock);
+}
+
+void cancel_nadine_other_weapon_back_decision(
+    const NadineOtherWeaponBackCorrection& capture) {
+    if (capture.decision.token == 0) return;
+    AcquireSRWLockExclusive(&g_nadine_other_weapon_back_lock);
+    coop::nadine_back::cancel(
+        g_nadine_other_weapon_back_ledger,
+        capture.scope.observation.inventory_slot, capture.decision.token);
+    ReleaseSRWLockExclusive(&g_nadine_other_weapon_back_lock);
+}
+
+bool seh_resolve_nadine_other_weapon_back_frame(
+    void* weapon, const void* input, NadineAttachTransform32* frame,
+    NadineOtherWeaponBackCorrection* capture) {
+    if (frame == nullptr || capture == nullptr) return false;
+    *capture = {};
+    if (!g_net_role_b) {
+        AcquireSRWLockExclusive(&g_nadine_other_weapon_back_lock);
+        // Preserve the monotonically increasing token serial across role exits.
+        g_nadine_other_weapon_back_ledger.slots = {};
+        ReleaseSRWLockExclusive(&g_nadine_other_weapon_back_lock);
+        return false;
+    }
+    __try {
+        if (input == nullptr || !seh_read_nadine_other_weapon_back_scope(
+                weapon, &capture->scope)) {
+            return false;
+        }
+        const auto& scope = capture->scope;
+        capture->admission_stage = 1;
+        AcquireSRWLockExclusive(&g_nadine_other_weapon_back_lock);
+        coop::nadine_back::reconcile(
+            g_nadine_other_weapon_back_ledger, scope.observation);
+        ReleaseSRWLockExclusive(&g_nadine_other_weapon_back_lock);
+        if (!scope.observation.selected_back ||
+            !raw_attach_transform_valid(
+                static_cast<const NadineAttachTransform32*>(input)) ||
+            !seh_read_nadine_other_weapon_back_art(
+                scope.observation.identity.art, &capture->art)) {
+            return false;
+        }
+        capture->admission_stage = 2;
+
+        // Correct only the known legacy spineb identity alias. A future real
+        // authored AD record must not receive a second copy of its marker.
+        const auto* const selected = scope.records +
+            static_cast<std::size_t>(scope.selected_index) * 48;
+        if (scope.selected_joint < 0 ||
+            scope.selected_joint != raw_resolve_attach_joint(
+                scope.table, kSpinebJointNameId) ||
+            std::memcmp(selected, kCanonicalAttachIdentityBits.data(), 32) != 0) {
+            return false;
+        }
+        capture->admission_stage = 3;
+        int donor_index = -1;
+        unsigned selected_matches = 0;
+        unsigned donor_matches = 0;
+        for (std::uint32_t index = 0; index < scope.count; ++index) {
+            const auto* const record = scope.records + index * 48ull;
+            const std::uint32_t id =
+                *reinterpret_cast<const std::uint32_t*>(record + 0x20);
+            if (id == kTargSpinePropAttachId) ++selected_matches;
+            if (id == kLegacyNadineSpinedIdentityAttachId) {
+                ++donor_matches;
+                donor_index = static_cast<int>(index);
+            }
+        }
+        const std::int16_t spined = raw_resolve_attach_joint(
+            scope.table, kSpinedJointNameId);
+        if (selected_matches != 1 || donor_matches != 1 || donor_index < 0 ||
+            donor_index > 0xFE || spined < 0) {
+            return false;
+        }
+        const auto* const donor = scope.records +
+            static_cast<std::size_t>(donor_index) * 48;
+        if (*reinterpret_cast<const std::int16_t*>(donor + 0x24) != spined ||
+            std::memcmp(donor, kCanonicalAttachIdentityBits.data(), 32) != 0) {
+            return false;
+        }
+        capture->donor_index = static_cast<std::uint8_t>(donor_index);
+        capture->donor_joint = spined;
+        using ResolveFunction = NadineAttachTransform32*(__fastcall*)(
+            void*, NadineAttachTransform32*, std::uint8_t);
+        using ComposeFunction = NadineAttachTransform32*(__fastcall*)(
+            const NadineAttachTransform32*, NadineAttachTransform32*,
+            const NadineAttachTransform32*);
+        const auto resolve = reinterpret_cast<ResolveFunction>(
+            g_module + kAttachSystemResolveRecordTransformRva);
+        const auto compose = reinterpret_cast<ComposeFunction>(
+            g_module + kTransformComposeRva);
+        NadineAttachTransform32 spined_frame{};
+        NadineAttachTransform32 marker{};
+        NadineAttachTransform32 authored_frame{};
+        std::memcpy(&marker, kChloeTargSpinePropTransformBits.data(), 32);
+        if (resolve(scope.table, &spined_frame, capture->donor_index) !=
+                &spined_frame || !raw_attach_transform_valid(&spined_frame) ||
+            compose(&spined_frame, &authored_frame, &marker) != &authored_frame ||
+            !raw_attach_transform_valid(&authored_frame)) {
+            return false;
+        }
+
+        // The native resolver can fill joint caches, but it must not change
+        // the admitted resource/owner/selector/binding topology under us.
+        NadineOtherWeaponBackScope after{};
+        NadineOtherWeaponBackArt art_after{};
+        if (!seh_read_nadine_other_weapon_back_scope(weapon, &after) ||
+            !same_nadine_other_weapon_back_scope(scope, after) ||
+            scope.binding_bits != after.binding_bits ||
+            scope.observation.duration_bits != after.observation.duration_bits ||
+            scope.progress_bits != after.progress_bits ||
+            scope.observation.to_back != after.observation.to_back ||
+            !seh_read_nadine_other_weapon_back_art(
+                scope.observation.identity.art, &art_after) ||
+            capture->art.registry != art_after.registry ||
+            capture->art.definition != art_after.definition ||
+            capture->art.descriptor != art_after.descriptor ||
+            capture->art.primary != art_after.primary ||
+            capture->art.authored_binding_bits != art_after.authored_binding_bits ||
+            raw_resolve_attach_joint(scope.table, kSpinedJointNameId) != spined ||
+            *reinterpret_cast<const std::uint32_t*>(donor + 0x20) !=
+                kLegacyNadineSpinedIdentityAttachId ||
+            *reinterpret_cast<const std::int16_t*>(donor + 0x24) != spined ||
+            std::memcmp(donor, kCanonicalAttachIdentityBits.data(), 32) != 0 ||
+            std::memcmp(selected, kCanonicalAttachIdentityBits.data(), 32) != 0) {
+            return false;
+        }
+        capture->admission_stage = 4;
+        capture->scope = after;
+        AcquireSRWLockExclusive(&g_nadine_other_weapon_back_lock);
+        capture->decision = coop::nadine_back::prepare(
+            g_nadine_other_weapon_back_ledger, after.observation);
+        ReleaseSRWLockExclusive(&g_nadine_other_weapon_back_lock);
+        if (capture->decision.disposition ==
+                coop::nadine_back::Disposition::kStock) {
+            return false;
+        }
+        capture->admission_stage = 5;
+        const float weight = capture->decision.weight;
+        using InterpolateFunction = NadineAttachTransform32*(__fastcall*)(
+            NadineAttachTransform32*, const NadineAttachTransform32*,
+            const NadineAttachTransform32*, float);
+        const auto interpolate = reinterpret_cast<InterpolateFunction>(
+            g_module + kTransformInterpolateTranslationAndRotationRva);
+        if (weight <= 0.0001F) {
+            std::memcpy(frame, input, 32);
+        } else if (weight >= 0.9999F) {
+            std::memcpy(frame, &authored_frame, 32);
+        } else if (interpolate(
+                       frame, static_cast<const NadineAttachTransform32*>(input),
+                       &authored_frame, weight) != frame) {
+            cancel_nadine_other_weapon_back_decision(*capture);
+            return false;
+        }
+        if (!raw_attach_transform_valid(frame)) {
+            cancel_nadine_other_weapon_back_decision(*capture);
+            return false;
+        }
+        std::memcpy(capture->input_bits.data(), input, 32);
+        std::memcpy(capture->authored_frame_bits.data(), &authored_frame, 32);
+        capture->admission_stage = 6;
+        capture->resolved = true;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        cancel_nadine_other_weapon_back_decision(*capture);
+        return false;
+    }
+}
+
+bool seh_finish_nadine_other_weapon_back_frame(
+    void* weapon, void* output, std::int64_t stock_result,
+    NadineOtherWeaponBackCorrection* capture) {
+    if (capture == nullptr) return false;
+    __try {
+        NadineOtherWeaponBackScope after{};
+        if (output == nullptr || stock_result !=
+                reinterpret_cast<std::int64_t>(output) ||
+            !raw_attach_transform_valid(
+                static_cast<const NadineAttachTransform32*>(output)) ||
+            !seh_read_nadine_other_weapon_back_scope(weapon, &after) ||
+            !same_nadine_other_weapon_back_scope(capture->scope, after)) {
+            cancel_nadine_other_weapon_back_decision(*capture);
+            return false;
+        }
+        // Stock may update its depenetration state at +510/+520; only the
+        // primary binding +4F0/+500 is invariant across this particular call.
+        capture->primary_preserved = std::memcmp(
+            capture->scope.binding_bits.data(), after.binding_bits.data(), 32) == 0;
+        if (!capture->primary_preserved) {
+            cancel_nadine_other_weapon_back_decision(*capture);
+            return false;
+        }
+        capture->stock_verified = true;
+        if (capture->decision.token != 0) {
+            AcquireSRWLockExclusive(&g_nadine_other_weapon_back_lock);
+            capture->phase_committed = coop::nadine_back::commit(
+                g_nadine_other_weapon_back_ledger, after.observation,
+                capture->decision.token);
+            ReleaseSRWLockExclusive(&g_nadine_other_weapon_back_lock);
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        cancel_nadine_other_weapon_back_decision(*capture);
+        return false;
+    }
+}
+
+void log_nadine_other_weapon_back_frame_once(
+    void* output, const NadineOtherWeaponBackCorrection& capture) {
+    const auto& scope = capture.scope;
+    const auto& observation = scope.observation;
+    const unsigned bucket = static_cast<unsigned>(std::clamp(
+        std::floor(capture.decision.weight * 10.0F), 0.0F, 10.0F));
+    std::uint64_t signature = 1469598103934665603ULL;
+    const auto mix = [&signature](std::uint64_t value) {
+        signature ^= value;
+        signature *= 1099511628211ULL;
+    };
+    mix(observation.identity.fg);
+    mix(observation.identity.art);
+    mix(observation.identity.owner_generation);
+    mix(observation.identity.weapon_generation);
+    mix(reinterpret_cast<std::uintptr_t>(scope.records));
+    mix(scope.selected_id);
+    mix(capture.admission_stage);
+    mix(static_cast<unsigned>(capture.decision.reason));
+    mix(bucket);
+    mix(capture.stock_verified ? 1u : 0u);
+    mix(capture.phase_committed ? 1u : 0u);
+    mix(std::min(capture.decision.terminal_ordinal, 2u));
+    static std::array<std::array<std::atomic<std::uint64_t>, 192>, 4> seen{};
+    const std::size_t art_bucket =
+        (observation.identity.art ^ (observation.identity.art >> 16)) & 3u;
+    if (!claim_holster_probe_signature(seen[art_bucket], signature)) return;
+    std::array<std::uint32_t, 8> output_bits{};
+    seh_copy_nadine_attach_transform_bits(output, &output_bits);
+    std::ostringstream line;
+    line << (capture.resolved
+                 ? "NADINE-OTHER-WEAPON-BACK art=0x"
+                 : "NADINE-OTHER-WEAPON-BACK-SKIP art=0x") << std::hex
+         << observation.identity.art << " weapon=0x"
+         << observation.raw_weapon << " player=0x"
+         << reinterpret_cast<std::uintptr_t>(scope.owner) << " fg=0x"
+         << observation.identity.fg << " records=0x"
+         << reinterpret_cast<std::uintptr_t>(scope.records) << std::dec
+         << " generation=" << observation.identity.owner_generation << "/"
+         << observation.identity.weapon_generation
+         << " slot/current/state=" << observation.inventory_slot << "/"
+         << observation.current_slot << "/" << observation.controller_state
+         << " selected=" << static_cast<unsigned>(scope.selected_index) << ":"
+         << scope.selected_joint << "/0x" << std::hex << scope.selected_id
+         << " authoredId=0x" << capture.art.primary_id << std::dec
+         << " donor=" << static_cast<unsigned>(capture.donor_index) << ":"
+         << capture.donor_joint
+         << " admission=" << static_cast<unsigned>(capture.admission_stage)
+         << " reason=" << static_cast<unsigned>(capture.decision.reason)
+         << " weight=" << capture.decision.weight
+         << " terminal=" << (capture.decision.terminal_hold ? 1 : 0) << "/"
+         << capture.decision.terminal_ordinal
+         << " relocated=" << (capture.decision.raw_relocated ? 1 : 0)
+         << " stock=" << (capture.stock_verified ? 1 : 0)
+         << " primaryPreserved=" << (capture.primary_preserved ? 1 : 0)
+         << " phaseCommitted=" << (capture.phase_committed ? 1 : 0)
+         << " clearance=stock"
+         << std::hex << " input=";
+    for (const auto bits : capture.input_bits) line << bits << ",";
+    line << " authoredFrame=";
+    for (const auto bits : capture.authored_frame_bits) line << bits << ",";
+    line << " binding=";
+    for (std::size_t i = 0; i < 8; ++i) line << scope.binding_bits[i] << ",";
+    line << " output=";
+    for (const auto bits : output_bits) line << bits << ",";
+    boot_log_line(line.str().c_str());
+}
+
 std::int64_t __fastcall hooked_nd_attachable_apply_local_transform(
     void* weapon, void* output, const void* input) {
     NadineMazurTransitionIdentity mazur_transition_identity{};
@@ -69392,17 +69939,39 @@ std::int64_t __fastcall hooked_nd_attachable_apply_local_transform(
         NadineMazurTransitionBackBlendResult::kRejected;
     const bool mazur_corrected =
         mazur_frame_resolved && !mazur_transition_rejected;
+    NadineAttachTransform32 other_back_frame{};
+    NadineOtherWeaponBackCorrection other_correction{};
+    const bool try_other_back_frame =
+        kEnableLegacyNadineOtherWeaponBackFrame && !mazur_frame_resolved;
+    const bool other_corrected = try_other_back_frame &&
+        seh_resolve_nadine_other_weapon_back_frame(
+            weapon, input, &other_back_frame, &other_correction);
+    if (try_other_back_frame && !other_corrected) {
+        // A witnessed scope/resource/donor loss also revokes an earlier
+        // committed phase; cancel(token) alone covers only PendingDraw.
+        invalidate_nadine_other_weapon_back_scope(weapon, other_correction);
+    }
     const void* const effective_input = mazur_corrected
         ? static_cast<const void*>(
               mazur_transition_blended
                   ? &mazur_weighted_back_frame
                   : &mazur_back_frame)
-        : input;
+        : (other_corrected ? static_cast<const void*>(&other_back_frame) : input);
     const std::int64_t result =
         g_original_nd_attachable_apply_local_transform != nullptr
             ? g_original_nd_attachable_apply_local_transform(
                   weapon, output, effective_input)
             : 0;
+    if (other_corrected) {
+        if (!seh_finish_nadine_other_weapon_back_frame(
+                weapon, output, result, &other_correction)) {
+            invalidate_nadine_other_weapon_back_scope(weapon, other_correction);
+        }
+    }
+    if (kEnableLegacyNadineOtherWeaponBackFrame &&
+        other_correction.scope.observation.selected_back) {
+        log_nadine_other_weapon_back_frame_once(output, other_correction);
+    }
     if (mazur_correction.handoff_latch_serial != 0 &&
         !mazur_correction.handoff_terminal_hold &&
         mazur_correction.handoff_to_back == 0 &&
@@ -69620,6 +70189,12 @@ bool install_nadine_local_transform_probe() {
     if constexpr (kEnableLegacyNadineMazurBackTransitionCensus) {
         boot_log_line(
             "bounded legacy-Nadine Mazur back-transition census active at 0x141ED19BB");
+    }
+    if constexpr (kEnableLegacyNadineOtherWeaponBackFrame) {
+        boot_log_line(
+            "legacy-Nadine other-weapon authored back-frame correction installed "
+            "at 0x141ED19BB (current primary+selected targSpineProp; "
+            "per-art binding and non-back endpoints unchanged; separate item ledger)");
     }
     g_nadine_local_transform_probe_ready.store(
         true, std::memory_order_release);
@@ -76453,8 +77028,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-26aga "
-        "(read-only WeaponPartial Perform discriminator; AFZ parked)");
+        "TLL co-op runtime init 2026-08-27agb "
+        "(other-weapon authored back frames; Mazur/P99 preserved; animations parked)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "
@@ -76568,6 +77143,7 @@ DWORD WINAPI install_hook(void*) {
     }
     if constexpr ((kEnableLegacyNadineMazurNativeBackFrame ||
                    kEnableLegacyNadineMazurAuthoredBackFrame ||
+                   kEnableLegacyNadineOtherWeaponBackFrame ||
                    kEnableLegacyNadineP99HipAxisLift ||
                    kEnableLegacyNadineDrawnP99LocalTransformCensus) &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {

@@ -56,3 +56,25 @@ set_target_properties(
 
 target_link_libraries(tll_coop_runtime PRIVATE ws2_32)
 target_link_libraries(tll_remote_input_client PRIVATE ws2_32)
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(
+        tll_nadine_back_frame_policy_tests
+        tests/nadine_back_frame_policy_tests.cpp
+    )
+    target_include_directories(tll_nadine_back_frame_policy_tests PRIVATE src)
+    target_compile_features(tll_nadine_back_frame_policy_tests PRIVATE cxx_std_20)
+    if(MSVC)
+        target_compile_options(
+            tll_nadine_back_frame_policy_tests
+            PRIVATE /W4 /permissive- /EHsc
+        )
+    else()
+        target_compile_options(
+            tll_nadine_back_frame_policy_tests
+            PRIVATE -Wall -Wextra -Wpedantic
+        )
+    endif()
+    add_test(NAME nadine_back_frame_policy COMMAND tll_nadine_back_frame_policy_tests)
+endif()

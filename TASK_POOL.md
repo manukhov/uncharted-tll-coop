@@ -11,10 +11,37 @@
 
 ## P0 CURRENT: correct remaining Nadine weapon back placement (2026-08-27)
 
-- [ ] Correct the holstered positions of all other weapons on local legacy
-      Nadine so they do not sink into her back. Start with the remaining weapon
-      arts and their native holster locator/transform routes; preserve the
-      user-confirmed Mazur back placement and confirmed P99 behavior.
+- [x] Complete the read-only remaining-weapon registry and authored-binding
+      audit. Ordinary `weapon-art.bin` has 38 `targSpineProp AD047A` arts
+      including Mazur: 37 other arts, 10 exact primary profiles and 14 full
+      primary/secondary packages. `net/net-weapon-art.bin` has 33 AD arts
+      including Mazur, four primary profiles and seven full packages; the
+      union is 41 arts including Mazur / 40 others. See the exact grouped
+      catalog and offsets in the final 2026-08-27 STATIC registry section of
+      `COOP_STATUS.md`; asset presence is not a visual placement result.
+- [x] Implement the placement path separately from Mazur transition/cold
+      state. Resolve the current mode/generation-aware registry through
+      `0x1414FA380`, look up the actual art through `0x141614E40`, and require
+      both `ArtDef+0xD8 -> descriptor+8 -> binding[0] == AD047A` and the current
+      selected attachment record `== AD047A`. Explicitly preserve Mazur and
+      P99; retain every weapon's own primary and optional secondary binding.
+      Use an independent bounded terminal ledger for the other-weapon work,
+      never the parked Mazur action/provenance latch. Native `targChest`
+      (`4F62CD9D`, identity on `spined`), generic/hip/hand, heavy/other endpoints,
+      body/head pose and animation timing remain stock.
+- [x] Build `agb`, pass CTest and 27/27 item-policy scenarios, and close the
+      independent-review stale-authority/negative-admission gap. The new path
+      changes only the selected frame's parent basis; it does not extrapolate
+      Mazur's 5 cm clearance to other model geometry. Source and DLL hashes,
+      static competitors and the exact one-copy prediction are recorded in
+      the final `agb` section of `COOP_STATUS.md`.
+- [ ] Verify the holstered positions of the other eligible weapons on local
+      legacy Nadine against the written per-art prediction, without regressing
+      the user-confirmed Mazur back placement or confirmed P99 behavior.
+      Runtime validation is still pending: the audit does not prove complete
+      separation for every weapon mesh. A successful exact frame row plus
+      residual clipping requires an art-specific follow-up, not a universal
+      offset or reopening the parked animation task.
 - [ ] Earn any placement mutation with the normal static evidence quota,
       competing explanations and a written visual prediction. Keep the
       appearance-1 limit of one game copy; the user performs all game input.

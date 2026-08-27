@@ -8140,8 +8140,12 @@ FUNCTIONS = {
     ),
     0x1414FA380: (
         "GetCachedWeaponArtDefsHashRegistry",
-        "Cached accessor for the registry keyed by the '*weapon-art-defs-hash*' "
-        "string family.",
+        "Returns the active WeaponArtDef hash, not necessarily the offline "
+        "registry. At 0x1414FA4BD HIBYTE(g_NetModeFlags) selects the online "
+        "cache 0x1437426E0/0x1437426F0 or the offline cache "
+        "0x146C90228/0x146C90238; resource owner+0x58 generation changes "
+        "refresh the cached data. Callers must not retain an ArtDef/holster "
+        "descriptor across a registry generation or mode change.",
     ),
     0x1414FA800: (
         "GetCachedWeaponArtDefsOnlineHashRegistry",
@@ -10880,16 +10884,25 @@ FUNCTIONS = {
     ),
     0x1414FEB30: (
         "WeaponHolster_ResolveAttachPoint",
-        "Uses the weapon-art holster joint when it is non-generic; otherwise "
-        "delegates to WeaponHolster_SelectCharacterAttachPoint for the target "
-        "character.",
+        "Reads active WeaponArtDef+0xD8 -> descriptor+8 -> primary binding "
+        "attachment StringId at binding+0 (0x1414FEB8E). Descriptor+0 is not "
+        "a primary-binding count. A non-generic id such as targSpineProp "
+        "0x00AD047A or targChest 0x4F62CD9D bypasses the character scan; "
+        "generic gun_holster 0x555EFB8D delegates to "
+        "WeaponHolster_SelectCharacterAttachPoint. The current selected id "
+        "alone does not establish an art's authored holster endpoint.",
     ),
     0x1414FE540: (
         "WeaponHolster_BuildBinding",
         "Builds a Player holster binding: selected attachment StringId at +0, "
         "primary authored transform at +0x10/+0x20, secondary transform at "
-        "+0x30/+0x40 and scalar at +0x50. A non-generic first WeaponArt record "
-        "such as pistol targSpineProp bypasses the character gun_holster* scan. "
+        "+0x30/+0x40 and scalar at +0x50. ArtDef+0xD8 points to a descriptor "
+        "whose +8 is the primary binding and +0x10 is an optional alternative "
+        "endpoint array. Primary+0 is the id, +0x10/+0x20 its transform, "
+        "+0x30/+0x38 optional secondary T/Q pointers and +0x40 the scalar; "
+        "secondary transform pointers are not alternative endpoint records. "
+        "Non-generic targSpineProp (Mazur and other long guns, not P99) "
+        "bypasses the character gun_holster* scan. "
         "The controller copies the primary transform to weapon+0x4F0/+0x500. "
         "A later +0x7A8 selected-id redirect does not rebuild this art-specific "
         "primary transform for the replacement endpoint.",

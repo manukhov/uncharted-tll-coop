@@ -29540,3 +29540,366 @@ holster locator/transform routes, followed by a narrowly scoped placement
 change that leaves Mazur and P99 untouched. Runtime remains limited to one
 copy of `tll.exe`, only after the normal static evidence quota and written
 prediction; all gameplay input remains with the user.
+
+### 2026-08-27 STATIC: remaining-weapon back registry and authored binding coverage
+
+**STATIC ONLY; placement implementation and runtime validation pending.** The
+user's new priority is other weapons sinking into local legacy Nadine's back.
+This read-only audit enumerates the installed assets and the exact runtime
+selector. It does not report any newly corrected pixels, modify a weapon,
+change animation timing or reopen the parked Mazur Draw/Put/grip work.
+
+#### Registry ownership and exact runtime schema
+
+The ordinary `dc1.psarc/weapon-art.bin` contains the DC00 hash-table object
+`61D589D9 = *weapon-art-defs-hash*`, record `0x1BC0`, with capacity 256, keys at
+file `0x51B4` and value pointers at `0x47F8`. It has 137 occupied entries.
+The independent StringId preimages were resolved from installed
+`sid1.psarc/sidbase.bin`, not inferred from the old co-op constant names.
+
+`GetCachedWeaponArtDefsHashRegistry 0x1414FA380` is the required runtime
+accessor. Its normal branch selects `*weapon-art-defs-hash*`; a nonzero high
+byte of `g_NetModeFlags` selects `*weapon-art-defs-online-hash*` instead. Each
+cached branch checks its registry owner and saved generation against the
+owner's `+0x58` generation and refreshes stale state through `0x140185180`.
+Therefore do not retain a raw art/descriptor pointer independently across a
+registry reload, and do not substitute a fixed ordinary-file whitelist for
+the current runtime accessor. `LookupRegistryRecordPointerById 0x141614E40`
+then resolves the current `ProcessWeapon+0x860` art key.
+
+MCP reads of `WeaponHolster_ResolveAttachPoint 0x1414FEB30` and
+`WeaponHolster_BuildBinding 0x1414FE540` close the consumer schema:
+
+| Field | Authored meaning consumed by the stock path |
+| --- | --- |
+| `WeaponArtDef+0x10` | Weapon type; not a complete placement discriminator |
+| `WeaponArtDef+0xD8` | Pointer to the holster descriptor |
+| descriptor `+0/+4` | Raw DWORDs `0/1` in all enumerated AD descriptors; their semantics are not required for admission |
+| descriptor `+8` | Primary binding pointer |
+| descriptor `+0x10` | Optional array of alternative endpoint bindings |
+| binding `+0` | Authored attachment StringId |
+| binding `+0x10/+0x20` | Primary translation/quaternion, four floats each |
+| binding `+0x30/+0x38` | Optional secondary translation/quaternion pointers |
+| binding `+0x40` | Scalar; 1 for the enumerated AD bindings |
+
+`ResolveAttachPoint` returns a non-generic authored first binding ID directly;
+only missing/zero or generic `gun_holster 555EFB8D` selects the character's
+leg/pelvis/generic fallback. `BuildBinding` finds the selected endpoint and
+copies the primary transform, optional secondary transform and scalar into
+its output. Its callers include the actual holster action, controller rebind
+and selected-binding preparation, not merely a diagnostic consumer. A
+non-null secondary transform is not an alternative attachment point and must
+not be zeroed or replaced with Mazur's transform.
+
+Every ordinary AD descriptor (38 arts) and every online AD descriptor (33 arts)
+has a null descriptor `+0x10` alternative-endpoint array. Some primary bindings
+nevertheless have non-null `+0x30/+0x38` secondary overrides. This distinction
+is required for preserving each art's native handoff data.
+
+Older semantic aliases are unsafe for this extension. `C3181EBD` resolves to
+`assault-rifle-bullpup`, type 1, despite the old `kCoopScopedPistolArtId` name;
+`9A07E17F` is `assault-rifle-insas`, type 1, not the handgun described in older
+notes. Actual RPG `7525AA5C = rocket-launcher` is type 6 and uses AD, so a
+type-1/2-only gate would omit a valid back-attachment route.
+
+#### Ordinary registry: all 37 non-Mazur AD arts
+
+All entries below select `targSpineProp 00AD047A`. The ordinary registry has
+38 such arts including `33E29A1B = sniper-rifle-bolt` (Mazur). Excluding Mazur
+leaves the following 37, grouped by exact 32-byte primary binding. These are
+10 primary profiles but 14 complete primary/secondary descriptor packages.
+Asset presence is not proof that an art is obtainable in the current campaign.
+
+| Profile | Count excluding Mazur | Exact art/name pairs |
+| --- | --- | --- |
+| P1 | 14 | `C14CB0B7 assault-rifle-burst`; `4C240263 assault-rifle-close-upgrade`; `53AE127A assault-rifle-levergun`; `84C55608 assault-rifle-m4`; `0D11DBBA assault-rifle-scoped-auto`; `8B9366B5 assault-rifle-scorpion`; `3019CBEE assault-rifle-single-shot`; `6BA624EE assault-rifle-upgrade`; `E6B5C93C battle-rifle-basic`; `BA7F4B41 light-machinegun-basic`; `FB1C130F light-machinegun-pkm`; `7525AA5C rocket-launcher`; `BE281563 sniper-rifle-auto`; `10EA501E sniper-rifle-heavy-bolt` |
+| P2 | 2 | `23C8B0AD assault-rifle-basic`; `9A07E17F assault-rifle-insas` |
+| P3 | 6 | `7901D72B assault-rifle-basic-2`; `C3181EBD assault-rifle-bullpup`; `63ECE256 assault-rifle-p90`; `27617D0D assault-rifle-qbz95`; `B94895C2 assault-rifle-tavor`; `26A21250 submachine-gun` |
+| P4 | 1 | `2D58427C assault-rifle-basic-2-flashlight` |
+| P5 | 5 | `E9813B1F assault-rifle-single-shot-elena`; `2F73D112 coop-musket`; `8A6E4572 tower-collapsed-rocket-launcher`; `84076A36 tower-descent-rocket-launcher`; `A76E05A2 tower-descent-rocket-launcher-phantom` |
+| P6 | 1 | `354646B8 shotgun-basic` |
+| P7 | 3 | `AD18784E grenade-launcher-pump`; `3CC5B561 shotgun-auto`; `3DB640BF shotgun-upgrade` |
+| P8 | 3 | `70F6BE51 coop-blunderbuss`; `B15D983F mine-launcher`; `51645A5A mine-launcher-2` |
+| P9 | 1 | `7E9ECF73 coop-rocket-launcher` |
+| P10 | 1 | `8F0095F2 shotgun-spas` |
+
+Mazur also belongs to P1 but is deliberately excluded from the new path.
+Exact primary DWORDs below are ordered `Txyzw,Qxyzw`; do not normalize away
+their raw position-W bookkeeping or overwrite the live stock binding:
+
+```text
+P1  3D9BA5E3 BCA3D70A BD4CCCCD 00000000 BD6477B3 BDCD7209 3E0A06FB 3F7BF4C4
+P2  3DAC0831 BCFDF3B6 BD0B4396 00000000 BD6477B3 BDCD7209 3E0A06FB 3F7BF4C4
+P3  3DC6A7F0 BD449BA6 BDA1CAC1 00000000 BD4DB3EA BDCBE230 3E0A9AE4 3F7C0861
+P4  3D8D4FDF BD449BA6 BE3020C5 00000000 B9A366B5 BDBCF830 3D92FAC3 3F7E3EB4
+P5  3D3851EC BCED9168 BD656042 00000000 BD6477B3 BDCD7209 3E0A06FB 3F7BF4C4
+P6  3D958106 3B449BA6 BD27EF9E 00000000 3CA1B283 BDB7B501 3E117CA0 3F7C4F51
+P7  3D958106 BC343958 BD4CCCCD 00000000 3CA2E2CE BDD485D8 3E110BD3 3F7BF89F
+P8  3D3851EC BCED9168 BD656042 00000000 3C929E76 BDB84008 3E1150A6 3F7C519E
+P9  3D851EB8 BD9DB22D 3CFDF3B6 00000000 BE99BE89 BDC3CE91 3E37EA5E 3F6E90CC
+P10 3DBA5E35 BD0B4396 BD8D4FDF 00000000 BD54E19D BDCC6071 3E0A6C60 3F7C026B
+```
+
+The complete file-offset map is reproducible from the same ordinary entry:
+
+| Profile | Descriptor / primary binding | Secondary translation / quaternion |
+| --- | --- | --- |
+| P1, Mazur and 11 others | `13958 / 19890` | null / null |
+| P1, M4 / levergun / scorpion | `13A58 / 18F00` | `1A5C0 / 1A860` |
+| P2 | `12B20 / 19030` | null / null |
+| P3, bullpup / P90 / QBZ95 / Tavor | `15848 / 19C60` | `1A5C0 / 1A860` |
+| P3, basic-2 | `17178 / 19AD0` | null / null |
+| P3, submachine-gun | `17A10 / 1A330` | `1A6A0 / 1AC00` |
+| P4 | `10D80 / 19F60` | null / null |
+| P5 | `FE30 / 19150` | null / null |
+| P6 | `161B8 / 19300` | null / null |
+| P7, pump launcher / shotgun-upgrade | `12408 / 196F0` | null / null |
+| P7, shotgun-auto | `10038 / 1A2D0` | `1A880 / 1A680` |
+| P8 | `17710 / 18EA0` | null / null |
+| P9 | `14770 / 19D20` | `1A880 / 1A680`, byte-identical to its primary |
+| P10 | `18558 / 19950` | null / null |
+
+#### Online registry and dynamic coverage
+
+The separate `dc1.psarc/net/net-weapon-art.bin` has hash object
+`F73C3716 = *weapon-art-defs-online-hash*`, record `0x2678`, capacity 256,
+keys at `0x6FE8` and values at `0x5D90`. Its AD subset contains 33 unique arts
+including Mazur / 32 others, with four primary profiles and seven complete
+primary/secondary packages. The schema is the same, but many transforms are
+different from the ordinary registry, including Mazur's own binding.
+
+Three online AD arts are additional to the ordinary AD catalog:
+`DC5979BB blunderbuss`, `2C5E7C95 pirate-musket-a` and
+`71EFDBD9 submachine-gun-bullpup`. Conversely these eight ordinary AD arts are
+not online AD entries: `2D58427C`, `51645A5A`, `84076A36`, `8A6E4572`,
+`8F0095F2`, `A76E05A2`, `B15D983F`, `E9813B1F`. Thus the union is 41 unique
+AD arts including Mazur / 40 others. This is a static catalog bound, not a
+claim that the current process exposes every one or that all are visually fixed.
+
+Online descriptor/primary pairs are `13168/1C5D0`, `132E0/1C8A0`,
+`13A28/1D500`, `148B8/1D270`, `15908/1CA70`, `18620/1D0F0` and
+`1B058/1C6C0`. The set of their four primary profiles is ordinary P8, P5, P4
+and P9; pairs sharing primary bytes can still differ in optional
+secondary pointers. All have null alternative-endpoint arrays. A live
+current-registry lookup plus exact authored/selected AD equality covers the
+mode-specific route without relying on a guessed type or a stale 37-art list.
+
+#### Excluded endpoints and the native targChest comparison
+
+The ordinary non-AD firearm candidates remain separate:
+
+- `4F62CD9D` is authored **targChest**, not a generic spined name. Its existing
+  attachment record is identity on the target's own `spined B5AFAB6E` joint.
+  Ordinary `7DC0CA9C assault-rifle-basic-3`, `BA3FB00A grenade-launcher-auto`,
+  `22036CB3 rocket-launcher-homing` and `6A1E2CC5 boat-grenade-launcher` use
+  descriptor/primary `FE08/1A3F0` directly on this frame. They do not share the
+  AD-to-spineb parent mismatch and must not receive the Chloe AD marker.
+- Ordinary `56B2D7E1 heavy-weapon-basic`, `913F6522 heavy-weapon-uber` and
+  `18EA8FDD coop-flintlock-pistol` select `AE5513B1 = gun-holster`, with a
+  hyphen. The installed `attach-points.bin` has zero occurrences of that ID.
+  This does not establish a legitimate back endpoint or prove hand-only
+  gameplay. Online heavy-uber and coop-flintlock instead use generic
+  `gun_holster 555EFB8D`; a universal heavy-weapon placement claim is unsound.
+- Pistols and their per-art generic/leg/pelvis bindings remain outside this
+  change, as do right-hand attachments, grenades, shields, tools, turrets and
+  other endpoint IDs. Body/head pose, arm animation, timing and straps are
+  not owned by this placement extension. Preserve the accepted P99 route.
+
+An offline calculation using the existing build-pinned retail
+`Transform_Compose 0x1401998F0` compares the ordinary Chloe marker times the
+ordinary Mazur primary binding with the direct targChest binding. This helper
+mapped only the known executable math routine; it neither launched nor
+attached to a game process:
+
+```text
+Chloe targSpineProp marker * ordinary Mazur binding:
+T = ( 0.086825237, 0.075367264,-0.045139860)
+Q = ( 0.666358769,-0.689670563,-0.082403809, 0.271164358)
+
+Direct targChest FE08/1A3F0 binding:
+T = ( 0.007000000, 0.123000003,-0.049000000)
+Q = (-0.729794204, 0.589785278, 0.097314186,-0.331788629)
+```
+
+The difference is **9.303680 cm / 15.342225 degrees**. This is a different
+authored profile, not evidence that targChest needs the Mazur orientation or
+exactly 5 cm of extra clearance. `NdAttachableObject_ApplyLocalAttachmentCorrection
+0x141ED0A70` additionally accounts for the weapon's inverse rig-joint frame
+selected by `+0x68C`; the comparison above is attachment-level and must not be
+reported as the final weapon-world transform. No quantitative mesh-clearance
+proof for a new targChest mutation was obtained.
+
+#### Competing explanations, evidence quota and next implementation
+
+- **H-AD-parent:** other currently holstered AD weapons inherit the same wrong
+  legacy-Nadine parent frame as the Mazur did. Replace only their resolved
+  parent marker with the proven target-spined/authored-marker construction;
+  leave every art's binding and the stock correction/publication chain intact.
+- **H-per-art-binding:** a particular weapon's own primary/secondary binding,
+  not the shared parent, causes its placement. The ten ordinary primary
+  profiles and four online profiles make copying Mazur's full binding invalid;
+  preserve those independent per-art inputs so the exam can discriminate it.
+- **H-native-endpoint-or-clearance:** targChest/generic/heavy paths have
+  separate endpoint ownership or model-specific thickness. Direct targChest
+  already uses target spined, so the shared-parent argument does not justify
+  a marker substitution there. The accepted Mazur 5 cm clearance does not
+  independently prove sufficient clearance for every other mesh.
+- **H-publication-or-admission:** the chosen art never reaches an exact owned
+  AD correction, or a later stock publisher determines the visible result.
+  A missing bounded correction/terminal witness is admission-inconclusive,
+  not proof that the parent hypothesis failed visually.
+
+Three independent evidence kinds support the narrow AD-parent candidate:
+(1) installed authored asset data gives the complete art/endpoint/binding
+catalog and the separate target-spined targChest record; (2) MCP caller graph
+and concrete data reads at `0x1414FA380`, `0x1414FEB30`, `0x1414FE540` and
+`0x141ED0A70` close registry selection, binding ownership and the physical
+correction consumer; (3) structural consistency with the user-accepted
+`afp/afu` Mazur result proves the same target-spined/Chloe-marker boundary can
+reach visible back placement while keeping the original selected AD id and
+art binding. The independent native-targChest route rejects an all-weapons
+marker substitution. This earns a bounded implementation/review step, not a
+claim that runtime validation is complete.
+
+Next implement a separate other-weapon path requiring exact local role-B
+legacy-Nadine ownership/generations, current raw inventory membership, current
+mode/generation-valid art lookup, authored primary `AD047A`, and actual
+selected-record `AD047A`. Explicitly exclude Mazur and P99 and preserve the
+stock primary/secondary transforms and scalar. Keep an independent bounded
+terminal ledger for eligible other weapons; do not reuse the parked Mazur
+action/provenance latch or its cold/transition state. No shared attachment
+record, weapon animation-pose bank, head/arm pose, animation clock or renderer
+override is authorized by this audit.
+
+Before an earned one-copy exam, freeze the implementation and write its exact
+per-art terminal/visual prediction. Complete exact correction markers plus a
+weapon still sinking into the back reject sufficiency for that art; absent
+admission or incomplete terminal evidence remains inconclusive. Mazur/P99
+regression rejects the package independently. All game input stays with the
+user. This audit changed no engine address or function identity; root must
+complete the normal IDB/documentation/review and commit/push handoff for the
+actual implementation unit.
+
+### 2026-08-27 STATIC / IMPLEMENTED (`agb`): repair the other authored-AD parent frames without changing weapon bindings
+
+The new path at the already verified `0x141ED19BB` is independent of the
+accepted Mazur/P99 paths. It requires local role B, retained screen-0 legacy
+Nadine, exact ProcessWeapon/PlayerWeaponController identities, reciprocal
+weapon/Fg retained handles, both runtime generations and unique raw inventory
+membership. Both the current authored primary binding and actual selected
+record must name `targSpineProp AD047A`. The selected record must still be the
+baseline repair's unique canonical identity on the named target `spineb`;
+an already-authored record is not corrected twice.
+
+The helper resolves the unique target `targChest 4F62CD9D` canonical identity
+on the named target `spined`, then composes the shipped Chloe marker from
+`attach-points.bin@0x91C0`. It substitutes only the wrapper's aligned temporary
+R8 input. `0x141ED0A70` receives the original weapon and output pointer exactly
+once, preserving the weapon's own primary and optional secondary transforms.
+The live table/records/rig, current selector, generations, primary resource
+chain and binding/clock snapshot are rechecked before the call. Null copied
+AttachSystem rig contexts, duplicate IDs, malformed transforms or missing
+resource admission fall back to the original input. Post-stock verification
+checks the output-pointer ABI, scope and unchanged primary `+4F0/+500`;
+stock's permitted depenetration changes at `+510/+520` are not rejected.
+
+No per-art numeric clearance was added. Offline HALF4 vertex inspection gives
+model-X envelopes of 6.860 cm (AK), 7.114 cm (FAL DLC), 6.825 cm (QBZ-95),
+5.193 cm (shotgun), 17.218 cm (Saiga), 13.586 cm (grenade-launcher-pump) and
+12.241 cm (RPG); the Mazur control is 10.785 cm, consistent with the earlier
+approximately 10.7 cm finding. These are **not** body-back projections or
+torso-surface clearances. The inverse weapon-rig joint at `+68C`, live
+spined-to-Player frame and torso surface remain relevant; taking half a raw
+bbox or copying Mazur's 5 cm would not be justified. The exact M4 model
+resource was not resolved by this bounded geometry audit. Thus `agb` fixes
+the shared incorrect parent frame; absence of residual clipping for each mesh
+is still a falsifiable visual requirement, not a confirmed fact.
+
+#### Independent item-phase policy; no animation-speed mutation
+
+Full replacement on every selected-AD callback and a steady-only toggle are
+both rejected statically. `NdAttachableObject_UpdateLocalAttachmentBlend
+0x141ED4390` performs the actual Draw/Put interpolation **before** `19BB`:
+source `+620/+630` to target `+600/+610`, mode-2 smoothstep at `141ED441A`,
+interpolation at `141ED4436`, then primary `+4F0/+500`. The later interpolation
+inside `141ED1380` is LongGunJiggle (`+848/+84C`), not this handoff.
+The shared Draw producer `1414FBE10` requests ADAnim at `1414FC412`, seeds an
+identity target and native `0.1/0` clock at `1414FC478`; shared Put `14108A640`
+requires AD at `14108A798` and seeds the saved art binding at `14108AD69..99`.
+Neither producer is Mazur-art scoped. Legacy Nadine lacks ADAnim, so the known
+failed selector can leave AD selected during the native local blend.
+
+`scanner/src/nadine_back_frame_policy.h` therefore owns a **separate** fixed
+23-slot item-presentation ledger. A verified native `0.1f` clock uses
+`1-smoothstep(progress)` for Draw and `smoothstep(progress)` for Put. A Draw
+reservation commits only after a successful original call and freshly
+verified active-Draw identity. The logical key is Fg, both runtime generations
+and art, not the movable raw address. A proven terminal phase holds zero on
+repeated AD callbacks until actual selector exit; a cold zero-duration tuple
+does not acquire terminal authority from stale progress/endpoints. Put,
+positive stable-back cancellation, identity replacement and actual selector
+exit clear the appropriate slot, without dropping a different back weapon
+merely because the controller is transitioning.
+
+Independent review caught and fixed a negative-evidence gap: an early failed
+scope/resource/donor admission previously bypassed policy reconciliation.
+Every failed new resolver or stock-finish now invalidates matching complete
+identity or known raw address, including already committed Active/Terminal
+states; unrelated weapons and the monotonic serial survive. Logging also now
+prints the actually read authored primary ID or zero, not a constant AD on
+an art-gate failure. Both review findings are closed in the frozen package.
+No animation clock, endpoint, selector, shared attachment record, jiggle state,
+pose row, grip, renderer matrix or Mazur/P99 latch is written by this path.
+The parked AGA census and its otherwise-unneeded action-seed stream are off.
+
+#### Frozen package and written one-copy prediction
+
+Release compilation/linking succeeds. CTest `nadine_back_frame_policy` passes;
+the executable reports **27/27** scenarios, including stale cold progress,
+active Draw/Put weights, repeated terminal callbacks, relocation, replacement,
+other-weapon isolation, malformed clocks, stale commits and admission-loss
+invalidation. Two independent source reviews found no remaining blocking
+admission or policy issue. This is code/static validation, not visual success.
+
+The source SHA-256 is
+`9ECC86FA0D88B1AB91B2F04866B2714BEBA42EC48A12DA12623F9CC08E9DDCFF`;
+policy SHA-256 is
+`0D9281231909C275C61AB1F0FC04F83BE107F5ED8F345676AF9CDFF493C3B3CC`.
+Source time `2026-08-27T17:36:40.483Z` precedes object `17:38:11.914Z`
+and DLL `17:38:12.012Z`. The DLL is `802816` bytes, SHA-256
+`780A5BAF25D7109ACDF84D06C229779E511A5617686FF87295290FE6B6031EBE`.
+PE readback contains exact `2026-08-27agb` and the other-weapon marker, and
+does not contain the enabled AGA-census startup string.
+
+Before launch, the amended registry/binding comments were applied headlessly
+to the single `ida/tll.i64`, with MCP stopped. The local apply log reports
+`1793 functions, 61 data names, 1 function types` and
+`save_database returned True`. After MCP restart, the names and amended
+comments at `1414FA380/1414FEB30/1414FE540` read back correctly; xrefs still
+show the sole code call `141ED19BB -> 141ED0A70`. No parallel IDB was created.
+
+Text comparison against the pre-change source also confirms the existing
+Mazur authored-frame resolver, body-back depth function and transition helper
+are unchanged. The new dispatch is an exclusive fallback, not a replacement
+for an admitted Mazur correction.
+
+The earned exam is one fresh copy, after commit/push/clean-tree closure.
+The user selects an available ordinary assault rifle and then a shotgun,
+holsters each and checks its back placement; one Draw/Put per weapon may also
+check that the hand endpoint stays normal. The agent sends **no gameplay
+input**. For an admitted non-Mazur AD art, a stable holstered callback must
+emit `NADINE-OTHER-WEAPON-BACK ... admission=6 ... weight=1 ... stock=1
+primaryPreserved=1 ... clearance=stock`, selected spineb with the resolved
+spined donor. Its visible attachment should move from the wrong lower-spine
+frame to the authored upper-back frame. If an active native item handoff is
+observed, weights must remain complementary and a proven terminal Draw must
+not return to full correction before the selector exits. This is not another
+AGA/provenance/arm-animation exam and requires no such census EXIT.
+
+The same package must leave user-accepted Mazur placement and P99 behavior
+unchanged. Native targChest, generic/hip and all other authored endpoints
+remain stock and must not acquire new correction rows. Exact successful rows
+plus persistent visible clipping reject **sufficiency for that art**, not the
+unchanged binding or an absent hook; record that model for a separately earned
+geometry correction. Missing rows or `BACK-SKIP` are admission-only. Do not
+claim all remaining weapons fixed from a build, a marker, or a single model.
