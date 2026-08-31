@@ -31327,3 +31327,26 @@ verdict: the new stage-specific reject identifies the next static boundary.
 Any jerk, broken draw/hold/holster animation, attachment/back regression, or
 mutation in ADS/state4/Mazur/Type95/M30/another art rejects the implementation.
 The agent launches/injects exactly one copy and sends no gameplay input.
+
+### 2026-08-31 RUNTIME REJECTED (`agj`, PID 4820): locked operand snapshot failed before native evaluation or pose write
+
+After the committed/pushed AGJ static gate and a zero-instance preflight, the
+agent launched and injected exactly one responsive process. Its PID-scoped log
+contains exact `2026-08-31agj`, role B/local Nadine, two-site/nested-stock
+`INSTALLED`, and compressed-row-index `READY`. Without requiring a user test,
+the loaded state reached the real P99/state2 admission and emitted 24
+`NADINE-P99-CHLOE-ORDER reject=materialize-locked-operands` rows followed by
+`reject=saturated rows=24`. There is no `applied=21` and no exception.
+
+Therefore AGJ also performed no pose write and the screenshots still do not
+show transfer output. The compressed-index correction remains statically valid,
+but it was not sufficient to complete the full locked snapshot. The stage now
+excludes embedded D350/B8 source construction, row20/row157 native evaluation,
+blend, ticket sealing and postblend commit: none was reached. The process was
+stopped after collecting this result. Re-running unchanged AGJ is forbidden.
+Next work is static decomposition of `capture_p99_chloe_transfer_locked_operands`
+into registry shape/lock acquisition, exact ArtItemSkeleton/reference-pose
+layout, row20/124/157 entry identity, required-record mapping/reference-row
+validation, and post-copy epoch/identity recheck. No further runtime is earned
+until one of those alternatives is proved and a new distinguishing prediction
+is written.

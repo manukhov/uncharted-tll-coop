@@ -6632,6 +6632,17 @@ Keep the postblend preservation boundary; replace only its steady content.
       other-weapon regression rejects. Agent uses one copy and no gameplay
       input.
 
+      RUNTIME REJECTED (`agj`, PID 4820): after zero-instance launch the exact
+      AGJ/role-B/INSTALLED/compressed-index READY gates passed. The already
+      loaded real-P99 state2 path emitted 24
+      `reject=materialize-locked-operands` rows and saturation, with no
+      `applied=21` and no exception. No native row evaluation, blend, ticket or
+      pose write was reached, so screenshots remain stock-pose evidence only.
+      The process was stopped and unchanged AGJ must not be rerun. Statics must
+      split locked capture among registry/lock shape, ArtItemSkeleton reference
+      layout, rows 20/124/157 identity, record/reference validation, and final
+      epoch/identity recheck before another runtime prediction.
+
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such
