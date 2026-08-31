@@ -31209,3 +31209,14 @@ no `NADINE-P99-CHLOE-ORDER` result yet, so no runtime or visual conclusion has
 been drawn. The next action remains the prewritten exam: the user draws the real
 P99, stays in WeaponOut/state2 without aiming or firing, and holds still for
 3-5 seconds. The agent sent no gameplay input.
+
+### 2026-08-31 RUNTIME REBOOT READY (`agi`, PID 8160): awaiting deliberate P99/state2 hold
+
+At the user's request the previous process was relaunched from a zero-instance
+preflight. Exactly one responsive `tll.exe`, PID 8160, now carries the unchanged
+frozen DLL SHA-256
+`03AC600C127C321BB40405F10E3E190F4BD5989C57329B00036CFE1CCF8D631A`.
+Its PID-scoped log again contains exact `2026-08-31agi`, role B/local Nadine,
+two-site/nested-stock `INSTALLED`, and offline-generated-row/locked-row `READY`
+markers, with no result or exception yet. The written P99/state2 exam remains
+pending, and the agent sent no gameplay input.

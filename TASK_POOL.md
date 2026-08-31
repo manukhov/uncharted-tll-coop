@@ -6580,6 +6580,13 @@ Keep the postblend preservation boundary; replace only its steady content.
       User input is now limited to drawing the real P99 and holding state2
       without aim/fire for 3-5 seconds; the agent sends no gameplay input.
 
+      RUNTIME REBOOT READY (`agi`, PID 8160): at the user's request the game was
+      relaunched from zero instances with the unchanged frozen DLL. Exactly one
+      responsive role-B/local-Nadine process again emitted exact init,
+      INSTALLED and READY markers; there is no result or exception yet. The
+      deliberate P99/state2 hold remains pending and the agent sent no gameplay
+      input.
+
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such
