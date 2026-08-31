@@ -31013,3 +31013,43 @@ There is no `NADINE-P99-CHLOE-SEAL` or `NADINE-P99-CHLOE-ORDER` result yet; the
 deliberate real-P99/state2 hold has not been reported complete. This is a boot/
 installation success only, not a classifier result and not a visual grip
 verdict. The agent sent no keyboard, mouse, controller or menu input.
+
+### 2026-08-31 RUNTIME ADMISSION REJECTED (`agh`, PID 25416): group 0 reaches normal Process but fails the terminal parser
+
+After the user deliberately drew the pistol, the exact selector immediately
+admitted 24 consecutive top-level Perform epochs. Every bounded classifier row
+is identical except for row/nonce:
+
+`stage=no-parser proc=0x01 parser=0x00 captured=0x00 entries=0 groups=0/0
+owner=0/0 skeleton=0/0 branch=1 enter=1 main=1 prepass=0 split=0 force1=1
+limit=1 job0=1 job14=0 fg0=0x000000F8 fg5=1 fg6=2 fg7=0x03 cb=0
+cache=1 gpre=0 gsplit=1 ready=0 groupN=8 aux=72`
+
+Rows 0..23 are followed by both bounded saturation markers. There is no
+`applied=21` marker. Since only `seh_select_p99_chloe_transfer_epoch` creates a
+nonce, these rows independently prove role B, retained local Player0, legacy
+Nadine, real P99 art `8075397D`, exact owner/Fg/local pose and controller state
+2. This is not an art/state ambiguity.
+
+The runtime result selects **H1 / no-parser** and rejects H2--H4 for this scope:
+neither native capture nor owner/skeleton seal was reached. It also confirms the
+static force-one prediction. Fg `+7=0x03` has bit 3 clear and Fg flags
+`0x000000F8` have `0x20000` clear, so `0x141A92411` forces an inline limit of
+one. Raw `gsplit=1` does not select the residual-split local because the group
+flag is absent; derived `split=0`, `force1=1` is exact. Group 0 alone reaches the
+normal `ProcessAnimCmdListSegment 0x141A92759`, while group 1 belongs to the
+separate Async joint-blend work for the same Fg. This disproves `agf`'s
+same-Perform/two-group packaging independently of the parser mismatch.
+
+The visible wrong grip is still not a Chloe-order verdict: this run wrote no
+new pose. The previously supplied screenshot was created at 12:34, before PID
+25416 started at 13:28, so it depicts an earlier build and cannot be attributed
+to `agh`.
+
+Do not relaunch unchanged `agh` and do not widen the terminal grammar from a
+single boolean failure. The next admissible work is static resolution of the
+actual group-0 completed command list, followed by a bounded value-only command
+inventory only if static analysis cannot distinguish the exact mismatch. Any
+later repair must also aggregate group 0 and the independent Async group 1 under
+the same Fg/owner/generation without relaxing the existing fail-closed ticket or
+pose transaction. The agent sent no gameplay input.

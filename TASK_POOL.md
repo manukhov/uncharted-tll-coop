@@ -6498,6 +6498,26 @@ Keep the postblend preservation boundary; replace only its steady content.
       the deliberate real-P99/state2 hold is still pending. This is boot success
       only, not a classifier or visual verdict. The agent sent no gameplay input.
 
+      RUNTIME ADMISSION REJECTED (`agh`, PID 25416): after the user drew the
+      pistol, 24 exact P99/state2 selector epochs all emitted
+      `stage=no-parser proc=01 parser=00 captured=00`, then saturated; no
+      `applied=21` exists. All branch fields are stable:
+      `enter=1 main=1 prepass=0 split=0 force1=1 limit=1 job0=1 job14=0
+      fg0=000000F8 fg5=1 fg6=2 fg7=03 cb=0 cache=1 gpre=0 gsplit=1 ready=0
+      groupN=8 aux=72`. This selects H1 and rejects H2--H4 before any native
+      capture, owner/skeleton seal or pose write. It runtime-confirms the
+      force-one branch at `0x141A92411`: only group 0 reaches normal Process
+      `0x141A92759`; group 1 is separate Async work. Thus same-Perform/two-group
+      `agf` packaging is independently disproved even before resolving why the
+      real group-0 command list fails the exact parser.
+
+      Do not relaunch unchanged `agh` or widen grammar from this boolean. Next:
+      resolve the actual group-0 completed list statically; authorize a bounded
+      value-only inventory only if static analysis remains underdetermined. A
+      later repair must correlate normal group 0 and independent Async group 1
+      by the same Fg/owner/generation while preserving the fail-closed 21-row
+      transaction. No visual Chloe-order verdict exists; no pose was written.
+
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such
