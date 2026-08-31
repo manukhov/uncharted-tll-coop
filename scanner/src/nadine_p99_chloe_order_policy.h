@@ -10,11 +10,11 @@
 //   Player D350 --row20--> Chloe --blend B8 mode2/weight1-->
 //   Chloe composite --row157--> legacy Nadine
 //
-// The runtime remains responsible for proving the same Perform job/lifetime and
-// for doing all native pose evaluation.  This policy only validates immutable
-// scope, entry/record metadata, the 21-joint semantic join, and normalized
-// ValidBits evidence.  It grants no authority for state 4, another weapon, a
-// raw ordinal copy, a partial group, or a cached donor pointer.
+// The offline-generated D350/B8 manifest is the compile-time authority for the
+// exact source rows and their authored semantic join.  Runtime policy validates
+// the actual role/owner/Nadine/P99 scope plus locked retarget-record and
+// normalized ValidBits value evidence.  It grants no authority for state 4,
+// another weapon, a raw ordinal copy, a partial group, or a borrowed pointer.
 namespace coop::p99_chloe_order {
 
 inline constexpr std::uint32_t kP99ArtId = 0x8075397Du;
@@ -43,231 +43,6 @@ inline constexpr std::size_t kRequiredJointCount = 21;
 inline constexpr std::size_t kRequiredFingerCount = 19;
 inline constexpr std::size_t kGlobalMaskWordCount = 11; // 704 normalized bits.
 
-struct TerminalCommandPlanEvidence {
-    std::span<const std::uint32_t> words{};
-    std::uint32_t processing_group = 0xFFFFFFFFu;
-    std::uint32_t base_word = 0xFFFFFFFFu;
-    std::uint32_t additive_word = 0xFFFFFFFFu;
-    std::uint32_t finalizer_word = 0xFFFFFFFFu;
-};
-
-// The two selected leaves must be the complete terminal blend subtree. No
-// opaque callback or other logical-lane writer may run between either leaf,
-// their blend and cmd3. The only accepted post-cmd3 difference is the
-// statically resolved group-zero joint-conversion callback; cmd27 then exports
-// the finalized JointParams for both retained groups.
-inline constexpr bool exact_terminal_command_plan(
-    const TerminalCommandPlanEvidence& evidence) {
-    constexpr std::uint32_t kAnimationWords = 6;
-    constexpr std::uint32_t kBlendWords = 6;
-    constexpr std::uint32_t kMaxLanes = 64;
-    constexpr std::uint32_t kPostPoseJointConversionId = 0x248B1AAEu;
-    const auto& words = evidence.words;
-    if (evidence.processing_group > 1 ||
-        evidence.base_word >= words.size() ||
-        evidence.additive_word >= words.size() ||
-        evidence.finalizer_word >= words.size() ||
-        evidence.base_word + kAnimationWords != evidence.additive_word ||
-        evidence.additive_word + kAnimationWords + kBlendWords !=
-            evidence.finalizer_word ||
-        words.size() - evidence.base_word <
-            2 * kAnimationWords + kBlendWords) {
-        return false;
-    }
-    const std::uint32_t blend_word =
-        evidence.additive_word + kAnimationWords;
-    if (words[evidence.base_word] !=
-            ((kAnimationWords << 16) | 6u) ||
-        words[evidence.additive_word] !=
-            ((kAnimationWords << 16) | 6u) ||
-        words[blend_word] != ((kBlendWords << 16) | 7u)) {
-        return false;
-    }
-    const std::uint32_t base_lane = words[evidence.base_word + 4];
-    const std::uint32_t additive_lane = words[evidence.additive_word + 4];
-    if (base_lane != 0 || additive_lane == base_lane ||
-        additive_lane >= kMaxLanes ||
-        words[evidence.base_word + 5] != 0 ||
-        words[evidence.additive_word + 5] != 0 ||
-        words[blend_word + 1] != base_lane ||
-        words[blend_word + 2] != additive_lane ||
-        words[blend_word + 3] != 0 ||
-        words[blend_word + 4] != kRequiredBlendMode ||
-        words[blend_word + 5] != kUnitWeightBits) {
-        return false;
-    }
-
-    std::size_t cursor = evidence.finalizer_word;
-    const auto consume = [&](std::uint32_t opcode,
-                             std::uint32_t command_words) constexpr {
-        if (cursor >= words.size() ||
-            command_words > words.size() - cursor ||
-            words[cursor] != ((command_words << 16) | opcode)) {
-            return false;
-        }
-        cursor += command_words;
-        return true;
-    };
-    if (!consume(3u, 2u) || !consume(4u, 2u) ||
-        !consume(15u, 4u) || !consume(16u, 2u) ||
-        !consume(17u, 4u)) {
-        return false;
-    }
-    if (evidence.processing_group == 0) {
-        const std::size_t conversion_word = cursor;
-        if (!consume(24u, 6u) ||
-            words[conversion_word + 1] != kPostPoseJointConversionId) {
-            return false;
-        }
-    }
-    return consume(27u, 6u) && consume(5u, 2u) && cursor == words.size();
-}
-
-// Read-only classification for one admitted Perform that failed to seal.  The
-// runtime fills this from TLS-local scalar masks and from the same owner/table
-// and skeleton comparisons already required by seal; it grants no pose-write
-// authority and cannot relax any admission predicate.
-enum class SealIncompleteStage : std::uint8_t {
-    kNone = 0,
-    kNoParserCandidate,
-    kOneGroupCaptured,
-    kOwnerTableIdentity,
-    kSkeletonIdentity,
-    kOtherIncomplete,
-};
-
-// Scalar-only snapshot of the branches that decide whether PerformAnimBlend
-// reaches its normal inline Process loop.  These fields describe control flow;
-// they never authorize command parsing or a pose write.
-struct PerformBranchEvidence {
-    bool snapshot_valid = false;
-    bool job_object_present = false;
-    std::uint8_t job_flags14 = 0;
-    std::uint32_t fg_flags0 = 0;
-    std::uint8_t fg_enabled5 = 0;
-    std::uint8_t fg_state6 = 0;
-    std::uint8_t fg_flags7 = 0;
-    bool custom_callback_present = false;
-    bool cached_skeleton_exact = false;
-    bool global_prepass_enabled = false;
-    bool global_split_enabled = false;
-    std::uint8_t fg_split_ready2d1 = 0;
-    std::uint32_t target_group_count = 0;
-    std::uint16_t target_auxiliary_word = 0;
-};
-
-struct PerformBranchDecision {
-    bool can_enter = false;
-    bool main_loop = false;
-    bool prepass = false;
-    bool split_residual = false;
-    bool force_one = false;
-    std::uint32_t inline_group_limit = 0;
-};
-
-[[nodiscard]] inline constexpr PerformBranchDecision derive_perform_branch(
-    const PerformBranchEvidence& evidence) noexcept {
-    PerformBranchDecision decision{};
-    if (!evidence.snapshot_valid) {
-        return decision;
-    }
-    const bool group_flag = (evidence.fg_flags7 & 0x08u) != 0;
-    const bool no_deferred_groups =
-        (evidence.fg_flags0 & 0x00020000u) != 0;
-    decision.can_enter = evidence.fg_enabled5 != 0 &&
-        (evidence.job_flags14 == 0 || group_flag);
-    decision.main_loop = decision.can_enter &&
-        evidence.job_object_present && !evidence.custom_callback_present;
-    if (!decision.main_loop) {
-        return decision;
-    }
-    decision.prepass = !evidence.cached_skeleton_exact ||
-        evidence.global_prepass_enabled;
-    decision.force_one = !group_flag && !no_deferred_groups;
-    decision.split_residual = evidence.global_split_enabled &&
-        (evidence.fg_split_ready2d1 != 0 ||
-         evidence.target_auxiliary_word == 0) &&
-        evidence.target_group_count > 1 && group_flag &&
-        !no_deferred_groups;
-    decision.inline_group_limit =
-        decision.force_one || decision.split_residual
-        ? 1u
-        : evidence.target_group_count;
-    return decision;
-}
-
-struct SealDiagnosticEvidence {
-    PerformBranchEvidence perform_branch{};
-    std::uint8_t process_group_mask = 0;
-    std::uint8_t parser_candidate_group_mask = 0;
-    std::uint8_t captured_group_mask = 0;
-    bool entries_captured = false;
-    bool group0_valid = false;
-    bool group1_valid = false;
-    bool owner_checked = false;
-    bool owner_exact = false;
-    bool skeleton_checked = false;
-    bool skeleton_exact = false;
-    bool seal_succeeded = false;
-};
-
-[[nodiscard]] inline constexpr SealIncompleteStage classify_seal_diagnostic(
-    const SealDiagnosticEvidence& evidence) noexcept {
-    constexpr std::uint8_t kRequiredGroups = 0x03u;
-    const std::uint8_t valid_group_mask =
-        static_cast<std::uint8_t>((evidence.group0_valid ? 0x01u : 0u) |
-                                  (evidence.group1_valid ? 0x02u : 0u));
-    const bool both_groups_ready =
-        evidence.captured_group_mask == kRequiredGroups &&
-        evidence.entries_captured && valid_group_mask == kRequiredGroups;
-    if ((evidence.process_group_mask & ~kRequiredGroups) != 0 ||
-        (evidence.parser_candidate_group_mask & ~kRequiredGroups) != 0 ||
-        (evidence.captured_group_mask & ~kRequiredGroups) != 0 ||
-        (evidence.parser_candidate_group_mask &
-             ~evidence.process_group_mask) != 0 ||
-        evidence.parser_candidate_group_mask !=
-            evidence.captured_group_mask ||
-        valid_group_mask != evidence.captured_group_mask ||
-        evidence.entries_captured !=
-            (evidence.captured_group_mask != 0) ||
-        evidence.owner_checked != both_groups_ready ||
-        (evidence.owner_exact && !evidence.owner_checked) ||
-        evidence.skeleton_checked !=
-            (evidence.owner_checked && evidence.owner_exact) ||
-        (evidence.skeleton_exact && !evidence.skeleton_checked)) {
-        return SealIncompleteStage::kOtherIncomplete;
-    }
-    if (evidence.seal_succeeded) {
-        return evidence.process_group_mask == kRequiredGroups &&
-                evidence.parser_candidate_group_mask == kRequiredGroups &&
-                evidence.captured_group_mask == kRequiredGroups &&
-                evidence.entries_captured && evidence.group0_valid &&
-                evidence.group1_valid && evidence.owner_checked &&
-                evidence.owner_exact && evidence.skeleton_checked &&
-                evidence.skeleton_exact
-            ? SealIncompleteStage::kNone
-            : SealIncompleteStage::kOtherIncomplete;
-    }
-    if (evidence.parser_candidate_group_mask == 0 &&
-        evidence.captured_group_mask == 0 && !evidence.entries_captured &&
-        !evidence.group0_valid && !evidence.group1_valid) {
-        return SealIncompleteStage::kNoParserCandidate;
-    }
-    if (evidence.captured_group_mask == 0x01u ||
-        evidence.captured_group_mask == 0x02u) {
-        return SealIncompleteStage::kOneGroupCaptured;
-    }
-    if (both_groups_ready && evidence.owner_checked &&
-        !evidence.owner_exact) {
-        return SealIncompleteStage::kOwnerTableIdentity;
-    }
-    if (both_groups_ready && evidence.owner_checked && evidence.owner_exact &&
-        evidence.skeleton_checked && !evidence.skeleton_exact) {
-        return SealIncompleteStage::kSkeletonIdentity;
-    }
-    return SealIncompleteStage::kOtherIncomplete;
-}
-
 struct ScopeEvidence {
     bool is_role_b = false;
     bool is_retained_local_owner = false;
@@ -275,22 +50,14 @@ struct ScopeEvidence {
     std::uint8_t owner_index = 0xFF;
     std::uint32_t art_id = 0;
     std::uint32_t weapon_state = 0;
-    std::uint32_t base_clip_id = 0;
-    std::uint32_t additive_clip_id = 0;
-    std::uint8_t blend_mode = 0;
-    std::uint32_t blend_weight_bits = 0;
-    bool base_is_additive = true;
-    bool right_is_additive = false;
-    // Row157 must consume the completed Chloe pose as an absolute pose.  It
-    // must not inherit B8's additive flag.
-    bool composite_is_additive = true;
 };
 
 // Exact identity/layout evidence for one runtime retarget entry.  The DC table
 // identity, row index, native stride and raw file offsets are build-pinned
-// provenance (entry_index may also be recomputed by scanning the live table);
+// provenance (entry_index may also be recomputed while the table is locked);
 // they are not claimed to reside in the entry object.  Remaining values are
-// compared to live entry/authored-resource/skeleton/clip observations as noted.
+// compared only after the entry/resource/skeleton values have been copied under
+// the SkelTable lock; this policy never dereferences a live clip.
 struct RetargetEntryMetadata {
     // Build-pinned DC provenance.
     std::uint32_t table_object_id = 0;
@@ -362,44 +129,10 @@ struct PoseValidEvidence {
     std::array<std::uint64_t, kGlobalMaskWordCount> global_lsb_bits{};
 };
 
-enum class SourcePoseKind : std::uint8_t {
-    kPlayerBase = 1,
-    kChloeAdditive = 2,
-};
-
-// Exact live SegmentContext layout at the retarget-plugin Add boundary.  The
-// group descriptor is selected from the source skeleton's 0x20-byte group
-// table; its +0x02 word selects one 10-byte processing descriptor.  Byte +0x04
-// is the logical lane count, not the 48-byte JointParams row size.  Byte +0x05
-// and word +0x08 are retained as raw build-pinned fields because no semantic
-// interpretation is needed to admit this transfer.
-struct SourcePoseLayoutEvidence {
-    SourcePoseKind kind = SourcePoseKind::kPlayerBase;
-    std::uint8_t target_group = 0xFF;
-    std::uint8_t source_group = 0xFF;
-    bool group_pointer_exact = false;
-    bool processing_pointer_exact = false;
-    bool stable = false;
-    std::uint32_t group_table_offset = 0;
-    std::uint32_t processing_table_offset = 0;
-    std::uint16_t group_first = 0;
-    std::uint16_t processing_descriptor_index = 0;
-    std::uint16_t workspace_count = 0;
-    std::uint16_t parameter_count = 0;
-    std::uint16_t processing_joint_count = 0;
-    std::uint16_t processing_scalar_count = 0;
-    std::uint8_t processing_lane_count = 0;
-    std::uint8_t processing_byte5 = 0xFF;
-    std::uint16_t processing_first_parameter = 0;
-    std::uint16_t processing_word8 = 0xFFFF;
-};
-
 struct TransferEvidence {
     ScopeEvidence scope{};
     RetargetEntryView row20{};
     RetargetEntryView row157{};
-    std::span<const SourcePoseLayoutEvidence> player_source_layouts{};
-    std::span<const SourcePoseLayoutEvidence> chloe_source_layouts{};
     PoseValidEvidence player_base{};
     PoseValidEvidence chloe_additive{};
     PoseValidEvidence chloe_composite{};
@@ -409,7 +142,6 @@ struct TransferEvidence {
 enum class RejectReason : std::uint8_t {
     kNone,
     kScope,
-    kSourceLayout,
     kRow20Identity,
     kRow157Identity,
     kEntryJoin,
@@ -448,26 +180,6 @@ inline constexpr std::array<SkeletonGroup, 8> kNadineGroups{{
     {0, 104}, {104, 38}, {142, 119}, {261, 83},
     {344, 107}, {451, 52}, {503, 52}, {555, 25},
 }};
-
-// actor77.psarc exact source skeleton-program tables.  Player's processing
-// table begins at raw+0x160 while Chloe's begins at raw+0x140.  Group zero is
-// deliberately not conflated with its larger workspace: only 71/89 authored
-// JointParams rows precede the native 128-bit ValidBits block.
-inline constexpr std::array<SourcePoseLayoutEvidence, 2>
-    kExpectedPlayerSourceLayouts{{
-        {SourcePoseKind::kPlayerBase, 0, 0, true, true, true,
-         0x40, 0x160, 0, 0, 168, 71, 71, 27, 2, 0, 0, 0},
-        {SourcePoseKind::kPlayerBase, 1, 7, true, true, true,
-         0x40, 0x160, 639, 7, 38, 38, 38, 0, 1, 0, 435, 0},
-    }};
-
-inline constexpr std::array<SourcePoseLayoutEvidence, 2>
-    kExpectedChloeSourceLayouts{{
-        {SourcePoseKind::kChloeAdditive, 0, 0, true, true, true,
-         0x40, 0x140, 0, 0, 205, 89, 89, 27, 2, 0, 0, 0},
-        {SourcePoseKind::kChloeAdditive, 1, 2, true, true, true,
-         0x40, 0x140, 267, 2, 38, 38, 38, 0, 1, 0, 90, 0},
-    }};
 
 struct ExpectedJointTransfer {
     std::uint32_t semantic_id = 0;
@@ -724,58 +436,6 @@ template <std::size_t N>
     return true;
 }
 
-[[nodiscard]] inline constexpr bool same_source_layout(
-    const SourcePoseLayoutEvidence& left,
-    const SourcePoseLayoutEvidence& right) noexcept {
-    return left.kind == right.kind &&
-        left.target_group == right.target_group &&
-        left.source_group == right.source_group &&
-        left.group_pointer_exact == right.group_pointer_exact &&
-        left.processing_pointer_exact == right.processing_pointer_exact &&
-        left.stable == right.stable &&
-        left.group_table_offset == right.group_table_offset &&
-        left.processing_table_offset == right.processing_table_offset &&
-        left.group_first == right.group_first &&
-        left.processing_descriptor_index ==
-            right.processing_descriptor_index &&
-        left.workspace_count == right.workspace_count &&
-        left.parameter_count == right.parameter_count &&
-        left.processing_joint_count == right.processing_joint_count &&
-        left.processing_scalar_count == right.processing_scalar_count &&
-        left.processing_lane_count == right.processing_lane_count &&
-        left.processing_byte5 == right.processing_byte5 &&
-        left.processing_first_parameter ==
-            right.processing_first_parameter &&
-        left.processing_word8 == right.processing_word8;
-}
-
-template <std::size_t N>
-[[nodiscard]] inline constexpr bool exact_source_layouts(
-    std::span<const SourcePoseLayoutEvidence> actual,
-    const std::array<SourcePoseLayoutEvidence, N>& expected) noexcept {
-    if (actual.size() != expected.size()) {
-        return false;
-    }
-    for (std::size_t i = 0; i < actual.size(); ++i) {
-        for (std::size_t j = i + 1; j < actual.size(); ++j) {
-            if (actual[i].kind == actual[j].kind &&
-                actual[i].target_group == actual[j].target_group) {
-                return false;
-            }
-        }
-    }
-    for (const SourcePoseLayoutEvidence& wanted : expected) {
-        std::size_t matches = 0;
-        for (const SourcePoseLayoutEvidence& candidate : actual) {
-            matches += same_source_layout(candidate, wanted) ? 1u : 0u;
-        }
-        if (matches != 1) {
-            return false;
-        }
-    }
-    return true;
-}
-
 template <std::size_t N>
 [[nodiscard]] inline constexpr RejectReason validate_pose(
     const PoseValidEvidence& pose,
@@ -799,22 +459,8 @@ template <std::size_t N>
     const ScopeEvidence& scope = evidence.scope;
     if (!scope.is_role_b || !scope.is_retained_local_owner ||
         !scope.is_legacy_nadine || scope.owner_index != 0 ||
-        scope.art_id != kP99ArtId || scope.weapon_state != kWeaponOutState ||
-        scope.base_clip_id != kPlayerBaseClipId ||
-        scope.additive_clip_id != kChloeAdditiveClipId ||
-        scope.blend_mode != kRequiredBlendMode ||
-        scope.blend_weight_bits != kUnitWeightBits || scope.base_is_additive ||
-        !scope.right_is_additive || scope.composite_is_additive) {
+        scope.art_id != kP99ArtId || scope.weapon_state != kWeaponOutState) {
         return {RejectReason::kScope};
-    }
-
-    if (!detail::exact_source_layouts(
-            evidence.player_source_layouts,
-            kExpectedPlayerSourceLayouts) ||
-        !detail::exact_source_layouts(
-            evidence.chloe_source_layouts,
-            kExpectedChloeSourceLayouts)) {
-        return {RejectReason::kSourceLayout};
     }
 
     if (evidence.row20.metadata.authored_target_base_id !=

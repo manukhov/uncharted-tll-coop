@@ -809,21 +809,31 @@ constexpr std::uintptr_t kAnimManagerCreateAnimCmdsNormalCallsiteRva =
 // command-DAG producer that writes the persistent FgAnimData+0x100 local pose
 // before Player post-blend and the later Async joint-palette rebuild.
 constexpr std::uintptr_t kAnimManagerPerformAnimBlendRva = 0x1A92260;
-// PerformAnimBlend's cached-skeleton prepass and residual-group split switches.
-// The latter is BYTE2(dword_143682FF5), read at 0x141A9238C; both are captured
-// only as diagnostic scalars for an already-admitted P99 Perform epoch.
-constexpr std::uintptr_t kAnimManagerForcePrepassGlobalRva = 0x3682F4B;
-constexpr std::uintptr_t kAnimManagerResidualGroupSplitGlobalRva = 0x3682FF7;
 // Sole normal Perform call in AnimManager's post-blend worker.  The wrapper
 // scopes the nested CreateAnimCmds call above without touching either function
 // entry.  Its stock bytes are E8 56 F9 FF FF.
 constexpr std::uintptr_t kAnimManagerPerformAnimBlendCallsiteRva = 0x1A92905;
+constexpr std::array<std::uint8_t, 5>
+    kAnimManagerPerformAnimBlendCallsiteStockBytes{
+        0xE8, 0x56, 0xF9, 0xFF, 0xFF};
+// Normal inline ProcessAnimCmdListSegment call. The offline-generated-row P99
+// transfer
+// no longer hooks this site; its exact retail E8 bytes are a negative installer
+// witness that the rejected command-parser path remains stock.
+constexpr std::uintptr_t kAnimManagerProcessAnimCmdListSegmentCallsiteRva =
+    0x1A92759;
+constexpr std::array<std::uint8_t, 5>
+    kAnimManagerProcessAnimCmdListSegmentCallsiteStockBytes{
+        0xE8, 0x62, 0x70, 0x02, 0x00};
 // Exact six-byte indirect Player vtable+0x408 call in the same worker, after
 // the Perform call above and before AsyncObjectUpdateJointBlendJob.  A scoped
 // callsite relay can run stock post-blend first and then restore the exact
 // Perform-produced C39 arm rows without modifying the shared Player vtable.
 // Stock bytes: FF 90 08 04 00 00.
 constexpr std::uintptr_t kAnimManagerPlayerPostBlendCallsiteRva = 0x1A929A1;
+constexpr std::array<std::uint8_t, 6>
+    kAnimManagerPlayerPostBlendCallsiteStockBytes{
+        0xFF, 0x90, 0x08, 0x04, 0x00, 0x00};
 constexpr std::uintptr_t kAnimManagerAsyncObjectUpdateJointBlendJobRva =
     0x1A92A00;
 // Cross-skeleton animation command case 6 resolves the exact source and
@@ -833,15 +843,33 @@ constexpr std::uintptr_t kAnimManagerAsyncObjectUpdateJointBlendJobRva =
 // E8 callsites let a read-only census bind a live ArtItemAnim to those source
 // rows without detouring either hot function entry.
 constexpr std::uintptr_t kProcessAnimCmdRetargetCallsiteRva = 0x1AB9FC4;
+constexpr std::array<std::uint8_t, 5>
+    kProcessAnimCmdRetargetCallsiteStockBytes{
+        0xE8, 0xF7, 0x12, 0xE8, 0xFF};
 constexpr std::uintptr_t kRetargetAnimUsingBatchMgrRva = 0x193B2C0;
 constexpr std::uintptr_t kRetargetPostPoseAddCallsiteRva = 0x1937DBA;
+constexpr std::array<std::uint8_t, 5>
+    kRetargetPostPoseAddCallsiteStockBytes{
+        0xE8, 0xD1, 0xE6, 0xFF, 0xFF};
 constexpr std::uintptr_t kRetargetPluginAddJointRetargetCommandsRva =
     0x1936490;
 // Native value-only helpers used by the state-2 P99 Chloe-space transfer.
-// FindRetargetEntry is a read-only table lookup. DoJointRetarget evaluates one
-// already-built 0x2e record without invoking BatchMgr, while the blend helper
-// applies the engine's exact ValidBits/mode-2 transform math to local buffers.
+// ResolveArtItemSkeleton and FindRetargetEntry are read-only registry lookups.
+// DoJointRetarget evaluates one already-built 0x2e record without invoking
+// BatchMgr, while the blend helper applies the engine's exact ValidBits/mode-2
+// transform math to local buffers.
+constexpr std::uintptr_t kSkelTableResolveArtItemSkeletonRva = 0x17CD100;
 constexpr std::uintptr_t kSkelTableFindRetargetEntryRva = 0x17D0BD0;
+// ResolveArtItemSkeleton returns a borrowed pointer.  The SkelTable registry
+// owns a separate epoch and a 64-bit 0/-1 spin lock; P99 snapshots use a
+// single non-blocking CAS and copy every borrowed operand before releasing it.
+constexpr std::uintptr_t kSkelTableRegistryEpochRva = 0x38401CC;
+constexpr std::uintptr_t kSkelTableRegistryBucketsPtrRva = 0x66EC3E0;
+constexpr std::uintptr_t kSkelTableRegistrySentinelPtrRva = 0x66EC440;
+constexpr std::uintptr_t kSkelTableRegistryBucketCountRva = 0x66EC470;
+constexpr std::uintptr_t kSkelTableRegistryInitializedRva = 0x66EC474;
+constexpr std::uintptr_t kSkelTableRegistryLockRva = 0x66EC4B0;
+constexpr std::uint32_t kSkelTableRegistryExpectedBucketCount = 384;
 constexpr std::uintptr_t kSkelTableRetargetEntryCountRva = 0x38401D8;
 constexpr std::uintptr_t kSkelTableRetargetEntriesRva = 0x3864A00;
 constexpr std::uintptr_t kRetargetPluginDoJointRetargetRva = 0x1AE2100;

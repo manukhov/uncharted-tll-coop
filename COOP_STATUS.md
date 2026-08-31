@@ -31053,3 +31053,146 @@ inventory only if static analysis cannot distinguish the exact mismatch. Any
 later repair must also aggregate group 0 and the independent Async group 1 under
 the same Fg/owner/generation without relaxing the existing fail-closed ticket or
 pose transaction. The agent sent no gameplay input.
+
+### 2026-08-31 STATIC / IMPLEMENTED (`agi`): offline D350/B8 rows, locked SkelTable operands and a two-site commit
+
+The preceding `agh` result rejected command-capture packaging, not
+H-Chloe-order. Build `agi` therefore does not widen that parser or join inline
+and Async command groups. Its precise hypothesis is: on exact role-B retained
+local legacy Nadine with the real P99 in WeaponOut/state2, evaluate the shipped
+one-sample Player `D350A452` rows through authored Player-to-Chloe row 20,
+blend the shipped one-sample Chloe additive `B8FC6B25` rows with native mode 2
+/ weight 1, then evaluate that Chloe composite through authored Chloe-to-C39
+row 157. Writing only the resulting right palm, right-hand prop and 19
+right-finger C39 rows after stock Player `+0x408` should reproduce Chloe's
+pistol grip without changing attachment, IK, animation time or another
+art/state.
+
+Competing implementations were separated before runtime.
+
+1. **Live terminal-command capture** is REJECTED for this scope by `agf/agh`:
+   group 0 alone reaches normal `ProcessAnimCmdListSegment 0x141A92759`, its
+   terminal parser does not admit the list, and no pose was written.
+2. **Direct Player/Nadine ordinal copying** is REJECTED statically: their
+   right-finger orders differ. The correspondence is the unique same-StringId
+   join across both authored retarget maps.
+3. **A borrowed live D350/B8 pointer plus epoch double-read** is REJECTED
+   statically. `AnimMasterTable_LoginArtGroup 0x1417C9070` and
+   `LogoutArtGroup 0x1417C93F0` mutate table/count/listeners directly, contain
+   no internal lock/CMPXCHG, and increment epoch `0x1438401BC` only afterward.
+   The epoch detects a completed change but cannot pin a clip during dereference.
+4. **Exact offline source rows plus live locked retarget/reference operands** is
+   selected. It avoids the unprovable clip lifetime while retaining current
+   skeleton objects, reference poses and native retarget math.
+
+The static evidence quota is met by four independent kinds.
+
+- **Asset/data derivation.** New
+  `scripts/generate_p99_chloe_source_rows.py` pins retail `tll.exe` SHA-256
+  `ed1371a4b47961abc160e92aa0b9bdfd787638fa1a39ba2403b423ab45c210be`,
+  extracts `anim-player-movement.pak` from `actor77.psarc`, decodes complete
+  opcode-22/24 destination maps for D350/B8, reads Player/Chloe/Nadine skeleton
+  groups and StringIds, resolves authored rows 20/157 from
+  `skel-retargets.bin`, and derives all 21 joins rather than consuming a
+  hand-written transfer table. Exact input hashes are animation
+  `337cb2c4cfdc51cb71d2291f7af7f4bff478e21c3a53e986a22bfc22248f470c`,
+  Player skeleton
+  `fd3e58acf071fd0d3f3783c5fd29bd654d74efef42cbcf4033727340fabf99d0`,
+  Chloe skeleton
+  `13b24c6068d6ef42be0ca683be94d8d891477fa09dc2c8dd1de84672c37d5109`,
+  Nadine skeleton
+  `2bf66e61fae156a41952d8d2659e06215dbe8f0c827a9f6a89cada0c9490b06b`
+  and retarget table
+  `227fa31a5deab04561f37c3fdd2a38b429ab426889cfe0498bbd3f93cb1e0a50`.
+  The combined-row hash is
+  `0aefc3ea21b16d2059160052888b4508a4a213ba9f2d42ec1cd2d82ff5ccb0b2`;
+  the C++ test compares every row and rich join to an independent fixture.
+- **Native ABI/call graph.** `RetargetPlugin_DoJointRetarget 0x141AE2100`
+  consumes one copied 0x2e record, source row and copied target-reference row
+  and calls only `Transform_Compose`;
+  `AnimJointParams_BlendTransformsByValidBits 0x142188A30` is value-only.
+  AGI passes aligned local pose arrays and local packed 0x2e record copies,
+  never a borrowed clip or registry node.
+- **Skeleton-registry lifetime.**
+  `SkelTable_LoginArtItemSkeleton 0x1417CD4E0` acquires 64-bit lock
+  `0x1466EC4B0` by LOCK CMPXCHG at `0x1417CD51E` and releases by XCHG at
+  `0x1417CD7A0`; `Logout 0x1417CD7C0` uses
+  `0x1417CD80C/0x1417CD9B3`. Each changes independent epoch
+  `0x1438401CC`. AGI makes one non-spinning attempt, validates the initialized
+  384-bucket/sentinel shape, resolves exact Player/Chloe/C39 skeletons and rows
+  20/124/157, copies 21+21 records and 21+21 reference rows, rechecks
+  identities/epoch, and releases in `__finally`. Evaluation happens afterward
+  only on local copies.
+- **Write-boundary/order proof.**
+  `AnimManager_PerformBlendAndDispatchPostBlendJob 0x141A928F0` calls stock
+  Perform at `0x141A92905`, which may swap Fg `+0x100`, then Player
+  `+0x408` at `0x141A929A1`. AGI re-resolves the post-Perform pose,
+  materializes a value-only ticket, runs stock Player `+0x408` once, then
+  preflights/writes/readbacks all 21 rows or restores all 21. Nested Process
+  `0x141A92759`, Retarget `0x141AB9FC4` and Add `0x141937DBA` remain
+  exact stock bytes checked before, during and after the two-site/one-page
+  installer transaction.
+
+The active path contains no parser, Process/Retarget/Add interception, live clip
+dereference or pre-Perform pose pointer. After Perform it re-resolves the pose,
+takes the bounded SkelTable snapshot, evaluates 21 rows, then revalidates
+owner/runtime IDs, both registry epochs, the three skeleton resolver identities
+and rows 20/124/157 before publishing a ticket. The postblend hook consumes that
+ticket on entry, calls the stock virtual, repeats preflight, and commits with
+readback/all-row rollback. A failure or busy lock skips the frame without
+spinning or writing.
+
+The sole IDB was updated only while MCP was stopped. New durable names cover
+`SkelTable_LoginArtItemSkeleton 0x1417CD4E0`,
+`SkelTable_LogoutArtItemSkeleton 0x1417CD7C0`,
+`SkelTable_FindSkeletonRegistryNode 0x1417D1170`, epoch
+`0x1438401CC`, buckets `0x1466EC3E0`, sentinel `0x1466EC440`, count
+`0x1466EC470`, initialized byte `0x1466EC474` and lock
+`0x1466EC4B0`. AnimMaster Login/Logout/epoch comments record the separate
+no-lock exclusion for live clip validation. The final headless pass reports
+`apply_labels OK: 1818 functions, 72 data names, 1 function types` and
+`save_database returned True`. Restarted MCP resolves all three new SkelTable
+function names and reads back epoch/buckets/sentinel/count/initialized/lock plus
+the AnimMaster epoch under their durable names.
+
+Final offline verification is clean: generator `--check` and Python compilation
+pass; the focused Release policy executable passes `11/11`, `5181` checks; full
+CTest passes `4/4`. The tested installer fixture independently pins both patch
+RVAs/bytes, all three stock-witness RVAs/bytes, same-page order and pairwise
+distinctness. The x64 Release DLL is 862208 bytes; source timestamp
+`12:19:09.839Z` precedes object `12:19:26.818Z` and DLL `12:19:26.919Z`.
+Frozen SHA-256 values are:
+
+- `coop_runtime.cpp` —
+  `9446E482F6E238D329642C34B9E97814BD80E8BA1F4BB12C34CD57295801A124`;
+- `coop_runtime_offsets.h` —
+  `B00D7FCC72F8DF5A77DDED635E61595407F2ACE289A97A12ADBF31F8274480DA`;
+- `nadine_p99_chloe_order_policy.h` —
+  `C0EB5594B93A6B3F30497988C6443D6EC84DFADDEA93BD4D3BC8412B8265557A`;
+- `nadine_p99_chloe_source_rows.h` —
+  `A233F844D814B3345D3E4081A0265359A0727E54A0BD24BAE1368CD60CFF0AAA`;
+- `nadine_p99_chloe_order_policy_tests.cpp` —
+  `3E3EEFF25572A5217CF3B191446E4070F355CA78A0643466383C414708ECDD61`;
+- `generate_p99_chloe_source_rows.py` —
+  `768BBFDFBD9BEEFF9DE8725D72B4B7978A260671C001E73C2EB0D6FB1B6141FE`;
+- `native_anim_pose_audit.py` —
+  `C712C64322883CBEC4982008F672FC62A179F54D1E14599E702205F56456F638`;
+- `ida_apply_labels.py` —
+  `B044EDBE0E68CEE64A295DC05AEB65EA16C558295951D5047057859429C1272A`;
+- `scanner/build/tll_coop_runtime.dll` —
+  `03AC600C127C321BB40405F10E3E190F4BD5989C57329B00036CFE1CCF8D631A`.
+
+The falsifiable one-copy prediction is written before any `agi` runtime.
+Require exact `2026-08-31agi`, role B/local Nadine,
+`INSTALLED (21 offline-generated rows; two sites/one page; nested stock=3/3)` and
+`READY (state2; offline-generated D350/B8; locked row20/157; palm/prop/19 fingers)`.
+The user draws the real P99 and remains in WeaponOut/state2 without aiming or
+firing. A valid exam must emit
+`NADINE-P99-CHLOE-ORDER applied=21 source=offline-generated-D350-B8
+target-groups=0,1 state=2 art=8075397D`. That marker plus a Chloe-like wrapped
+right-hand grip supports H-Chloe-order; the same wrong grip with the marker
+rejects it. No marker is an admission/evaluation/lifetime failure with no visual
+verdict. Any jerk, broken hold animation, attachment/holster/back regression,
+mutation in ADS/state4/Mazur/Type95/M30/another art, or failed rollback rejects
+the implementation. The agent starts/injects only one copy and sends no
+gameplay input.

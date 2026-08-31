@@ -212,11 +212,17 @@ def decode_phase(
     animation_offset: int,
     sample: float,
     expected_frame_stride: int | None,
+    group_index: int = 0,
 ) -> tuple[bytes, list[int], dict[int, tuple[int, ...]], int, int]:
     animation_buffer = ctypes.create_string_buffer(animation)
     base = ctypes.addressof(animation_buffer) + animation_offset
+    group_count = ctypes.c_uint16.from_address(base + 0x0C).value
+    if group_index < 0 or group_index >= group_count:
+        raise ValueError(
+            f"group index {group_index} exceeds animation group count {group_count}"
+        )
     group_table = ctypes.c_uint32.from_address(base + 0x14).value
-    group = base + group_table
+    group = base + group_table + group_index * 0x10
     program_rel = ctypes.c_uint32.from_address(group).value
     frame_data_rel = ctypes.c_uint32.from_address(group + 8).value
     frame_stride = ctypes.c_uint16.from_address(group + 12).value
@@ -401,8 +407,19 @@ def main() -> None:
     parser.add_argument(
         "--animation-offset", type=lambda value: int(value, 0), required=True
     )
+    parser.add_argument("--group-index", type=int, default=0)
     parser.add_argument("--first-joint", type=int, required=True)
     parser.add_argument("--last-joint", type=int, required=True)
+    parser.add_argument(
+        "--joints",
+        type=parse_joint_chain,
+        help="comma-separated sparse processing-row indices to validate and print",
+    )
+    parser.add_argument(
+        "--emit-bits",
+        action="store_true",
+        help="also print the exact twelve uint32 words of each 48-byte row",
+    )
     parser.add_argument("--samples", type=parse_samples, required=True)
     parser.add_argument("--expected-frame-stride", type=int)
     parser.add_argument(
@@ -418,6 +435,13 @@ def main() -> None:
     args = parser.parse_args()
     if args.first_joint < 0 or args.last_joint < args.first_joint:
         parser.error("invalid joint range")
+    selected_joints = (
+        args.joints
+        if args.joints is not None
+        else tuple(range(args.first_joint, args.last_joint + 1))
+    )
+    if any(joint < 0 for joint in selected_joints):
+        parser.error("joint indices must be non-negative")
     expected_opcodes = [int(item, 0) for item in args.expected_opcodes.split(",")]
 
     audit = load_audit_module()
@@ -440,13 +464,16 @@ def main() -> None:
                 args.animation_offset,
                 sample,
                 args.expected_frame_stride,
+                args.group_index,
             )
             if seen != expected_opcodes:
                 raise ValueError(f"unexpected opcodes {seen}; expected {expected_opcodes}")
-            validate_target_pose(pose, args.first_joint, args.last_joint)
+            for joint in selected_joints:
+                validate_target_pose(pose, joint, joint)
             target_samples[sample] = pose
             if sample == args.samples[0]:
                 print(
+                    f"groupIndex={args.group_index} "
                     f"frameCount={frame_count} frameStride={frame_stride}"
                 )
                 for opcode in (22, 24):
@@ -461,7 +488,7 @@ def main() -> None:
                     )
                     print(f"opcode={opcode} mappedJoints={mapped_joints}")
             print(f"sample={sample:.3f}")
-            for joint in range(args.first_joint, args.last_joint + 1):
+            for joint in selected_joints:
                 values = joint_values(pose, joint)
                 print(
                     f"  joint={joint} "
@@ -470,6 +497,12 @@ def main() -> None:
                     f"{values[6]:.9g},{values[7]:.9g}) "
                     f"T=({values[8]:.9g},{values[9]:.9g},{values[10]:.9g})"
                 )
+                if args.emit_bits:
+                    row_words = struct.unpack_from("<12I", pose, joint * 0x30)
+                    print(
+                        "    bits="
+                        + ",".join(f"0x{word:08X}" for word in row_words)
+                    )
             if constants:
                 endpoint_positions: dict[str, tuple[float, float, float]] = {}
                 for side, chain in (
@@ -494,11 +527,14 @@ def main() -> None:
         if len(args.samples) >= 2:
             first = target_samples[args.samples[0]]
             last = target_samples[args.samples[-1]]
-            start = args.first_joint * 0x30
-            end = (args.last_joint + 1) * 0x30
+            exact = all(
+                first[joint * 0x30 : (joint + 1) * 0x30]
+                == last[joint * 0x30 : (joint + 1) * 0x30]
+                for joint in selected_joints
+            )
             print(
                 "loopClosure="
-                + ("exact" if first[start:end] == last[start:end] else "different")
+                + ("exact" if exact else "different")
             )
     finally:
         image.close()

@@ -110,16 +110,20 @@ FUNCTIONS = {
         "Exact AnimMasterTable::LoginArtGroup assertion. Registers a unique "
         "art-group id/pointer in the 0x10-byte table at 0x143840200, notifies "
         "animation-table listeners, and increments the registry epoch at "
-        "0x1438401BC (write 0x1417C9185). Clip lookup only searches these "
-        "registered groups; it is not itself a resource load or pin.",
+        "0x1438401BC (write 0x1417C9185). The body mutates the table, count and "
+        "listeners directly and contains no CMPXCHG or other internal registry "
+        "lock. Clip lookup only searches these registered groups; neither this "
+        "body nor the epoch is a resource pin.",
     ),
     0x1417C93F0: (
         "AnimMasterTable_LogoutArtGroup",
         "Notifies animation-table listeners around removal of every matching "
         "art-group pointer from the 0x143840200 table using swap-last "
         "compaction, updates count 0x1438401C8, and increments registry epoch "
-        "0x1438401BC at 0x1417C94A0. An epoch check detects registry changes "
-        "but does not hold a cached clip or skeleton resident.",
+        "0x1438401BC at 0x1417C94A0. The body performs those table/listener "
+        "mutations directly and contains no CMPXCHG or other internal registry "
+        "lock. An epoch check detects a completed change but cannot make a "
+        "borrowed clip dereference safe or keep a clip/skeleton resident.",
     ),
     0x141AE1F10: (
         "RetargetPlugin_DecodePackedReferenceLocator",
@@ -3919,8 +3923,29 @@ FUNCTIONS = {
     0x1417CD100: (
         "SkelTable_ResolveArtItemSkeleton",
         "Resolves an ArtItemSkeleton from its StringId through the skeleton registry. "
-        "ProcessAnimCmdListSegment case 6 uses it to validate the source skeleton "
-        "before cross-skeleton animation retargeting.",
+        "This is a lock-free borrowed lookup: it calls the registry hash walker and "
+        "returns node+0x18 value[0] without AddRef. Callers that cross a lifecycle "
+        "boundary must hold g_SkelTableRegistryLock while copying the value.",
+    ),
+    0x1417CD4E0: (
+        "SkelTable_LoginArtItemSkeleton",
+        "Registers one ArtItemSkeleton under the 64-bit SkelTable registry lock. "
+        "Acquisition is LOCK CMPXCHG qword 0->-1 at 0x1417CD51E, release is XCHG "
+        "qword zero at 0x1417CD7A0, and successful insertion increments the separate "
+        "g_SkelTableRegistryEpoch at 0x1417CD754..0x1417CD75F.",
+    ),
+    0x1417CD7C0: (
+        "SkelTable_LogoutArtItemSkeleton",
+        "Removes and frees one skeleton-registry node under the same 64-bit lock. "
+        "Acquisition is LOCK CMPXCHG at 0x1417CD80C, release is XCHG zero at "
+        "0x1417CD9B3, and removal increments g_SkelTableRegistryEpoch at "
+        "0x1417CD994..0x1417CD9A5. The record use-count does not pin the node.",
+    ),
+    0x1417D1170: (
+        "SkelTable_FindSkeletonRegistryNode",
+        "Lock-free fixed-table hash walker used by ResolveArtItemSkeleton. It does "
+        "not acquire the registry lock or retain the returned node; safe snapshots "
+        "must therefore enter through the owning SkelTable lock.",
     ),
     0x14193B2C0: (
         "RetargetAnimUsingBatchMgr",
@@ -12740,8 +12765,16 @@ DATA_NAMES = {
         "g_AnimMasterTableArtGroupRegistryEpoch",
         "Animation art-group registry change counter, incremented by "
         "LoginArtGroup at 0x1417C9185 and LogoutArtGroup at 0x1417C94A0. "
-        "Useful for invalidating resource lookup caches, not a residency pin "
-        "or a substitute for the native unload/scheduling lifetime barrier.",
+        "Both writers mutate the table/listeners without an internal lock or "
+        "CMPXCHG. The counter can reject a completed registry change, but it is "
+        "not a residency pin and cannot authorize a live borrowed-clip read.",
+    ),
+    0x1438401CC: (
+        "g_SkelTableRegistryEpoch",
+        "Independent skeleton-registry lifecycle counter incremented by "
+        "SkelTable_LoginArtItemSkeleton and SkelTable_LogoutArtItemSkeleton. "
+        "It is distinct from g_AnimMasterTableArtGroupRegistryEpoch; freshness "
+        "checks need this epoch and borrowed dereferences still require the lock.",
     ),
     0x1438401D8: (
         "g_SkelTableRetargetEntryCount",
@@ -12755,7 +12788,35 @@ DATA_NAMES = {
         "BuildRetargetEntries populates it from skel-retargets.bin; exact P99 "
         "Chloe-order evaluation uses rows 20 (Player to Chloe) and 157 "
         "(Chloe to legacy Nadine) only after FindRetargetEntry returns the same "
-        "array element and the art-group registry epoch remains unchanged.",
+        "array element. Borrowed record/reference snapshots are copied while "
+        "g_SkelTableRegistryLock is held and are rejected if either registry epoch "
+        "or the three resolver identities changes.",
+    ),
+    0x1466EC3E0: (
+        "g_SkelTableRegistryBuckets",
+        "Pointer to the 384-bucket skeleton-registry hash table. The initialized "
+        "shape includes an additional sentinel slot at buckets[384].",
+    ),
+    0x1466EC440: (
+        "g_SkelTableRegistrySentinel",
+        "Skeleton-registry sentinel node pointer; initialized shape requires "
+        "g_SkelTableRegistryBuckets[384] to equal this value.",
+    ),
+    0x1466EC470: (
+        "g_SkelTableRegistryBucketCount",
+        "Skeleton-registry bucket count. The pinned retail build initializes it "
+        "to 384 before publishing the initialized byte.",
+    ),
+    0x1466EC474: (
+        "g_SkelTableRegistryInitialized",
+        "One-byte initialized flag for the skeleton registry. Borrowed lookup "
+        "snapshots fail closed unless it is exactly one under the registry lock.",
+    ),
+    0x1466EC4B0: (
+        "g_SkelTableRegistryLock",
+        "64-bit registry lock with free value 0 and owned value -1. Login/Logout "
+        "spin using LOCK CMPXCHG and release with atomic XCHG; runtime probes use "
+        "one nonblocking InterlockedCompareExchange64 attempt and never spin.",
     ),
     0x14386FD00: (
         "g_AuthoredTransformPointerTable",
@@ -13126,6 +13187,14 @@ def apply_labels():
     # A previous melee pass accidentally put the dispatcher function name on an
     # interior instruction, forcing IDA to suffix the real entry with `_0`.
     ida_name.set_name(0x141273B20, "", ida_name.SN_NOWARN)
+    # Auto-analysis coalesces the adjacent SkelTable bucket-count DWORD and
+    # initialized byte into one wider item. Split them so both confirmed
+    # lifecycle fields can carry independent names and comments.
+    ida_bytes.del_items(0x1466EC470, ida_bytes.DELIT_SIMPLE, 5)
+    if not ida_bytes.create_dword(0x1466EC470, 4):
+        raise RuntimeError("failed to create SkelTable bucket-count DWORD")
+    if not ida_bytes.create_byte(0x1466EC474, 1):
+        raise RuntimeError("failed to create SkelTable initialized byte")
     for ea, (name, comment) in FUNCTIONS.items():
         ensure_function(ea)
         ida_name.set_name(

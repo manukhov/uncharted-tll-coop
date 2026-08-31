@@ -1,25 +1,22 @@
 #include "nadine_p99_chloe_order_policy.h"
+#include "nadine_p99_chloe_source_rows.h"
+#include "coop_runtime_offsets.h"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <utility>
-#include <vector>
 
 namespace {
 
 namespace policy = coop::p99_chloe_order;
+namespace rows = coop::p99_chloe_source_rows;
 using policy::Decision;
 using policy::PoseValidEvidence;
-using policy::PerformBranchEvidence;
 using policy::RejectReason;
 using policy::RetargetEntryMetadata;
 using policy::RetargetRecordMetadata;
-using policy::SealDiagnosticEvidence;
-using policy::SealIncompleteStage;
-using policy::SourcePoseKind;
-using policy::SourcePoseLayoutEvidence;
 
 std::size_t checks = 0;
 
@@ -89,27 +86,125 @@ constexpr std::array<FixtureTransfer, 21> fixture_transfers{{
     {0xC83B7AFDu, 676, 304, 135, 7, 2, 1, 1},
 }};
 
+bool generated_source_rows_match_independent_fixture() {
+    constexpr std::array<std::uint8_t, 5> expected_perform{
+        0xE8, 0x56, 0xF9, 0xFF, 0xFF};
+    constexpr std::array<std::uint8_t, 6> expected_postblend{
+        0xFF, 0x90, 0x08, 0x04, 0x00, 0x00};
+    constexpr std::array<std::uint8_t, 5> expected_process{
+        0xE8, 0x62, 0x70, 0x02, 0x00};
+    constexpr std::array<std::uint8_t, 5> expected_retarget{
+        0xE8, 0xF7, 0x12, 0xE8, 0xFF};
+    constexpr std::array<std::uint8_t, 5> expected_add{
+        0xE8, 0xD1, 0xE6, 0xFF, 0xFF};
+    CHECK(kAnimManagerPerformAnimBlendCallsiteRva == 0x1A92905);
+    CHECK(kAnimManagerPlayerPostBlendCallsiteRva == 0x1A929A1);
+    CHECK(kAnimManagerProcessAnimCmdListSegmentCallsiteRva == 0x1A92759);
+    CHECK(kProcessAnimCmdRetargetCallsiteRva == 0x1AB9FC4);
+    CHECK(kRetargetPostPoseAddCallsiteRva == 0x1937DBA);
+    CHECK(kAnimManagerPerformAnimBlendCallsiteStockBytes == expected_perform);
+    CHECK(kAnimManagerPlayerPostBlendCallsiteStockBytes == expected_postblend);
+    CHECK(kAnimManagerProcessAnimCmdListSegmentCallsiteStockBytes ==
+          expected_process);
+    CHECK(kProcessAnimCmdRetargetCallsiteStockBytes == expected_retarget);
+    CHECK(kRetargetPostPoseAddCallsiteStockBytes == expected_add);
+    CHECK((kAnimManagerPerformAnimBlendCallsiteRva >> 12) ==
+          (kAnimManagerPlayerPostBlendCallsiteRva >> 12));
+    CHECK(kAnimManagerPerformAnimBlendCallsiteRva <
+          kAnimManagerPlayerPostBlendCallsiteRva);
+    constexpr std::array<std::uintptr_t, 5> witness_rvas{
+        kAnimManagerPerformAnimBlendCallsiteRva,
+        kAnimManagerPlayerPostBlendCallsiteRva,
+        kAnimManagerProcessAnimCmdListSegmentCallsiteRva,
+        kProcessAnimCmdRetargetCallsiteRva,
+        kRetargetPostPoseAddCallsiteRva};
+    for (std::size_t index = 0; index < witness_rvas.size(); ++index) {
+        for (std::size_t prior = 0; prior < index; ++prior) {
+            CHECK(witness_rvas[index] != witness_rvas[prior]);
+        }
+    }
+    CHECK(rows::kRetailExeSha256 ==
+          "ed1371a4b47961abc160e92aa0b9bdfd787638fa1a39ba2403b423ab45c210be");
+    CHECK(rows::kEntrySha256 ==
+          "337cb2c4cfdc51cb71d2291f7af7f4bff478e21c3a53e986a22bfc22248f470c");
+    CHECK(rows::kPlayerSkeletonEntrySha256 ==
+          "fd3e58acf071fd0d3f3783c5fd29bd654d74efef42cbcf4033727340fabf99d0");
+    CHECK(rows::kChloeSkeletonEntrySha256 ==
+          "13b24c6068d6ef42be0ca683be94d8d891477fa09dc2c8dd1de84672c37d5109");
+    CHECK(rows::kNadineSkeletonEntrySha256 ==
+          "2bf66e61fae156a41952d8d2659e06215dbe8f0c827a9f6a89cada0c9490b06b");
+    CHECK(rows::kRetargetEntrySha256 ==
+          "227fa31a5deab04561f37c3fdd2a38b429ab426889cfe0498bbd3f93cb1e0a50");
+    CHECK(rows::kPolicyManifestSha256 ==
+          "11af5389f7b47ac48cca71b10a03abbe215ffcfd0772d9e806c61605e1c38502");
+    CHECK(rows::kRichManifestSha256 ==
+          "5107aff8bee5752b0af5153a7e07d3d055b06415139ddf4d75854d6ef71189b0");
+    CHECK(rows::kPlayerRowsSha256 ==
+          "9d3a72550481469533c9c1df82f864d5027c75e1fbe7dc7f2e317f0781bba727");
+    CHECK(rows::kChloeRowsSha256 ==
+          "1735098f297a40b996325966f95307ed07fc7c98276aa27877967dc098be2ecf");
+    CHECK(rows::kCombinedRowsSha256 ==
+          "0aefc3ea21b16d2059160052888b4508a4a213ba9f2d42ec1cd2d82ff5ccb0b2");
+    CHECK(rows::kRows.size() == fixture_transfers.size());
+    CHECK(rows::kSemanticJoin.size() == fixture_transfers.size());
+    CHECK(rows::kFrameCount == 1 && rows::kFrameStride == 0);
+    CHECK(rows::kPlayerToChloeRetargetRowIndex == 20);
+    CHECK(rows::kChloeToNadineRetargetRowIndex == 157);
+    std::uint64_t player_hash = 14695981039346656037ull;
+    std::uint64_t chloe_hash = 14695981039346656037ull;
+    constexpr std::uint64_t kPrime = 1099511628211ull;
+    for (std::size_t index = 0; index < fixture_transfers.size(); ++index) {
+        const auto& expected = fixture_transfers[index];
+        const auto& row = rows::kRows[index];
+        const auto& join = rows::kSemanticJoin[index];
+        CHECK(row.semantic_id == expected.semantic_id);
+        CHECK(row.player_global == expected.player);
+        CHECK(row.chloe_global == expected.chloe);
+        CHECK(row.nadine_global == expected.nadine);
+        CHECK(row.player_group == expected.player_group);
+        CHECK(row.chloe_group == expected.chloe_group);
+        CHECK(join.semantic_id == expected.semantic_id);
+        CHECK(join.player_group == expected.player_group);
+        CHECK(join.chloe_group == expected.chloe_group);
+        CHECK(join.nadine_group == expected.nadine_group);
+        CHECK(join.mode == expected.mode);
+        CHECK(row.player_local ==
+              expected.player - player_groups[expected.player_group].first);
+        CHECK(row.chloe_local ==
+              expected.chloe - chloe_groups[expected.chloe_group].first);
+        CHECK(join.nadine_local ==
+              expected.nadine - nadine_groups[expected.nadine_group].first);
+        for (std::size_t prior = 0; prior < index; ++prior) {
+            CHECK(rows::kSemanticJoin[prior].row20_map_index !=
+                  join.row20_map_index);
+            CHECK(rows::kSemanticJoin[prior].row157_map_index !=
+                  join.row157_map_index);
+        }
+        for (const std::uint32_t word : row.player_words) {
+            for (unsigned shift = 0; shift < 32; shift += 8) {
+                player_hash ^= static_cast<std::uint8_t>(word >> shift);
+                player_hash *= kPrime;
+            }
+        }
+        for (const std::uint32_t word : row.chloe_additive_words) {
+            for (unsigned shift = 0; shift < 32; shift += 8) {
+                chloe_hash ^= static_cast<std::uint8_t>(word >> shift);
+                chloe_hash *= kPrime;
+            }
+        }
+    }
+    CHECK(rows::kPlayerRowsFnv1a64 == 0x65A8FCDC119135E7ull);
+    CHECK(rows::kChloeRowsFnv1a64 == 0x502C5AD5F0374FACull);
+    CHECK(player_hash == 0x65A8FCDC119135E7ull);
+    CHECK(chloe_hash == 0x502C5AD5F0374FACull);
+    return true;
+}
+
 constexpr std::array<std::uint16_t, 2> fixture_g0_targets{28, 30};
 constexpr std::array<std::uint16_t, 19> fixture_finger_targets{
     105, 107, 109, 111, 113, 115, 117, 119, 121, 123,
     125, 127, 129, 131, 133, 135, 137, 139, 141,
 };
-
-// Independent transcription of the live source-evaluation descriptors.  The
-// larger workspace counts are intentionally different from the processing
-// row counts for both group-zero clips.
-constexpr std::array<SourcePoseLayoutEvidence, 2> fixture_player_layouts{{
-    {SourcePoseKind::kPlayerBase, 0, 0, true, true, true,
-     0x40, 0x160, 0, 0, 168, 71, 71, 27, 2, 0, 0, 0},
-    {SourcePoseKind::kPlayerBase, 1, 7, true, true, true,
-     0x40, 0x160, 639, 7, 38, 38, 38, 0, 1, 0, 435, 0},
-}};
-constexpr std::array<SourcePoseLayoutEvidence, 2> fixture_chloe_layouts{{
-    {SourcePoseKind::kChloeAdditive, 0, 0, true, true, true,
-     0x40, 0x140, 0, 0, 205, 89, 89, 27, 2, 0, 0, 0},
-    {SourcePoseKind::kChloeAdditive, 1, 2, true, true, true,
-     0x40, 0x140, 267, 2, 38, 38, 38, 0, 1, 0, 90, 0},
-}};
 
 template <std::size_t N>
 int group_for(const std::array<Group, N>& groups, std::uint16_t global) {
@@ -198,10 +293,6 @@ struct Fixture {
     std::array<std::uint8_t, 2> additive_mask_groups{0, 2};
     std::array<std::uint8_t, 2> composite_mask_groups{0, 2};
     std::array<std::uint8_t, 2> nadine_mask_groups{0, 1};
-    std::array<SourcePoseLayoutEvidence, 2> player_layouts{
-        fixture_player_layouts};
-    std::array<SourcePoseLayoutEvidence, 2> chloe_layouts{
-        fixture_chloe_layouts};
     policy::TransferEvidence evidence{};
 
     Fixture() {
@@ -240,8 +331,6 @@ struct Fixture {
 
         evidence.scope = {
             true, true, true, 0, 0x8075397Du, 2u,
-            0xD350A452u, 0xB8FC6B25u, 2u, 0x3F800000u,
-            false, true, false,
         };
         evidence.row20.metadata = {
             0xFE014FD2u, 0x8E53B36Eu, 20, 0x2E, 0x410u, 0x2124u, 96, 93,
@@ -257,8 +346,6 @@ struct Fixture {
         };
         evidence.row20.records = row20_records;
         evidence.row157.records = row157_records;
-        evidence.player_source_layouts = player_layouts;
-        evidence.chloe_source_layouts = chloe_layouts;
 
         evidence.player_base.skeleton_joint_count = 702;
         evidence.player_base.groups = player_mask_groups;
@@ -332,42 +419,6 @@ bool exact_asset_constants_and_target_inventory() {
     CHECK(policy::kExpectedRow157.profile_id == 0xFC34096Cu);
     CHECK(policy::kExpectedRow157.scale_bits == 0x3F770A3Du);
 
-    const auto check_layout = [](const SourcePoseLayoutEvidence& actual,
-                                 const SourcePoseLayoutEvidence& expected) {
-        return actual.kind == expected.kind &&
-            actual.target_group == expected.target_group &&
-            actual.source_group == expected.source_group &&
-            actual.group_pointer_exact == expected.group_pointer_exact &&
-            actual.processing_pointer_exact ==
-                expected.processing_pointer_exact &&
-            actual.stable == expected.stable &&
-            actual.group_table_offset == expected.group_table_offset &&
-            actual.processing_table_offset ==
-                expected.processing_table_offset &&
-            actual.group_first == expected.group_first &&
-            actual.processing_descriptor_index ==
-                expected.processing_descriptor_index &&
-            actual.workspace_count == expected.workspace_count &&
-            actual.parameter_count == expected.parameter_count &&
-            actual.processing_joint_count ==
-                expected.processing_joint_count &&
-            actual.processing_scalar_count ==
-                expected.processing_scalar_count &&
-            actual.processing_lane_count == expected.processing_lane_count &&
-            actual.processing_byte5 == expected.processing_byte5 &&
-            actual.processing_first_parameter ==
-                expected.processing_first_parameter &&
-            actual.processing_word8 == expected.processing_word8;
-    };
-    for (std::size_t i = 0; i < fixture_player_layouts.size(); ++i) {
-        CHECK(check_layout(
-            policy::kExpectedPlayerSourceLayouts[i],
-            fixture_player_layouts[i]));
-        CHECK(check_layout(
-            policy::kExpectedChloeSourceLayouts[i],
-            fixture_chloe_layouts[i]));
-    }
-
     for (std::size_t i = 0; i < fixture_transfers.size(); ++i) {
         const auto& actual = policy::kExpectedTransfers[i];
         const auto& expected = fixture_transfers[i];
@@ -385,83 +436,6 @@ bool exact_asset_constants_and_target_inventory() {
             CHECK(actual.chloe_global != policy::kExpectedTransfers[j].chloe_global);
             CHECK(actual.nadine_global != policy::kExpectedTransfers[j].nadine_global);
         }
-    }
-    return true;
-}
-
-bool source_pose_layout_is_exact_and_fail_closed() {
-    {
-        Fixture fixture;
-        std::swap(fixture.player_layouts[0], fixture.player_layouts[1]);
-        std::swap(fixture.chloe_layouts[0], fixture.chloe_layouts[1]);
-        CHECK(decide(fixture).admitted());
-    }
-
-    const auto rejects_player = [](std::size_t index, auto mutate) {
-        Fixture fixture;
-        mutate(fixture.player_layouts[index]);
-        return decide(fixture).reason == RejectReason::kSourceLayout;
-    };
-    const auto rejects_chloe = [](std::size_t index, auto mutate) {
-        Fixture fixture;
-        mutate(fixture.chloe_layouts[index]);
-        return decide(fixture).reason == RejectReason::kSourceLayout;
-    };
-    for (std::size_t index = 0; index < 2; ++index) {
-#define CHECK_LAYOUT_FIELD(field, mutation)                                      \
-        CHECK(rejects_player(index, [](auto& value) { value.field mutation; })); \
-        CHECK(rejects_chloe(index, [](auto& value) { value.field mutation; }))
-        CHECK_LAYOUT_FIELD(kind, = value.kind == SourcePoseKind::kPlayerBase
-                                      ? SourcePoseKind::kChloeAdditive
-                                      : SourcePoseKind::kPlayerBase);
-        CHECK_LAYOUT_FIELD(target_group, ^= 1u);
-        CHECK_LAYOUT_FIELD(source_group, ^= 1u);
-        CHECK_LAYOUT_FIELD(group_pointer_exact, = false);
-        CHECK_LAYOUT_FIELD(processing_pointer_exact, = false);
-        CHECK_LAYOUT_FIELD(stable, = false);
-        CHECK_LAYOUT_FIELD(group_table_offset, ^= 0x20u);
-        CHECK_LAYOUT_FIELD(processing_table_offset, ^= 0x20u);
-        CHECK_LAYOUT_FIELD(group_first, ^= 1u);
-        CHECK_LAYOUT_FIELD(processing_descriptor_index, ^= 1u);
-        CHECK_LAYOUT_FIELD(workspace_count, ^= 1u);
-        CHECK_LAYOUT_FIELD(parameter_count, ^= 1u);
-        CHECK_LAYOUT_FIELD(processing_joint_count, ^= 1u);
-        CHECK_LAYOUT_FIELD(processing_scalar_count, ^= 1u);
-        CHECK_LAYOUT_FIELD(processing_lane_count, ^= 1u);
-        CHECK_LAYOUT_FIELD(processing_byte5, ^= 1u);
-        CHECK_LAYOUT_FIELD(processing_first_parameter, ^= 1u);
-        CHECK_LAYOUT_FIELD(processing_word8, ^= 1u);
-#undef CHECK_LAYOUT_FIELD
-    }
-    {
-        Fixture fixture;
-        fixture.evidence.player_source_layouts =
-            fixture.evidence.player_source_layouts.first(1);
-        CHECK(decide(fixture).reason == RejectReason::kSourceLayout);
-    }
-    {
-        Fixture fixture;
-        fixture.evidence.chloe_source_layouts =
-            fixture.evidence.chloe_source_layouts.first(1);
-        CHECK(decide(fixture).reason == RejectReason::kSourceLayout);
-    }
-    {
-        Fixture fixture;
-        fixture.player_layouts[1] = fixture.player_layouts[0];
-        CHECK(decide(fixture).reason == RejectReason::kSourceLayout);
-    }
-    {
-        Fixture fixture;
-        fixture.chloe_layouts[1] = fixture.chloe_layouts[0];
-        CHECK(decide(fixture).reason == RejectReason::kSourceLayout);
-    }
-    {
-        Fixture fixture;
-        const std::array<SourcePoseLayoutEvidence, 3> extra{
-            fixture.player_layouts[0], fixture.player_layouts[1],
-            fixture.player_layouts[0]};
-        fixture.evidence.player_source_layouts = extra;
-        CHECK(decide(fixture).reason == RejectReason::kSourceLayout);
     }
     return true;
 }
@@ -509,13 +483,6 @@ bool scope_is_exact_and_fail_closed() {
     CHECK(rejects([](auto& value) { value.art_id ^= 1u; }));
     CHECK(rejects([](auto& value) { value.art_id = 0x33E29A1Bu; })); // Mazur
     CHECK(rejects([](auto& value) { value.weapon_state = 4; })); // ADS
-    CHECK(rejects([](auto& value) { value.base_clip_id ^= 1u; }));
-    CHECK(rejects([](auto& value) { value.additive_clip_id ^= 1u; }));
-    CHECK(rejects([](auto& value) { value.blend_mode = 1; }));
-    CHECK(rejects([](auto& value) { value.blend_weight_bits ^= 1u; }));
-    CHECK(rejects([](auto& value) { value.base_is_additive = true; }));
-    CHECK(rejects([](auto& value) { value.right_is_additive = false; }));
-    CHECK(rejects([](auto& value) { value.composite_is_additive = true; }));
     return true;
 }
 
@@ -862,332 +829,12 @@ bool mask_group_coverage_is_exact_and_unique() {
     return true;
 }
 
-std::vector<std::uint32_t> exact_terminal_commands(
-    std::uint32_t processing_group) {
-    std::vector<std::uint32_t> words;
-    const auto append = [&](std::uint32_t opcode, std::uint32_t count) {
-        words.push_back((count << 16) | opcode);
-        words.resize(words.size() + count - 1, 0);
-    };
-    append(0, 2);
-    append(1, 2);
-    append(2, 4);
-    append(6, 6);
-    words[words.size() - 2] = 0;
-    append(6, 6);
-    words[words.size() - 2] = 1;
-    append(7, 6);
-    words[words.size() - 5] = 0;
-    words[words.size() - 4] = 1;
-    words[words.size() - 3] = 0;
-    words[words.size() - 2] = policy::kRequiredBlendMode;
-    words[words.size() - 1] = policy::kUnitWeightBits;
-    append(3, 2);
-    append(4, 2);
-    append(15, 4);
-    append(16, 2);
-    append(17, 4);
-    if (processing_group == 0) {
-        append(24, 6);
-        words[words.size() - 5] = 0x248B1AAEu;
-    }
-    append(27, 6);
-    append(5, 2);
-    return words;
-}
-
-bool terminal_command_plan_is_exact_and_fail_closed() {
-    constexpr std::uint32_t base_word = 8;
-    constexpr std::uint32_t additive_word = 14;
-    constexpr std::uint32_t finalizer_word = 26;
-    for (std::uint32_t group = 0; group < 2; ++group) {
-        const auto evaluate = [group](
-                                  const std::vector<std::uint32_t>& candidate,
-                                  std::uint32_t candidate_group,
-                                  std::uint32_t base,
-                                  std::uint32_t additive,
-                                  std::uint32_t finalizer) {
-            return policy::exact_terminal_command_plan({
-                std::span<const std::uint32_t>(candidate.data(),
-                                               candidate.size()),
-                candidate_group, base, additive, finalizer});
-        };
-        auto words = exact_terminal_commands(group);
-        CHECK(evaluate(words, group, base_word, additive_word,
-                       finalizer_word));
-        CHECK(!evaluate(words, group ^ 1u, base_word, additive_word,
-                        finalizer_word));
-        CHECK(!evaluate(words, group, base_word + 1, additive_word,
-                        finalizer_word));
-        CHECK(!evaluate(words, group, base_word, additive_word + 1,
-                        finalizer_word));
-        CHECK(!evaluate(words, group, base_word, additive_word,
-                        finalizer_word + 1));
-
-        const std::array<std::size_t, 13> structural_words{
-            base_word, base_word + 4, base_word + 5,
-            additive_word, additive_word + 4, additive_word + 5,
-            20, 21, 22, 23, 24, 25, finalizer_word,
-        };
-        for (const std::size_t word : structural_words) {
-            auto mutated = words;
-            mutated[word] ^= 1u;
-            CHECK(!evaluate(mutated, group, base_word, additive_word,
-                            finalizer_word));
-        }
-
-        const std::array<std::size_t, 7> common_tail_headers{
-            26, 28, 30, 34, 36,
-            group == 0 ? 46u : 40u,
-            group == 0 ? 52u : 46u,
-        };
-        for (const std::size_t word : common_tail_headers) {
-            auto mutated = words;
-            mutated[word] ^= 1u;
-            CHECK(!evaluate(mutated, group, base_word, additive_word,
-                            finalizer_word));
-        }
-        if (group == 0) {
-            auto bad_opcode = words;
-            bad_opcode[40] ^= 1u;
-            CHECK(!evaluate(bad_opcode, group, base_word, additive_word,
-                            finalizer_word));
-            auto bad_id = words;
-            bad_id[41] ^= 1u;
-            CHECK(!evaluate(bad_id, group, base_word, additive_word,
-                            finalizer_word));
-        }
-        auto extended = words;
-        extended.push_back(0);
-        CHECK(!evaluate(extended, group, base_word, additive_word,
-                        finalizer_word));
-    }
-    return true;
-}
-
-bool seal_diagnostic_classifier_is_exact_and_fail_closed() {
-    SealDiagnosticEvidence evidence{};
-    evidence.process_group_mask = 0x03u;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kNoParserCandidate);
-    evidence.process_group_mask = 0x01u;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kNoParserCandidate);
-    evidence.process_group_mask = 0;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kNoParserCandidate);
-
-    // A later-stage claim without the earlier evidence is malformed rather
-    // than a plausible no-parser result.
-    evidence.owner_checked = true;
-    evidence.owner_exact = false;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kOtherIncomplete);
-
-    evidence = {};
-    evidence.process_group_mask = 0x03u;
-    evidence.parser_candidate_group_mask = 0x01u;
-    evidence.captured_group_mask = 0x01u;
-    evidence.entries_captured = true;
-    evidence.group0_valid = true;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kOneGroupCaptured);
-    evidence.owner_checked = true;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kOtherIncomplete);
-
-    evidence = {};
-    evidence.process_group_mask = 0x03u;
-    evidence.parser_candidate_group_mask = 0x02u;
-    evidence.captured_group_mask = 0x02u;
-    evidence.entries_captured = true;
-    evidence.group1_valid = true;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kOneGroupCaptured);
-
-    evidence = {};
-    evidence.process_group_mask = 0x03u;
-    evidence.parser_candidate_group_mask = 0x03u;
-    evidence.captured_group_mask = 0x03u;
-    evidence.entries_captured = true;
-    evidence.group0_valid = true;
-    evidence.group1_valid = true;
-    evidence.owner_checked = true;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kOwnerTableIdentity);
-
-    evidence.owner_exact = true;
-    evidence.skeleton_checked = true;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kSkeletonIdentity);
-
-    evidence.skeleton_exact = true;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kOtherIncomplete);
-    evidence.seal_succeeded = true;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kNone);
-
-    // A parser candidate without a completed group is not mislabeled as the
-    // no-parser or one-group case.
-    evidence = {};
-    evidence.process_group_mask = 0x03u;
-    evidence.parser_candidate_group_mask = 0x03u;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kOtherIncomplete);
-
-    evidence = {};
-    evidence.process_group_mask = 0x04u;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kOtherIncomplete);
-    evidence = {};
-    evidence.parser_candidate_group_mask = 0x04u;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kOtherIncomplete);
-    evidence = {};
-    evidence.captured_group_mask = 0x04u;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kOtherIncomplete);
-
-    evidence = {};
-    evidence.seal_succeeded = true;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kOtherIncomplete);
-
-    // Cross-field contradictions are diagnostic corruption, never evidence
-    // for a plausible runtime stage.
-    evidence = {};
-    evidence.process_group_mask = 0x01u;
-    evidence.parser_candidate_group_mask = 0x01u;
-    evidence.captured_group_mask = 0x01u;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kOtherIncomplete);
-    evidence.entries_captured = true;
-    evidence.group1_valid = true;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kOtherIncomplete);
-
-    evidence = {};
-    evidence.process_group_mask = 0x01u;
-    evidence.parser_candidate_group_mask = 0x01u;
-    evidence.captured_group_mask = 0x01u;
-    evidence.entries_captured = true;
-    evidence.group0_valid = true;
-    evidence.owner_checked = true;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kOtherIncomplete);
-
-    evidence = {};
-    evidence.process_group_mask = 0x03u;
-    evidence.parser_candidate_group_mask = 0x03u;
-    evidence.captured_group_mask = 0x03u;
-    evidence.entries_captured = true;
-    evidence.group0_valid = true;
-    evidence.group1_valid = true;
-    evidence.owner_checked = true;
-    evidence.owner_exact = true;
-    CHECK(policy::classify_seal_diagnostic(evidence) ==
-          SealIncompleteStage::kOtherIncomplete);
-    return true;
-}
-
-bool perform_branch_classifier_matches_static_control_flow() {
-    PerformBranchEvidence evidence{};
-    auto decision = policy::derive_perform_branch(evidence);
-    CHECK(!decision.can_enter);
-    CHECK(!decision.main_loop);
-    CHECK(decision.inline_group_limit == 0);
-
-    evidence.snapshot_valid = true;
-    evidence.job_object_present = true;
-    evidence.fg_enabled5 = 1;
-    evidence.fg_state6 = 2;
-    evidence.fg_flags7 = 0x08u;
-    evidence.cached_skeleton_exact = true;
-    decision = policy::derive_perform_branch(evidence);
-    CHECK(decision.can_enter);
-    CHECK(decision.main_loop);
-    CHECK(decision.inline_group_limit == 0);
-
-    evidence.target_group_count = 8;
-    evidence.target_auxiliary_word = 1;
-    decision = policy::derive_perform_branch(evidence);
-    CHECK(decision.can_enter);
-    CHECK(decision.main_loop);
-    CHECK(!decision.prepass);
-    CHECK(!decision.split_residual);
-    CHECK(!decision.force_one);
-    CHECK(decision.inline_group_limit == 8);
-
-    evidence.cached_skeleton_exact = false;
-    decision = policy::derive_perform_branch(evidence);
-    CHECK(decision.prepass);
-    evidence.cached_skeleton_exact = true;
-    evidence.global_prepass_enabled = true;
-    decision = policy::derive_perform_branch(evidence);
-    CHECK(decision.prepass);
-    evidence.global_prepass_enabled = false;
-
-    evidence.global_split_enabled = true;
-    evidence.fg_split_ready2d1 = 1;
-    decision = policy::derive_perform_branch(evidence);
-    CHECK(decision.split_residual);
-    CHECK(!decision.force_one);
-    CHECK(decision.inline_group_limit == 1);
-    evidence.fg_split_ready2d1 = 0;
-    evidence.target_auxiliary_word = 0;
-    decision = policy::derive_perform_branch(evidence);
-    CHECK(decision.split_residual);
-
-    evidence.target_auxiliary_word = 1;
-    evidence.fg_flags7 = 0;
-    evidence.job_flags14 = 0;
-    decision = policy::derive_perform_branch(evidence);
-    CHECK(decision.can_enter);
-    CHECK(decision.main_loop);
-    CHECK(!decision.split_residual);
-    CHECK(decision.force_one);
-    CHECK(decision.inline_group_limit == 1);
-
-    evidence.job_flags14 = 1;
-    decision = policy::derive_perform_branch(evidence);
-    CHECK(!decision.can_enter);
-    CHECK(!decision.main_loop);
-    CHECK(decision.inline_group_limit == 0);
-
-    evidence.fg_flags7 = 0x08u;
-    decision = policy::derive_perform_branch(evidence);
-    CHECK(decision.can_enter);
-    CHECK(decision.main_loop);
-    evidence.custom_callback_present = true;
-    decision = policy::derive_perform_branch(evidence);
-    CHECK(decision.can_enter);
-    CHECK(!decision.main_loop);
-    CHECK(decision.inline_group_limit == 0);
-    evidence.custom_callback_present = false;
-    evidence.job_object_present = false;
-    decision = policy::derive_perform_branch(evidence);
-    CHECK(decision.can_enter);
-    CHECK(!decision.main_loop);
-
-    evidence.job_object_present = true;
-    evidence.fg_flags0 = 0x00020000u;
-    evidence.fg_flags7 = 0;
-    evidence.job_flags14 = 0;
-    decision = policy::derive_perform_branch(evidence);
-    CHECK(decision.main_loop);
-    CHECK(!decision.force_one);
-    CHECK(!decision.split_residual);
-    CHECK(decision.inline_group_limit == 8);
-    return true;
-}
-
 } // namespace
 
 int main() {
-    const std::array<std::pair<const char*, bool (*)()>, 14> tests{{
+    const std::array<std::pair<const char*, bool (*)()>, 11> tests{{
         {"asset constants and exact C39 targets", exact_asset_constants_and_target_inventory},
-        {"source-pose layout", source_pose_layout_is_exact_and_fail_closed},
+        {"generated source rows", generated_source_rows_match_independent_fixture},
         {"exact fixture", exact_fixture_is_admitted},
         {"scope", scope_is_exact_and_fail_closed},
         {"entry identity and join", exact_entry_identity_and_entry_join},
@@ -1196,11 +843,6 @@ int main() {
         {"semantic middle join", semantic_middle_join_and_order_are_mandatory},
         {"every valid-mask bit", every_valid_mask_bit_is_fail_closed},
         {"mask group coverage", mask_group_coverage_is_exact_and_unique},
-        {"terminal command plan", terminal_command_plan_is_exact_and_fail_closed},
-        {"seal diagnostic classifier",
-         seal_diagnostic_classifier_is_exact_and_fail_closed},
-        {"Perform branch classifier",
-         perform_branch_classifier_matches_static_control_flow},
         {"repeat exact fixture after negatives", exact_fixture_is_admitted},
     }};
     std::size_t passed = 0;
