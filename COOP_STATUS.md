@@ -30809,3 +30809,44 @@ or parser failure, not a visual verdict. An applied marker plus the same wrong
 grip rejects H-Chloe-order. Any jerk, broken holding animation, attachment/back
 regression, other-art write or failed rollback rejects the implementation; do
 not widen the grammar after a failed exam.
+
+### 2026-08-31 RUNTIME INSTALLED / DELIBERATE STEADY EXAM PENDING (`agf`, PID 24944)
+
+After static implementation commit `6e8f79c` and its successful immediate push
+to `origin/master`, preflight found zero existing `tll.exe` processes.
+`launch_coop.ps1 -Count 1 -SettleSeconds 14` started exactly PID 24944 and loaded
+the frozen DLL. A read-only process check still finds exactly that one game.
+Initial log rows prove the expected boot and complete installer path:
+
+- `TLL co-op runtime init 2026-08-31agf`;
+- `co-op role = B (player 2, local Nadine)` and state-net started;
+- `legacy-Nadine P99 Chloe-order transfer INSTALLED (21 rows; five sites/three
+  pages)`;
+- `legacy-Nadine P99 Chloe-order grip transfer READY (state2; palm/prop/19
+  fingers)`.
+
+The process then entered the exact scope selected by
+`seh_select_p99_chloe_transfer_epoch`: role B, retained Player0, legacy Nadine,
+real P99 and controller state 2. Twenty-four top-level Perform epochs each ended
+`NADINE-P99-CHLOE-ORDER reject=perform-incomplete row=0..23`, followed by the
+bounded `reject=saturated rows=24`. There is no `applied=21` marker. A later
+`FIRE-RELAY ... art=0x8075397d` independently confirms that the live weapon was
+the real P99.
+
+These rows prove broad scope admission but not a deliberate steady-state exam.
+They may be transition/parallel Perform passes with no exact terminal subtree;
+fail-closed behavior wrote no reconstructed pose. The separate reject counter's
+24-row saturation suppresses only later rejection text: it does not clear READY,
+disable hooks or prevent a future valid ticket from emitting the independent
+`applied=21` marker. The later P99 fire proves the art was live, but does not
+prove that the user held it steadily without ADS. Therefore this is not yet an
+admission or visual rejection of H-Chloe-order.
+
+If the deliberate state2 hold still produces no applied marker, the competing
+causes to distinguish statically are (1) neither exact group command list passes
+the parser, (2) only one of groups 0/1 passes, (3) final owner/table identity
+fails, or (4) the two groups carry different skeleton object identities. A
+failure inside an admitted Retarget/Add chain is already disfavored because it
+would set ambiguity and log `perform-ambiguous`. Do not widen the grammar from
+the current generic trace. The agent sent no keyboard, mouse, controller or menu
+input; exactly PID 24944 remained running while this result was recorded.
