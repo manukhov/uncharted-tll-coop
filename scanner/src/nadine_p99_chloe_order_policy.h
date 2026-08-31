@@ -165,21 +165,66 @@ struct Decision {
 struct SkeletonGroup {
     std::uint16_t first = 0;
     std::uint16_t count = 0;
+    std::uint16_t parameter_first = 0;
+    std::uint16_t parameter_count = 0;
 };
 
 // actor77 proto/chloe-base/nadine-dlc-base skeleton program descriptors.
+// `first/count` cover the workspace/global joints.  `parameter_first/count`
+// cover the compressed JointParams/reference-pose rows.  They are deliberately
+// different: e.g. Nadine group 1 is global 104..141 but parameter 66..103.
 inline constexpr std::array<SkeletonGroup, 9> kPlayerGroups{{
-    {0, 168}, {168, 63}, {231, 76}, {307, 83}, {390, 107},
-    {497, 52}, {549, 90}, {639, 38}, {677, 25},
+    {0, 168, 0, 71}, {168, 63, 71, 63}, {231, 76, 134, 76},
+    {307, 83, 210, 83}, {390, 107, 293, 88},
+    {497, 52, 381, 52}, {549, 90, 433, 2},
+    {639, 38, 435, 38}, {677, 25, 0, 0},
 }};
 inline constexpr std::array<SkeletonGroup, 8> kChloeGroups{{
-    {0, 205}, {205, 62}, {267, 38}, {305, 72},
-    {377, 83}, {460, 107}, {567, 59}, {626, 25},
+    {0, 205, 0, 89}, {205, 62, 89, 1}, {267, 38, 90, 38},
+    {305, 72, 128, 72}, {377, 83, 200, 83},
+    {460, 107, 283, 88}, {567, 59, 371, 59}, {626, 25, 0, 0},
 }};
 inline constexpr std::array<SkeletonGroup, 8> kNadineGroups{{
-    {0, 104}, {104, 38}, {142, 119}, {261, 83},
-    {344, 107}, {451, 52}, {503, 52}, {555, 25},
+    {0, 104, 0, 66}, {104, 38, 66, 38}, {142, 119, 104, 96},
+    {261, 83, 200, 83}, {344, 107, 283, 88},
+    {451, 52, 371, 52}, {503, 52, 423, 3}, {555, 25, 0, 0},
 }};
+
+template <std::size_t N>
+[[nodiscard]] inline constexpr int parameter_index_for_global(
+    const std::array<SkeletonGroup, N>& groups,
+    std::uint16_t global) noexcept {
+    for (const SkeletonGroup& group : groups) {
+        const std::uint32_t end =
+            static_cast<std::uint32_t>(group.first) + group.count;
+        if (global < group.first || global >= end) {
+            continue;
+        }
+        const std::uint32_t local =
+            static_cast<std::uint32_t>(global - group.first);
+        if (local >= group.parameter_count) {
+            return -1;
+        }
+        const std::uint32_t parameter = group.parameter_first + local;
+        return parameter <= 0xFFFFu ? static_cast<int>(parameter) : -1;
+    }
+    return -1;
+}
+
+template <std::size_t N>
+[[nodiscard]] inline constexpr std::uint16_t parameter_pose_count(
+    const std::array<SkeletonGroup, N>& groups) noexcept {
+    std::uint32_t result = 0;
+    for (const SkeletonGroup& group : groups) {
+        const std::uint32_t end =
+            static_cast<std::uint32_t>(group.parameter_first) +
+            group.parameter_count;
+        if (end > result) {
+            result = end;
+        }
+    }
+    return result <= 0xFFFFu ? static_cast<std::uint16_t>(result) : 0;
+}
 
 struct ExpectedJointTransfer {
     std::uint32_t semantic_id = 0;
@@ -307,20 +352,7 @@ template <std::size_t N>
 [[nodiscard]] inline constexpr int flattened_index_for_global(
     const std::array<SkeletonGroup, N>& groups,
     std::uint16_t global) noexcept {
-    std::uint32_t prefix = 0;
-    for (const SkeletonGroup& group : groups) {
-        const std::uint32_t end =
-            static_cast<std::uint32_t>(group.first) + group.count;
-        if (global >= group.first && global < end) {
-            const std::uint32_t flattened =
-                prefix + static_cast<std::uint32_t>(global - group.first);
-            return flattened <= 0xFFFFu
-                ? static_cast<int>(flattened)
-                : -1;
-        }
-        prefix += group.count;
-    }
-    return -1;
+    return parameter_index_for_global(groups, global);
 }
 
 [[nodiscard]] inline constexpr bool same_entry_metadata(

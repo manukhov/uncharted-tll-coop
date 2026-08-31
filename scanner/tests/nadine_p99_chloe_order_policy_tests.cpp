@@ -33,22 +33,28 @@ std::size_t checks = 0;
 struct Group {
     std::uint16_t first;
     std::uint16_t count;
+    std::uint16_t parameter_first;
+    std::uint16_t parameter_count;
 };
 
 // Independent fixture transcription from the three skeleton objects.  Do not
 // build the positive fixture from the policy's own tables: that would let an
 // omitted or mistyped group validate itself.
 constexpr std::array<Group, 9> player_groups{{
-    {0, 168}, {168, 63}, {231, 76}, {307, 83}, {390, 107},
-    {497, 52}, {549, 90}, {639, 38}, {677, 25},
+    {0, 168, 0, 71}, {168, 63, 71, 63}, {231, 76, 134, 76},
+    {307, 83, 210, 83}, {390, 107, 293, 88},
+    {497, 52, 381, 52}, {549, 90, 433, 2},
+    {639, 38, 435, 38}, {677, 25, 0, 0},
 }};
 constexpr std::array<Group, 8> chloe_groups{{
-    {0, 205}, {205, 62}, {267, 38}, {305, 72},
-    {377, 83}, {460, 107}, {567, 59}, {626, 25},
+    {0, 205, 0, 89}, {205, 62, 89, 1}, {267, 38, 90, 38},
+    {305, 72, 128, 72}, {377, 83, 200, 83},
+    {460, 107, 283, 88}, {567, 59, 371, 59}, {626, 25, 0, 0},
 }};
 constexpr std::array<Group, 8> nadine_groups{{
-    {0, 104}, {104, 38}, {142, 119}, {261, 83},
-    {344, 107}, {451, 52}, {503, 52}, {555, 25},
+    {0, 104, 0, 66}, {104, 38, 66, 38}, {142, 119, 104, 96},
+    {261, 83, 200, 83}, {344, 107, 283, 88},
+    {451, 52, 371, 52}, {503, 52, 423, 3}, {555, 25, 0, 0},
 }};
 
 struct FixtureTransfer {
@@ -221,14 +227,15 @@ int group_for(const std::array<Group, N>& groups, std::uint16_t global) {
 template <std::size_t N>
 std::uint16_t flattened_index_for(
     const std::array<Group, N>& groups, std::uint16_t global) {
-    std::uint32_t prefix = 0;
     for (const Group& group : groups) {
         if (global >= group.first &&
             global < static_cast<std::uint32_t>(group.first) + group.count) {
-            return static_cast<std::uint16_t>(
-                prefix + static_cast<std::uint32_t>(global - group.first));
+            const std::uint32_t local = global - group.first;
+            if (local >= group.parameter_count) {
+                return 0xFFFFu;
+            }
+            return static_cast<std::uint16_t>(group.parameter_first + local);
         }
-        prefix += group.count;
     }
     return 0xFFFFu;
 }
@@ -315,8 +322,13 @@ struct Fixture {
                 fixture_chloe_endpoint(candidate)) {
                 continue;
             }
-            row20_records[next++] = record(
+            const auto filler = record(
                 candidate, candidate, 0, player_groups, chloe_groups);
+            if (filler.source_parameter_index == 0xFFFFu ||
+                filler.target_reference_index == 0xFFFFu) {
+                continue;
+            }
+            row20_records[next++] = filler;
         }
         next = fixture_transfers.size();
         for (std::uint16_t candidate = 0; next < row157_records.size();
@@ -325,8 +337,13 @@ struct Fixture {
                 fixture_nadine_endpoint(candidate)) {
                 continue;
             }
-            row157_records[next++] = record(
+            const auto filler = record(
                 candidate, candidate, 0, chloe_groups, nadine_groups);
+            if (filler.source_parameter_index == 0xFFFFu ||
+                filler.target_reference_index == 0xFFFFu) {
+                continue;
+            }
+            row157_records[next++] = filler;
         }
 
         evidence.scope = {
@@ -387,6 +404,42 @@ bool exact_asset_constants_and_target_inventory() {
     CHECK(policy::kExpectedNadineGroup0Targets == fixture_g0_targets);
     CHECK(policy::kExpectedNadineRightFingerTargets == fixture_finger_targets);
     CHECK(policy::kExpectedNadineRightFingerTargets.size() == 19);
+    CHECK(policy::parameter_pose_count(policy::kPlayerGroups) == 473);
+    CHECK(policy::parameter_pose_count(policy::kChloeGroups) == 430);
+    CHECK(policy::parameter_pose_count(policy::kNadineGroups) == 426);
+    CHECK(policy::parameter_index_for_global(policy::kPlayerGroups, 640) == 436);
+    CHECK(policy::parameter_index_for_global(policy::kPlayerGroups, 676) == 472);
+    CHECK(policy::parameter_index_for_global(policy::kChloeGroups, 268) == 91);
+    CHECK(policy::parameter_index_for_global(policy::kChloeGroups, 304) == 127);
+    CHECK(policy::parameter_index_for_global(policy::kNadineGroups, 105) == 67);
+    CHECK(policy::parameter_index_for_global(policy::kNadineGroups, 141) == 103);
+    CHECK(policy::parameter_index_for_global(policy::kPlayerGroups, 677) == -1);
+    CHECK(policy::parameter_index_for_global(policy::kChloeGroups, 626) == -1);
+    CHECK(policy::parameter_index_for_global(policy::kNadineGroups, 555) == -1);
+    for (std::size_t i = 0; i < player_groups.size(); ++i) {
+        CHECK(policy::kPlayerGroups[i].first == player_groups[i].first);
+        CHECK(policy::kPlayerGroups[i].count == player_groups[i].count);
+        CHECK(policy::kPlayerGroups[i].parameter_first ==
+              player_groups[i].parameter_first);
+        CHECK(policy::kPlayerGroups[i].parameter_count ==
+              player_groups[i].parameter_count);
+    }
+    for (std::size_t i = 0; i < chloe_groups.size(); ++i) {
+        CHECK(policy::kChloeGroups[i].first == chloe_groups[i].first);
+        CHECK(policy::kChloeGroups[i].count == chloe_groups[i].count);
+        CHECK(policy::kChloeGroups[i].parameter_first ==
+              chloe_groups[i].parameter_first);
+        CHECK(policy::kChloeGroups[i].parameter_count ==
+              chloe_groups[i].parameter_count);
+    }
+    for (std::size_t i = 0; i < nadine_groups.size(); ++i) {
+        CHECK(policy::kNadineGroups[i].first == nadine_groups[i].first);
+        CHECK(policy::kNadineGroups[i].count == nadine_groups[i].count);
+        CHECK(policy::kNadineGroups[i].parameter_first ==
+              nadine_groups[i].parameter_first);
+        CHECK(policy::kNadineGroups[i].parameter_count ==
+              nadine_groups[i].parameter_count);
+    }
     CHECK(policy::kExpectedRow20.entry_index == 20);
     CHECK(policy::kExpectedRow20.authored_row_offset == 0x410u);
     CHECK(policy::kExpectedRow20.authored_map_offset == 0x2124u);
@@ -446,18 +499,28 @@ bool exact_fixture_is_admitted() {
     CHECK(fixture.row157_records.size() == 71);
     CHECK(fixture_pairs_are_unique(fixture.row20_records));
     CHECK(fixture_pairs_are_unique(fixture.row157_records));
-    // These three shipped skeletons have dense, consecutive parameter groups.
-    // BuildRetargetEntry therefore stores cumulative +0x26/+0x2a indices equal
-    // to the skeleton-global joints, not group-local ordinals.
+    // The shipped skeletons use compressed parameter/reference poses.  Exact
+    // +0x26/+0x2a values follow each processing descriptor's first/count and
+    // deliberately diverge from global joints for all selected finger rows.
     for (std::size_t i = 0; i < fixture_transfers.size(); ++i) {
         CHECK(fixture.row20_records[i].source_parameter_index ==
-              fixture_transfers[i].player);
+              flattened_index_for(player_groups, fixture_transfers[i].player));
         CHECK(fixture.row20_records[i].target_reference_index ==
-              fixture_transfers[i].chloe);
+              flattened_index_for(chloe_groups, fixture_transfers[i].chloe));
         CHECK(fixture.row157_records[i].source_parameter_index ==
-              fixture_transfers[i].chloe);
+              flattened_index_for(chloe_groups, fixture_transfers[i].chloe));
         CHECK(fixture.row157_records[i].target_reference_index ==
-              fixture_transfers[i].nadine);
+              flattened_index_for(nadine_groups, fixture_transfers[i].nadine));
+        if (i >= 2) {
+            CHECK(fixture.row20_records[i].source_parameter_index !=
+                  fixture_transfers[i].player);
+            CHECK(fixture.row20_records[i].target_reference_index !=
+                  fixture_transfers[i].chloe);
+            CHECK(fixture.row157_records[i].source_parameter_index !=
+                  fixture_transfers[i].chloe);
+            CHECK(fixture.row157_records[i].target_reference_index !=
+                  fixture_transfers[i].nadine);
+        }
     }
     CHECK(decide(fixture).admitted());
 

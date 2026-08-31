@@ -61636,6 +61636,7 @@ struct P99ChloeTransferArtSkeleton {
     std::uint32_t database_id = 0;
     std::uint32_t skeleton_id = 0;
     std::uint16_t joint_count = 0;
+    std::uint16_t parameter_count = 0;
     std::uint8_t group_count = 0;
 };
 
@@ -61715,6 +61716,55 @@ struct P99ChloeTransferEpoch {
     std::array<P99ChloeTransferGroupResult, 2> groups{};
 };
 
+enum class P99ChloeTransferMaterializeResult : std::uint8_t {
+    kSuccess = 0,
+    kEpochGate,
+    kOwnerBefore,
+    kPostPerformOwner,
+    kLockedOperands,
+    kEmbeddedPlayerGroup0,
+    kEmbeddedChloeGroup0,
+    kEvaluateGroup0,
+    kEmbeddedPlayerGroup1,
+    kEmbeddedChloeGroup1,
+    kEvaluateGroup1,
+    kOwnerAfter,
+    kException,
+};
+
+[[nodiscard]] const char* p99_chloe_transfer_materialize_reject(
+    P99ChloeTransferMaterializeResult result) noexcept {
+    switch (result) {
+    case P99ChloeTransferMaterializeResult::kEpochGate:
+        return "materialize-epoch-gate";
+    case P99ChloeTransferMaterializeResult::kOwnerBefore:
+        return "materialize-owner-before";
+    case P99ChloeTransferMaterializeResult::kPostPerformOwner:
+        return "materialize-post-owner";
+    case P99ChloeTransferMaterializeResult::kLockedOperands:
+        return "materialize-locked-operands";
+    case P99ChloeTransferMaterializeResult::kEmbeddedPlayerGroup0:
+        return "materialize-player-g0";
+    case P99ChloeTransferMaterializeResult::kEmbeddedChloeGroup0:
+        return "materialize-chloe-g0";
+    case P99ChloeTransferMaterializeResult::kEvaluateGroup0:
+        return "materialize-evaluate-g0";
+    case P99ChloeTransferMaterializeResult::kEmbeddedPlayerGroup1:
+        return "materialize-player-g1";
+    case P99ChloeTransferMaterializeResult::kEmbeddedChloeGroup1:
+        return "materialize-chloe-g1";
+    case P99ChloeTransferMaterializeResult::kEvaluateGroup1:
+        return "materialize-evaluate-g1";
+    case P99ChloeTransferMaterializeResult::kOwnerAfter:
+        return "materialize-owner-after";
+    case P99ChloeTransferMaterializeResult::kException:
+        return "materialize-exception";
+    case P99ChloeTransferMaterializeResult::kSuccess:
+    default:
+        return "materialize-unknown";
+    }
+}
+
 struct P99ChloeTransferTicket {
     bool valid = false;
     std::uint64_t nonce = 0;
@@ -61791,7 +61841,13 @@ consteval bool p99_chloe_embedded_rows_match_policy() {
             p99_order::kNadineGroups[join.nadine_group];
         if (row.player_local != row.player_global - player_group.first ||
             row.chloe_local != row.chloe_global - chloe_group.first ||
-            join.nadine_local != row.nadine_global - nadine_group.first) {
+            join.nadine_local != row.nadine_global - nadine_group.first ||
+            p99_order::parameter_index_for_global(
+                p99_order::kPlayerGroups, row.player_global) < 0 ||
+            p99_order::parameter_index_for_global(
+                p99_order::kChloeGroups, row.chloe_global) < 0 ||
+            p99_order::parameter_index_for_global(
+                p99_order::kNadineGroups, row.nadine_global) < 0) {
             return false;
         }
         for (std::size_t prior = 0; prior < index; ++prior) {
@@ -61849,6 +61905,7 @@ int p99_chloe_transfer_group_for_global(
 bool seh_capture_p99_chloe_transfer_art_skeleton(
     void* art_skeleton, std::uint32_t expected_database_id,
     std::uint32_t expected_skeleton_id, std::uint16_t expected_joint_count,
+    std::uint16_t expected_parameter_count,
     std::uint8_t expected_group_count,
     P99ChloeTransferArtSkeleton* output) {
     if (output == nullptr) {
@@ -61880,7 +61937,7 @@ bool seh_capture_p99_chloe_transfer_art_skeleton(
         auto* const reference_pose = underlying + reference_offset;
         if (reference_offset < 0x24 || reference_pose < underlying ||
             readable_bytes(reference_pose) <
-                static_cast<std::size_t>(expected_joint_count) *
+                static_cast<std::size_t>(expected_parameter_count) *
                     kP99ChloeTransferRowBytes) {
             return false;
         }
@@ -61891,6 +61948,7 @@ bool seh_capture_p99_chloe_transfer_art_skeleton(
         output->database_id = expected_database_id;
         output->skeleton_id = expected_skeleton_id;
         output->joint_count = expected_joint_count;
+        output->parameter_count = expected_parameter_count;
         output->group_count = expected_group_count;
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -62277,13 +62335,19 @@ bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
             nadine_art == nullptr || nadine_art != target_skeleton ||
             !seh_capture_p99_chloe_transfer_art_skeleton(
                 player_art, p99_order::kPlayerDatabaseId,
-                p99_order::kPlayerSkeletonId, 702, 9, &player) ||
+                p99_order::kPlayerSkeletonId, 702,
+                p99_order::parameter_pose_count(p99_order::kPlayerGroups),
+                9, &player) ||
             !seh_capture_p99_chloe_transfer_art_skeleton(
                 chloe_art, p99_order::kChloeDatabaseId,
-                p99_order::kChloeSkeletonId, 651, 8, &chloe) ||
+                p99_order::kChloeSkeletonId, 651,
+                p99_order::parameter_pose_count(p99_order::kChloeGroups),
+                8, &chloe) ||
             !seh_capture_p99_chloe_transfer_art_skeleton(
                 nadine_art, p99_order::kNadineDatabaseId,
-                p99_order::kNadineSkeletonId, 580, 8, &nadine)) {
+                p99_order::kNadineSkeletonId, 580,
+                p99_order::parameter_pose_count(p99_order::kNadineGroups),
+                8, &nadine)) {
             return false;
         }
 
@@ -62343,26 +62407,38 @@ bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
                 *reinterpret_cast<const std::uint16_t*>(row20_copy + 0x2A);
             const std::uint16_t nadine_reference_index =
                 *reinterpret_cast<const std::uint16_t*>(row157_copy + 0x2A);
+            const int player_parameter_index =
+                p99_order::parameter_index_for_global(
+                    p99_order::kPlayerGroups, transfer.player_global);
+            const int chloe_parameter_index =
+                p99_order::parameter_index_for_global(
+                    p99_order::kChloeGroups, transfer.chloe_global);
+            const int nadine_parameter_index =
+                p99_order::parameter_index_for_global(
+                    p99_order::kNadineGroups, transfer.nadine_global);
             if (*reinterpret_cast<const std::uint16_t*>(row20_copy + 0x24) !=
                     transfer.player_global ||
                 *reinterpret_cast<const std::uint16_t*>(row20_copy + 0x26) !=
-                    transfer.player_global ||
+                    player_parameter_index ||
                 *reinterpret_cast<const std::uint16_t*>(row20_copy + 0x28) !=
                     transfer.chloe_global ||
-                chloe_reference_index != transfer.chloe_global ||
+                chloe_reference_index != chloe_parameter_index ||
                 *reinterpret_cast<const std::uint16_t*>(row20_copy + 0x2C) !=
                     transfer.mode ||
                 *reinterpret_cast<const std::uint16_t*>(row157_copy + 0x24) !=
                     transfer.chloe_global ||
                 *reinterpret_cast<const std::uint16_t*>(row157_copy + 0x26) !=
-                    transfer.chloe_global ||
+                    chloe_parameter_index ||
                 *reinterpret_cast<const std::uint16_t*>(row157_copy + 0x28) !=
                     transfer.nadine_global ||
-                nadine_reference_index != transfer.nadine_global ||
+                nadine_reference_index != nadine_parameter_index ||
                 *reinterpret_cast<const std::uint16_t*>(row157_copy + 0x2C) !=
                     transfer.mode ||
-                chloe_reference_index >= chloe.joint_count ||
-                nadine_reference_index >= nadine.joint_count) {
+                player_parameter_index < 0 ||
+                chloe_parameter_index < 0 ||
+                nadine_parameter_index < 0 ||
+                chloe_reference_index >= chloe.parameter_count ||
+                nadine_reference_index >= nadine.parameter_count) {
                 return false;
             }
             std::memcpy(
@@ -62560,6 +62636,15 @@ bool seh_evaluate_p99_chloe_transfer_joint(
             *reinterpret_cast<const std::uint16_t*>(row20 + 0x2C);
         const std::uint16_t row157_mode =
             *reinterpret_cast<const std::uint16_t*>(row157 + 0x2C);
+        const int player_parameter_index =
+            p99_order::parameter_index_for_global(
+                p99_order::kPlayerGroups, transfer.player_global);
+        const int chloe_parameter_index =
+            p99_order::parameter_index_for_global(
+                p99_order::kChloeGroups, transfer.chloe_global);
+        const int nadine_parameter_index =
+            p99_order::parameter_index_for_global(
+                p99_order::kNadineGroups, transfer.nadine_global);
         std::array<std::byte, 10> row20_fields{};
         std::array<std::byte, 10> row157_fields{};
         std::memcpy(row20_fields.data(), row20 + 0x24,
@@ -62569,20 +62654,21 @@ bool seh_evaluate_p99_chloe_transfer_joint(
         if (*reinterpret_cast<const std::uint16_t*>(
                 row20 + 0x24) != transfer.player_global ||
             *reinterpret_cast<const std::uint16_t*>(
-                row20 + 0x26) != transfer.player_global ||
+                row20 + 0x26) != player_parameter_index ||
             *reinterpret_cast<const std::uint16_t*>(
                 row20 + 0x28) != transfer.chloe_global ||
-            row20_reference_index != transfer.chloe_global ||
+            row20_reference_index != chloe_parameter_index ||
             row20_mode != transfer.mode ||
             *reinterpret_cast<const std::uint16_t*>(
                 row157 + 0x24) != transfer.chloe_global ||
             *reinterpret_cast<const std::uint16_t*>(
-                row157 + 0x26) != transfer.chloe_global ||
+                row157 + 0x26) != chloe_parameter_index ||
             *reinterpret_cast<const std::uint16_t*>(
                 row157 + 0x28) != transfer.nadine_global ||
-            row157_reference_index != transfer.nadine_global ||
+            row157_reference_index != nadine_parameter_index ||
             row157_mode != transfer.mode || row20_mode > 3 ||
-            row157_mode > 3) {
+            row157_mode > 3 || player_parameter_index < 0 ||
+            chloe_parameter_index < 0 || nadine_parameter_index < 0) {
             return false;
         }
         const auto do_joint =
@@ -62864,16 +62950,16 @@ bool seh_p99_chloe_transfer_epoch_owner_still_exact(
     }
 }
 
-bool seh_materialize_p99_chloe_embedded_epoch(
+P99ChloeTransferMaterializeResult seh_materialize_p99_chloe_embedded_epoch(
     P99ChloeTransferEpoch* epoch) {
     if (epoch == nullptr || !epoch->active || !epoch->valid ||
         epoch->ambiguous || epoch->depth != 1) {
-        return false;
+        return P99ChloeTransferMaterializeResult::kEpochGate;
     }
     __try {
         P99ChloeTransferEpoch prepared = *epoch;
         if (!seh_p99_chloe_transfer_epoch_owner_still_exact(prepared)) {
-            return false;
+            return P99ChloeTransferMaterializeResult::kOwnerBefore;
         }
         IdleArmPoseOwnerScope post_perform_owner{};
         if (!seh_resolve_idle_arm_pose_owner_scope(
@@ -62889,14 +62975,14 @@ bool seh_materialize_p99_chloe_embedded_epoch(
             readable_bytes(post_perform_owner.local_pose) <
                 static_cast<std::size_t>(142) *
                     kP99ChloeTransferRowBytes) {
-            return false;
+            return P99ChloeTransferMaterializeResult::kPostPerformOwner;
         }
         prepared.local_pose = post_perform_owner.local_pose;
 
         P99ChloeTransferLockedOperands operands{};
         if (!capture_p99_chloe_transfer_locked_operands(
                 prepared.target_skeleton, &operands)) {
-            return false;
+            return P99ChloeTransferMaterializeResult::kLockedOperands;
         }
 
         std::array<P99ChloeTransferGroupResult, 2> groups{};
@@ -62905,13 +62991,23 @@ bool seh_materialize_p99_chloe_embedded_epoch(
             P99ChloeTransferSourceRows player_rows{};
             P99ChloeTransferSourceRows chloe_rows{};
             if (!build_p99_chloe_embedded_source_rows(
-                    true, target_group, &player_rows) ||
-                !build_p99_chloe_embedded_source_rows(
-                    false, target_group, &chloe_rows) ||
-                !evaluate_p99_chloe_transfer_group(
+                    true, target_group, &player_rows)) {
+                return target_group == 0
+                    ? P99ChloeTransferMaterializeResult::kEmbeddedPlayerGroup0
+                    : P99ChloeTransferMaterializeResult::kEmbeddedPlayerGroup1;
+            }
+            if (!build_p99_chloe_embedded_source_rows(
+                    false, target_group, &chloe_rows)) {
+                return target_group == 0
+                    ? P99ChloeTransferMaterializeResult::kEmbeddedChloeGroup0
+                    : P99ChloeTransferMaterializeResult::kEmbeddedChloeGroup1;
+            }
+            if (!evaluate_p99_chloe_transfer_group(
                     operands, player_rows, chloe_rows, target_group,
                     &groups[target_group])) {
-                return false;
+                return target_group == 0
+                    ? P99ChloeTransferMaterializeResult::kEvaluateGroup0
+                    : P99ChloeTransferMaterializeResult::kEvaluateGroup1;
             }
         }
 
@@ -62932,12 +63028,12 @@ bool seh_materialize_p99_chloe_embedded_epoch(
                 prepared.chloe_art_identity,
                 prepared.nadine_art_identity,
                 prepared.target_skeleton)) {
-            return false;
+            return P99ChloeTransferMaterializeResult::kOwnerAfter;
         }
         *epoch = prepared;
-        return true;
+        return P99ChloeTransferMaterializeResult::kSuccess;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return false;
+        return P99ChloeTransferMaterializeResult::kException;
     }
 }
 
@@ -63090,9 +63186,12 @@ std::int64_t __fastcall hooked_p99_chloe_transfer_perform(void* job) {
     P99ChloeTransferEpoch completed = epoch;
     epoch = {};
     P99ChloeTransferTicket ticket{};
-    const bool materialized = !completed.ambiguous &&
-        completed.depth == 1 &&
-        seh_materialize_p99_chloe_embedded_epoch(&completed);
+    const P99ChloeTransferMaterializeResult materialize_result =
+        completed.ambiguous || completed.depth != 1
+            ? P99ChloeTransferMaterializeResult::kEpochGate
+            : seh_materialize_p99_chloe_embedded_epoch(&completed);
+    const bool materialized = materialize_result ==
+        P99ChloeTransferMaterializeResult::kSuccess;
     const bool sealed = materialized &&
         seal_p99_chloe_transfer_ticket(completed, &ticket);
     if (sealed) {
@@ -63101,8 +63200,10 @@ std::int64_t __fastcall hooked_p99_chloe_transfer_perform(void* job) {
         log_p99_chloe_transfer_reject(
             completed.ambiguous || completed.depth != 1
                 ? "perform-ambiguous"
-                : (materialized ? "offline-source-seal" :
-                                  "offline-source-eval"));
+                : (materialized
+                       ? "offline-source-seal"
+                       : p99_chloe_transfer_materialize_reject(
+                             materialize_result)));
     }
     return result;
 }
@@ -79925,8 +80026,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-31agi "
-        "(offline-derived D350/B8 rows; locked SkelTable snapshot; two-site P99 commit; no live clip dereference; AGC back profiles retained)");
+        "TLL co-op runtime init 2026-08-31agj "
+        "(compressed retarget parameter/reference indices; offline-derived D350/B8 rows; locked SkelTable snapshot; two-site P99 commit; no live clip dereference; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "
@@ -80442,7 +80543,7 @@ DWORD WINAPI install_hook(void*) {
             install_legacy_nadine_p99_chloe_grip_transfer();
         boot_log_line(
             p99_chloe_transfer_ready
-                ? "legacy-Nadine P99 Chloe-order grip transfer READY (state2; offline-generated D350/B8; locked row20/157; palm/prop/19 fingers)"
+                ? "legacy-Nadine P99 Chloe-order grip transfer READY (state2; compressed row20/157 indices; offline-generated D350/B8; palm/prop/19 fingers)"
                 : "legacy-Nadine P99 Chloe-order grip transfer SKIPPED (combined package)");
     }
     bool weapon_ik_goal_package_ready = false;

@@ -3845,8 +3845,10 @@ FUNCTIONS = {
         "uniform scale and sampled target reference pose. Raw bytes +0x2C/+0x2D gate "
         "the optional arm/leg IK structures stored at runtime +0x30/+0x38. Each "
         "resolved 0x2E-byte record stores skeleton-global source/target joints at "
-        "+0x24/+0x28, cumulative flattened source-parameter index at +0x26, complete "
-        "target-reference index at +0x2A, and retarget mode at +0x2C.",
+        "+0x24/+0x28, compressed processing-table source-parameter index at +0x26, "
+        "complete compressed target-reference index at +0x2A, and retarget mode at "
+        "+0x2C. These indices are not skeleton-global joints: Nadine group 1 maps "
+        "global 104..141 to reference rows 66..103 (for example 105 -> 67).",
     ),
     0x141936490: (
         "RetargetPlugin_AddJointRetargetCommands",
@@ -3869,8 +3871,10 @@ FUNCTIONS = {
         "Exact ApplyJointRetargets source assertion. Applies the authored joint map "
         "and sampled reference-pose correction. For each 0x2E record it indexes "
         "the group-local source/output buffers by global-first, but indexes the "
-        "complete target reference pose by the u16 at record+0x2A before calling "
-        "DoJointRetarget. It conditionally dispatches the separate arm/leg IK "
+        "complete compressed target reference pose directly by the u16 at "
+        "record+0x2A before calling DoJointRetarget. Therefore +0x2A cannot be "
+        "substituted with record+0x28's skeleton-global target joint. It "
+        "conditionally dispatches the separate arm/leg IK "
         "stages only when their runtime entry pointers exist.",
     ),
     0x141AE3320: (

@@ -31235,3 +31235,95 @@ output because the ticket never existed. Re-running the unchanged DLL is
 forbidden. The next work is static: isolate which exact native value-only step
 fails (input validation, row20 `DoJointRetarget`, mode-2 blend, or row157
 `DoJointRetarget`) and prove the correct ABI/layout before another game launch.
+
+### 2026-08-31 STATIC ROOT CAUSE / IMPLEMENTED (`agj`): retarget record parameter/reference indices are compressed, not skeleton-global
+
+The AGI failure has a specific pre-write cause. The runtime and its independent
+policy fixture incorrectly required the u16 source-parameter index at runtime
+retarget record `+0x26` and target-reference index at `+0x2A` to equal the
+skeleton-global joints stored at `+0x24/+0x28`. **H-compressed-index is STATIC
+SUPPORTED and implemented**: `+0x26/+0x2A` are indices into the compressed
+JointParams/reference pose defined by each skeleton processing descriptor.
+They may differ from the global joints even though `+0x24/+0x28` remain global.
+
+Competing explanations were separated before changing the DLL:
+
+- **H-ABI-mismatch** (`DoJointRetarget` arguments were wrong) is STATIC
+  REJECTED. `RetargetPlugin_ApplyJointRetargets 0x141AE2A50` calls
+  `RetargetPlugin_DoJointRetarget 0x141AE2100` with the copied 0x2e record,
+  source JointParams row, one concrete target reference row, additive flag and
+  output row, matching the AGI ABI.
+- **H-blend-layout** (the 112-byte mode-2 blob or encoding `0x0108` was wrong)
+  is STATIC REJECTED. The direct caller
+  `AnimCmdEvaluator_ApplyBlend 0x14217CF90` constructs the same one-row layout
+  and calls `AnimJointParams_BlendTransformsByValidBits 0x142188A30` with the
+  same encoding/argument order.
+- **H-registry-lifetime** (copied records/reference rows expired) remains
+  excluded by the already-proved SkelTable lock/epoch/identity snapshot; all
+  native math runs after unlock only on local value copies.
+- **H-bad-offline-source-row** is not the AGI admission failure: the generated
+  D350/B8 rows and hashes still match their independently decoded fixture. The
+  locked operand capture rejected the record/reference indices before either
+  native retarget call could consume those rows.
+
+The evidence quota is met by three independent kinds:
+
+1. **IDA code/data flow.** At callsite `0x141AE2EBE`,
+   `RetargetPlugin_ApplyJointRetargets` uses record `+0x2A` directly as
+   `targetReferenceBase + 48 * index` before `DoJointRetarget`; it does not use
+   target global `+0x28` for that reference lookup.
+2. **Shipped asset structure.** Exact workspace/global and compressed parameter
+   ranges are Player
+   `{0/168->0/71,168/63->71/63,231/76->134/76,307/83->210/83,
+   390/107->293/88,497/52->381/52,549/90->433/2,639/38->435/38}`;
+   Chloe
+   `{0/205->0/89,205/62->89/1,267/38->90/38,305/72->128/72,
+   377/83->200/83,460/107->283/88,567/59->371/59}`; and Nadine
+   `{0/104->0/66,104/38->66/38,142/119->104/96,261/83->200/83,
+   344/107->283/88,451/52->371/52,503/52->423/3}`. Final 25-joint
+   workspace-only groups have no parameter rows. Therefore pose counts are
+   Player 473, Chloe 430 and Nadine 426, not global joint counts 702/651/580.
+3. **Deterministic contradiction/regression.** Nadine group 1 global `104..141`
+   maps to reference `66..103`; `r_pinky_a` global 105 is reference row 67.
+   The old runtime demanded 105 and necessarily returned before native math.
+   Release tests now pin exact examples Player `640->436`, Chloe `268->91`,
+   Nadine `105->67`, reject workspace-only joints, and compare every policy
+   descriptor with an independent fixture transcription.
+
+AGJ now derives `+0x26/+0x2A` from the exact compressed ranges, bounds reference
+reads by 473/430/426 parameter rows, and retains `+0x24/+0x28` as globals. The
+materializer also reports a precise fail-closed stage (`locked-operands`,
+embedded Player/Chloe group 0/1, native evaluate group 0/1, or owner/identity)
+instead of the single `offline-source-eval` bucket. No new hook or write seam was
+added. Focused Release validation passes `11/11`, `5445` checks; full CTest
+passes `4/4`; generator `--check` and Python compilation pass. The sole IDB was
+saved while MCP was stopped (`1818` functions, `72` data names, one function
+type, `save_database returned True`). Restarted MCP decompilation reads back the
+compressed-index comments on `SkelTable_BuildRetargetEntry 0x1417CE210` and
+`RetargetPlugin_ApplyJointRetargets 0x141AE2A50`.
+
+The frozen x64 Release DLL is 863744 bytes, PE machine `0x8664`, SHA-256
+`F203143E785597A59EB89B38B47EFE3067455EB2FB3F84BA7CFC05393E29086D`.
+Source timestamp `20:43:45.179Z` precedes object `20:44:16.014Z` and DLL
+`20:44:16.115Z`. The binary contains the AGJ init, compressed-index READY and
+`applied=21` markers, and contains no AGI init marker. Frozen source hashes are
+`coop_runtime.cpp` `823C263547E79067762FAFCCCF4F982B51C3FF08D018DDEA2861F79174CD30AC`,
+policy header `19D808C26EDFED042D438A8B8E9EBFFB524BBCD9A651893A4E194CCC405790AF`,
+and policy test
+`B65D7992C9BEE463CD651F7B3A5B4A37AB5D1F4C267D95AB2C021F81B2050B15`.
+
+The falsifiable one-copy prediction is written before any AGJ runtime. Require
+exact init `2026-08-31agj`, role B/local Nadine,
+`INSTALLED (21 offline-generated rows; two sites/one page; nested stock=3/3)`
+and `READY (state2; compressed row20/157 indices; offline-generated D350/B8;
+palm/prop/19 fingers)`. The user draws the real P99 and stays in
+WeaponOut/state2 without aiming or firing for 3-5 seconds. A valid visual exam
+requires exact
+`NADINE-P99-CHLOE-ORDER applied=21 source=offline-generated-D350-B8
+target-groups=0,1 state=2 art=8075397D`. That marker plus a Chloe-like wrapped
+support-hand grip supports H-Chloe-order; that marker plus the same edge-on hand
+shown in the new overhead screenshot rejects it. No marker is not a visual
+verdict: the new stage-specific reject identifies the next static boundary.
+Any jerk, broken draw/hold/holster animation, attachment/back regression, or
+mutation in ADS/state4/Mazur/Type95/M30/another art rejects the implementation.
+The agent launches/injects exactly one copy and sends no gameplay input.
