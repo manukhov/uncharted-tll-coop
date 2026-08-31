@@ -6570,6 +6570,16 @@ Keep the postblend preservation boundary; replace only its steady content.
       another art/state rejects implementation. Agent launches/injects one copy
       only and sends no gameplay input.
 
+      RUNTIME BOOT READY (`agi`, PID 13852; deliberate P99/state2 hold pending):
+      zero-instance preflight preceded one responsive role-B/local-Nadine
+      process. The injected frozen DLL SHA
+      `03AC600C127C321BB40405F10E3E190F4BD5989C57329B00036CFE1CCF8D631A`
+      emitted exact `2026-08-31agi`, two-site/nested-stock INSTALLED and
+      offline-generated-row/locked-row READY markers. No
+      `NADINE-P99-CHLOE-ORDER` result exists yet, so there is no visual verdict.
+      User input is now limited to drawing the real P99 and holding state2
+      without aim/fire for 3-5 seconds; the agent sends no gameplay input.
+
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

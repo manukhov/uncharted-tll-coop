@@ -31196,3 +31196,16 @@ verdict. Any jerk, broken hold animation, attachment/holster/back regression,
 mutation in ADS/state4/Mazur/Type95/M30/another art, or failed rollback rejects
 the implementation. The agent starts/injects only one copy and sends no
 gameplay input.
+
+### 2026-08-31 RUNTIME BOOT READY (`agi`, PID 13852): awaiting deliberate P99/state2 hold
+
+The frozen 862208-byte DLL with SHA-256
+`03AC600C127C321BB40405F10E3E190F4BD5989C57329B00036CFE1CCF8D631A`
+was launched after a zero-instance preflight and injected into exactly one
+responsive `tll.exe`, PID 13852. The fresh PID-scoped log contains the exact
+`2026-08-31agi` init marker, role B/local Nadine, two-site/nested-stock
+`INSTALLED`, and offline-generated-row/locked-row `READY` markers. It contains
+no `NADINE-P99-CHLOE-ORDER` result yet, so no runtime or visual conclusion has
+been drawn. The next action remains the prewritten exam: the user draws the real
+P99, stays in WeaponOut/state2 without aiming or firing, and holds still for
+3-5 seconds. The agent sent no gameplay input.
