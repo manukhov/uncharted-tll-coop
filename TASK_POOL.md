@@ -6587,6 +6587,15 @@ Keep the postblend preservation boundary; replace only its steady content.
       deliberate P99/state2 hold remains pending and the agent sent no gameplay
       input.
 
+      RUNTIME REJECTED (`agi`, PID 8160): the deliberate real-P99 state2 hold
+      emitted 24 `reject=offline-source-eval` rows and then saturation, with no
+      `applied=21` and no exception. The user's overhead screenshot shows the
+      unchanged bad support hand beside the pistol, but is not a transfer
+      verdict because no ticket or write existed. Do not rerun unchanged AGI.
+      Split the evaluator failure statically among input validation, row20
+      `DoJointRetarget`, native mode-2 blend, and row157 `DoJointRetarget`; prove
+      the exact ABI/layout before earning another runtime.
+
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

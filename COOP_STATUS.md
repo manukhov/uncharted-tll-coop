@@ -31220,3 +31220,18 @@ Its PID-scoped log again contains exact `2026-08-31agi`, role B/local Nadine,
 two-site/nested-stock `INSTALLED`, and offline-generated-row/locked-row `READY`
 markers, with no result or exception yet. The written P99/state2 exam remains
 pending, and the agent sent no gameplay input.
+
+### 2026-08-31 RUNTIME REJECTED (`agi`, PID 8160): offline source evaluation never produced a ticket
+
+The user completed the deliberate real-P99 WeaponOut/state2 hold. The exact
+PID-scoped result was 24 consecutive
+`NADINE-P99-CHLOE-ORDER reject=offline-source-eval` rows followed by
+`reject=saturated rows=24`; there was no `applied=21` marker and no exception.
+Therefore AGI performed no P99 pose write and this run gives no verdict on the
+Chloe-order transfer itself. The user's overhead screenshot is consistent with
+the unchanged bad stock pose: the support hand remains beside the pistol rather
+than wrapping the grip. This visual evidence must not be misreported as an AGI
+output because the ticket never existed. Re-running the unchanged DLL is
+forbidden. The next work is static: isolate which exact native value-only step
+fails (input validation, row20 `DoJointRetarget`, mode-2 blend, or row157
+`DoJointRetarget`) and prove the correct ABI/layout before another game launch.
