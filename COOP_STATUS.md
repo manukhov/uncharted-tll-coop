@@ -30659,3 +30659,153 @@ above. No new game exam has been prepared or launched. Next required input is
 a close pistol-grip image; subsequent static work must follow the right distal
 frame/fingers or the left support target as appropriate, while NPC context and
 resource-lifetime gaps remain explicit.
+
+### 2026-08-31 STATIC / IMPLEMENTED: reconstruct the P99 grip in Chloe space (`agf`; runtime pending)
+
+The user clarified the desired repair: copy Chloe's P99 grip rather than tune
+guessed C39 rotations. The precise hypothesis is **H-Chloe-order**: the shipped
+P99 distal pose is constructed as Player `D350A452 p1h-fingers`, retargeted into
+Chloe, composed there with Chloe additive
+`B8FC6B25 clo-gun-grip-opener-r-hand--add` at mode 2 / weight 1, and only then
+retargeted into legacy Nadine. Evaluating the two inputs through separate
+receiver retargets and combining them in C39 space is not generally equivalent,
+because palm/finger mode 1 consumes the intermediate skeleton's reference pose
+and hand-prop mode 3 copies source S/T/Q.
+
+The competing hypotheses remain explicit:
+
+1. **H-remove-additive** predicted that preserving D350 while suppressing B8
+   would repair the grip. Runtime build `agd` executed that mutation and the
+   user still saw the wrong grip, so it is REJECTED for visual sufficiency.
+2. **H-raw-row/ordinal** would copy the same joint ordinals between Player,
+   Chloe and C39. It is REJECTED statically: the three skeletons have different
+   right-finger ordering and the two native maps join by semantic StringId.
+3. **H-proximal-Feather/clamp** would fix the handle relation through arm IK or
+   hidden limits. The common Feather-limit branch is statically REJECTED and
+   the measured P99 boundary leaves the palm-to-prop frame distal to those
+   proximal changes.
+4. **H-attachment-offset** predicts a correct palm/finger pose with only the
+   weapon rigid body displaced. Prior `aci` proved drawn P99 follows right-hand
+   prop joint 30 with identity weapon-local binding; the current hypothesis
+   therefore changes pose values, not the attachment table or art mesh.
+5. **H-later-writer/order** predicts that an apparently matching leaf pair is
+   not the terminal pose owner. This remains a mandatory admission competitor
+   and is closed fail-safe by exact command grammar below, not by assuming a
+   command id is harmless.
+
+Four independent static evidence classes support H-Chloe-order.
+
+- **Asset identity and source layout.** Actor77 resolves D350 on
+  `27E57F43/FD6DBE03` and B8 on `6C2B2396/4B0F5DE3`; both have one sample. D350
+  has flags zero and B8 raw ANIM flags `0x0002`. The exact source-evaluation
+  descriptors are Player group 0 -> processing 0
+  `{workspace=168, parameter=71, processing={71,27,2,first0}}`, Player group 7
+  -> processing 7 `{38,38,{38,0,1,first435}}`, Chloe group 0 -> processing 0
+  `{205,89,{89,27,2,first0}}`, and Chloe group 2 -> processing 2
+  `{38,38,{38,0,1,first90}}`. The 128-bit source ValidBits live at
+  `sourcePose + 48*(processingCount+1)` and use MSB-first local indexing.
+- **Two authored retarget maps and a semantic join.** Live row 20 is exact
+  Player->Chloe: raw row/map `0x410/0x2124`, authored/runtime counts `96/93`,
+  profile `0`, scale `3F6BE76D`, no arm/leg IK. Row 157 is exact
+  Chloe->C39: `0x1DC0/0x2720`, counts `74/71`, profile `FC34096C`, scale
+  `3F770A3D`, no arm/leg IK. Each contains exactly one matching semantic record
+  for right palm, right-hand prop and all 19 right fingers. The exact global
+  joins are Player `30/32` plus `640..676` at the mapped even entries, Chloe
+  `39/41` plus `268..304`, and C39 `28/30` plus the reordered
+  `105..141`; palm/fingers use mode 1 and prop uses mode 3.
+- **Resolved evaluator dataflow.** `AnimSnapshotNodeBlend_GenerateAnimCommands
+  0x14191E5F0` emits child 0, child 1 and then its cmd7. The admitted direct
+  subtree must therefore be adjacent `cmd6(D350), cmd6(B8),
+  cmd7(left=base,right=additive,out=0,mode=2,weight=1)` and must be followed
+  immediately by the sole cmd3. Group 0 then has exact suffix
+  `4,15,16,17,24(248B1AAE),27,5`; group 1 cannot reach the group-zero cmd24
+  branch and has `4,15,16,17,27,5`. `cmd24/248B1AAE` converts finalized matrix
+  workspace and does not write a logical pose lane; cmd27 exports finalized
+  JointParams. Arbitrary cmd23/24 callbacks receive the whole WorkBuffer/
+  SegmentContext and are never modeled as `word1` lane writers.
+- **Native helper ABI.** `RetargetPlugin_DoJointRetarget 0x141AE2100` consumes
+  one full `0x2E` runtime record, one 48-byte source row, one complete target
+  reference row indexed by record `+0x2A`, an additive flag and one 48-byte
+  output. `AnimJointParams_BlendTransformsByValidBits 0x142188A30` is `void`;
+  encoding `0x0108` is one row, mode 2, output-left, no overrides. Its local
+  blob is exactly 112 bytes: row, 48-byte SIMD pad and two ValidBits qwords.
+  `{8000000000000000,0}` selects local row zero in the engine's MSB-first form.
+
+Build `agf` implements only this value construction. Admission requires role B,
+retained local Player0, legacy Nadine `ED25C708/C39CA709`, P99 art `8075397D`,
+controller state 2, exact owner/Fg/local-pose/runtime identities and both
+processing groups 0/1. The complete command list is hashed and parsed twice
+before stock evaluation and again afterward. D350 and B8 must each occur once,
+in base-before-additive order and as the exact terminal subtree above. The
+case-6 Retarget and nested Add hooks capture their live source rows and exact
+ValidBits before stock retargeting; the registry epoch, FindRetargetEntry result,
+row20/row124/row157 identity, raw resource metadata, clip flags and both group
+layouts are revalidated.
+
+Each selected native `0x2E` record and each 48-byte reference row is copied
+twice around a sequentially consistent fence and compared; native helpers see
+only the stable local copies. The result is a value-only ticket for exactly 21
+C39 rows. The already measured Player `+0x408` seam still runs its stock virtual
+target once; only afterward does the package revalidate the same P99 owner and
+write all 21 rows. Full before-images, full readback and all-or-rollback behavior
+make a partial finger/palm commit inadmissible. This is deliberately the same
+physical seam as rejected late `abw/aby` experiments, but not the same value
+hypothesis: those copied receiver/guessed rows, while `agf` reconstructs the
+exact Chloe intermediate and includes every right finger.
+
+The five callsites (Perform, completed-list Process, case-6 Retarget, nested Add
+and Player post-blend) install as one transaction. Exact original bytes, rel32
+targets, all suspended thread RIPs, three page protections, patched readback,
+protection restoration and verified rollback are required. Every older pistol
+pose mutation remains disabled. P99 holster/hip/axis attachment repairs and the
+implemented but visually unvalidated/deferred AGC Type95/M30 back profiles are
+untouched; Mazur grip/Draw/Put and strap remain parked.
+
+The pure policy includes exact scope, both entry layouts, every native record
+field, the 21 semantic joins, all four normalized ValidBits masks, exact group
+coverage and both terminal command tails. Release reports `12/12` tests and
+`4568` fail-closed checks; the complete CTest suite reports `4/4`. Independent
+descriptor/ValidBits, command/installer and native-ABI audits found and closed
+two pre-launch P0 gaps: generic whole-buffer command classification, and raw
+registry/reference lifetime across native calls. Final holistic and independent
+five-site installer/rollback audits report GO with no open P0/P1. A possible
+identity-only rollback guard is retained as nonblocking P2 hardening because no
+concrete same-worker lifetime violation path was found. No game was launched
+during this static work.
+
+The final database and package handoff is reproducible. MCP was stopped before
+the headless label pass; `reports/ida_apply_agf_p99_chloe_order.log` reports
+`apply_labels OK: 1811 functions, 64 data names, 1 function types` and
+`save_database returned True`. After restarting MCP, readback resolves
+`RetargetPlugin_DoJointRetarget 0x141AE2100`,
+`RetargetPlugin_AddJointRetargetCommands 0x141936490`,
+`g_SkelTableRetargetEntryCount 0x1438401D8` and
+`g_SkelTableRetargetEntries 0x143864A00`; decompiled
+`SkelTable_FindRetargetEntry 0x1417D0BD0` uses the named count and retains the
+new table/layout comment. The final Release DLL is x64 `8664` / `PE32+`; CTest
+is `4/4` and the focused policy is `12/12`, `4568` checks. Frozen SHA-256 hashes
+are:
+
+- `coop_runtime.cpp` —
+  `F293BB6542D32E9777677EDBDA34077E88390678BDA2CD90087CF674E35396E7`;
+- `nadine_p99_chloe_order_policy.h` —
+  `B0EC14B50FA74F1F3D4369D47976EFD0284232D16082A55BE4B96E05B40F2B7D`;
+- `nadine_p99_chloe_order_policy_tests.cpp` —
+  `3E7633AEA0A12DA6C4CCAB8CCFE764984727623E01EC1A487D93EB5722EC1333`;
+- `scanner/build/tll_coop_runtime.dll` —
+  `1455F38B0ADC2D3DA23CD9D23EAA6581BA0660EA9394355DC27B179EED00FC64`.
+
+The binary contains exact tag `2026-08-31agf`, the READY text and the bounded
+`NADINE-P99-CHLOE-ORDER` marker.
+
+The falsifiable one-copy prediction is written before runtime. On role-B local
+Nadine, draw the real P99 and remain in WeaponOut/state2. A valid exam must emit
+the exact installed/READY markers and one bounded
+`NADINE-P99-CHLOE-ORDER applied=21 groups=0,1 state=2 art=8075397D`; visually,
+the right palm/prop alignment and all right fingers must wrap the handle like
+Chloe's grip. ADS/state4, Put/holster, Mazur, Type95/M30 and every other weapon
+must receive no pose write from this package. No applied marker is an admission
+or parser failure, not a visual verdict. An applied marker plus the same wrong
+grip rejects H-Chloe-order. Any jerk, broken holding animation, attachment/back
+regression, other-art write or failed rollback rejects the implementation; do
+not widen the grammar after a failed exam.

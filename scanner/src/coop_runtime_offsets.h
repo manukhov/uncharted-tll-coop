@@ -234,8 +234,6 @@ constexpr std::uintptr_t kAnimJointProgramCustomOp129Rva = 0x1A951F0;
 constexpr std::uintptr_t kAnimJointProgramCustomOp131Rva = 0x1A94D80;
 constexpr std::uintptr_t kAnimCmdWriteSkinningPaletteCallsiteRva = 0x1ABAE8C;
 constexpr std::uintptr_t kAnimCmdWriteSkinningPaletteRva = 0x218B170;
-constexpr std::uintptr_t kSkelTableRetargetEntryCountRva = 0x38401D8;
-constexpr std::uintptr_t kSkelTableRetargetEntriesRva = 0x3864A00;
 // Embedded PlayerInputCommandState (sub_14024D7E0 returns Player+0x39A0).
 constexpr std::size_t kPlayerInputCommandStateOffset = 0x39A0;
 constexpr std::uintptr_t kPlayerInputCommandStateIsCommandActiveRva = 0x1E39D50;
@@ -834,6 +832,18 @@ constexpr std::uintptr_t kRetargetAnimUsingBatchMgrRva = 0x193B2C0;
 constexpr std::uintptr_t kRetargetPostPoseAddCallsiteRva = 0x1937DBA;
 constexpr std::uintptr_t kRetargetPluginAddJointRetargetCommandsRva =
     0x1936490;
+// Native value-only helpers used by the state-2 P99 Chloe-space transfer.
+// FindRetargetEntry is a read-only table lookup. DoJointRetarget evaluates one
+// already-built 0x2e record without invoking BatchMgr, while the blend helper
+// applies the engine's exact ValidBits/mode-2 transform math to local buffers.
+constexpr std::uintptr_t kSkelTableFindRetargetEntryRva = 0x17D0BD0;
+constexpr std::uintptr_t kSkelTableRetargetEntryCountRva = 0x38401D8;
+constexpr std::uintptr_t kSkelTableRetargetEntriesRva = 0x3864A00;
+constexpr std::uintptr_t kRetargetPluginDoJointRetargetRva = 0x1AE2100;
+constexpr std::uintptr_t kAnimJointParamsBlendTransformsByValidBitsRva =
+    0x2188A30;
+constexpr std::uintptr_t kAnimMasterTableArtGroupRegistryEpochRva =
+    0x38401BC;
 // Read-only final holster discriminator. The anim-control event hook exposes
 // authored named events, the binding builder exposes the selected gun_holster*
 // id and offsets, and the final mutation hook proves whether the state-script

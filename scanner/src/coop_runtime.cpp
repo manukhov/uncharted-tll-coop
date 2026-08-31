@@ -25,6 +25,7 @@
 #include "nadine_back_clearance.h"
 #include "nadine_back_clearance_profiles.h"
 #include "nadine_holster_binding.h"
+#include "nadine_p99_chloe_order_policy.h"
 #include "nadine_pistol_grip_policy.h"
 
 // ============================================================================
@@ -2646,8 +2647,20 @@ constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
 // is therefore insufficient, not an admission failure. Keep this experiment
 // and the rejected abk resolver mutation off; do not widen either boundary.
 constexpr bool kEnableLegacyNadinePistolPoseGripRepair = false;
+// Build agf evaluates the shipped P99 steady partial in Chloe space before
+// applying the authored Chloe->legacy-Nadine retarget.  Stock evaluates the
+// Player base and Chloe additive through two different receiver retargets and
+// only then blends them; reference-pose composition and the two scale profiles
+// make those orders non-commutative.  The transfer is state-2/P99-only and
+// owns only r_palm, r_prop and the nineteen right-finger rows.
+constexpr bool kEnableLegacyNadineP99ChloeGripTransfer = true;
 static_assert(!kEnableLegacyNadinePistolPoseGripRepair ||
               !kEnableLegacyNadineActiveWeaponGripOverlayRepair);
+static_assert(
+    !kEnableLegacyNadineP99ChloeGripTransfer ||
+        (!kEnableLegacyNadinePistolPoseGripRepair &&
+         !kEnableLegacyNadineActiveWeaponGripOverlayRepair),
+    "P99 Chloe-space transfer must be the only pistol-pose mutation");
 // Builds ack/acl installed the exact TransformState row-skip boundary, but two
 // bounded exams produced live owner0 copy markers and zero skip markers.  The
 // custom-pair Player fields are transition-time request storage, not a proven
@@ -2871,6 +2884,28 @@ static_assert(
          !kEnableLegacyNadineMazurChloeRightHandPropReference &&
          !kEnableLegacyNadineVirtualChloeGripSourceCensus),
     "aga Perform blend census must be the sole arm-transition experiment");
+static_assert(
+    !kEnableLegacyNadineP99ChloeGripTransfer ||
+        (!kEnableLegacyNadineMazurAuthoredPairRepair &&
+         !kEnableLegacyNadineMazurEmptyTrackEndpointFiller &&
+         !kEnableLegacyNadineMazurLateSteadyIkRepair &&
+         !kEnableLegacyNadineMazurTransientPostblendReplay &&
+         !kEnableLegacyNadineMazurTransientPostblendCensus &&
+         !kEnableLegacyNadineMazurStockTransitionCensus &&
+         !kEnableLegacyNadineMazurStockPosePipelineCensus &&
+         !kEnableLegacyNadineMazurPerformBlendCensus &&
+         !kEnableLegacyNadineIdleArmPoseRoundTrip &&
+         !kEnableLegacyNadineActiveWeaponGripOverlayRepair &&
+         !kEnableLegacyNadinePistolPoseGripRepair &&
+         !kEnableLegacyNadineMazurDrawEndpointRepair &&
+         !kEnableLegacyNadineWeaponIkGoalRelay &&
+         !kEnableLegacyNadineWeaponIkTerminalGoalRelay &&
+         !kEnableLegacyNadineWeaponIkFeatherSuppression &&
+         !kEnableLegacyNadineMazurRightHandPropRelay &&
+         !kEnableLegacyNadineMazurChloeRightHandPropReference &&
+         !kEnableLegacyNadineVirtualChloeGripSourceCensus &&
+         !kEnableLegacyNadineMazurSteadyHandsCommandCensus),
+    "P99 Chloe-space transfer must exclusively own the pose callsites");
 // Build ada proved a repeatable first-Draw-good -> steady-broken transition,
 // followed by immediately broken later Draws. The animation layer has exact
 // create-new and loop-current paths while consuming its bounded transition
@@ -61561,6 +61596,2473 @@ bool install_legacy_nadine_mazur_aga_perform_blend_census() {
     return ready;
 }
 
+// The visible write seam is the already-tested Player +0x408 boundary.  This
+// package changes only the value producer: it evaluates the shipped P99 base
+// and additive in Chloe space, then applies the authored Chloe->C39 retarget.
+// Source pointers never leave the enclosing Perform call; the postblend ticket
+// contains only 21 completed C39 values plus identities needed to revalidate
+// the owner before the all-or-rollback write.
+namespace p99_order = coop::p99_chloe_order;
+
+constexpr std::uintptr_t kP99ChloeTransferProcessCallsiteRva = 0x1A92759;
+constexpr std::size_t kP99ChloeTransferMaxCommandWords = 4096;
+constexpr std::size_t kP99ChloeTransferMaxLanes = 64;
+constexpr std::size_t kP99ChloeTransferRowBytes = 48;
+constexpr std::size_t kP99ChloeTransferBlendBlobBytes = 112;
+constexpr std::uint16_t kP99ChloeTransferBlendEncoding = 0x0108;
+constexpr ULONGLONG kP99ChloeTransferTicketTtlMs = 100;
+
+using P99ChloeTransferPerformFunction = std::int64_t(__fastcall*)(void*);
+using P99ChloeTransferPostBlendFunction = std::int64_t(__fastcall*)(void*);
+using P99ChloeTransferRetargetFunction = void*(__fastcall*)(
+    void*, float, void*, void*, int, void*, void**, void**);
+using P99ChloeTransferAddFunction = std::int64_t(__fastcall*)(
+    void*, void*, void*, void*, void*, void*, void*, void*);
+using P99ChloeTransferFindEntryFunction = void*(__fastcall*)(
+    std::uint32_t, std::uint32_t);
+using P99ChloeTransferDoJointFunction = bool(__fastcall*)(
+    const void*, const void*, const void*, bool, void*);
+using P99ChloeTransferBlendFunction = void(__fastcall*)(
+    std::uint16_t, void*, void*, float, std::uint16_t, void*);
+
+P99ChloeTransferPerformFunction g_original_p99_chloe_transfer_perform = nullptr;
+ProcessAnimCmdListSegmentFunction g_original_p99_chloe_transfer_process = nullptr;
+P99ChloeTransferRetargetFunction g_original_p99_chloe_transfer_retarget = nullptr;
+P99ChloeTransferAddFunction g_original_p99_chloe_transfer_add = nullptr;
+std::atomic<bool> g_p99_chloe_transfer_ready{false};
+
+enum class P99ChloeTransferSourceKind : std::uint8_t {
+    kNone = 0,
+    kPlayerBase = 1,
+    kChloeAdditive = 2,
+};
+
+struct P99ChloeTransferArtSkeleton {
+    bool valid = false;
+    void* art_skeleton = nullptr;
+    const std::byte* underlying = nullptr;
+    const std::byte* reference_pose = nullptr;
+    std::uint32_t database_id = 0;
+    std::uint32_t skeleton_id = 0;
+    std::uint16_t joint_count = 0;
+    std::uint8_t group_count = 0;
+};
+
+struct P99ChloeTransferEntry {
+    bool valid = false;
+    void* entry = nullptr;
+    const std::byte* authored = nullptr;
+    const std::byte* native_records = nullptr;
+    p99_order::RetargetEntryMetadata metadata{};
+    std::array<p99_order::RetargetRecordMetadata, 93> records{};
+};
+
+struct P99ChloeTransferSourceRows {
+    bool valid = false;
+    std::uint8_t source_group = 0xFF;
+    std::uint8_t target_group = 0xFF;
+    p99_order::SourcePoseLayoutEvidence layout{};
+    P99ChloeTransferArtSkeleton source_skeleton{};
+    P99ChloeTransferArtSkeleton target_skeleton{};
+    std::array<std::array<std::byte, kP99ChloeTransferRowBytes>,
+               p99_order::kRequiredJointCount> rows{};
+    std::array<std::uint8_t, p99_order::kRequiredJointCount> present{};
+    std::array<std::uint64_t, p99_order::kGlobalMaskWordCount> valid_mask{};
+};
+
+struct P99ChloeTransferGroupResult {
+    bool valid = false;
+    std::uint8_t target_group = 0xFF;
+    P99ChloeTransferSourceRows player_base{};
+    P99ChloeTransferSourceRows chloe_additive{};
+    std::array<std::array<std::byte, kP99ChloeTransferRowBytes>,
+               p99_order::kRequiredJointCount> rows{};
+    std::array<std::uint8_t, p99_order::kRequiredJointCount> present{};
+    std::array<std::uint64_t, p99_order::kGlobalMaskWordCount>
+        chloe_composite_mask{};
+    std::array<std::uint64_t, p99_order::kGlobalMaskWordCount>
+        nadine_output_mask{};
+};
+
+struct P99ChloeTransferCommandPlan {
+    bool valid = false;
+    const std::uint32_t* commands = nullptr;
+    std::uint32_t word_count = 0;
+    std::uint64_t hash = 0;
+    std::uint32_t base_word = UINT32_MAX;
+    std::uint32_t additive_word = UINT32_MAX;
+    std::uint32_t blend_word = UINT32_MAX;
+    std::uint32_t base_lane = UINT32_MAX;
+    std::uint32_t additive_lane = UINT32_MAX;
+    std::uint32_t output_lane = UINT32_MAX;
+};
+
+struct P99ChloeTransferEpoch {
+    bool active = false;
+    bool valid = false;
+    bool ambiguous = false;
+    std::uint32_t depth = 0;
+    std::uint64_t nonce = 0;
+    void* job = nullptr;
+    void* player = nullptr;
+    void* fg_anim_data = nullptr;
+    void* local_pose = nullptr;
+    void* target_skeleton = nullptr;
+    void* weapon = nullptr;
+    void* base_clip = nullptr;
+    void* additive_clip = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    std::uint32_t registry_epoch = 0;
+    void* row20_entry = nullptr;
+    void* row124_entry = nullptr;
+    void* row157_entry = nullptr;
+    std::uint8_t clip_metadata_group_mask = 0;
+    bool entries_captured = false;
+    P99ChloeTransferEntry row20{};
+    P99ChloeTransferEntry row157{};
+    std::array<P99ChloeTransferGroupResult, 2> groups{};
+};
+
+struct P99ChloeTransferProcessTls {
+    bool active = false;
+    bool ambiguous = false;
+    std::uint64_t nonce = 0;
+    std::uint32_t target_group = UINT32_MAX;
+    P99ChloeTransferCommandPlan plan{};
+    std::uint16_t base_retarget_calls = 0;
+    std::uint16_t additive_retarget_calls = 0;
+    bool base_clip_metadata_exact = false;
+    bool additive_clip_metadata_exact = false;
+    P99ChloeTransferSourceRows player_base{};
+    P99ChloeTransferSourceRows chloe_additive{};
+};
+
+struct P99ChloeTransferRetargetTls {
+    bool active = false;
+    P99ChloeTransferSourceKind kind = P99ChloeTransferSourceKind::kNone;
+    std::uint64_t nonce = 0;
+    std::uint32_t target_group = UINT32_MAX;
+    void* retarget_entry = nullptr;
+    void* source_skeleton = nullptr;
+    void* target_skeleton = nullptr;
+};
+
+struct P99ChloeTransferTicket {
+    bool valid = false;
+    std::uint64_t nonce = 0;
+    void* player = nullptr;
+    void* fg_anim_data = nullptr;
+    void* local_pose = nullptr;
+    void* target_skeleton = nullptr;
+    void* weapon = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    std::uint32_t registry_epoch = 0;
+    ULONGLONG captured_ms = 0;
+    std::array<std::array<std::byte, kP99ChloeTransferRowBytes>,
+               p99_order::kRequiredJointCount> rows{};
+};
+
+thread_local P99ChloeTransferEpoch g_p99_chloe_transfer_epoch{};
+thread_local P99ChloeTransferProcessTls g_p99_chloe_transfer_process_tls{};
+thread_local P99ChloeTransferRetargetTls g_p99_chloe_transfer_retarget_tls{};
+thread_local P99ChloeTransferTicket g_p99_chloe_transfer_ticket{};
+std::atomic<std::uint64_t> g_p99_chloe_transfer_nonce{0};
+
+void log_p99_chloe_transfer_reject(const char* reason) {
+    static std::atomic<std::uint32_t> count{0};
+    static std::atomic<bool> saturated{false};
+    const std::uint32_t row = count.fetch_add(1, std::memory_order_relaxed);
+    if (row >= 24) {
+        if (!saturated.exchange(true, std::memory_order_relaxed)) {
+            boot_log_line("NADINE-P99-CHLOE-ORDER reject=saturated rows=24");
+        }
+        return;
+    }
+    char line[192]{};
+    std::snprintf(
+        line, sizeof(line), "NADINE-P99-CHLOE-ORDER reject=%s row=%u",
+        reason != nullptr ? reason : "unknown", row);
+    boot_log_line(line);
+}
+
+bool p99_chloe_transfer_row_valid(const std::byte* row) {
+    return virtual_chloe_source_row_valid(row);
+}
+
+template <std::size_t N>
+int p99_chloe_transfer_group_for_global(
+    const std::array<p99_order::SkeletonGroup, N>& groups,
+    std::uint16_t global) {
+    for (std::size_t index = 0; index < groups.size(); ++index) {
+        const std::uint32_t end =
+            static_cast<std::uint32_t>(groups[index].first) +
+            groups[index].count;
+        if (global >= groups[index].first && global < end) {
+            return static_cast<int>(index);
+        }
+    }
+    return -1;
+}
+
+bool seh_capture_p99_chloe_transfer_art_skeleton(
+    void* art_skeleton, std::uint32_t expected_database_id,
+    std::uint32_t expected_skeleton_id, std::uint16_t expected_joint_count,
+    std::uint8_t expected_group_count,
+    P99ChloeTransferArtSkeleton* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        auto* const art = static_cast<std::byte*>(art_skeleton);
+        if (art == nullptr || readable_bytes(art) < 0x48 ||
+            *reinterpret_cast<const std::uint32_t*>(art + 0x24) !=
+                expected_database_id) {
+            return false;
+        }
+        auto* const underlying =
+            *reinterpret_cast<std::byte* const*>(art + 0x40);
+        if (underlying == nullptr || readable_bytes(underlying) < 0x24 ||
+            *reinterpret_cast<const std::uint32_t*>(underlying + 0x04) !=
+                expected_skeleton_id ||
+            *reinterpret_cast<const std::uint16_t*>(underlying + 0x10) !=
+                expected_joint_count ||
+            *reinterpret_cast<const std::uint8_t*>(underlying + 0x16) !=
+                expected_group_count) {
+            return false;
+        }
+        const std::uint32_t reference_offset =
+            *reinterpret_cast<const std::uint32_t*>(underlying + 0x20);
+        auto* const reference_pose = underlying + reference_offset;
+        if (reference_offset < 0x24 || reference_pose < underlying ||
+            readable_bytes(reference_pose) <
+                static_cast<std::size_t>(expected_joint_count) *
+                    kP99ChloeTransferRowBytes) {
+            return false;
+        }
+        output->valid = true;
+        output->art_skeleton = art_skeleton;
+        output->underlying = underlying;
+        output->reference_pose = reference_pose;
+        output->database_id = expected_database_id;
+        output->skeleton_id = expected_skeleton_id;
+        output->joint_count = expected_joint_count;
+        output->group_count = expected_group_count;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+bool p99_chloe_transfer_art_skeleton_equal(
+    const P99ChloeTransferArtSkeleton& left,
+    const P99ChloeTransferArtSkeleton& right) {
+    return left.valid && right.valid &&
+        left.art_skeleton == right.art_skeleton &&
+        left.underlying == right.underlying &&
+        left.reference_pose == right.reference_pose &&
+        left.database_id == right.database_id &&
+        left.skeleton_id == right.skeleton_id &&
+        left.joint_count == right.joint_count &&
+        left.group_count == right.group_count;
+}
+
+bool seh_p99_chloe_transfer_clip_metadata_exact(
+    void* clip, std::uint32_t expected_database_id,
+    std::uint32_t expected_skeleton_id, std::uint16_t expected_flags) {
+    __try {
+        auto* const art = static_cast<std::byte*>(clip);
+        if (art == nullptr || readable_bytes(art) < 0x44 ||
+            *reinterpret_cast<const std::uint32_t*>(art + 0x40) !=
+                expected_database_id) {
+            return false;
+        }
+        auto* const clip_data =
+            *reinterpret_cast<std::byte* const*>(art + 0x28);
+        return clip_data != nullptr && readable_bytes(clip_data) >= 0x24 &&
+            *reinterpret_cast<const std::uint32_t*>(clip_data + 0x04) ==
+                expected_skeleton_id &&
+            *reinterpret_cast<const std::uint16_t*>(clip_data + 0x20) ==
+                expected_flags &&
+            *reinterpret_cast<const std::uint16_t*>(clip_data + 0x22) == 1 &&
+            clip_data == *reinterpret_cast<std::byte* const*>(art + 0x28);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_capture_p99_chloe_transfer_entry(
+    std::uint16_t index,
+    const p99_order::RetargetEntryMetadata& expected,
+    const P99ChloeTransferArtSkeleton& source,
+    const P99ChloeTransferArtSkeleton& target,
+    P99ChloeTransferEntry* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (g_module == 0 || !source.valid || !target.valid ||
+            index != expected.entry_index ||
+            source.database_id != expected.source_database_id ||
+            source.skeleton_id != expected.source_skeleton_id ||
+            source.joint_count != expected.source_joint_count ||
+            source.group_count != expected.source_group_count ||
+            target.database_id != expected.target_database_id ||
+            target.skeleton_id != expected.target_skeleton_id ||
+            target.joint_count != expected.target_joint_count ||
+            target.group_count != expected.target_group_count) {
+            return false;
+        }
+        const auto* const count_ptr = reinterpret_cast<const std::uint32_t*>(
+            g_module + kSkelTableRetargetEntryCountRva);
+        const std::uint32_t entry_count = *count_ptr;
+        auto* const table = reinterpret_cast<std::byte*>(
+            g_module + kSkelTableRetargetEntriesRva);
+        if (entry_count <= index || entry_count > 4096 ||
+            readable_bytes(table) <
+                static_cast<std::size_t>(entry_count) * 0x40 ||
+            entry_count != *count_ptr) {
+            return false;
+        }
+        auto* const entry = table + static_cast<std::size_t>(index) * 0x40;
+        const auto find_entry =
+            reinterpret_cast<P99ChloeTransferFindEntryFunction>(
+                g_module + kSkelTableFindRetargetEntryRva);
+        if (find_entry(expected.source_database_id,
+                       expected.target_database_id) != entry) {
+            return false;
+        }
+        auto* const authored =
+            *reinterpret_cast<std::byte* const*>(entry + 0x00);
+        auto* const records =
+            *reinterpret_cast<std::byte* const*>(entry + 0x18);
+        const std::uint16_t runtime_count =
+            *reinterpret_cast<const std::uint16_t*>(entry + 0x20);
+        const std::uint16_t feature =
+            *reinterpret_cast<const std::uint16_t*>(entry + 0x22);
+        const std::uint32_t scale_bits =
+            *reinterpret_cast<const std::uint32_t*>(entry + 0x24);
+        void* const group_map =
+            *reinterpret_cast<void* const*>(entry + 0x28);
+        void* const arm_ik =
+            *reinterpret_cast<void* const*>(entry + 0x30);
+        void* const leg_ik =
+            *reinterpret_cast<void* const*>(entry + 0x38);
+        if (authored == nullptr || records == nullptr ||
+            readable_bytes(authored) < 0x2E ||
+            runtime_count != expected.runtime_record_count ||
+            readable_bytes(records) <
+                static_cast<std::size_t>(runtime_count) *
+                    p99_order::kRuntimeRetargetRecordStride ||
+            *reinterpret_cast<const std::uint32_t*>(entry + 0x08) !=
+                expected.source_database_id ||
+            *reinterpret_cast<const std::uint32_t*>(entry + 0x0C) !=
+                expected.target_database_id ||
+            *reinterpret_cast<const std::uint32_t*>(entry + 0x10) !=
+                expected.source_skeleton_id ||
+            *reinterpret_cast<const std::uint32_t*>(entry + 0x14) !=
+                expected.target_skeleton_id ||
+            feature != expected.flags || scale_bits != expected.scale_bits ||
+            group_map == nullptr || arm_ik != nullptr || leg_ik != nullptr ||
+            *reinterpret_cast<const std::uint32_t*>(authored + 0x0C) !=
+                expected.authored_source_base_id ||
+            *reinterpret_cast<const std::uint32_t*>(authored + 0x10) !=
+                expected.authored_target_base_id ||
+            *reinterpret_cast<const std::uint32_t*>(authored + 0x20) !=
+                expected.authored_record_count ||
+            *reinterpret_cast<const std::uint32_t*>(authored + 0x24) !=
+                expected.profile_id ||
+            *reinterpret_cast<const std::uint32_t*>(authored + 0x28) !=
+                expected.scale_bits ||
+            *reinterpret_cast<const std::uint8_t*>(authored + 0x2C) !=
+                expected.arm_ik ||
+            *reinterpret_cast<const std::uint8_t*>(authored + 0x2D) !=
+                expected.leg_ik) {
+            return false;
+        }
+        const std::uintptr_t authored_address =
+            reinterpret_cast<std::uintptr_t>(authored);
+        if (authored_address < expected.authored_row_offset) {
+            return false;
+        }
+        auto* const raw_base = reinterpret_cast<std::byte*>(
+            authored_address - expected.authored_row_offset);
+        auto* const authored_map =
+            *reinterpret_cast<std::byte* const*>(authored + 0x18);
+        const std::size_t authored_map_bytes =
+            static_cast<std::size_t>(expected.authored_record_count) * 12;
+        if (authored_map != raw_base + expected.authored_map_offset ||
+            readable_bytes(raw_base) <
+                static_cast<std::size_t>(expected.authored_map_offset) +
+                    authored_map_bytes ||
+            *reinterpret_cast<const std::uint32_t*>(raw_base) !=
+                0x44433030u ||
+            *reinterpret_cast<const std::uint32_t*>(raw_base + 0x20) !=
+                expected.table_object_id ||
+            *reinterpret_cast<const std::uint32_t*>(raw_base + 0x24) !=
+                expected.table_type_id ||
+            readable_bytes(authored_map) < authored_map_bytes) {
+            return false;
+        }
+        for (const auto& transfer : p99_order::kExpectedTransfers) {
+            std::size_t semantic_matches = 0;
+            for (std::size_t raw_index = 0;
+                 raw_index < expected.authored_record_count; ++raw_index) {
+                const auto* const raw_record =
+                    authored_map + raw_index * 12;
+                const std::uint32_t source_id =
+                    *reinterpret_cast<const std::uint32_t*>(raw_record);
+                const std::uint32_t target_id =
+                    *reinterpret_cast<const std::uint32_t*>(
+                        raw_record + 0x04);
+                const std::uint32_t mode =
+                    *reinterpret_cast<const std::uint32_t*>(
+                        raw_record + 0x08);
+                if (source_id == transfer.semantic_id ||
+                    target_id == transfer.semantic_id) {
+                    if (source_id != transfer.semantic_id ||
+                        target_id != transfer.semantic_id ||
+                        mode != transfer.mode) {
+                        return false;
+                    }
+                    ++semantic_matches;
+                }
+            }
+            if (semantic_matches != 1) {
+                return false;
+            }
+        }
+
+        output->metadata = expected;
+        output->metadata.flags = feature;
+        output->metadata.scale_bits = scale_bits;
+        for (std::size_t record_index = 0;
+             record_index < runtime_count; ++record_index) {
+            const auto* const record = records +
+                record_index * p99_order::kRuntimeRetargetRecordStride;
+            p99_order::RetargetRecordMetadata metadata{};
+            metadata.source_global =
+                *reinterpret_cast<const std::uint16_t*>(record + 0x24);
+            metadata.source_parameter_index =
+                *reinterpret_cast<const std::uint16_t*>(record + 0x26);
+            metadata.target_global =
+                *reinterpret_cast<const std::uint16_t*>(record + 0x28);
+            metadata.target_reference_index =
+                *reinterpret_cast<const std::uint16_t*>(record + 0x2A);
+            const std::uint16_t mode =
+                *reinterpret_cast<const std::uint16_t*>(record + 0x2C);
+            const int source_group = index == 20
+                ? p99_chloe_transfer_group_for_global(
+                      p99_order::kPlayerGroups, metadata.source_global)
+                : p99_chloe_transfer_group_for_global(
+                      p99_order::kChloeGroups, metadata.source_global);
+            const int target_group = index == 20
+                ? p99_chloe_transfer_group_for_global(
+                      p99_order::kChloeGroups, metadata.target_global)
+                : p99_chloe_transfer_group_for_global(
+                      p99_order::kNadineGroups, metadata.target_global);
+            if (mode > 3 || source_group < 0 || target_group < 0 ||
+                metadata.source_global !=
+                    *reinterpret_cast<const std::uint16_t*>(record + 0x24) ||
+                metadata.source_parameter_index !=
+                    *reinterpret_cast<const std::uint16_t*>(record + 0x26) ||
+                metadata.target_global !=
+                    *reinterpret_cast<const std::uint16_t*>(record + 0x28) ||
+                metadata.target_reference_index !=
+                    *reinterpret_cast<const std::uint16_t*>(record + 0x2A) ||
+                mode != *reinterpret_cast<const std::uint16_t*>(
+                            record + 0x2C)) {
+                *output = {};
+                return false;
+            }
+            metadata.source_group = static_cast<std::uint8_t>(source_group);
+            metadata.target_group = static_cast<std::uint8_t>(target_group);
+            metadata.mode = static_cast<std::uint8_t>(mode);
+            output->records[record_index] = metadata;
+        }
+        if (entry_count != *count_ptr ||
+            authored != *reinterpret_cast<std::byte* const*>(entry) ||
+            records != *reinterpret_cast<std::byte* const*>(entry + 0x18)) {
+            *output = {};
+            return false;
+        }
+        output->valid = true;
+        output->entry = entry;
+        output->authored = authored;
+        output->native_records = records;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+bool seh_validate_p99_chloe_transfer_row124(void** entry_out) {
+    if (entry_out == nullptr) {
+        return false;
+    }
+    *entry_out = nullptr;
+    __try {
+        constexpr std::uint16_t kIndex = 124;
+        const auto* const count_ptr = reinterpret_cast<const std::uint32_t*>(
+            g_module + kSkelTableRetargetEntryCountRva);
+        const std::uint32_t count = *count_ptr;
+        auto* const table = reinterpret_cast<std::byte*>(
+            g_module + kSkelTableRetargetEntriesRva);
+        if (count <= kIndex || count > 4096 ||
+            readable_bytes(table) < static_cast<std::size_t>(count) * 0x40) {
+            return false;
+        }
+        auto* const entry = table + static_cast<std::size_t>(kIndex) * 0x40;
+        const auto find_entry =
+            reinterpret_cast<P99ChloeTransferFindEntryFunction>(
+                g_module + kSkelTableFindRetargetEntryRva);
+        auto* const authored =
+            *reinterpret_cast<std::byte* const*>(entry + 0x00);
+        auto* const records =
+            *reinterpret_cast<std::byte* const*>(entry + 0x18);
+        if (find_entry(p99_order::kPlayerDatabaseId,
+                       p99_order::kNadineDatabaseId) != entry ||
+            authored == nullptr || readable_bytes(authored) < 0x2E ||
+            records == nullptr || readable_bytes(records) < 71 * 0x2E ||
+            *reinterpret_cast<const std::uint32_t*>(entry + 0x08) !=
+                p99_order::kPlayerDatabaseId ||
+            *reinterpret_cast<const std::uint32_t*>(entry + 0x0C) !=
+                p99_order::kNadineDatabaseId ||
+            *reinterpret_cast<const std::uint32_t*>(entry + 0x10) !=
+                p99_order::kPlayerSkeletonId ||
+            *reinterpret_cast<const std::uint32_t*>(entry + 0x14) !=
+                p99_order::kNadineSkeletonId ||
+            *reinterpret_cast<const std::uint16_t*>(entry + 0x20) != 71 ||
+            *reinterpret_cast<const std::uint16_t*>(entry + 0x22) != 0 ||
+            *reinterpret_cast<const std::uint32_t*>(entry + 0x24) !=
+                0x3F666666u ||
+            *reinterpret_cast<void* const*>(entry + 0x28) == nullptr ||
+            *reinterpret_cast<void* const*>(entry + 0x30) != nullptr ||
+            *reinterpret_cast<void* const*>(entry + 0x38) != nullptr ||
+            *reinterpret_cast<const std::uint32_t*>(authored + 0x0C) !=
+                p99_order::kProtoBaseId ||
+            *reinterpret_cast<const std::uint32_t*>(authored + 0x10) !=
+                p99_order::kNadineDlcBaseId ||
+            *reinterpret_cast<const std::uint32_t*>(authored + 0x20) != 74 ||
+            *reinterpret_cast<const std::uint32_t*>(authored + 0x24) !=
+                0xE51542CAu ||
+            *reinterpret_cast<const std::uint32_t*>(authored + 0x28) !=
+                0x3F666666u ||
+            *reinterpret_cast<const std::uint8_t*>(authored + 0x2C) != 0 ||
+            *reinterpret_cast<const std::uint8_t*>(authored + 0x2D) != 0 ||
+            count != *count_ptr) {
+            return false;
+        }
+        *entry_out = entry;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *entry_out = nullptr;
+        return false;
+    }
+}
+
+bool p99_chloe_transfer_entry_equal(
+    const P99ChloeTransferEntry& left,
+    const P99ChloeTransferEntry& right) {
+    if (!left.valid || !right.valid || left.entry != right.entry ||
+        left.authored != right.authored ||
+        left.native_records != right.native_records ||
+        std::memcmp(&left.metadata, &right.metadata,
+                    sizeof(left.metadata)) != 0 ||
+        left.metadata.runtime_record_count !=
+            right.metadata.runtime_record_count) {
+        return false;
+    }
+    for (std::size_t index = 0;
+         index < left.metadata.runtime_record_count; ++index) {
+        if (std::memcmp(&left.records[index], &right.records[index],
+                        sizeof(left.records[index])) != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+const std::byte* p99_chloe_transfer_native_record(
+    const P99ChloeTransferEntry& entry, std::uint16_t source_global,
+    std::uint16_t target_global) {
+    if (!entry.valid) {
+        return nullptr;
+    }
+    const std::byte* result = nullptr;
+    for (std::size_t index = 0;
+         index < entry.metadata.runtime_record_count; ++index) {
+        const auto& record = entry.records[index];
+        if (record.source_global == source_global &&
+            record.target_global == target_global) {
+            if (result != nullptr) {
+                return nullptr;
+            }
+            result = entry.native_records +
+                index * p99_order::kRuntimeRetargetRecordStride;
+        }
+    }
+    return result;
+}
+
+bool seh_p99_chloe_transfer_table_identity(
+    std::uint32_t expected_registry_epoch, void* row20, void* row124,
+    void* row157) {
+    __try {
+        if (g_module == 0 || expected_registry_epoch == 0 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                g_module + kAnimMasterTableArtGroupRegistryEpochRva) !=
+                expected_registry_epoch) {
+            return false;
+        }
+        const std::uint32_t count = *reinterpret_cast<const std::uint32_t*>(
+            g_module + kSkelTableRetargetEntryCountRva);
+        auto* const table = reinterpret_cast<std::byte*>(
+            g_module + kSkelTableRetargetEntriesRva);
+        if (count <= 157 || count > 4096 ||
+            table + 20 * 0x40 != row20 ||
+            table + 124 * 0x40 != row124 ||
+            table + 157 * 0x40 != row157) {
+            return false;
+        }
+        const auto find_entry =
+            reinterpret_cast<P99ChloeTransferFindEntryFunction>(
+                g_module + kSkelTableFindRetargetEntryRva);
+        return find_entry(p99_order::kPlayerDatabaseId,
+                          p99_order::kChloeDatabaseId) == row20 &&
+            find_entry(p99_order::kPlayerDatabaseId,
+                       p99_order::kNadineDatabaseId) == row124 &&
+            find_entry(p99_order::kChloeDatabaseId,
+                       p99_order::kNadineDatabaseId) == row157 &&
+            *reinterpret_cast<const std::uint32_t*>(
+                g_module + kAnimMasterTableArtGroupRegistryEpochRva) ==
+                expected_registry_epoch;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_p99_chloe_transfer_table_epoch_only(
+    std::uint32_t expected_registry_epoch) {
+    __try {
+        if (g_module == 0) {
+            return false;
+        }
+        auto* const table = reinterpret_cast<std::byte*>(
+            g_module + kSkelTableRetargetEntriesRva);
+        return seh_p99_chloe_transfer_table_identity(
+            expected_registry_epoch, table + 20 * 0x40,
+            table + 124 * 0x40, table + 157 * 0x40);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+std::uint64_t p99_chloe_transfer_hash_word(
+    std::uint64_t hash, std::uint32_t word) {
+    constexpr std::uint64_t kPrime = 1099511628211ull;
+    hash ^= word;
+    hash *= kPrime;
+    return hash;
+}
+
+bool seh_parse_p99_chloe_transfer_commands(
+    const std::uint32_t* commands, std::uint32_t word_count,
+    std::uint32_t processing_group, void* base_clip, void* additive_clip,
+    P99ChloeTransferCommandPlan* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (commands == nullptr || processing_group > 1 ||
+            base_clip == nullptr ||
+            additive_clip == nullptr || base_clip == additive_clip ||
+            word_count == 0 ||
+            word_count > kP99ChloeTransferMaxCommandWords ||
+            readable_bytes(commands) <
+                static_cast<std::size_t>(word_count) * sizeof(std::uint32_t)) {
+            return false;
+        }
+        std::uint32_t base_count = 0;
+        std::uint32_t additive_count = 0;
+        std::uint32_t object_begin_count = 0;
+        std::uint32_t control_begin_count = 0;
+        std::uint32_t opener_count = 0;
+        std::uint32_t finalizer_count = 0;
+        std::uint32_t opener_word = UINT32_MAX;
+        std::uint32_t finalizer_word = UINT32_MAX;
+        std::uint32_t cursor = 0;
+        std::uint64_t hash = 1469598103934665603ull;
+        while (cursor < word_count) {
+            const std::uint32_t header = commands[cursor];
+            const std::uint16_t opcode =
+                static_cast<std::uint16_t>(header & 0xFFFFu);
+            const std::uint16_t words =
+                static_cast<std::uint16_t>(header >> 16);
+            if (words == 0 || words > word_count - cursor) {
+                return false;
+            }
+            for (std::uint32_t index = 0; index < words; ++index) {
+                hash = p99_chloe_transfer_hash_word(
+                    hash, commands[cursor + index]);
+            }
+            if (opcode == kAnimCommandBeginObject) {
+                if (words != 2 || cursor != 0) {
+                    return false;
+                }
+                ++object_begin_count;
+            } else if (opcode == kAnimCommandBeginControl) {
+                if (words != 2 || cursor != 2) {
+                    return false;
+                }
+                ++control_begin_count;
+            } else if (opcode == kAnimCommandAnimation &&
+                words == kAnimCommandWordCountAnimation) {
+                void* clip = nullptr;
+                std::memcpy(&clip, commands + cursor + 2, sizeof(clip));
+                const std::uint32_t lane = commands[cursor + 4];
+                const std::uint32_t phase = commands[cursor + 5];
+                if ((clip == base_clip || clip == additive_clip) &&
+                    (lane >= kP99ChloeTransferMaxLanes || phase != 0)) {
+                    return false;
+                }
+                if (clip == base_clip) {
+                    ++base_count;
+                    output->base_word = cursor;
+                    output->base_lane = lane;
+                } else if (clip == additive_clip) {
+                    ++additive_count;
+                    output->additive_word = cursor;
+                    output->additive_lane = lane;
+                }
+            } else if (opcode == kAnimCommandAllocateBlock) {
+                if (words != 4 || cursor != 4) {
+                    return false;
+                }
+                ++opener_count;
+                opener_word = cursor;
+            } else if (opcode == kAnimCommandFinalizeBlock) {
+                if (words != kAnimCommandWordCountFinalizeBlock) {
+                    return false;
+                }
+                ++finalizer_count;
+                finalizer_word = cursor;
+            }
+            if (header != commands[cursor]) {
+                return false;
+            }
+            cursor += words;
+        }
+        if (cursor != word_count || base_count != 1 ||
+            additive_count != 1 || object_begin_count != 1 ||
+            control_begin_count != 1 || opener_count != 1 ||
+            finalizer_count != 1 ||
+            opener_word != 4 ||
+            opener_word >= output->base_word ||
+            output->base_lane == output->additive_lane) {
+            return false;
+        }
+
+        const p99_order::TerminalCommandPlanEvidence terminal{
+            std::span<const std::uint32_t>(commands, word_count),
+            processing_group, output->base_word, output->additive_word,
+            finalizer_word};
+        if (!p99_order::exact_terminal_command_plan(terminal)) {
+            return false;
+        }
+        output->blend_word =
+            output->additive_word + kAnimCommandWordCountAnimation;
+        output->output_lane = 0;
+        output->valid = true;
+        output->commands = commands;
+        output->word_count = word_count;
+        output->hash = hash;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+bool p99_chloe_transfer_command_plan_equal(
+    const P99ChloeTransferCommandPlan& left,
+    const P99ChloeTransferCommandPlan& right) {
+    return left.valid && right.valid && left.commands == right.commands &&
+        left.word_count == right.word_count && left.hash == right.hash &&
+        left.base_word == right.base_word &&
+        left.additive_word == right.additive_word &&
+        left.blend_word == right.blend_word &&
+        left.base_lane == right.base_lane &&
+        left.additive_lane == right.additive_lane &&
+        left.output_lane == right.output_lane;
+}
+
+bool seh_capture_p99_chloe_transfer_source_rows(
+    P99ChloeTransferSourceKind kind, std::uint32_t target_group,
+    void* segment_context, void* source_skeleton, void* target_skeleton,
+    P99ChloeTransferSourceRows* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if ((target_group != 0 && target_group != 1) ||
+            segment_context == nullptr ||
+            readable_bytes(segment_context) < 0x58) {
+            return false;
+        }
+        P99ChloeTransferArtSkeleton source{};
+        const bool source_valid = kind ==
+                P99ChloeTransferSourceKind::kPlayerBase
+            ? seh_capture_p99_chloe_transfer_art_skeleton(
+                  source_skeleton, p99_order::kPlayerDatabaseId,
+                  p99_order::kPlayerSkeletonId, 702, 9, &source)
+            : kind == P99ChloeTransferSourceKind::kChloeAdditive
+            ? seh_capture_p99_chloe_transfer_art_skeleton(
+                  source_skeleton, p99_order::kChloeDatabaseId,
+                  p99_order::kChloeSkeletonId, 651, 8, &source)
+            : false;
+        P99ChloeTransferArtSkeleton target{};
+        if (!source_valid ||
+            !seh_capture_p99_chloe_transfer_art_skeleton(
+                target_skeleton, p99_order::kNadineDatabaseId,
+                p99_order::kNadineSkeletonId, 580, 8, &target)) {
+            return false;
+        }
+        auto* const segment = static_cast<std::byte*>(segment_context);
+        auto* const source_group_descriptor =
+            *reinterpret_cast<std::byte* const*>(segment + 0x38);
+        auto* const processing_descriptor =
+            *reinterpret_cast<std::byte* const*>(segment + 0x40);
+        auto* const source_pose =
+            *reinterpret_cast<std::byte* const*>(segment + 0x50);
+        if (source_group_descriptor == nullptr ||
+            processing_descriptor == nullptr || source_pose == nullptr ||
+            readable_bytes(source_group_descriptor) < 0x14 ||
+            readable_bytes(processing_descriptor) < 0x0A) {
+            return false;
+        }
+        const p99_order::SourcePoseKind policy_kind = kind ==
+                P99ChloeTransferSourceKind::kPlayerBase
+            ? p99_order::SourcePoseKind::kPlayerBase
+            : p99_order::SourcePoseKind::kChloeAdditive;
+        const p99_order::SourcePoseLayoutEvidence& descriptor_spec = kind ==
+                P99ChloeTransferSourceKind::kPlayerBase
+            ? p99_order::kExpectedPlayerSourceLayouts[target_group]
+            : p99_order::kExpectedChloeSourceLayouts[target_group];
+        if (descriptor_spec.kind != policy_kind ||
+            descriptor_spec.target_group != target_group ||
+            !descriptor_spec.group_pointer_exact ||
+            !descriptor_spec.processing_pointer_exact ||
+            !descriptor_spec.stable) {
+            return false;
+        }
+        const std::uint16_t source_first =
+            *reinterpret_cast<const std::uint16_t*>(
+                source_group_descriptor + 0x00);
+        const std::uint16_t processing_ordinal =
+            *reinterpret_cast<const std::uint16_t*>(
+                source_group_descriptor + 0x02);
+        const std::uint16_t source_workspace_count =
+            *reinterpret_cast<const std::uint16_t*>(
+                source_group_descriptor + 0x10);
+        const std::uint16_t source_parameter_count =
+            *reinterpret_cast<const std::uint16_t*>(
+                source_group_descriptor + 0x12);
+        const std::uint16_t processing_joint_count =
+            *reinterpret_cast<const std::uint16_t*>(processing_descriptor);
+        const std::uint16_t processing_scalar_count =
+            *reinterpret_cast<const std::uint16_t*>(
+                processing_descriptor + 0x02);
+        const std::uint8_t processing_lane_count =
+            *reinterpret_cast<const std::uint8_t*>(
+                processing_descriptor + 0x04);
+        const std::uint8_t processing_valid_offset =
+            *reinterpret_cast<const std::uint8_t*>(
+                processing_descriptor + 0x05);
+        const std::uint16_t processing_first_parameter =
+            *reinterpret_cast<const std::uint16_t*>(
+                processing_descriptor + 0x06);
+        const std::uint16_t processing_tail =
+            *reinterpret_cast<const std::uint16_t*>(
+                processing_descriptor + 0x08);
+        const std::uint8_t expected_source_group =
+            descriptor_spec.source_group;
+        const p99_order::SkeletonGroup source_expected = kind ==
+                P99ChloeTransferSourceKind::kPlayerBase
+            ? p99_order::kPlayerGroups[expected_source_group]
+            : p99_order::kChloeGroups[expected_source_group];
+        if (source.underlying == nullptr ||
+            readable_bytes(source.underlying) < 0x34) {
+            return false;
+        }
+        const std::uintptr_t underlying_address =
+            reinterpret_cast<std::uintptr_t>(source.underlying);
+        const std::uint32_t group_table_offset =
+            *reinterpret_cast<const std::uint32_t*>(
+                source.underlying + 0x2C);
+        const std::size_t group_descriptor_offset =
+            static_cast<std::size_t>(group_table_offset) +
+            static_cast<std::size_t>(expected_source_group) * 0x20u;
+        const std::uint32_t processing_table_offset =
+            *reinterpret_cast<const std::uint32_t*>(
+                source.underlying + 0x30);
+        const std::uint32_t reference_pose_offset =
+            *reinterpret_cast<const std::uint32_t*>(
+                source.underlying + 0x20);
+        const std::size_t processing_descriptor_offset =
+            static_cast<std::size_t>(processing_table_offset) +
+            static_cast<std::size_t>(processing_ordinal) * 10u;
+        if (group_table_offset != 0x40u ||
+            processing_table_offset !=
+                descriptor_spec.processing_table_offset ||
+            group_descriptor_offset < group_table_offset ||
+            group_descriptor_offset + 0x20u < group_descriptor_offset ||
+            processing_table_offset <
+                0x40u + static_cast<std::size_t>(source.group_count) * 0x20u ||
+            processing_descriptor_offset < processing_table_offset ||
+            processing_descriptor_offset + 10u <
+                processing_descriptor_offset ||
+            processing_descriptor_offset + 10u > reference_pose_offset ||
+            underlying_address + group_descriptor_offset <
+                underlying_address ||
+            underlying_address + processing_descriptor_offset <
+                underlying_address ||
+            source_group_descriptor != reinterpret_cast<const std::byte*>(
+                underlying_address + group_descriptor_offset) ||
+            processing_descriptor != reinterpret_cast<const std::byte*>(
+                underlying_address + processing_descriptor_offset) ||
+            source_first != descriptor_spec.group_first ||
+            processing_ordinal != expected_source_group ||
+            processing_ordinal !=
+                descriptor_spec.processing_descriptor_index ||
+            source_workspace_count != descriptor_spec.workspace_count ||
+            source_parameter_count != descriptor_spec.parameter_count ||
+            source_first != source_expected.first ||
+            source_workspace_count != source_expected.count ||
+            processing_joint_count !=
+                descriptor_spec.processing_joint_count ||
+            processing_scalar_count !=
+                descriptor_spec.processing_scalar_count ||
+            processing_lane_count != descriptor_spec.processing_lane_count ||
+            processing_valid_offset !=
+                descriptor_spec.processing_byte5 ||
+            processing_first_parameter !=
+                descriptor_spec.processing_first_parameter ||
+            processing_tail != descriptor_spec.processing_word8 ||
+            processing_joint_count == 0 || processing_joint_count > 128 ||
+            readable_bytes(source_pose) <
+                (static_cast<std::size_t>(processing_joint_count) + 1) *
+                        kP99ChloeTransferRowBytes +
+                    2 * sizeof(std::uint64_t)) {
+            return false;
+        }
+        const auto* const valid_bits =
+            reinterpret_cast<const std::uint64_t*>(
+                source_pose +
+                (static_cast<std::size_t>(processing_joint_count) + 1) *
+                    kP99ChloeTransferRowBytes);
+        const std::array<std::uint64_t, 2> valid_first{
+            valid_bits[0], valid_bits[1]};
+        MemoryBarrier();
+        const std::array<std::uint64_t, 2> valid_second{
+            valid_bits[0], valid_bits[1]};
+        if (valid_first != valid_second) {
+            return false;
+        }
+        // JointParams exposes exactly 128 native MSB-first ValidBits even when
+        // the enclosing skeleton group is larger.  Normalize every available
+        // bit, not merely the 21 requested rows; the pure policy then rejects
+        // an unexpected extra live source instead of silently hiding it.
+        const std::uint16_t visible_valid_count = processing_joint_count;
+        for (std::uint16_t local = 0; local < 128; ++local) {
+            const std::uint64_t bit =
+                std::uint64_t{1} << (63u - (local % 64u));
+            if ((valid_first[local / 64u] & bit) != 0) {
+                if (local >= processing_joint_count) {
+                    return false;
+                }
+                const std::uint16_t global = source_first + local;
+                output->valid_mask[global / 64u] |=
+                    std::uint64_t{1} << (global % 64u);
+            }
+        }
+        std::size_t selected_count = 0;
+        for (std::size_t index = 0;
+             index < p99_order::kExpectedTransfers.size(); ++index) {
+            const auto& transfer = p99_order::kExpectedTransfers[index];
+            if (transfer.nadine_group != target_group) {
+                continue;
+            }
+            const std::uint16_t global = kind ==
+                    P99ChloeTransferSourceKind::kPlayerBase
+                ? transfer.player_global
+                : transfer.chloe_global;
+            const std::uint8_t declared_group = kind ==
+                    P99ChloeTransferSourceKind::kPlayerBase
+                ? transfer.player_group
+                : transfer.chloe_group;
+            if (declared_group != expected_source_group ||
+                global < source_first ||
+                global >= static_cast<std::uint32_t>(source_first) +
+                              source_workspace_count) {
+                return false;
+            }
+            const std::uint16_t local = global - source_first;
+            const std::uint64_t bit =
+                std::uint64_t{1} << (63u - (local % 64u));
+            if (local >= visible_valid_count ||
+                (valid_first[local / 64u] & bit) == 0) {
+                return false;
+            }
+            const auto* const row = source_pose +
+                static_cast<std::size_t>(local) *
+                    kP99ChloeTransferRowBytes;
+            std::array<std::byte, kP99ChloeTransferRowBytes> first{};
+            std::array<std::byte, kP99ChloeTransferRowBytes> second{};
+            std::memcpy(first.data(), row, first.size());
+            MemoryBarrier();
+            std::memcpy(second.data(), row, second.size());
+            if (first != second ||
+                !p99_chloe_transfer_row_valid(first.data())) {
+                return false;
+            }
+            output->rows[index] = first;
+            output->present[index] = 1;
+            ++selected_count;
+        }
+        const std::size_t expected_count = target_group == 0
+            ? p99_order::kExpectedNadineGroup0Targets.size()
+            : p99_order::kExpectedNadineRightFingerTargets.size();
+        P99ChloeTransferArtSkeleton source_after{};
+        const bool source_after_valid = kind ==
+                P99ChloeTransferSourceKind::kPlayerBase
+            ? seh_capture_p99_chloe_transfer_art_skeleton(
+                  source_skeleton, p99_order::kPlayerDatabaseId,
+                  p99_order::kPlayerSkeletonId, 702, 9, &source_after)
+            : seh_capture_p99_chloe_transfer_art_skeleton(
+                  source_skeleton, p99_order::kChloeDatabaseId,
+                  p99_order::kChloeSkeletonId, 651, 8, &source_after);
+        P99ChloeTransferArtSkeleton target_after{};
+        const bool target_after_valid =
+            seh_capture_p99_chloe_transfer_art_skeleton(
+                target_skeleton, p99_order::kNadineDatabaseId,
+                p99_order::kNadineSkeletonId, 580, 8, &target_after);
+        if (selected_count != expected_count ||
+            !source_after_valid || !target_after_valid ||
+            !p99_chloe_transfer_art_skeleton_equal(source, source_after) ||
+            !p99_chloe_transfer_art_skeleton_equal(target, target_after) ||
+            source_group_descriptor !=
+                *reinterpret_cast<std::byte* const*>(segment + 0x38) ||
+            processing_descriptor !=
+                *reinterpret_cast<std::byte* const*>(segment + 0x40) ||
+            source_pose !=
+                *reinterpret_cast<std::byte* const*>(segment + 0x50) ||
+            group_table_offset !=
+                *reinterpret_cast<const std::uint32_t*>(
+                    source.underlying + 0x2C) ||
+            processing_table_offset !=
+                *reinterpret_cast<const std::uint32_t*>(
+                    source.underlying + 0x30) ||
+            reference_pose_offset !=
+                *reinterpret_cast<const std::uint32_t*>(
+                    source.underlying + 0x20) ||
+            source_first != *reinterpret_cast<const std::uint16_t*>(
+                                source_group_descriptor + 0x00) ||
+            processing_ordinal !=
+                *reinterpret_cast<const std::uint16_t*>(
+                    source_group_descriptor + 0x02) ||
+            source_workspace_count !=
+                *reinterpret_cast<const std::uint16_t*>(
+                    source_group_descriptor + 0x10) ||
+            source_parameter_count !=
+                *reinterpret_cast<const std::uint16_t*>(
+                    source_group_descriptor + 0x12) ||
+            processing_joint_count !=
+                *reinterpret_cast<const std::uint16_t*>(
+                    processing_descriptor + 0x00) ||
+            processing_scalar_count !=
+                *reinterpret_cast<const std::uint16_t*>(
+                    processing_descriptor + 0x02) ||
+            processing_lane_count !=
+                *reinterpret_cast<const std::uint8_t*>(
+                    processing_descriptor + 0x04) ||
+            processing_valid_offset !=
+                *reinterpret_cast<const std::uint8_t*>(
+                    processing_descriptor + 0x05) ||
+            processing_first_parameter !=
+                *reinterpret_cast<const std::uint16_t*>(
+                    processing_descriptor + 0x06) ||
+            processing_tail !=
+                *reinterpret_cast<const std::uint16_t*>(
+                    processing_descriptor + 0x08) ||
+            valid_first[0] != valid_bits[0] ||
+            valid_first[1] != valid_bits[1]) {
+            *output = {};
+            return false;
+        }
+        output->valid = true;
+        output->source_group = expected_source_group;
+        output->target_group = static_cast<std::uint8_t>(target_group);
+        output->layout.kind = policy_kind;
+        output->layout.target_group = static_cast<std::uint8_t>(target_group);
+        output->layout.source_group = expected_source_group;
+        output->layout.group_pointer_exact = true;
+        output->layout.processing_pointer_exact = true;
+        output->layout.stable = true;
+        output->layout.group_table_offset = group_table_offset;
+        output->layout.processing_table_offset = processing_table_offset;
+        output->layout.group_first = source_first;
+        output->layout.processing_descriptor_index = processing_ordinal;
+        output->layout.workspace_count = source_workspace_count;
+        output->layout.parameter_count = source_parameter_count;
+        output->layout.processing_joint_count = processing_joint_count;
+        output->layout.processing_scalar_count = processing_scalar_count;
+        output->layout.processing_lane_count = processing_lane_count;
+        output->layout.processing_byte5 = processing_valid_offset;
+        output->layout.processing_first_parameter =
+            processing_first_parameter;
+        output->layout.processing_word8 = processing_tail;
+        output->source_skeleton = source;
+        output->target_skeleton = target;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+bool seh_evaluate_p99_chloe_transfer_joint(
+    const std::byte* row20_record, const std::byte* row157_record,
+    const p99_order::ExpectedJointTransfer& transfer,
+    const P99ChloeTransferArtSkeleton& chloe,
+    const P99ChloeTransferArtSkeleton& nadine,
+    const std::array<std::byte, kP99ChloeTransferRowBytes>& player_base,
+    const std::array<std::byte, kP99ChloeTransferRowBytes>& chloe_additive,
+    std::array<std::byte, kP99ChloeTransferRowBytes>* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (row20_record == nullptr || row157_record == nullptr ||
+            !chloe.valid || !nadine.valid ||
+            readable_bytes(row20_record) <
+                p99_order::kRuntimeRetargetRecordStride ||
+            readable_bytes(row157_record) <
+                p99_order::kRuntimeRetargetRecordStride) {
+            return false;
+        }
+
+        // The retarget registry and skeleton resources are not pinned across
+        // this value construction.  Snapshot every native operand twice around
+        // a full fence and use only the stable local copies below.  This keeps a
+        // concurrent registry rebuild/logout from turning a readability check
+        // into a stale mapped pointer during either synchronous native helper.
+        std::array<std::byte, p99_order::kRuntimeRetargetRecordStride>
+            row20_first{};
+        std::array<std::byte, p99_order::kRuntimeRetargetRecordStride>
+            row20_stable{};
+        std::array<std::byte, p99_order::kRuntimeRetargetRecordStride>
+            row157_first{};
+        std::array<std::byte, p99_order::kRuntimeRetargetRecordStride>
+            row157_stable{};
+        std::memcpy(row20_first.data(), row20_record, row20_first.size());
+        std::memcpy(row157_first.data(), row157_record, row157_first.size());
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+        std::memcpy(row20_stable.data(), row20_record, row20_stable.size());
+        std::memcpy(row157_stable.data(), row157_record, row157_stable.size());
+        if (std::memcmp(row20_first.data(), row20_stable.data(),
+                        row20_first.size()) != 0 ||
+            std::memcmp(row157_first.data(), row157_stable.data(),
+                        row157_first.size()) != 0) {
+            return false;
+        }
+        const std::byte* const row20 = row20_stable.data();
+        const std::byte* const row157 = row157_stable.data();
+        const std::uint16_t row20_reference_index =
+            *reinterpret_cast<const std::uint16_t*>(row20 + 0x2A);
+        const std::uint16_t row157_reference_index =
+            *reinterpret_cast<const std::uint16_t*>(row157 + 0x2A);
+        const std::uint16_t row20_mode =
+            *reinterpret_cast<const std::uint16_t*>(row20 + 0x2C);
+        const std::uint16_t row157_mode =
+            *reinterpret_cast<const std::uint16_t*>(row157 + 0x2C);
+        std::array<std::byte, 10> row20_fields{};
+        std::array<std::byte, 10> row157_fields{};
+        std::memcpy(row20_fields.data(), row20 + 0x24,
+                    row20_fields.size());
+        std::memcpy(row157_fields.data(), row157 + 0x24,
+                    row157_fields.size());
+        if (*reinterpret_cast<const std::uint16_t*>(
+                row20 + 0x24) != transfer.player_global ||
+            *reinterpret_cast<const std::uint16_t*>(
+                row20 + 0x26) != transfer.player_global ||
+            *reinterpret_cast<const std::uint16_t*>(
+                row20 + 0x28) != transfer.chloe_global ||
+            row20_reference_index != transfer.chloe_global ||
+            row20_mode != transfer.mode ||
+            *reinterpret_cast<const std::uint16_t*>(
+                row157 + 0x24) != transfer.chloe_global ||
+            *reinterpret_cast<const std::uint16_t*>(
+                row157 + 0x26) != transfer.chloe_global ||
+            *reinterpret_cast<const std::uint16_t*>(
+                row157 + 0x28) != transfer.nadine_global ||
+            row157_reference_index != transfer.nadine_global ||
+            row157_mode != transfer.mode || row20_mode > 3 ||
+            row157_mode > 3 ||
+            row20_reference_index >= chloe.joint_count ||
+            row157_reference_index >= nadine.joint_count) {
+            return false;
+        }
+        const auto do_joint =
+            reinterpret_cast<P99ChloeTransferDoJointFunction>(
+                g_module + kRetargetPluginDoJointRetargetRva);
+        const auto blend = reinterpret_cast<P99ChloeTransferBlendFunction>(
+            g_module + kAnimJointParamsBlendTransformsByValidBitsRva);
+        alignas(16) std::array<std::byte,
+            kP99ChloeTransferBlendBlobBytes> left{};
+        alignas(16) std::array<std::byte,
+            kP99ChloeTransferBlendBlobBytes> right{};
+        std::array<std::byte, kP99ChloeTransferRowBytes> chloe_base{};
+        std::array<std::byte, kP99ChloeTransferRowBytes> nadine_output{};
+        const auto* const chloe_reference = chloe.reference_pose +
+            static_cast<std::size_t>(row20_reference_index) *
+                kP99ChloeTransferRowBytes;
+        const auto* const nadine_reference = nadine.reference_pose +
+            static_cast<std::size_t>(row157_reference_index) *
+                kP99ChloeTransferRowBytes;
+        if (readable_bytes(chloe_reference) < kP99ChloeTransferRowBytes ||
+            readable_bytes(nadine_reference) < kP99ChloeTransferRowBytes) {
+            return false;
+        }
+        std::array<std::byte, kP99ChloeTransferRowBytes>
+            chloe_reference_first{};
+        std::array<std::byte, kP99ChloeTransferRowBytes>
+            chloe_reference_stable{};
+        std::array<std::byte, kP99ChloeTransferRowBytes>
+            nadine_reference_first{};
+        std::array<std::byte, kP99ChloeTransferRowBytes>
+            nadine_reference_stable{};
+        std::memcpy(chloe_reference_first.data(), chloe_reference,
+                    chloe_reference_first.size());
+        std::memcpy(nadine_reference_first.data(), nadine_reference,
+                    nadine_reference_first.size());
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+        std::memcpy(chloe_reference_stable.data(), chloe_reference,
+                    chloe_reference_stable.size());
+        std::memcpy(nadine_reference_stable.data(), nadine_reference,
+                    nadine_reference_stable.size());
+        if (std::memcmp(chloe_reference_first.data(),
+                        chloe_reference_stable.data(),
+                        chloe_reference_first.size()) != 0 ||
+            std::memcmp(nadine_reference_first.data(),
+                        nadine_reference_stable.data(),
+                        nadine_reference_first.size()) != 0 ||
+            !p99_chloe_transfer_row_valid(chloe_reference_stable.data()) ||
+            !p99_chloe_transfer_row_valid(nadine_reference_stable.data())) {
+            return false;
+        }
+        if (!do_joint(row20, player_base.data(),
+                      chloe_reference_stable.data(),
+                      false, chloe_base.data()) ||
+            !p99_chloe_transfer_row_valid(chloe_base.data())) {
+            return false;
+        }
+        std::memcpy(left.data(), chloe_base.data(), chloe_base.size());
+        std::memcpy(
+            right.data(), chloe_additive.data(), chloe_additive.size());
+        *reinterpret_cast<std::uint64_t*>(left.data() + 96) =
+            0x8000000000000000ull;
+        *reinterpret_cast<std::uint64_t*>(right.data() + 96) =
+            0x8000000000000000ull;
+        blend(kP99ChloeTransferBlendEncoding, left.data(), right.data(),
+              1.0F, 0, nullptr);
+        if (*reinterpret_cast<const std::uint64_t*>(left.data() + 96) !=
+                0x8000000000000000ull ||
+            *reinterpret_cast<const std::uint64_t*>(left.data() + 104) != 0 ||
+            !p99_chloe_transfer_row_valid(left.data()) ||
+            !do_joint(row157, left.data(), nadine_reference_stable.data(), false,
+                      nadine_output.data()) ||
+            !p99_chloe_transfer_row_valid(nadine_output.data()) ||
+            std::memcmp(row20_fields.data(), row20 + 0x24,
+                        row20_fields.size()) != 0 ||
+            std::memcmp(row157_fields.data(), row157 + 0x24,
+                        row157_fields.size()) != 0) {
+            return false;
+        }
+        *output = nadine_output;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+bool evaluate_p99_chloe_transfer_group(
+    const P99ChloeTransferEntry& row20,
+    const P99ChloeTransferEntry& row157,
+    const P99ChloeTransferSourceRows& player_base,
+    const P99ChloeTransferSourceRows& chloe_additive,
+    std::uint32_t target_group,
+    P99ChloeTransferGroupResult* output) {
+    if (output == nullptr || !row20.valid || !row157.valid ||
+        !player_base.valid || !chloe_additive.valid ||
+        player_base.target_group != target_group ||
+        chloe_additive.target_group != target_group ||
+        !p99_chloe_transfer_art_skeleton_equal(
+            player_base.target_skeleton,
+            chloe_additive.target_skeleton)) {
+        return false;
+    }
+    *output = {};
+    output->target_group = static_cast<std::uint8_t>(target_group);
+    output->player_base = player_base;
+    output->chloe_additive = chloe_additive;
+    std::size_t selected = 0;
+    for (std::size_t index = 0;
+         index < p99_order::kExpectedTransfers.size(); ++index) {
+        const auto& transfer = p99_order::kExpectedTransfers[index];
+        if (transfer.nadine_group != target_group) {
+            continue;
+        }
+        if (player_base.present[index] != 1 ||
+            chloe_additive.present[index] != 1) {
+            *output = {};
+            return false;
+        }
+        const std::byte* const first_record =
+            p99_chloe_transfer_native_record(
+                row20, transfer.player_global, transfer.chloe_global);
+        const std::byte* const second_record =
+            p99_chloe_transfer_native_record(
+                row157, transfer.chloe_global, transfer.nadine_global);
+        if (first_record == nullptr || second_record == nullptr ||
+            !seh_evaluate_p99_chloe_transfer_joint(
+                first_record, second_record, transfer,
+                chloe_additive.source_skeleton,
+                player_base.target_skeleton, player_base.rows[index],
+                chloe_additive.rows[index], &output->rows[index])) {
+            *output = {};
+            return false;
+        }
+        output->present[index] = 1;
+        output->chloe_composite_mask[transfer.chloe_global / 64u] |=
+            std::uint64_t{1} << (transfer.chloe_global % 64u);
+        output->nadine_output_mask[transfer.nadine_global / 64u] |=
+            std::uint64_t{1} << (transfer.nadine_global % 64u);
+        ++selected;
+    }
+    const std::size_t expected = target_group == 0
+        ? p99_order::kExpectedNadineGroup0Targets.size()
+        : p99_order::kExpectedNadineRightFingerTargets.size();
+    output->valid = selected == expected;
+    return output->valid;
+}
+
+bool seh_select_p99_chloe_transfer_epoch(
+    void* job, P99ChloeTransferEpoch* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (!kEnableLegacyNadineP99ChloeGripTransfer ||
+            !g_p99_chloe_transfer_ready.load(std::memory_order_acquire) ||
+            !g_state_net.enabled || !g_net_role_b || g_module == 0 ||
+            job == nullptr || readable_bytes(job) < 0x10) {
+            return false;
+        }
+        auto* const fg = *reinterpret_cast<std::byte* const*>(
+            static_cast<const std::byte*>(job) + 0x08);
+        void* const player = retained_player_object(0);
+        IdleArmPoseOwnerScope owner{};
+        if (fg == nullptr || readable_bytes(fg) <
+                kFgAnimDataJointCacheLocalPoseOffset + sizeof(void*) ||
+            *reinterpret_cast<const std::uint8_t*>(fg + 0x06) != 2 ||
+            !seh_resolve_idle_arm_pose_owner_scope(player, 0, &owner) ||
+            !owner.valid || owner.player != player ||
+            owner.fg_anim_data != fg || owner.controller_state !=
+                p99_order::kWeaponOutState ||
+            owner.weapon_art_id != p99_order::kP99ArtId ||
+            owner.weapon == nullptr || owner.local_pose == nullptr ||
+            readable_bytes(owner.local_pose) <
+                static_cast<std::size_t>(142) *
+                    kP99ChloeTransferRowBytes) {
+            return false;
+        }
+        auto* const target_skeleton =
+            *reinterpret_cast<void* const*>(
+                fg + kFgAnimDataSkeletonOffset);
+        P99ChloeTransferArtSkeleton nadine{};
+        if (target_skeleton == nullptr ||
+            !seh_capture_p99_chloe_transfer_art_skeleton(
+                target_skeleton, p99_order::kNadineDatabaseId,
+                p99_order::kNadineSkeletonId, 580, 8, &nadine)) {
+            return false;
+        }
+        const std::uint32_t registry_epoch_before_resolve =
+            *reinterpret_cast<const std::uint32_t*>(
+                g_module + kAnimMasterTableArtGroupRegistryEpochRva);
+        if (registry_epoch_before_resolve == 0) {
+            return false;
+        }
+        void* const base_clip = seh_resolve_exact_animation_clip(
+            p99_order::kPlayerDatabaseId, p99_order::kPlayerSkeletonId,
+            p99_order::kPlayerBaseClipId);
+        void* const additive_clip = seh_resolve_exact_animation_clip(
+            p99_order::kChloeDatabaseId, p99_order::kChloeSkeletonId,
+            p99_order::kChloeAdditiveClipId);
+        if (base_clip == nullptr || additive_clip == nullptr ||
+            base_clip == additive_clip ||
+            !seh_p99_chloe_transfer_clip_metadata_exact(
+                base_clip, p99_order::kPlayerDatabaseId,
+                p99_order::kPlayerSkeletonId, 0x0000) ||
+            !seh_p99_chloe_transfer_clip_metadata_exact(
+                additive_clip, p99_order::kChloeDatabaseId,
+                p99_order::kChloeSkeletonId, 0x0002)) {
+            return false;
+        }
+        const std::uint32_t registry_epoch =
+            *reinterpret_cast<const std::uint32_t*>(
+                g_module + kAnimMasterTableArtGroupRegistryEpochRva);
+        const std::uint32_t entry_count =
+            *reinterpret_cast<const std::uint32_t*>(
+                g_module + kSkelTableRetargetEntryCountRva);
+        auto* const table = reinterpret_cast<std::byte*>(
+            g_module + kSkelTableRetargetEntriesRva);
+        if (registry_epoch != registry_epoch_before_resolve ||
+            entry_count <= 157 ||
+            entry_count > 4096 ||
+            readable_bytes(table) <
+                static_cast<std::size_t>(entry_count) * 0x40) {
+            return false;
+        }
+        void* row124 = nullptr;
+        const auto find_entry =
+            reinterpret_cast<P99ChloeTransferFindEntryFunction>(
+                g_module + kSkelTableFindRetargetEntryRva);
+        void* const row20 = table + 20 * 0x40;
+        void* const row157 = table + 157 * 0x40;
+        if (!seh_validate_p99_chloe_transfer_row124(&row124) ||
+            find_entry(p99_order::kPlayerDatabaseId,
+                       p99_order::kChloeDatabaseId) != row20 ||
+            find_entry(p99_order::kChloeDatabaseId,
+                       p99_order::kNadineDatabaseId) != row157 ||
+            registry_epoch != *reinterpret_cast<const std::uint32_t*>(
+                g_module + kAnimMasterTableArtGroupRegistryEpochRva)) {
+            return false;
+        }
+        output->active = true;
+        output->valid = true;
+        output->depth = 1;
+        output->nonce = g_p99_chloe_transfer_nonce.fetch_add(
+            1, std::memory_order_relaxed) + 1;
+        output->job = job;
+        output->player = player;
+        output->fg_anim_data = fg;
+        output->local_pose = owner.local_pose;
+        output->target_skeleton = target_skeleton;
+        output->weapon = owner.weapon;
+        output->base_clip = base_clip;
+        output->additive_clip = additive_clip;
+        output->player_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(player) +
+                kGameObjectRuntimeIdOffset);
+        output->weapon_runtime_id =
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(owner.weapon) +
+                kGameObjectRuntimeIdOffset);
+        output->registry_epoch = registry_epoch;
+        output->row20_entry = row20;
+        output->row124_entry = row124;
+        output->row157_entry = row157;
+        return output->player_runtime_id != 0 &&
+            output->weapon_runtime_id != 0 &&
+            p99_chloe_transfer_art_skeleton_equal(nadine, nadine);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
+void* __fastcall hooked_p99_chloe_transfer_retarget(
+    void* clip, float phase, void* source_skeleton, void* target_skeleton,
+    int group, void* retarget_entry, void** output_pose,
+    void** output_valid_bits) {
+    const auto original = g_original_p99_chloe_transfer_retarget;
+    if (original == nullptr) {
+        return nullptr;
+    }
+    const P99ChloeTransferRetargetTls previous =
+        g_p99_chloe_transfer_retarget_tls;
+    g_p99_chloe_transfer_retarget_tls = {};
+    auto& process = g_p99_chloe_transfer_process_tls;
+    auto& epoch = g_p99_chloe_transfer_epoch;
+    if (previous.active) {
+        process.ambiguous = true;
+    } else if (process.active && epoch.active && epoch.valid &&
+               !epoch.ambiguous && process.nonce == epoch.nonce &&
+               group >= 0 && static_cast<std::uint32_t>(group) ==
+                   process.target_group &&
+               (group == 0 || group == 1) && phase == 0.0F &&
+               target_skeleton == epoch.target_skeleton) {
+        P99ChloeTransferSourceKind kind =
+            P99ChloeTransferSourceKind::kNone;
+        bool clip_metadata_exact = false;
+        if (clip == epoch.base_clip &&
+            retarget_entry == epoch.row124_entry) {
+            kind = P99ChloeTransferSourceKind::kPlayerBase;
+            clip_metadata_exact =
+                seh_p99_chloe_transfer_clip_metadata_exact(
+                    clip, p99_order::kPlayerDatabaseId,
+                    p99_order::kPlayerSkeletonId, 0x0000);
+            process.base_clip_metadata_exact = clip_metadata_exact;
+            if (++process.base_retarget_calls != 1) {
+                process.ambiguous = true;
+            }
+        } else if (clip == epoch.additive_clip &&
+                   retarget_entry == epoch.row157_entry) {
+            kind = P99ChloeTransferSourceKind::kChloeAdditive;
+            clip_metadata_exact =
+                seh_p99_chloe_transfer_clip_metadata_exact(
+                    clip, p99_order::kChloeDatabaseId,
+                    p99_order::kChloeSkeletonId, 0x0002);
+            process.additive_clip_metadata_exact = clip_metadata_exact;
+            if (++process.additive_retarget_calls != 1) {
+                process.ambiguous = true;
+            }
+        }
+        if (kind != P99ChloeTransferSourceKind::kNone &&
+            !clip_metadata_exact) {
+            process.ambiguous = true;
+        }
+        if (kind != P99ChloeTransferSourceKind::kNone &&
+            !process.ambiguous) {
+            g_p99_chloe_transfer_retarget_tls.active = true;
+            g_p99_chloe_transfer_retarget_tls.kind = kind;
+            g_p99_chloe_transfer_retarget_tls.nonce = epoch.nonce;
+            g_p99_chloe_transfer_retarget_tls.target_group =
+                process.target_group;
+            g_p99_chloe_transfer_retarget_tls.retarget_entry =
+                retarget_entry;
+            g_p99_chloe_transfer_retarget_tls.source_skeleton =
+                source_skeleton;
+            g_p99_chloe_transfer_retarget_tls.target_skeleton =
+                target_skeleton;
+        }
+    }
+    void* const result = original(
+        clip, phase, source_skeleton, target_skeleton, group,
+        retarget_entry, output_pose, output_valid_bits);
+    g_p99_chloe_transfer_retarget_tls = previous;
+    return result;
+}
+
+std::int64_t __fastcall hooked_p99_chloe_transfer_add(
+    void* work_buffer, void* segment_context, void* retarget_entry,
+    void* source_program, void* source_skeleton, void* target_skeleton,
+    void* output_pose, void* output_valid_bits) {
+    const auto original = g_original_p99_chloe_transfer_add;
+    if (original == nullptr) {
+        return 0;
+    }
+    const P99ChloeTransferRetargetTls nested =
+        g_p99_chloe_transfer_retarget_tls;
+    auto& process = g_p99_chloe_transfer_process_tls;
+    auto& epoch = g_p99_chloe_transfer_epoch;
+    if (nested.active && process.active && epoch.active && epoch.valid &&
+        nested.nonce == process.nonce && nested.nonce == epoch.nonce &&
+        nested.target_group == process.target_group &&
+        retarget_entry == nested.retarget_entry &&
+        source_skeleton == nested.source_skeleton &&
+        target_skeleton == nested.target_skeleton) {
+        P99ChloeTransferSourceRows captured{};
+        if (!seh_capture_p99_chloe_transfer_source_rows(
+                nested.kind, nested.target_group, segment_context,
+                source_skeleton, target_skeleton, &captured)) {
+            process.ambiguous = true;
+        } else {
+            auto& destination = nested.kind ==
+                    P99ChloeTransferSourceKind::kPlayerBase
+                ? process.player_base
+                : process.chloe_additive;
+            if (destination.valid) {
+                process.ambiguous = true;
+            } else {
+                destination = captured;
+            }
+        }
+    }
+    return original(
+        work_buffer, segment_context, retarget_entry, source_program,
+        source_skeleton, target_skeleton, output_pose, output_valid_bits);
+}
+
+std::uint32_t __fastcall hooked_p99_chloe_transfer_process(
+    const std::uint32_t* commands, std::uint32_t command_word_count,
+    const void* context, std::uint32_t processing_group,
+    const void* callback_a5, const void* callback_a6,
+    const void* callback_a7) {
+    const auto original = g_original_p99_chloe_transfer_process;
+    if (original == nullptr) {
+        return 0;
+    }
+    auto& tls = g_p99_chloe_transfer_process_tls;
+    if (tls.active) {
+        const P99ChloeTransferProcessTls previous = tls;
+        tls = {};
+        const std::uint32_t nested_result = original(
+            commands, command_word_count, context, processing_group,
+            callback_a5, callback_a6, callback_a7);
+        tls = previous;
+        tls.ambiguous = true;
+        return nested_result;
+    }
+    auto& epoch = g_p99_chloe_transfer_epoch;
+    P99ChloeTransferCommandPlan first{};
+    P99ChloeTransferCommandPlan second{};
+    const bool candidate = epoch.active && epoch.valid &&
+        !epoch.ambiguous && (processing_group == 0 || processing_group == 1) &&
+        seh_parse_p99_chloe_transfer_commands(
+            commands, command_word_count, processing_group, epoch.base_clip,
+            epoch.additive_clip, &first) &&
+        seh_parse_p99_chloe_transfer_commands(
+            commands, command_word_count, processing_group, epoch.base_clip,
+            epoch.additive_clip, &second) &&
+        p99_chloe_transfer_command_plan_equal(first, second);
+    if (candidate) {
+        tls = {};
+        tls.active = true;
+        tls.nonce = epoch.nonce;
+        tls.target_group = processing_group;
+        tls.plan = first;
+    }
+    const std::uint32_t result = original(
+        commands, command_word_count, context, processing_group,
+        callback_a5, callback_a6, callback_a7);
+    if (!candidate) {
+        return result;
+    }
+    P99ChloeTransferCommandPlan after{};
+    const bool immutable_after_stock =
+        seh_parse_p99_chloe_transfer_commands(
+            commands, command_word_count, processing_group, epoch.base_clip,
+            epoch.additive_clip, &after) &&
+        p99_chloe_transfer_command_plan_equal(first, after);
+    const P99ChloeTransferProcessTls completed = tls;
+    tls = {};
+    if (!immutable_after_stock || completed.ambiguous ||
+        completed.base_retarget_calls != 1 ||
+        completed.additive_retarget_calls != 1 ||
+        !completed.base_clip_metadata_exact ||
+        !completed.additive_clip_metadata_exact ||
+        !completed.player_base.valid ||
+        !completed.chloe_additive.valid ||
+        completed.nonce != epoch.nonce || epoch.ambiguous) {
+        epoch.ambiguous = true;
+        return result;
+    }
+
+    P99ChloeTransferEntry row20{};
+    P99ChloeTransferEntry row157{};
+    if (!seh_capture_p99_chloe_transfer_entry(
+            20, p99_order::kExpectedRow20,
+            completed.player_base.source_skeleton,
+            completed.chloe_additive.source_skeleton, &row20) ||
+        !seh_capture_p99_chloe_transfer_entry(
+            157, p99_order::kExpectedRow157,
+            completed.chloe_additive.source_skeleton,
+            completed.player_base.target_skeleton, &row157) ||
+        row20.entry != epoch.row20_entry ||
+        row157.entry != epoch.row157_entry ||
+        !seh_p99_chloe_transfer_table_identity(
+            epoch.registry_epoch, epoch.row20_entry, epoch.row124_entry,
+            epoch.row157_entry)) {
+        epoch.ambiguous = true;
+        return result;
+    }
+    if (epoch.entries_captured) {
+        if (!p99_chloe_transfer_entry_equal(epoch.row20, row20) ||
+            !p99_chloe_transfer_entry_equal(epoch.row157, row157)) {
+            epoch.ambiguous = true;
+            return result;
+        }
+    } else {
+        epoch.row20 = row20;
+        epoch.row157 = row157;
+        epoch.entries_captured = true;
+    }
+    P99ChloeTransferGroupResult group_result{};
+    if (!evaluate_p99_chloe_transfer_group(
+            row20, row157, completed.player_base,
+            completed.chloe_additive, processing_group, &group_result) ||
+        epoch.groups[processing_group].valid) {
+        epoch.ambiguous = true;
+        return result;
+    }
+    epoch.groups[processing_group] = group_result;
+    epoch.clip_metadata_group_mask |=
+        static_cast<std::uint8_t>(1u << processing_group);
+    return result;
+}
+
+bool seh_p99_chloe_transfer_epoch_owner_still_exact(
+    const P99ChloeTransferEpoch& epoch) {
+    __try {
+        IdleArmPoseOwnerScope owner{};
+        if (!epoch.active || !epoch.valid || epoch.ambiguous ||
+            epoch.depth != 1 || retained_player_object(0) != epoch.player ||
+            !seh_resolve_idle_arm_pose_owner_scope(
+                epoch.player, 0, &owner) ||
+            !owner.valid || owner.player != epoch.player ||
+            owner.fg_anim_data != epoch.fg_anim_data ||
+            owner.local_pose != epoch.local_pose ||
+            owner.weapon != epoch.weapon ||
+            owner.weapon_art_id != p99_order::kP99ArtId ||
+            owner.controller_state != p99_order::kWeaponOutState ||
+            readable_bytes(epoch.local_pose) <
+                static_cast<std::size_t>(142) *
+                    kP99ChloeTransferRowBytes ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(epoch.player) +
+                kPlayerFgAnimDataOffset) != epoch.fg_anim_data ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(epoch.fg_anim_data) +
+                kFgAnimDataSkeletonOffset) != epoch.target_skeleton ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(epoch.fg_anim_data) +
+                kFgAnimDataJointCacheLocalPoseOffset) != epoch.local_pose ||
+            *reinterpret_cast<const std::uint8_t*>(
+                static_cast<const std::byte*>(epoch.fg_anim_data) + 0x06) !=
+                2 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(epoch.player) +
+                kGameObjectRuntimeIdOffset) != epoch.player_runtime_id ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(epoch.weapon) +
+                kGameObjectRuntimeIdOffset) != epoch.weapon_runtime_id) {
+            return false;
+        }
+        P99ChloeTransferArtSkeleton target{};
+        return seh_capture_p99_chloe_transfer_art_skeleton(
+                   epoch.target_skeleton, p99_order::kNadineDatabaseId,
+                   p99_order::kNadineSkeletonId, 580, 8, &target) &&
+            seh_p99_chloe_transfer_table_identity(
+                epoch.registry_epoch, epoch.row20_entry,
+                epoch.row124_entry, epoch.row157_entry);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seal_p99_chloe_transfer_ticket(
+    const P99ChloeTransferEpoch& epoch,
+    P99ChloeTransferTicket* output) {
+    if (output == nullptr || !epoch.entries_captured ||
+        epoch.clip_metadata_group_mask != 0x03u ||
+        !epoch.groups[0].valid || !epoch.groups[1].valid ||
+        !seh_p99_chloe_transfer_epoch_owner_still_exact(epoch)) {
+        return false;
+    }
+    *output = {};
+    const auto& group0 = epoch.groups[0];
+    const auto& group1 = epoch.groups[1];
+    if (!p99_chloe_transfer_art_skeleton_equal(
+            group0.player_base.source_skeleton,
+            group1.player_base.source_skeleton) ||
+        !p99_chloe_transfer_art_skeleton_equal(
+            group0.chloe_additive.source_skeleton,
+            group1.chloe_additive.source_skeleton) ||
+        !p99_chloe_transfer_art_skeleton_equal(
+            group0.player_base.target_skeleton,
+            group1.player_base.target_skeleton) ||
+        !p99_chloe_transfer_art_skeleton_equal(
+            group0.player_base.target_skeleton,
+            group0.chloe_additive.target_skeleton) ||
+        !p99_chloe_transfer_art_skeleton_equal(
+            group1.player_base.target_skeleton,
+            group1.chloe_additive.target_skeleton)) {
+        return false;
+    }
+
+    std::array<std::uint64_t, p99_order::kGlobalMaskWordCount>
+        player_mask{};
+    std::array<std::uint64_t, p99_order::kGlobalMaskWordCount>
+        additive_mask{};
+    std::array<std::uint64_t, p99_order::kGlobalMaskWordCount>
+        composite_mask{};
+    std::array<std::uint64_t, p99_order::kGlobalMaskWordCount>
+        output_mask{};
+    for (std::size_t word = 0; word < player_mask.size(); ++word) {
+        player_mask[word] = group0.player_base.valid_mask[word] |
+            group1.player_base.valid_mask[word];
+        additive_mask[word] = group0.chloe_additive.valid_mask[word] |
+            group1.chloe_additive.valid_mask[word];
+        composite_mask[word] = group0.chloe_composite_mask[word] |
+            group1.chloe_composite_mask[word];
+        output_mask[word] = group0.nadine_output_mask[word] |
+            group1.nadine_output_mask[word];
+    }
+    std::size_t transferred = 0;
+    for (std::size_t index = 0;
+         index < p99_order::kExpectedTransfers.size(); ++index) {
+        const std::uint8_t group =
+            p99_order::kExpectedTransfers[index].nadine_group;
+        const auto& result = epoch.groups[group];
+        if (result.present[index] != 1 ||
+            !p99_chloe_transfer_row_valid(result.rows[index].data())) {
+            return false;
+        }
+        output->rows[index] = result.rows[index];
+        ++transferred;
+    }
+    if (transferred != p99_order::kRequiredJointCount) {
+        return false;
+    }
+
+    constexpr std::array<std::uint8_t, 2> kPlayerGroups{0, 7};
+    constexpr std::array<std::uint8_t, 2> kChloeGroups{0, 2};
+    constexpr std::array<std::uint8_t, 2> kNadineGroups{0, 1};
+    const std::array<p99_order::SourcePoseLayoutEvidence, 2>
+        player_source_layouts{
+            group0.player_base.layout, group1.player_base.layout};
+    const std::array<p99_order::SourcePoseLayoutEvidence, 2>
+        chloe_source_layouts{
+            group0.chloe_additive.layout, group1.chloe_additive.layout};
+    p99_order::TransferEvidence evidence{};
+    evidence.scope.is_role_b = g_net_role_b;
+    evidence.scope.is_retained_local_owner =
+        retained_player_object(0) == epoch.player;
+    evidence.scope.is_legacy_nadine = true;
+    evidence.scope.owner_index = 0;
+    evidence.scope.art_id = p99_order::kP99ArtId;
+    evidence.scope.weapon_state = p99_order::kWeaponOutState;
+    evidence.scope.base_clip_id = p99_order::kPlayerBaseClipId;
+    evidence.scope.additive_clip_id = p99_order::kChloeAdditiveClipId;
+    evidence.scope.blend_mode = p99_order::kRequiredBlendMode;
+    evidence.scope.blend_weight_bits = p99_order::kUnitWeightBits;
+    evidence.scope.base_is_additive = false;
+    evidence.scope.right_is_additive = true;
+    evidence.scope.composite_is_additive = false;
+    evidence.row20.metadata = epoch.row20.metadata;
+    evidence.row20.records = std::span<const
+        p99_order::RetargetRecordMetadata>(
+            epoch.row20.records.data(),
+            epoch.row20.metadata.runtime_record_count);
+    evidence.row157.metadata = epoch.row157.metadata;
+    evidence.row157.records = std::span<const
+        p99_order::RetargetRecordMetadata>(
+            epoch.row157.records.data(),
+            epoch.row157.metadata.runtime_record_count);
+    evidence.player_source_layouts = player_source_layouts;
+    evidence.chloe_source_layouts = chloe_source_layouts;
+    evidence.player_base.skeleton_joint_count = 702;
+    evidence.player_base.groups = kPlayerGroups;
+    evidence.player_base.global_lsb_bits = player_mask;
+    evidence.chloe_additive.skeleton_joint_count = 651;
+    evidence.chloe_additive.groups = kChloeGroups;
+    evidence.chloe_additive.global_lsb_bits = additive_mask;
+    evidence.chloe_composite.skeleton_joint_count = 651;
+    evidence.chloe_composite.groups = kChloeGroups;
+    evidence.chloe_composite.global_lsb_bits = composite_mask;
+    evidence.nadine_output.skeleton_joint_count = 580;
+    evidence.nadine_output.groups = kNadineGroups;
+    evidence.nadine_output.global_lsb_bits = output_mask;
+    const p99_order::Decision decision = p99_order::evaluate(evidence);
+    if (!decision.admitted()) {
+        char reason[96]{};
+        std::snprintf(
+            reason, sizeof(reason), "policy-%u",
+            static_cast<unsigned>(decision.reason));
+        log_p99_chloe_transfer_reject(reason);
+        *output = {};
+        return false;
+    }
+    output->valid = true;
+    output->nonce = epoch.nonce;
+    output->player = epoch.player;
+    output->fg_anim_data = epoch.fg_anim_data;
+    output->local_pose = epoch.local_pose;
+    output->target_skeleton = epoch.target_skeleton;
+    output->weapon = epoch.weapon;
+    output->player_runtime_id = epoch.player_runtime_id;
+    output->weapon_runtime_id = epoch.weapon_runtime_id;
+    output->registry_epoch = epoch.registry_epoch;
+    output->captured_ms = GetTickCount64();
+    return true;
+}
+
+std::int64_t __fastcall hooked_p99_chloe_transfer_perform(void* job) {
+    const auto original = g_original_p99_chloe_transfer_perform;
+    if (original == nullptr) {
+        return 0;
+    }
+    auto& epoch = g_p99_chloe_transfer_epoch;
+    if (epoch.active) {
+        const P99ChloeTransferEpoch previous = epoch;
+        epoch = {};
+        const std::int64_t nested_result = original(job);
+        epoch = previous;
+        epoch.ambiguous = true;
+        ++epoch.depth;
+        return nested_result;
+    }
+    // A top-level Perform is the only producer.  Discard an unconsumed ticket
+    // before considering this frame so it can never authorize a later +0x408.
+    g_p99_chloe_transfer_ticket = {};
+    P99ChloeTransferEpoch selected{};
+    const bool admitted = seh_select_p99_chloe_transfer_epoch(job, &selected);
+    if (admitted) {
+        epoch = selected;
+    }
+    const std::int64_t result = original(job);
+    if (!admitted) {
+        return result;
+    }
+    const P99ChloeTransferEpoch completed = epoch;
+    epoch = {};
+    P99ChloeTransferTicket ticket{};
+    if (!completed.ambiguous && completed.depth == 1 &&
+        seal_p99_chloe_transfer_ticket(completed, &ticket)) {
+        g_p99_chloe_transfer_ticket = ticket;
+    } else {
+        log_p99_chloe_transfer_reject(
+            completed.ambiguous ? "perform-ambiguous" : "perform-incomplete");
+    }
+    return result;
+}
+
+bool seh_preflight_p99_chloe_transfer_commit(
+    void* player, const P99ChloeTransferTicket& ticket,
+    std::array<std::array<std::byte, kP99ChloeTransferRowBytes>,
+               p99_order::kRequiredJointCount>* before) {
+    if (before == nullptr) {
+        return false;
+    }
+    *before = {};
+    __try {
+        const ULONGLONG now = GetTickCount64();
+        IdleArmPoseOwnerScope owner{};
+        if (!ticket.valid || ticket.nonce == 0 || player != ticket.player ||
+            ticket.captured_ms == 0 || now < ticket.captured_ms ||
+            now - ticket.captured_ms > kP99ChloeTransferTicketTtlMs ||
+            retained_player_object(0) != ticket.player ||
+            !seh_resolve_idle_arm_pose_owner_scope(
+                ticket.player, 0, &owner) ||
+            !owner.valid || owner.player != ticket.player ||
+            owner.fg_anim_data != ticket.fg_anim_data ||
+            owner.local_pose != ticket.local_pose ||
+            owner.weapon != ticket.weapon ||
+            owner.weapon_art_id != p99_order::kP99ArtId ||
+            owner.controller_state != p99_order::kWeaponOutState ||
+            readable_bytes(ticket.local_pose) <
+                static_cast<std::size_t>(142) *
+                    kP99ChloeTransferRowBytes ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(ticket.fg_anim_data) +
+                kFgAnimDataSkeletonOffset) != ticket.target_skeleton ||
+            *reinterpret_cast<void* const*>(
+                static_cast<const std::byte*>(ticket.fg_anim_data) +
+                kFgAnimDataJointCacheLocalPoseOffset) != ticket.local_pose ||
+            *reinterpret_cast<const std::uint8_t*>(
+                static_cast<const std::byte*>(ticket.fg_anim_data) + 0x06) !=
+                2 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(ticket.player) +
+                kGameObjectRuntimeIdOffset) != ticket.player_runtime_id ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(ticket.weapon) +
+                kGameObjectRuntimeIdOffset) != ticket.weapon_runtime_id ||
+            !seh_p99_chloe_transfer_table_epoch_only(
+                ticket.registry_epoch)) {
+            return false;
+        }
+        P99ChloeTransferArtSkeleton target{};
+        if (!seh_capture_p99_chloe_transfer_art_skeleton(
+                ticket.target_skeleton, p99_order::kNadineDatabaseId,
+                p99_order::kNadineSkeletonId, 580, 8, &target)) {
+            return false;
+        }
+        for (std::size_t index = 0;
+             index < p99_order::kExpectedTransfers.size(); ++index) {
+            const std::uint16_t joint =
+                p99_order::kExpectedTransfers[index].nadine_global;
+            auto* const destination =
+                static_cast<std::byte*>(ticket.local_pose) +
+                static_cast<std::size_t>(joint) *
+                    kP99ChloeTransferRowBytes;
+            if (!p99_chloe_transfer_row_valid(ticket.rows[index].data()) ||
+                !p99_chloe_transfer_row_valid(destination)) {
+                return false;
+            }
+            std::memcpy((*before)[index].data(), destination,
+                        kP99ChloeTransferRowBytes);
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *before = {};
+        return false;
+    }
+}
+
+bool seh_commit_p99_chloe_transfer_rows(
+    const P99ChloeTransferTicket& ticket) {
+    __try {
+        for (std::size_t index = 0;
+             index < p99_order::kExpectedTransfers.size(); ++index) {
+            const std::uint16_t joint =
+                p99_order::kExpectedTransfers[index].nadine_global;
+            auto* const destination =
+                static_cast<std::byte*>(ticket.local_pose) +
+                static_cast<std::size_t>(joint) *
+                    kP99ChloeTransferRowBytes;
+            std::memcpy(destination, ticket.rows[index].data(),
+                        kP99ChloeTransferRowBytes);
+        }
+        for (std::size_t index = 0;
+             index < p99_order::kExpectedTransfers.size(); ++index) {
+            const std::uint16_t joint =
+                p99_order::kExpectedTransfers[index].nadine_global;
+            const auto* const destination =
+                static_cast<const std::byte*>(ticket.local_pose) +
+                static_cast<std::size_t>(joint) *
+                    kP99ChloeTransferRowBytes;
+            if (std::memcmp(destination, ticket.rows[index].data(),
+                            kP99ChloeTransferRowBytes) != 0) {
+                return false;
+            }
+        }
+        return seh_p99_chloe_transfer_table_epoch_only(
+            ticket.registry_epoch);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+bool seh_rollback_p99_chloe_transfer_rows(
+    const P99ChloeTransferTicket& ticket,
+    const std::array<std::array<std::byte, kP99ChloeTransferRowBytes>,
+                     p99_order::kRequiredJointCount>& before) {
+    __try {
+        if (ticket.local_pose == nullptr ||
+            readable_bytes(ticket.local_pose) <
+                static_cast<std::size_t>(142) *
+                    kP99ChloeTransferRowBytes) {
+            return false;
+        }
+        for (std::size_t index = 0;
+             index < p99_order::kExpectedTransfers.size(); ++index) {
+            const std::uint16_t joint =
+                p99_order::kExpectedTransfers[index].nadine_global;
+            auto* const destination =
+                static_cast<std::byte*>(ticket.local_pose) +
+                static_cast<std::size_t>(joint) *
+                    kP99ChloeTransferRowBytes;
+            std::memcpy(destination, before[index].data(),
+                        kP99ChloeTransferRowBytes);
+        }
+        for (std::size_t index = 0;
+             index < p99_order::kExpectedTransfers.size(); ++index) {
+            const std::uint16_t joint =
+                p99_order::kExpectedTransfers[index].nadine_global;
+            const auto* const destination =
+                static_cast<const std::byte*>(ticket.local_pose) +
+                static_cast<std::size_t>(joint) *
+                    kP99ChloeTransferRowBytes;
+            if (std::memcmp(destination, before[index].data(),
+                            kP99ChloeTransferRowBytes) != 0) {
+                return false;
+            }
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+std::int64_t __fastcall hooked_p99_chloe_transfer_postblend(void* player) {
+    // Consume on entry, even if the virtual target cannot be resolved.  A
+    // malformed call therefore cannot leave authority for another object.
+    const P99ChloeTransferTicket ticket = g_p99_chloe_transfer_ticket;
+    g_p99_chloe_transfer_ticket = {};
+    P99ChloeTransferPostBlendFunction original = nullptr;
+    __try {
+        auto* const vtable = player != nullptr
+            ? *reinterpret_cast<void***>(player)
+            : nullptr;
+        if (vtable != nullptr) {
+            original = reinterpret_cast<P99ChloeTransferPostBlendFunction>(
+                vtable[0x408 / sizeof(void*)]);
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        original = nullptr;
+    }
+    if (original == nullptr) {
+        return 0;
+    }
+    // The exact virtual stock call still runs once before any pose write.
+    const std::int64_t result = original(player);
+    if (!ticket.valid) {
+        return result;
+    }
+    std::array<std::array<std::byte, kP99ChloeTransferRowBytes>,
+               p99_order::kRequiredJointCount> before{};
+    if (!seh_preflight_p99_chloe_transfer_commit(player, ticket, &before)) {
+        log_p99_chloe_transfer_reject("postblend-preflight");
+        return result;
+    }
+    bool committed = seh_commit_p99_chloe_transfer_rows(ticket);
+    std::array<std::array<std::byte, kP99ChloeTransferRowBytes>,
+               p99_order::kRequiredJointCount> after{};
+    committed = committed &&
+        seh_preflight_p99_chloe_transfer_commit(player, ticket, &after);
+    if (committed) {
+        for (std::size_t index = 0; index < after.size(); ++index) {
+            committed = committed && after[index] == ticket.rows[index];
+        }
+    }
+    if (!committed) {
+        const bool rolled_back =
+            seh_rollback_p99_chloe_transfer_rows(ticket, before);
+        log_p99_chloe_transfer_reject(
+            rolled_back ? "commit-readback-rollback" :
+                          "commit-rollback-failed");
+        return result;
+    }
+    static std::atomic<bool> logged{false};
+    if (!logged.exchange(true, std::memory_order_relaxed)) {
+        boot_log_line(
+            "NADINE-P99-CHLOE-ORDER applied=21 groups=0,1 state=2 art=8075397D");
+    }
+    return result;
+}
+
+bool install_legacy_nadine_p99_chloe_grip_transfer() {
+    g_p99_chloe_transfer_ready.store(false, std::memory_order_release);
+    static_assert(
+        (kP99ChloeTransferProcessCallsiteRva >> 12) ==
+            (kAnimManagerPerformAnimBlendCallsiteRva >> 12) &&
+        (kP99ChloeTransferProcessCallsiteRva >> 12) ==
+            (kAnimManagerPlayerPostBlendCallsiteRva >> 12) &&
+        (kP99ChloeTransferProcessCallsiteRva >> 12) !=
+            (kProcessAnimCmdRetargetCallsiteRva >> 12) &&
+        (kP99ChloeTransferProcessCallsiteRva >> 12) !=
+            (kRetargetPostPoseAddCallsiteRva >> 12) &&
+        (kProcessAnimCmdRetargetCallsiteRva >> 12) !=
+            (kRetargetPostPoseAddCallsiteRva >> 12),
+        "P99 Chloe transfer must patch one worker page and two nested pages");
+
+    if (g_enable_aim_case6_probe ||
+        kEnableLegacyNadineMazurAuthoredPairRepair ||
+        kEnableLegacyNadineMazurEmptyTrackEndpointFiller ||
+        kEnableLegacyNadineMazurLateSteadyIkRepair ||
+        kEnableLegacyNadineMazurTransientPostblendReplay ||
+        kEnableLegacyNadineMazurTransientPostblendCensus ||
+        kEnableLegacyNadineMazurStockTransitionCensus ||
+        kEnableLegacyNadineMazurStockPosePipelineCensus ||
+        kEnableLegacyNadineMazurPerformBlendCensus ||
+        kEnableLegacyNadineMazurSteadyHandsOwnerCensus ||
+        kEnableLegacyNadineMazurSteadyHandsCommandCensus ||
+        kEnableLegacyNadineVirtualChloeGripSourceCensus ||
+        kEnableLegacyNadineIdleArmPoseRoundTrip ||
+        kEnableLegacyNadineActiveWeaponGripOverlayRepair ||
+        kEnableLegacyNadinePistolPoseGripRepair ||
+        kEnableLegacyNadineMazurDrawEndpointRepair ||
+        kEnableLegacyNadineWeaponIkGoalRelay ||
+        kEnableLegacyNadineWeaponIkTerminalGoalRelay ||
+        kEnableLegacyNadineWeaponIkFeatherSuppression ||
+        kEnableLegacyNadineMazurRightHandPropRelay ||
+        kEnableLegacyNadineMazurChloeRightHandPropReference) {
+        boot_log_line(
+            "legacy-Nadine P99 Chloe-order transfer SKIPPED (conflicting pose hook)");
+        return false;
+    }
+
+    struct PreparedSite {
+        std::uint8_t* address = nullptr;
+        std::uint8_t* relay = nullptr;
+        std::size_t size = 0;
+        std::array<std::uint8_t, 6> expected{};
+        std::array<std::uint8_t, 6> patch{};
+    };
+    std::array<PreparedSite, 5> sites{};
+    constexpr std::array<std::uint8_t, 5> kExpectedProcess{
+        0xE8, 0x62, 0x70, 0x02, 0x00};
+    constexpr std::array<std::uint8_t, 5> kExpectedPerform{
+        0xE8, 0x56, 0xF9, 0xFF, 0xFF};
+    constexpr std::array<std::uint8_t, 6> kExpectedPostBlend{
+        0xFF, 0x90, 0x08, 0x04, 0x00, 0x00};
+    constexpr std::array<std::uint8_t, 5> kExpectedRetarget{
+        0xE8, 0xF7, 0x12, 0xE8, 0xFF};
+    constexpr std::array<std::uint8_t, 5> kExpectedAdd{
+        0xE8, 0xD1, 0xE6, 0xFF, 0xFF};
+    const auto prepare_plain = [&sites](
+        std::size_t index, std::uintptr_t callsite, std::uintptr_t target,
+        const void* hook) {
+        std::int32_t displacement = 0;
+        if (!prepare_plain_callsite_relay(
+                callsite, target, hook, sites[index].address,
+                sites[index].relay, displacement)) {
+            return false;
+        }
+        sites[index].size = 5;
+        std::memcpy(
+            sites[index].expected.data(), sites[index].address,
+            sites[index].size);
+        sites[index].patch = sites[index].expected;
+        sites[index].patch[0] = 0xE8;
+        std::memcpy(
+            sites[index].patch.data() + 1, &displacement,
+            sizeof(displacement));
+        return true;
+    };
+    const bool plain_ready =
+        prepare_plain(
+            0, kP99ChloeTransferProcessCallsiteRva,
+            kProcessAnimCmdListSegmentRva,
+            reinterpret_cast<const void*>(
+                &hooked_p99_chloe_transfer_process)) &&
+        prepare_plain(
+            1, kAnimManagerPerformAnimBlendCallsiteRva,
+            kAnimManagerPerformAnimBlendRva,
+            reinterpret_cast<const void*>(
+                &hooked_p99_chloe_transfer_perform)) &&
+        prepare_plain(
+            3, kProcessAnimCmdRetargetCallsiteRva,
+            kRetargetAnimUsingBatchMgrRva,
+            reinterpret_cast<const void*>(
+                &hooked_p99_chloe_transfer_retarget)) &&
+        prepare_plain(
+            4, kRetargetPostPoseAddCallsiteRva,
+            kRetargetPluginAddJointRetargetCommandsRva,
+            reinterpret_cast<const void*>(
+                &hooked_p99_chloe_transfer_add));
+    if (plain_ready) {
+        sites[2].size = 6;
+        sites[2].expected = kExpectedPostBlend;
+        if (!prepare_six_byte_indirect_callsite_relay(
+                kAnimManagerPlayerPostBlendCallsiteRva,
+                kExpectedPostBlend,
+                reinterpret_cast<const void*>(
+                    &hooked_p99_chloe_transfer_postblend),
+                sites[2].address, sites[2].relay, sites[2].patch)) {
+            sites[2].address = nullptr;
+        }
+    }
+    const auto free_relays = [&]() {
+        for (auto& site : sites) {
+            if (site.relay != nullptr) {
+                VirtualFree(site.relay, 0, MEM_RELEASE);
+                site.relay = nullptr;
+            }
+        }
+    };
+    const auto clear_originals = [&]() {
+        g_original_p99_chloe_transfer_perform = nullptr;
+        g_original_p99_chloe_transfer_process = nullptr;
+        g_original_p99_chloe_transfer_retarget = nullptr;
+        g_original_p99_chloe_transfer_add = nullptr;
+    };
+    const bool all_prepared = plain_ready && sites[2].address != nullptr;
+    if (!all_prepared ||
+        std::memcmp(sites[0].expected.data(), kExpectedProcess.data(), 5) != 0 ||
+        std::memcmp(sites[1].expected.data(), kExpectedPerform.data(), 5) != 0 ||
+        std::memcmp(sites[3].expected.data(), kExpectedRetarget.data(), 5) != 0 ||
+        std::memcmp(sites[4].expected.data(), kExpectedAdd.data(), 5) != 0) {
+        free_relays();
+        clear_originals();
+        boot_log_line(
+            "legacy-Nadine P99 Chloe-order transfer SKIPPED (five-site preflight)");
+        return false;
+    }
+
+    g_original_p99_chloe_transfer_process =
+        reinterpret_cast<ProcessAnimCmdListSegmentFunction>(
+            g_module + kProcessAnimCmdListSegmentRva);
+    g_original_p99_chloe_transfer_perform =
+        reinterpret_cast<P99ChloeTransferPerformFunction>(
+            g_module + kAnimManagerPerformAnimBlendRva);
+    g_original_p99_chloe_transfer_retarget =
+        reinterpret_cast<P99ChloeTransferRetargetFunction>(
+            g_module + kRetargetAnimUsingBatchMgrRva);
+    g_original_p99_chloe_transfer_add =
+        reinterpret_cast<P99ChloeTransferAddFunction>(
+            g_module + kRetargetPluginAddJointRetargetCommandsRva);
+
+    SuspendedProcessThreads suspended{};
+    if (!suspend_other_process_threads(suspended, THREAD_GET_CONTEXT)) {
+        free_relays();
+        clear_originals();
+        boot_log_line(
+            "legacy-Nadine P99 Chloe-order transfer SKIPPED (thread suspend)");
+        return false;
+    }
+    const auto all_match = [&](bool patched) {
+        for (const auto& site : sites) {
+            const auto& expected = patched ? site.patch : site.expected;
+            if (site.address == nullptr ||
+                std::memcmp(site.address, expected.data(), site.size) != 0) {
+                return false;
+            }
+        }
+        return true;
+    };
+    bool safe_to_patch = all_match(false);
+    for (std::size_t thread_index = 0;
+         safe_to_patch && thread_index < suspended.count; ++thread_index) {
+        CONTEXT context{};
+        context.ContextFlags = CONTEXT_CONTROL;
+        if (!GetThreadContext(
+                suspended.handles[thread_index], &context)) {
+            safe_to_patch = false;
+            break;
+        }
+        const auto rip = static_cast<std::uintptr_t>(context.Rip);
+        for (const auto& site : sites) {
+            const auto begin = reinterpret_cast<std::uintptr_t>(site.address);
+            if (site.address == nullptr || rip < begin ||
+                rip >= begin + site.size) {
+                continue;
+            }
+            safe_to_patch = false;
+            break;
+        }
+    }
+    if (!safe_to_patch) {
+        resume_suspended_process_threads(suspended);
+        free_relays();
+        clear_originals();
+        boot_log_line(
+            "legacy-Nadine P99 Chloe-order transfer SKIPPED (live callsite/context)");
+        return false;
+    }
+
+    struct ProtectedRegion {
+        std::uint8_t* address = nullptr;
+        std::size_t size = 0;
+        DWORD old_protection = 0;
+        bool changed = false;
+    };
+    std::array<ProtectedRegion, 3> regions{{
+        {sites[0].address,
+         static_cast<std::size_t>((sites[2].address + sites[2].size) -
+                                  sites[0].address),
+         0, false},
+        {sites[3].address, sites[3].size, 0, false},
+        {sites[4].address, sites[4].size, 0, false},
+    }};
+    bool protected_all = true;
+    for (auto& region : regions) {
+        region.changed = VirtualProtect(
+            region.address, region.size, PAGE_EXECUTE_READWRITE,
+            &region.old_protection) != 0;
+        protected_all = protected_all && region.changed;
+    }
+    if (!protected_all) {
+        bool restored = true;
+        for (const auto& region : regions) {
+            if (!region.changed) {
+                continue;
+            }
+            DWORD ignored = 0;
+            restored = VirtualProtect(
+                region.address, region.size, region.old_protection,
+                &ignored) != 0 && restored;
+        }
+        resume_suspended_process_threads(suspended);
+        if (restored) {
+            free_relays();
+            clear_originals();
+        }
+        boot_log_line(
+            restored
+                ? "legacy-Nadine P99 Chloe-order transfer SKIPPED (protect)"
+                : "legacy-Nadine P99 Chloe-order transfer PARTIAL (protection warning; relays retained)");
+        return false;
+    }
+
+    for (const auto& site : sites) {
+        std::memcpy(site.address, site.patch.data(), site.size);
+        FlushInstructionCache(GetCurrentProcess(), site.address, site.size);
+    }
+    bool installed = all_match(true);
+    bool rollback_verified = false;
+    if (!installed) {
+        for (const auto& site : sites) {
+            std::memcpy(site.address, site.expected.data(), site.size);
+            FlushInstructionCache(GetCurrentProcess(), site.address, site.size);
+        }
+        rollback_verified = all_match(false);
+    }
+    bool protections_restored = true;
+    for (const auto& region : regions) {
+        DWORD ignored = 0;
+        protections_restored = VirtualProtect(
+            region.address, region.size, region.old_protection,
+            &ignored) != 0 && protections_restored;
+    }
+    if (installed && !protections_restored) {
+        bool reopened_all = true;
+        for (const auto& region : regions) {
+            DWORD ignored = 0;
+            reopened_all = VirtualProtect(
+                region.address, region.size, PAGE_EXECUTE_READWRITE,
+                &ignored) != 0 && reopened_all;
+        }
+        if (reopened_all) {
+            for (const auto& site : sites) {
+                std::memcpy(site.address, site.expected.data(), site.size);
+                FlushInstructionCache(
+                    GetCurrentProcess(), site.address, site.size);
+            }
+            rollback_verified = all_match(false);
+        }
+        bool rollback_protections_restored = true;
+        for (const auto& region : regions) {
+            DWORD ignored = 0;
+            rollback_protections_restored = VirtualProtect(
+                region.address, region.size, region.old_protection,
+                &ignored) != 0 && rollback_protections_restored;
+        }
+        installed = false;
+        protections_restored = rollback_protections_restored;
+    }
+
+    const bool ready = installed && protections_restored;
+    const bool safe_rollback = !installed && rollback_verified &&
+        protections_restored;
+    if (ready) {
+        g_p99_chloe_transfer_ready.store(true, std::memory_order_release);
+    }
+    resume_suspended_process_threads(suspended);
+    if (safe_rollback) {
+        free_relays();
+        clear_originals();
+    }
+    boot_log_line(
+        ready
+            ? "legacy-Nadine P99 Chloe-order transfer INSTALLED (21 rows; five sites/three pages)"
+            : (safe_rollback
+                   ? "legacy-Nadine P99 Chloe-order transfer SKIPPED (verified rollback)"
+                   : "legacy-Nadine P99 Chloe-order transfer PARTIAL (pass-through; relays retained)"));
+    return ready;
+}
+
+
+
+
+
+
+
+
 void clear_local_nadine_mazur_weapon_palette_census_target() {
     g_nadine_mazur_weapon_palette_census_fg.store(
         0, std::memory_order_release);
@@ -77914,7 +80416,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-27age "
+        "TLL co-op runtime init 2026-08-31agf "
         "(failed AGD pistol pose filter disabled; AGC back profiles retained; holsters/IK/animation clocks unchanged)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
@@ -78425,6 +80927,15 @@ DWORD WINAPI install_hook(void*) {
     log_line("local-player-1 -> Nadine bind hook ENABLED");
     log_line("one-shot split render activation ENABLED after login_state==3");
     const bool state_net_started = start_state_net();
+    if constexpr (kEnableLegacyNadineP99ChloeGripTransfer &&
+                  !kEnableRejectedNadineWeaponRuntimeProbes) {
+        const bool p99_chloe_transfer_ready = state_net_started &&
+            install_legacy_nadine_p99_chloe_grip_transfer();
+        boot_log_line(
+            p99_chloe_transfer_ready
+                ? "legacy-Nadine P99 Chloe-order grip transfer READY (state2; palm/prop/19 fingers)"
+                : "legacy-Nadine P99 Chloe-order grip transfer SKIPPED (combined package)");
+    }
     bool weapon_ik_goal_package_ready = false;
     if constexpr ((kEnablePlayerWeaponIkFeatherGoalCensus ||
                    kEnableLegacyNadineWeaponIkGoalRelay ||

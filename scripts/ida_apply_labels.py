@@ -136,7 +136,10 @@ FUNCTIONS = {
         "at 0x141AE27FE), not a raw quaternion copy; mode 3 copies source "
         "S/T/Q at 0x141AE28F3. Player and Chloe finger/palm maps can therefore "
         "both reach Nadine through their authored retarget entries despite "
-        "different processing-group indices and reference poses.",
+        "different processing-group indices and reference poses. Its third "
+        "argument is one concrete target-reference JointParams row, not the "
+        "reference-pose base: ApplyJointRetargets forms it as whole-reference "
+        "base + 48 * record[+0x2A].",
     ),
     # --- 2026-08-27: node-local pose overlays before clip caching ---
     0x1400EDBC0: (
@@ -3810,7 +3813,11 @@ FUNCTIONS = {
         "Looks up the fixed-stride SkelTable retarget entry for a source/target "
         "ArtItemSkeleton StringId pair. ProcessAnimCmdListSegment case 6 validates "
         "the returned entry's feature word at +0x22 and mapping table at +0x28; "
-        "named-reference sampling consumes its uniform position scale at +0x24.",
+        "named-reference sampling consumes its uniform position scale at +0x24. "
+        "The live table is g_SkelTableRetargetEntries with 0x40-byte entries and "
+        "g_SkelTableRetargetEntryCount elements; entry +0x18/+0x20 holds the "
+        "resolved 0x2E-record pointer/count after unresolved authored names were "
+        "discarded by BuildRetargetEntry.",
     ),
     0x1417CDDC0: (
         "SkelTable_BuildRetargetEntries",
@@ -3823,23 +3830,35 @@ FUNCTIONS = {
         "SkelTable_BuildRetargetEntry",
         "Builds one runtime skeleton-retarget entry from the authored StringId map, "
         "uniform scale and sampled target reference pose. Raw bytes +0x2C/+0x2D gate "
-        "the optional arm/leg IK structures stored at runtime +0x30/+0x38.",
+        "the optional arm/leg IK structures stored at runtime +0x30/+0x38. Each "
+        "resolved 0x2E-byte record stores skeleton-global source/target joints at "
+        "+0x24/+0x28, cumulative flattened source-parameter index at +0x26, complete "
+        "target-reference index at +0x2A, and retarget mode at +0x2C.",
     ),
     0x141936490: (
         "RetargetPlugin_AddJointRetargetCommands",
         "Exact AddRetargetPlugin source assertion in nd-anim-plugins.cpp:181. "
         "Publishes the selected runtime retarget entry and its StringId joint map "
         "into the animation command stream before target-pose evaluation. At the "
-        "nested callsite 0x141937DBA, SegmentContext+0x38 is the target group "
-        "descriptor, +0x40 is the current processing descriptor and +0x50 is the "
-        "evaluated source JointParams base. The source group's 128-bit ValidBits "
-        "follow the source pose at 48*(processing joint count+1).",
+        "nested callsite 0x141937DBA, SegmentContext+0x38 is the source-evaluation "
+        "group descriptor, +0x40 is the current source processing descriptor and "
+        "+0x50 is the evaluated source JointParams base. Group +0x02 selects the "
+        "10-byte processing descriptor; its +0x00/+0x02 words are joint/scalar "
+        "counts and byte +0x04 is the logical lane count, not a row stride. The "
+        "source group's 128-bit MSB-first ValidBits follow the source pose at "
+        "48*(processing joint count+1). The callback's "
+        "target-reference base is the complete ArtItemSkeleton reference pose: "
+        "target+0x40 raw skeleton, then raw + *(u32 *)(raw+0x20). It is not "
+        "pre-offset to the current processing group.",
     ),
     0x141AE2A50: (
         "RetargetPlugin_ApplyJointRetargets",
         "Exact ApplyJointRetargets source assertion. Applies the authored joint map "
-        "and sampled reference-pose correction, then conditionally dispatches the "
-        "separate arm/leg IK stages only when their runtime entry pointers exist.",
+        "and sampled reference-pose correction. For each 0x2E record it indexes "
+        "the group-local source/output buffers by global-first, but indexes the "
+        "complete target reference pose by the u16 at record+0x2A before calling "
+        "DoJointRetarget. It conditionally dispatches the separate arm/leg IK "
+        "stages only when their runtime entry pointers exist.",
     ),
     0x141AE3320: (
         "RetargetPlugin_DoRetargetArmIk",
@@ -12670,6 +12689,20 @@ DATA_NAMES = {
         "LoginArtGroup at 0x1417C9185 and LogoutArtGroup at 0x1417C94A0. "
         "Useful for invalidating resource lookup caches, not a residency pin "
         "or a substitute for the native unload/scheduling lifetime barrier.",
+    ),
+    0x1438401D8: (
+        "g_SkelTableRetargetEntryCount",
+        "Live number of 0x40-byte runtime skeleton-retarget entries in "
+        "g_SkelTableRetargetEntries. SkelTable_FindRetargetEntry reads this "
+        "bound; each entry's resolved record count is a separate u16 at +0x20.",
+    ),
+    0x143864A00: (
+        "g_SkelTableRetargetEntries",
+        "Live fixed-capacity skeleton-retarget entry array, stride 0x40. "
+        "BuildRetargetEntries populates it from skel-retargets.bin; exact P99 "
+        "Chloe-order evaluation uses rows 20 (Player to Chloe) and 157 "
+        "(Chloe to legacy Nadine) only after FindRetargetEntry returns the same "
+        "array element and the art-group registry epoch remains unchanged.",
     ),
     0x14386FD00: (
         "g_AuthoredTransformPointerTable",

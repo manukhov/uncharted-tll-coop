@@ -6375,6 +6375,55 @@ Keep the postblend preservation boundary; replace only its steady content.
       the confirmed Mazur and P99 paths. Do not repair AGA or rerun it as part
       of that placement task.
 
+      USER PRIORITY (2026-08-31): back-placement work is retained, but the
+      immediate task is the visibly wrong drawn-P99 grip. Copy Chloe's authored
+      grip construction rather than guessing individual C39 rotations. Keep
+      Mazur grip/Draw/Put/strap parked and preserve the implemented but visually
+      unvalidated/deferred AGC Type95/M30 back profiles plus the P99 attachment/
+      holster paths.
+
+      STATIC / IMPLEMENTED (`agf`, runtime result pending): the exact shipped
+      order is Player `D350A452` through retarget row 20 into Chloe, then Chloe
+      additive `B8FC6B25` with mode 2 / weight 1, then the completed Chloe pose
+      through row 157 into legacy Nadine. The transfer is a semantic StringId
+      join for right palm, right-hand prop and all 19 right fingers; it is not a
+      raw ordinal copy, and the differing Player/Chloe/Nadine finger order is
+      explicit. Both clips are one-sample; D350 is absolute and B8 additive.
+
+      The runtime admits only role B, retained local Player0, ED25/C39, exact
+      P99 art `8075397D`, controller state 2 and processing groups 0/1. Each
+      group must contain the unique adjacent terminal subtree
+      `cmd6(D350),cmd6(B8),cmd7(mode2,weight1,out0),cmd3`; group 0 then requires
+      exact `4,15,16,17,24(248B1AAE),27,5`, while group 1 requires
+      `4,15,16,17,27,5`. Opaque cmd23/24 callbacks are never modeled as logical
+      lane-word writers. Full `0x2E` native retarget records and 48-byte
+      reference rows are stable double-snapshotted before synchronous native
+      evaluation. The ticket contains only 21 completed values and exact owner
+      identities; Player `+0x408` runs stock once, then all 21 rows commit with
+      readback or all roll back. Five callsites are installed as one suspended-
+      thread transaction with exact bytes, RIP exclusion, three-page protection
+      restore and verified rollback. All older pistol-pose mutations stay off.
+
+      Static evidence quota is met by three independent kinds: actor77 clip/
+      skeleton descriptors and exact ValidBits; live/runtime retarget-entry
+      layout plus two authored semantic maps; and the resolved evaluator/
+      retarget/blend call graph and native ABI. Release CTest is `4/4`; the new
+      pure policy is `12/12`, `4568` Release-safe checks. Independent holistic,
+      native-ABI/lifetime and five-site installer/rollback audits report GO with
+      no open P0/P1. Runtime is authorized only after IDB save/readback, frozen
+      build, commit and push all succeed.
+
+      Written one-copy prediction: on role-B local Nadine, draw the real P99 and
+      remain in WeaponOut/state2. An admitted frame must emit exactly one bounded
+      `NADINE-P99-CHLOE-ORDER applied=21 groups=0,1 state=2 art=8075397D` marker
+      and show Chloe-like palm/prop alignment with all right fingers wrapped on
+      the handle. State4/ADS, Put/holster, Mazur, Type95/M30 and every other art
+      must remain stock for this package. No applied marker is an admission/path
+      failure; marker plus the same wrong grip rejects the Chloe-order hypothesis;
+      a jerk, broken holding animation, attachment/back regression, other-art
+      mutation or rollback failure rejects the implementation. Do not widen the
+      parser after a failed exam.
+
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such
