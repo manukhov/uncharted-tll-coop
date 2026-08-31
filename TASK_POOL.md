@@ -6382,8 +6382,8 @@ Keep the postblend preservation boundary; replace only its steady content.
       unvalidated/deferred AGC Type95/M30 back profiles plus the P99 attachment/
       holster paths.
 
-      STATIC / IMPLEMENTED (`agf`; runtime installed, deliberate steady exam
-      pending below): the exact shipped
+      STATIC / IMPLEMENTED (`agf`; runtime admission REJECTED below): the exact
+      shipped
       order is Player `D350A452` through retarget row 20 into Chloe, then Chloe
       additive `B8FC6B25` with mode 2 / weight 1, then the completed Chloe pose
       through row 157 into legacy Nadine. The transfer is a semantic StringId
@@ -6425,19 +6425,21 @@ Keep the postblend preservation boundary; replace only its steady content.
       mutation or rollback failure rejects the implementation. Do not widen the
       parser after a failed exam.
 
-      RUNTIME INSTALLED / STEADY EXAM PENDING (`agf`, PID 24944): after commit
+      RUNTIME ADMISSION REJECTED (`agf`, PID 24944): after commit
       `6e8f79c` was pushed, preflight found zero `tll.exe`; one-copy launch and
       injection produced exact tag `2026-08-31agf`, role B/local Nadine,
       state-net started, `P99 Chloe-order transfer INSTALLED (21 rows; five
       sites/three pages)` and `grip transfer READY (state2; palm/prop/19
-      fingers)`. Before an explicit steady-hold scenario, the exact P99/state2
-      selector admitted 24 top-level Perform epochs that ended
+      fingers)`. The exact P99/state2 selector admitted 24 top-level Perform
+      epochs that ended
       `reject=perform-incomplete`, followed by diagnostic-only
-      `reject=saturated rows=24`; no `applied=21` marker exists yet. A later P99
+      `reject=saturated rows=24`; no `applied=21` marker appeared during the
+      process lifetime. A later P99
       `FIRE-RELAY ... art=8075397d` independently proves the real art was live,
-      but not that it was held steadily in state2. Saturation suppresses only
-      repeated reject text and cannot disable a later valid ticket/applied
-      marker. Exactly one process remains; the agent sent no gameplay input.
+      while clean process exit proves no later ticket applied after diagnostic
+      saturation. This rejects only the current capture/seal packaging, before
+      any pose write; H-Chloe-order has no visual verdict. Do not relaunch
+      unchanged `agf`. The agent sent no gameplay input.
 
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
