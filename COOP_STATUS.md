@@ -30992,3 +30992,24 @@ gameplay input. Without the unchanged exact
 `NADINE-P99-CHLOE-ORDER applied=21 groups=0,1 state=2 art=8075397D` marker, the
 run has no visual grip verdict. Only that marker authorizes comparing the visible
 hand to Chloe's grip.
+
+### 2026-08-31 RUNTIME BOOT READY (`agh`, PID 25416): awaiting deliberate P99/state2 hold
+
+After static commit `74312b0` was pushed to `origin/master`, preflight found
+zero `tll.exe` processes. `launch_coop.ps1 -Count 1 -SettleSeconds 14` started
+exactly PID 25416 and injected the frozen 875008-byte DLL. The process remains
+responsive and is the only game instance. Its boot log proves the expected
+package rather than a stale binary:
+
+- `TLL co-op runtime init 2026-08-31agh`;
+- `co-op role = B (player 2, local Nadine)`;
+- `state net started: recv :31338 -> peer 127.0.0.1:31339`;
+- `legacy-Nadine P99 Chloe-order transfer INSTALLED (21 rows; five sites/three
+  pages)`;
+- `legacy-Nadine P99 Chloe-order grip transfer READY (state2; palm/prop/19
+  fingers)`.
+
+There is no `NADINE-P99-CHLOE-SEAL` or `NADINE-P99-CHLOE-ORDER` result yet; the
+deliberate real-P99/state2 hold has not been reported complete. This is a boot/
+installation success only, not a classifier result and not a visual grip
+verdict. The agent sent no keyboard, mouse, controller or menu input.

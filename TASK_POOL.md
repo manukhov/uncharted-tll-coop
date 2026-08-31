@@ -6490,6 +6490,14 @@ Keep the postblend preservation boundary; replace only its steady content.
       Silence is packaging failure. There is no visual grip verdict without the
       unchanged exact `applied=21 groups=0,1 state=2 art=8075397D` marker.
 
+      RUNTIME BOOT READY (`agh`, PID 25416; scenario pending): after pushed
+      static commit `74312b0`, preflight found zero games; one-copy launch loaded
+      the frozen DLL and produced exact `2026-08-31agh`, role B/local Nadine,
+      state-net, five-site INSTALLED and grip-transfer READY markers. PID 25416
+      remains the sole responsive game. No seal/order result exists yet because
+      the deliberate real-P99/state2 hold is still pending. This is boot success
+      only, not a classifier or visual verdict. The agent sent no gameplay input.
+
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such
