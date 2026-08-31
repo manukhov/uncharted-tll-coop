@@ -61717,6 +61717,9 @@ struct P99ChloeTransferEpoch {
     void* row20_entry = nullptr;
     void* row124_entry = nullptr;
     void* row157_entry = nullptr;
+    p99_order::PerformBranchEvidence perform_branch{};
+    std::uint8_t process_group_mask = 0;
+    std::uint8_t parser_candidate_group_mask = 0;
     std::uint8_t clip_metadata_group_mask = 0;
     bool entries_captured = false;
     P99ChloeTransferEntry row20{};
@@ -61784,6 +61787,85 @@ void log_p99_chloe_transfer_reject(const char* reason) {
     std::snprintf(
         line, sizeof(line), "NADINE-P99-CHLOE-ORDER reject=%s row=%u",
         reason != nullptr ? reason : "unknown", row);
+    boot_log_line(line);
+}
+
+const char* p99_chloe_seal_stage_name(
+    p99_order::SealIncompleteStage stage) {
+    switch (stage) {
+        case p99_order::SealIncompleteStage::kNone:
+            return "none";
+        case p99_order::SealIncompleteStage::kNoParserCandidate:
+            return "no-parser";
+        case p99_order::SealIncompleteStage::kOneGroupCaptured:
+            return "one-group";
+        case p99_order::SealIncompleteStage::kOwnerTableIdentity:
+            return "owner-table";
+        case p99_order::SealIncompleteStage::kSkeletonIdentity:
+            return "skeleton-identity";
+        case p99_order::SealIncompleteStage::kOtherIncomplete:
+            return "other-incomplete";
+    }
+    return "unknown";
+}
+
+void log_p99_chloe_seal_diagnostic(
+    std::uint64_t nonce,
+    const p99_order::SealDiagnosticEvidence& diagnostic) {
+    static std::atomic<std::uint32_t> count{0};
+    static std::atomic<bool> saturated{false};
+    const std::uint32_t row = count.fetch_add(1, std::memory_order_relaxed);
+    if (row >= 24) {
+        if (!saturated.exchange(true, std::memory_order_relaxed)) {
+            boot_log_line("NADINE-P99-CHLOE-SEAL saturated=24");
+        }
+        return;
+    }
+    const p99_order::PerformBranchDecision branch =
+        p99_order::derive_perform_branch(diagnostic.perform_branch);
+    char line[512]{};
+    std::snprintf(
+        line, sizeof(line),
+        "NADINE-P99-CHLOE-SEAL stage=%s row=%u nonce=%llu proc=0x%02X "
+        "parser=0x%02X captured=0x%02X entries=%u groups=%u/%u "
+        "owner=%u/%u skeleton=%u/%u branch=%u enter=%u main=%u "
+        "prepass=%u split=%u force1=%u limit=%u job0=%u job14=%u "
+        "fg0=0x%08X fg5=%u fg6=%u fg7=0x%02X cb=%u cache=%u "
+        "gpre=%u gsplit=%u ready=%u groupN=%u aux=%u",
+        p99_chloe_seal_stage_name(
+            p99_order::classify_seal_diagnostic(diagnostic)),
+        row, static_cast<unsigned long long>(nonce),
+        static_cast<unsigned>(diagnostic.process_group_mask),
+        static_cast<unsigned>(diagnostic.parser_candidate_group_mask),
+        static_cast<unsigned>(diagnostic.captured_group_mask),
+        diagnostic.entries_captured ? 1u : 0u,
+        diagnostic.group0_valid ? 1u : 0u,
+        diagnostic.group1_valid ? 1u : 0u,
+        diagnostic.owner_checked ? 1u : 0u,
+        diagnostic.owner_exact ? 1u : 0u,
+        diagnostic.skeleton_checked ? 1u : 0u,
+        diagnostic.skeleton_exact ? 1u : 0u,
+        diagnostic.perform_branch.snapshot_valid ? 1u : 0u,
+        branch.can_enter ? 1u : 0u,
+        branch.main_loop ? 1u : 0u,
+        branch.prepass ? 1u : 0u,
+        branch.split_residual ? 1u : 0u,
+        branch.force_one ? 1u : 0u,
+        branch.inline_group_limit,
+        diagnostic.perform_branch.job_object_present ? 1u : 0u,
+        static_cast<unsigned>(diagnostic.perform_branch.job_flags14),
+        diagnostic.perform_branch.fg_flags0,
+        static_cast<unsigned>(diagnostic.perform_branch.fg_enabled5),
+        static_cast<unsigned>(diagnostic.perform_branch.fg_state6),
+        static_cast<unsigned>(diagnostic.perform_branch.fg_flags7),
+        diagnostic.perform_branch.custom_callback_present ? 1u : 0u,
+        diagnostic.perform_branch.cached_skeleton_exact ? 1u : 0u,
+        diagnostic.perform_branch.global_prepass_enabled ? 1u : 0u,
+        diagnostic.perform_branch.global_split_enabled ? 1u : 0u,
+        static_cast<unsigned>(diagnostic.perform_branch.fg_split_ready2d1),
+        diagnostic.perform_branch.target_group_count,
+        static_cast<unsigned>(
+            diagnostic.perform_branch.target_auxiliary_word));
     boot_log_line(line);
 }
 
@@ -62966,6 +63048,67 @@ bool evaluate_p99_chloe_transfer_group(
     return output->valid;
 }
 
+bool seh_capture_p99_chloe_perform_branch(
+    void* job, std::byte* fg, void* target_skeleton,
+    const P99ChloeTransferArtSkeleton& target,
+    p99_order::PerformBranchEvidence* output) {
+    if (output == nullptr) {
+        return false;
+    }
+    *output = {};
+    __try {
+        if (job == nullptr || fg == nullptr || target_skeleton == nullptr ||
+            !target.valid || target.underlying == nullptr ||
+            readable_bytes(job) < 0x15 || readable_bytes(fg) < 0x2D2 ||
+            readable_bytes(target_skeleton) < 0x34 ||
+            readable_bytes(target.underlying) < 0x20) {
+            return false;
+        }
+        p99_order::PerformBranchEvidence snapshot{};
+        const auto* const job_bytes =
+            static_cast<const std::byte*>(job);
+        const auto* const target_bytes =
+            static_cast<const std::byte*>(target_skeleton);
+        snapshot.job_object_present =
+            *reinterpret_cast<void* const*>(job_bytes) != nullptr;
+        snapshot.job_flags14 =
+            *reinterpret_cast<const std::uint8_t*>(job_bytes + 0x14);
+        snapshot.fg_flags0 =
+            *reinterpret_cast<const std::uint32_t*>(fg);
+        snapshot.fg_enabled5 =
+            *reinterpret_cast<const std::uint8_t*>(fg + 0x05);
+        snapshot.fg_state6 =
+            *reinterpret_cast<const std::uint8_t*>(fg + 0x06);
+        snapshot.fg_flags7 =
+            *reinterpret_cast<const std::uint8_t*>(fg + 0x07);
+        snapshot.custom_callback_present =
+            *reinterpret_cast<void* const*>(fg + 0x298) != nullptr;
+        snapshot.cached_skeleton_exact =
+            *reinterpret_cast<void* const*>(fg + 0x1A0) ==
+            target_skeleton;
+        snapshot.global_prepass_enabled =
+            *reinterpret_cast<const std::uint8_t*>(
+                g_module + kAnimManagerForcePrepassGlobalRva) != 0;
+        snapshot.global_split_enabled =
+            *reinterpret_cast<const std::uint8_t*>(
+                g_module + kAnimManagerResidualGroupSplitGlobalRva) != 0;
+        snapshot.fg_split_ready2d1 =
+            *reinterpret_cast<const std::uint8_t*>(fg + 0x2D1);
+        snapshot.target_group_count =
+            *reinterpret_cast<const std::uint32_t*>(
+                target_bytes + 0x30);
+        snapshot.target_auxiliary_word =
+            *reinterpret_cast<const std::uint16_t*>(
+                target.underlying + 0x1E);
+        snapshot.snapshot_valid = true;
+        *output = snapshot;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        return false;
+    }
+}
+
 bool seh_select_p99_chloe_transfer_epoch(
     void* job, P99ChloeTransferEpoch* output) {
     if (output == nullptr) {
@@ -63084,6 +63227,10 @@ bool seh_select_p99_chloe_transfer_epoch(
         output->row20_entry = row20;
         output->row124_entry = row124;
         output->row157_entry = row157;
+        // Diagnostic failure is isolated by the helper and deliberately does
+        // not alter the already-proven admission result.
+        static_cast<void>(seh_capture_p99_chloe_perform_branch(
+            job, fg, target_skeleton, nadine, &output->perform_branch));
         return output->player_runtime_id != 0 &&
             output->weapon_runtime_id != 0 &&
             p99_chloe_transfer_art_skeleton_equal(nadine, nadine);
@@ -63227,6 +63374,12 @@ std::uint32_t __fastcall hooked_p99_chloe_transfer_process(
         return nested_result;
     }
     auto& epoch = g_p99_chloe_transfer_epoch;
+    const bool tracked_group = epoch.active && epoch.valid &&
+        !epoch.ambiguous && processing_group <= 1;
+    if (tracked_group) {
+        epoch.process_group_mask |=
+            static_cast<std::uint8_t>(1u << processing_group);
+    }
     P99ChloeTransferCommandPlan first{};
     P99ChloeTransferCommandPlan second{};
     const bool candidate = epoch.active && epoch.valid &&
@@ -63239,6 +63392,8 @@ std::uint32_t __fastcall hooked_p99_chloe_transfer_process(
             epoch.additive_clip, &second) &&
         p99_chloe_transfer_command_plan_equal(first, second);
     if (candidate) {
+        epoch.parser_candidate_group_mask |=
+            static_cast<std::uint8_t>(1u << processing_group);
         tls = {};
         tls.active = true;
         tls.nonce = epoch.nonce;
@@ -63365,31 +63520,57 @@ bool seh_p99_chloe_transfer_epoch_owner_still_exact(
 
 bool seal_p99_chloe_transfer_ticket(
     const P99ChloeTransferEpoch& epoch,
-    P99ChloeTransferTicket* output) {
+    P99ChloeTransferTicket* output,
+    p99_order::SealDiagnosticEvidence* diagnostic) {
+    if (diagnostic != nullptr) {
+        *diagnostic = {};
+        diagnostic->perform_branch = epoch.perform_branch;
+        diagnostic->process_group_mask = epoch.process_group_mask;
+        diagnostic->parser_candidate_group_mask =
+            epoch.parser_candidate_group_mask;
+        diagnostic->captured_group_mask = epoch.clip_metadata_group_mask;
+        diagnostic->entries_captured = epoch.entries_captured;
+        diagnostic->group0_valid = epoch.groups[0].valid;
+        diagnostic->group1_valid = epoch.groups[1].valid;
+    }
     if (output == nullptr || !epoch.entries_captured ||
         epoch.clip_metadata_group_mask != 0x03u ||
-        !epoch.groups[0].valid || !epoch.groups[1].valid ||
-        !seh_p99_chloe_transfer_epoch_owner_still_exact(epoch)) {
+        !epoch.groups[0].valid || !epoch.groups[1].valid) {
+        return false;
+    }
+    const bool owner_exact =
+        seh_p99_chloe_transfer_epoch_owner_still_exact(epoch);
+    if (diagnostic != nullptr) {
+        diagnostic->owner_checked = true;
+        diagnostic->owner_exact = owner_exact;
+    }
+    if (!owner_exact) {
         return false;
     }
     *output = {};
     const auto& group0 = epoch.groups[0];
     const auto& group1 = epoch.groups[1];
-    if (!p99_chloe_transfer_art_skeleton_equal(
+    const bool skeleton_exact =
+        p99_chloe_transfer_art_skeleton_equal(
             group0.player_base.source_skeleton,
-            group1.player_base.source_skeleton) ||
-        !p99_chloe_transfer_art_skeleton_equal(
+            group1.player_base.source_skeleton) &&
+        p99_chloe_transfer_art_skeleton_equal(
             group0.chloe_additive.source_skeleton,
-            group1.chloe_additive.source_skeleton) ||
-        !p99_chloe_transfer_art_skeleton_equal(
+            group1.chloe_additive.source_skeleton) &&
+        p99_chloe_transfer_art_skeleton_equal(
             group0.player_base.target_skeleton,
-            group1.player_base.target_skeleton) ||
-        !p99_chloe_transfer_art_skeleton_equal(
+            group1.player_base.target_skeleton) &&
+        p99_chloe_transfer_art_skeleton_equal(
             group0.player_base.target_skeleton,
-            group0.chloe_additive.target_skeleton) ||
-        !p99_chloe_transfer_art_skeleton_equal(
+            group0.chloe_additive.target_skeleton) &&
+        p99_chloe_transfer_art_skeleton_equal(
             group1.player_base.target_skeleton,
-            group1.chloe_additive.target_skeleton)) {
+            group1.chloe_additive.target_skeleton);
+    if (diagnostic != nullptr) {
+        diagnostic->skeleton_checked = true;
+        diagnostic->skeleton_exact = skeleton_exact;
+    }
+    if (!skeleton_exact) {
         return false;
     }
 
@@ -63497,6 +63678,9 @@ bool seal_p99_chloe_transfer_ticket(
     output->weapon_runtime_id = epoch.weapon_runtime_id;
     output->registry_epoch = epoch.registry_epoch;
     output->captured_ms = GetTickCount64();
+    if (diagnostic != nullptr) {
+        diagnostic->seal_succeeded = true;
+    }
     return true;
 }
 
@@ -63530,10 +63714,17 @@ std::int64_t __fastcall hooked_p99_chloe_transfer_perform(void* job) {
     const P99ChloeTransferEpoch completed = epoch;
     epoch = {};
     P99ChloeTransferTicket ticket{};
-    if (!completed.ambiguous && completed.depth == 1 &&
-        seal_p99_chloe_transfer_ticket(completed, &ticket)) {
+    p99_order::SealDiagnosticEvidence diagnostic{};
+    const bool seal_attempted =
+        !completed.ambiguous && completed.depth == 1;
+    const bool sealed = seal_attempted &&
+        seal_p99_chloe_transfer_ticket(completed, &ticket, &diagnostic);
+    if (sealed) {
         g_p99_chloe_transfer_ticket = ticket;
     } else {
+        if (seal_attempted) {
+            log_p99_chloe_seal_diagnostic(completed.nonce, diagnostic);
+        }
         log_p99_chloe_transfer_reject(
             completed.ambiguous ? "perform-ambiguous" : "perform-incomplete");
     }
@@ -80416,8 +80607,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-31agf "
-        "(failed AGD pistol pose filter disabled; AGC back profiles retained; holsters/IK/animation clocks unchanged)");
+        "TLL co-op runtime init 2026-08-31agh "
+        "(AGF Chloe-order value/commit unchanged; bounded P99 seal classifier; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "

@@ -30853,3 +30853,142 @@ the current generic trace or relaunch unchanged `agf`. A bounded per-Perform
 summary of parser candidates, captured-group mask and final owner identity is
 the next admissible discriminator. The agent sent no keyboard, mouse, controller
 or menu input.
+
+### 2026-08-31 STATIC / IMPLEMENTED (`agh`): bounded seal and Perform-branch classifier; no new pose authority
+
+The preceding `agf` runtime exam is conclusive only at the packaging boundary.
+PID 24944 entered the exact role-B/local-Nadine/real-P99/state2 scope for 24
+top-level Perform epochs, but every epoch ended `reject=perform-incomplete`; no
+`applied=21` marker appeared before process exit. The independent
+`FIRE-RELAY ... art=0x8075397d` row proves that the live weapon was the real
+P99. Therefore unchanged `agf` is REJECTED at capture/seal, before any
+reconstructed value reached the pose. H-Chloe-order still has no visual verdict,
+and unchanged `agf` must not be relaunched.
+
+The four competing causes are now exact.
+
+1. **H1 / no-parser:** neither group 0 nor group 1 reaches the exact immutable
+   terminal grammar at the hooked normal completed-list Process callsite.
+2. **H2 / one-group:** exactly one of groups 0/1 passes that parser and completes
+   its native Player-to-Chloe/additive/Chloe-to-Nadine chain.
+3. **H3 / owner-table:** both groups complete, but the final retained Player/Fg/
+   local-pose/weapon/runtime-generation or retarget-table row identity no longer
+   matches the admitted epoch.
+4. **H4 / skeleton-identity:** both groups and owner/table are exact, but the two
+   groups do not carry identical Player-base source, Chloe-additive source and
+   common target skeleton objects.
+
+A recognized failure inside an admitted Retarget/Add chain remains the separate
+`perform-ambiguous` result and is not promoted to H1--H4.
+
+Three independent static evidence kinds earn one diagnostic-only runtime exam.
+
+- **Direct caller/callee control flow.** `AnimManager_PerformBlendAndDispatchPostBlendJob
+  0x141A928F0` calls `AnimManager_PerformAnimBlend 0x141A92260` at
+  `0x141A92905`, then Player vtable `+0x408` at `0x141A929A1`. The normal
+  Perform path builds once at `0x141A92637`, loops groups at
+  `0x141A926CF..0x141A9277C` and calls `ProcessAnimCmdListSegment` at
+  `0x141A92759`. Retarget `0x141AB9FC4` and nested Add `0x141937DBA` are
+  synchronous inside that call.
+- **Exact branch dataflow.** Job `+0x14`, Fg bytes `+5/+7`, job `+0`, and the
+  callback at Fg `+0x298` gate the normal loop. Fg `+0x1A0` versus target
+  skeleton and `g_AnimManagerForceCachedSkeletonPrepass 0x143682F4B` select a
+  prepass whose separate Process callsite is `0x141A921E2`. Fg `+7` bit 3 clear
+  with Fg flags `0x20000` clear forces one inline group at `0x141A92411`.
+  Independently, `0x141A9238C..0x141A923BE` derives the residual-split local
+  from byte 2 `0x143682FF7` of
+  `g_AnimManagerResidualGroupSplitFlags 0x143682FF5`, Fg `+0x2D1`, underlying
+  skeleton `+0x1E`, group count, Fg `+7` bit 3 and flags `0x20000`.
+  `0x141A92424` then limits the inline loop to one group.
+- **Independent residual-job route.** `0x141A927D9` calls
+  `AnimMgr_QueueResidualJointBlendGroups 0x14177FEB0`, which stores the residual
+  mask at deferred-record `+0x24` and state 2 at `+0x58`, then publishes through
+  `AnimMgr_PublishResidualJointBlendJobReady 0x141780100`.
+  `AnimMgr_SyncUpdate 0x141782B40` dispatches at `0x14178327D` through
+  `AnimMgr_DispatchAsyncObjectUpdateJointBlendJob 0x141782B30` into
+  `AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00`; its independent
+  Process callsites `0x141A92E78/0x141A932F8` are outside the current Perform
+  TLS epoch. `AnimManager_CreateAsyncUpdateJobFunctor 0x141781390` independently
+  materializes the normal Perform and Async joint-blend callbacks for the same
+  Fg payload.
+
+Build `agh` preserves the complete `agf` selector, immutable terminal parser,
+native Retarget/Add evaluation, ticket, 21-row transaction and Player `+0x408`
+commit. It adds only TLS-local Process/parser group masks and one scalar-only
+snapshot of the already-admitted Perform branch. Snapshot reads are isolated in
+their own SEH helper: an unreadable field produces `branch=0` but cannot change
+admission. The owner/table predicate is still called exactly once and in the
+same seal order; the five cross-group skeleton comparisons retain the old
+left-to-right short circuit. No command, weight, native record, JointParams row,
+attachment, holster, IK state or animation clock is changed. An incomplete seal
+still publishes no ticket and writes no pose; existing `agf` pose authority is
+neither widened nor bypassed.
+
+Each non-ambiguous failed admitted Perform emits at most one row, for 24 rows
+total, followed once by `NADINE-P99-CHLOE-SEAL saturated=24`:
+
+`NADINE-P99-CHLOE-SEAL stage=... row=... nonce=... proc=... parser=...
+captured=... entries=... groups=.../... owner=.../... skeleton=.../...
+branch=... enter=... main=... prepass=... split=... force1=... limit=...
+job0=... job14=... fg0=... fg5=... fg6=... fg7=... cb=... cache=...
+gpre=... gsplit=... ready=... groupN=... aux=...`
+
+`proc` is the group mask observed only at the normal synchronous Process
+callsite `0x141A92759`; `parser` is the exact terminal-parser candidate mask and
+`captured` is the mask whose unchanged native chain completed. `entries`,
+`groups=G0/G1`, `owner=checked/exact` and `skeleton=checked/exact` expose the
+ordered seal stages. `branch` says that the scalar snapshot was valid;
+`enter/main/prepass/split/force1/limit` are pure decisions derived from the raw
+branch fields. Cross-field contradictions fail closed as `other-incomplete`.
+
+- `proc=0x00` means neither required group reached normal `0x141A92759`.
+  `enter/main/prepass` and the raw fields distinguish loop gating, custom
+  callback/null job and a cached-skeleton prepass candidate.
+- `proc=0x01` means only group 0 ran inline. `split=1,limit=1` selects the
+  residual-split route; `force1=1,limit=1` selects the separate force-one branch.
+  A real `one-group` stage additionally requires internally consistent parser,
+  captured, entries and group-valid evidence.
+- `proc=0x03` means both required groups reached normal Process. Parser/captured
+  zero selects H1, one exact bit selects H2, both bits followed by
+  `owner=1/0` select H3, and both bits plus `owner=1/1 skeleton=1/0` select H4.
+
+Two independent code reviews report GO after closing two diagnostic P0s: the
+pure classifier now rejects malformed cross-field evidence, models
+`target_group_count==0` literally, and isolates all new reads from admission.
+The final clean Release build reports focused `14/14`, `4625` fail-closed checks
+and CTest `4/4`. The DLL is 875008 bytes, x64 `8664` / `PE32+`; source
+`10:20:04.773Z` < object `10:24:38.220Z` < DLL `10:24:38.320Z`. It contains the
+exact `2026-08-31agh`, READY and bounded seal strings. Frozen SHA-256 hashes are:
+
+- `coop_runtime.cpp` —
+  `7EB2909243AAD09B72020403EF74E23DAC8E7E21948B6C071329D33FC4D6C882`;
+- `coop_runtime_offsets.h` —
+  `4625A6202DEB3B48FC654A6F13C6FE3D34775D48D131D4ED25FE0A78AB9B6789`;
+- `nadine_p99_chloe_order_policy.h` —
+  `E9BD87033BC13C1EDB1587901B675AD1CD41E1026366B35576CE72EE519ECF86`;
+- `nadine_p99_chloe_order_policy_tests.cpp` —
+  `F663FE8281FADC7E099464BDE01C41FB5CF3E393F9D8C7B3BD1338474F3EE43A`;
+- `ida_apply_labels.py` —
+  `1B44E8B02D26E667A289CC0966719BADF33126A527CC7CA768EC45D912D50CD5`;
+- `scanner/build/tll_coop_runtime.dll` —
+  `9CA0E580BFC5DB13FAE0244937B8113C841A60A69ECE9FD77CF143504E90B1AA`.
+
+The sole IDB was written only while MCP was stopped.
+`reports/ida_apply_agh_p99_seal.log` reports
+`apply_labels OK: 1815 functions, 66 data names, 1 function types` and
+`save_database returned True`. Restarted MCP reads back all four new residual/
+SyncUpdate names, both new globals inside decompiled Perform and the renamed
+residual call at `0x141A927D9`.
+
+The falsifiable one-copy prediction is written before runtime. Require exact
+`2026-08-31agh`, role B/local Nadine, five-site INSTALLED and grip-transfer READY
+markers. The user then draws the real P99, remains in WeaponOut/state2 without
+aiming or firing, and holds still for 3--5 seconds. The first non-ambiguous
+incomplete admitted epoch must emit a bounded seal row that either selects
+H1--H4 or positively distinguishes the normal/prepass/force-one/residual-split
+branch through `proc` and the branch fields. A contradictory row must be
+`other-incomplete`; silence is packaging/admission failure. The agent sends no
+gameplay input. Without the unchanged exact
+`NADINE-P99-CHLOE-ORDER applied=21 groups=0,1 state=2 art=8075397D` marker, the
+run has no visual grip verdict. Only that marker authorizes comparing the visible
+hand to Chloe's grip.

@@ -123,6 +123,151 @@ inline constexpr bool exact_terminal_command_plan(
     return consume(27u, 6u) && consume(5u, 2u) && cursor == words.size();
 }
 
+// Read-only classification for one admitted Perform that failed to seal.  The
+// runtime fills this from TLS-local scalar masks and from the same owner/table
+// and skeleton comparisons already required by seal; it grants no pose-write
+// authority and cannot relax any admission predicate.
+enum class SealIncompleteStage : std::uint8_t {
+    kNone = 0,
+    kNoParserCandidate,
+    kOneGroupCaptured,
+    kOwnerTableIdentity,
+    kSkeletonIdentity,
+    kOtherIncomplete,
+};
+
+// Scalar-only snapshot of the branches that decide whether PerformAnimBlend
+// reaches its normal inline Process loop.  These fields describe control flow;
+// they never authorize command parsing or a pose write.
+struct PerformBranchEvidence {
+    bool snapshot_valid = false;
+    bool job_object_present = false;
+    std::uint8_t job_flags14 = 0;
+    std::uint32_t fg_flags0 = 0;
+    std::uint8_t fg_enabled5 = 0;
+    std::uint8_t fg_state6 = 0;
+    std::uint8_t fg_flags7 = 0;
+    bool custom_callback_present = false;
+    bool cached_skeleton_exact = false;
+    bool global_prepass_enabled = false;
+    bool global_split_enabled = false;
+    std::uint8_t fg_split_ready2d1 = 0;
+    std::uint32_t target_group_count = 0;
+    std::uint16_t target_auxiliary_word = 0;
+};
+
+struct PerformBranchDecision {
+    bool can_enter = false;
+    bool main_loop = false;
+    bool prepass = false;
+    bool split_residual = false;
+    bool force_one = false;
+    std::uint32_t inline_group_limit = 0;
+};
+
+[[nodiscard]] inline constexpr PerformBranchDecision derive_perform_branch(
+    const PerformBranchEvidence& evidence) noexcept {
+    PerformBranchDecision decision{};
+    if (!evidence.snapshot_valid) {
+        return decision;
+    }
+    const bool group_flag = (evidence.fg_flags7 & 0x08u) != 0;
+    const bool no_deferred_groups =
+        (evidence.fg_flags0 & 0x00020000u) != 0;
+    decision.can_enter = evidence.fg_enabled5 != 0 &&
+        (evidence.job_flags14 == 0 || group_flag);
+    decision.main_loop = decision.can_enter &&
+        evidence.job_object_present && !evidence.custom_callback_present;
+    if (!decision.main_loop) {
+        return decision;
+    }
+    decision.prepass = !evidence.cached_skeleton_exact ||
+        evidence.global_prepass_enabled;
+    decision.force_one = !group_flag && !no_deferred_groups;
+    decision.split_residual = evidence.global_split_enabled &&
+        (evidence.fg_split_ready2d1 != 0 ||
+         evidence.target_auxiliary_word == 0) &&
+        evidence.target_group_count > 1 && group_flag &&
+        !no_deferred_groups;
+    decision.inline_group_limit =
+        decision.force_one || decision.split_residual
+        ? 1u
+        : evidence.target_group_count;
+    return decision;
+}
+
+struct SealDiagnosticEvidence {
+    PerformBranchEvidence perform_branch{};
+    std::uint8_t process_group_mask = 0;
+    std::uint8_t parser_candidate_group_mask = 0;
+    std::uint8_t captured_group_mask = 0;
+    bool entries_captured = false;
+    bool group0_valid = false;
+    bool group1_valid = false;
+    bool owner_checked = false;
+    bool owner_exact = false;
+    bool skeleton_checked = false;
+    bool skeleton_exact = false;
+    bool seal_succeeded = false;
+};
+
+[[nodiscard]] inline constexpr SealIncompleteStage classify_seal_diagnostic(
+    const SealDiagnosticEvidence& evidence) noexcept {
+    constexpr std::uint8_t kRequiredGroups = 0x03u;
+    const std::uint8_t valid_group_mask =
+        static_cast<std::uint8_t>((evidence.group0_valid ? 0x01u : 0u) |
+                                  (evidence.group1_valid ? 0x02u : 0u));
+    const bool both_groups_ready =
+        evidence.captured_group_mask == kRequiredGroups &&
+        evidence.entries_captured && valid_group_mask == kRequiredGroups;
+    if ((evidence.process_group_mask & ~kRequiredGroups) != 0 ||
+        (evidence.parser_candidate_group_mask & ~kRequiredGroups) != 0 ||
+        (evidence.captured_group_mask & ~kRequiredGroups) != 0 ||
+        (evidence.parser_candidate_group_mask &
+             ~evidence.process_group_mask) != 0 ||
+        evidence.parser_candidate_group_mask !=
+            evidence.captured_group_mask ||
+        valid_group_mask != evidence.captured_group_mask ||
+        evidence.entries_captured !=
+            (evidence.captured_group_mask != 0) ||
+        evidence.owner_checked != both_groups_ready ||
+        (evidence.owner_exact && !evidence.owner_checked) ||
+        evidence.skeleton_checked !=
+            (evidence.owner_checked && evidence.owner_exact) ||
+        (evidence.skeleton_exact && !evidence.skeleton_checked)) {
+        return SealIncompleteStage::kOtherIncomplete;
+    }
+    if (evidence.seal_succeeded) {
+        return evidence.process_group_mask == kRequiredGroups &&
+                evidence.parser_candidate_group_mask == kRequiredGroups &&
+                evidence.captured_group_mask == kRequiredGroups &&
+                evidence.entries_captured && evidence.group0_valid &&
+                evidence.group1_valid && evidence.owner_checked &&
+                evidence.owner_exact && evidence.skeleton_checked &&
+                evidence.skeleton_exact
+            ? SealIncompleteStage::kNone
+            : SealIncompleteStage::kOtherIncomplete;
+    }
+    if (evidence.parser_candidate_group_mask == 0 &&
+        evidence.captured_group_mask == 0 && !evidence.entries_captured &&
+        !evidence.group0_valid && !evidence.group1_valid) {
+        return SealIncompleteStage::kNoParserCandidate;
+    }
+    if (evidence.captured_group_mask == 0x01u ||
+        evidence.captured_group_mask == 0x02u) {
+        return SealIncompleteStage::kOneGroupCaptured;
+    }
+    if (both_groups_ready && evidence.owner_checked &&
+        !evidence.owner_exact) {
+        return SealIncompleteStage::kOwnerTableIdentity;
+    }
+    if (both_groups_ready && evidence.owner_checked && evidence.owner_exact &&
+        evidence.skeleton_checked && !evidence.skeleton_exact) {
+        return SealIncompleteStage::kSkeletonIdentity;
+    }
+    return SealIncompleteStage::kOtherIncomplete;
+}
+
 struct ScopeEvidence {
     bool is_role_b = false;
     bool is_retained_local_owner = false;

@@ -3436,7 +3436,16 @@ FUNCTIONS = {
         "imports this same +0x100 pose into its group WorkBuffer. It reads "
         "optional scalar-bank pointers at FgAnimData+0x118/+0x120; a special "
         "multi-group mode locally suppresses the +0x120 value without modifying "
-        "the field. Fallback allocates and publishes identity matrices.",
+        "the field. The inline Process loop is gated by job+0x14, Fg bytes "
+        "+5/+7, job+0, Fg+0x298 and the cached-skeleton prepass. At "
+        "0x141A92411 Fg+7 bit3 clear with Fg flags 0x20000 clear forces one "
+        "inline group. Independently, 0x141A9238C..0x141A923BE derives the "
+        "residual split "
+        "from g_AnimManagerResidualGroupSplitFlags byte2, Fg+0x2D1, the "
+        "underlying skeleton +0x1E word, group count, Fg+7 bit3 and flags "
+        "0x20000; 0x141A92424 then limits the inline loop to one and "
+        "0x141A927D9 queues the residual mask. Fallback allocates and publishes "
+        "identity matrices.",
     ),
     0x1418C4FB0: (
         "FgAnimData_AllocateAndSwapSkinningBuffers",
@@ -10487,6 +10496,36 @@ FUNCTIONS = {
         "AnimMgr category/allocated bit and returns the slot to the free mask; "
         "it does not inspect or release FgAnimData+0x210 driven instances.",
     ),
+    0x14177FEB0: (
+        "AnimMgr_QueueResidualJointBlendGroups",
+        "Special multi-group tail reached from PerformAnimBlend 0x141A927D9. "
+        "Builds the exact 96-byte per-Fg deferred-stage record, stores the "
+        "residual group mask at +0x24 and state 2 at +0x58, then publishes the "
+        "Fg slot through AnimMgr_PublishResidualJointBlendJobReady. These "
+        "groups do not execute at the normal synchronous Process callsite "
+        "0x141A92759.",
+    ),
+    0x141780100: (
+        "AnimMgr_PublishResidualJointBlendJobReady",
+        "Derives the FgAnimData pool index, takes the residual-stage lock and "
+        "sets that index in the global ready bitset. AnimMgr_SyncUpdate later "
+        "consumes the bitset and dispatches the independent async joint-blend "
+        "job; this is a publication boundary, not pose evaluation.",
+    ),
+    0x141782B30: (
+        "AnimMgr_DispatchAsyncObjectUpdateJointBlendJob",
+        "SyncUpdate callback thunk for the residual joint-blend category. "
+        "Advances the 56-byte work-item cursor and tail-jumps to "
+        "AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00.",
+    ),
+    0x141782B40: (
+        "AnimMgr_SyncUpdate",
+        "Exact AnimMgr::SyncUpdate(unsigned int,bool) source identity. Consumes "
+        "the category ready masks and at 0x14178327D dispatches the residual "
+        "joint-blend callback 0x141782B30. This proves special Perform groups "
+        "queued by 0x14177FEB0 run in a separate async job with independent "
+        "Process callsites 0x141A92E78/0x141A932F8.",
+    ),
     0x14181A4B0: (
         "FgDrawMgr_AttachInstanceToAnimData",
         "Exact FgDrawMgr::AttachInstanceToAnimData source assertion. Appends "
@@ -12683,6 +12722,20 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x143682F4B: (
+        "g_AnimManagerForceCachedSkeletonPrepass",
+        "Nonzero forces PerformAnimBlend's cached-skeleton prepass even when "
+        "FgAnimData+0x1A0 equals the current target skeleton at +0x18. The "
+        "prepass has its own Process callsite 0x141A921E2 and can consume "
+        "groups before the normal inline callsite 0x141A92759.",
+    ),
+    0x143682FF5: (
+        "g_AnimManagerResidualGroupSplitFlags",
+        "PerformAnimBlend reads byte2 of this DWORD at 0x141A9238C. Together "
+        "with FgAnimData+0x2D1, the underlying skeleton +0x1E word, group "
+        "count, Fg+7 bit3 and Fg flags 0x20000 it selects the special one-inline-"
+        "group path whose residual mask is queued at 0x141A927D9.",
+    ),
     0x1438401BC: (
         "g_AnimMasterTableArtGroupRegistryEpoch",
         "Animation art-group registry change counter, incremented by "

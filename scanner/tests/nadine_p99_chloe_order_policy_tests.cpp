@@ -12,9 +12,12 @@ namespace {
 namespace policy = coop::p99_chloe_order;
 using policy::Decision;
 using policy::PoseValidEvidence;
+using policy::PerformBranchEvidence;
 using policy::RejectReason;
 using policy::RetargetEntryMetadata;
 using policy::RetargetRecordMetadata;
+using policy::SealDiagnosticEvidence;
+using policy::SealIncompleteStage;
 using policy::SourcePoseKind;
 using policy::SourcePoseLayoutEvidence;
 
@@ -962,10 +965,227 @@ bool terminal_command_plan_is_exact_and_fail_closed() {
     return true;
 }
 
+bool seal_diagnostic_classifier_is_exact_and_fail_closed() {
+    SealDiagnosticEvidence evidence{};
+    evidence.process_group_mask = 0x03u;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kNoParserCandidate);
+    evidence.process_group_mask = 0x01u;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kNoParserCandidate);
+    evidence.process_group_mask = 0;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kNoParserCandidate);
+
+    // A later-stage claim without the earlier evidence is malformed rather
+    // than a plausible no-parser result.
+    evidence.owner_checked = true;
+    evidence.owner_exact = false;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kOtherIncomplete);
+
+    evidence = {};
+    evidence.process_group_mask = 0x03u;
+    evidence.parser_candidate_group_mask = 0x01u;
+    evidence.captured_group_mask = 0x01u;
+    evidence.entries_captured = true;
+    evidence.group0_valid = true;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kOneGroupCaptured);
+    evidence.owner_checked = true;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kOtherIncomplete);
+
+    evidence = {};
+    evidence.process_group_mask = 0x03u;
+    evidence.parser_candidate_group_mask = 0x02u;
+    evidence.captured_group_mask = 0x02u;
+    evidence.entries_captured = true;
+    evidence.group1_valid = true;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kOneGroupCaptured);
+
+    evidence = {};
+    evidence.process_group_mask = 0x03u;
+    evidence.parser_candidate_group_mask = 0x03u;
+    evidence.captured_group_mask = 0x03u;
+    evidence.entries_captured = true;
+    evidence.group0_valid = true;
+    evidence.group1_valid = true;
+    evidence.owner_checked = true;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kOwnerTableIdentity);
+
+    evidence.owner_exact = true;
+    evidence.skeleton_checked = true;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kSkeletonIdentity);
+
+    evidence.skeleton_exact = true;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kOtherIncomplete);
+    evidence.seal_succeeded = true;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kNone);
+
+    // A parser candidate without a completed group is not mislabeled as the
+    // no-parser or one-group case.
+    evidence = {};
+    evidence.process_group_mask = 0x03u;
+    evidence.parser_candidate_group_mask = 0x03u;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kOtherIncomplete);
+
+    evidence = {};
+    evidence.process_group_mask = 0x04u;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kOtherIncomplete);
+    evidence = {};
+    evidence.parser_candidate_group_mask = 0x04u;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kOtherIncomplete);
+    evidence = {};
+    evidence.captured_group_mask = 0x04u;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kOtherIncomplete);
+
+    evidence = {};
+    evidence.seal_succeeded = true;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kOtherIncomplete);
+
+    // Cross-field contradictions are diagnostic corruption, never evidence
+    // for a plausible runtime stage.
+    evidence = {};
+    evidence.process_group_mask = 0x01u;
+    evidence.parser_candidate_group_mask = 0x01u;
+    evidence.captured_group_mask = 0x01u;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kOtherIncomplete);
+    evidence.entries_captured = true;
+    evidence.group1_valid = true;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kOtherIncomplete);
+
+    evidence = {};
+    evidence.process_group_mask = 0x01u;
+    evidence.parser_candidate_group_mask = 0x01u;
+    evidence.captured_group_mask = 0x01u;
+    evidence.entries_captured = true;
+    evidence.group0_valid = true;
+    evidence.owner_checked = true;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kOtherIncomplete);
+
+    evidence = {};
+    evidence.process_group_mask = 0x03u;
+    evidence.parser_candidate_group_mask = 0x03u;
+    evidence.captured_group_mask = 0x03u;
+    evidence.entries_captured = true;
+    evidence.group0_valid = true;
+    evidence.group1_valid = true;
+    evidence.owner_checked = true;
+    evidence.owner_exact = true;
+    CHECK(policy::classify_seal_diagnostic(evidence) ==
+          SealIncompleteStage::kOtherIncomplete);
+    return true;
+}
+
+bool perform_branch_classifier_matches_static_control_flow() {
+    PerformBranchEvidence evidence{};
+    auto decision = policy::derive_perform_branch(evidence);
+    CHECK(!decision.can_enter);
+    CHECK(!decision.main_loop);
+    CHECK(decision.inline_group_limit == 0);
+
+    evidence.snapshot_valid = true;
+    evidence.job_object_present = true;
+    evidence.fg_enabled5 = 1;
+    evidence.fg_state6 = 2;
+    evidence.fg_flags7 = 0x08u;
+    evidence.cached_skeleton_exact = true;
+    decision = policy::derive_perform_branch(evidence);
+    CHECK(decision.can_enter);
+    CHECK(decision.main_loop);
+    CHECK(decision.inline_group_limit == 0);
+
+    evidence.target_group_count = 8;
+    evidence.target_auxiliary_word = 1;
+    decision = policy::derive_perform_branch(evidence);
+    CHECK(decision.can_enter);
+    CHECK(decision.main_loop);
+    CHECK(!decision.prepass);
+    CHECK(!decision.split_residual);
+    CHECK(!decision.force_one);
+    CHECK(decision.inline_group_limit == 8);
+
+    evidence.cached_skeleton_exact = false;
+    decision = policy::derive_perform_branch(evidence);
+    CHECK(decision.prepass);
+    evidence.cached_skeleton_exact = true;
+    evidence.global_prepass_enabled = true;
+    decision = policy::derive_perform_branch(evidence);
+    CHECK(decision.prepass);
+    evidence.global_prepass_enabled = false;
+
+    evidence.global_split_enabled = true;
+    evidence.fg_split_ready2d1 = 1;
+    decision = policy::derive_perform_branch(evidence);
+    CHECK(decision.split_residual);
+    CHECK(!decision.force_one);
+    CHECK(decision.inline_group_limit == 1);
+    evidence.fg_split_ready2d1 = 0;
+    evidence.target_auxiliary_word = 0;
+    decision = policy::derive_perform_branch(evidence);
+    CHECK(decision.split_residual);
+
+    evidence.target_auxiliary_word = 1;
+    evidence.fg_flags7 = 0;
+    evidence.job_flags14 = 0;
+    decision = policy::derive_perform_branch(evidence);
+    CHECK(decision.can_enter);
+    CHECK(decision.main_loop);
+    CHECK(!decision.split_residual);
+    CHECK(decision.force_one);
+    CHECK(decision.inline_group_limit == 1);
+
+    evidence.job_flags14 = 1;
+    decision = policy::derive_perform_branch(evidence);
+    CHECK(!decision.can_enter);
+    CHECK(!decision.main_loop);
+    CHECK(decision.inline_group_limit == 0);
+
+    evidence.fg_flags7 = 0x08u;
+    decision = policy::derive_perform_branch(evidence);
+    CHECK(decision.can_enter);
+    CHECK(decision.main_loop);
+    evidence.custom_callback_present = true;
+    decision = policy::derive_perform_branch(evidence);
+    CHECK(decision.can_enter);
+    CHECK(!decision.main_loop);
+    CHECK(decision.inline_group_limit == 0);
+    evidence.custom_callback_present = false;
+    evidence.job_object_present = false;
+    decision = policy::derive_perform_branch(evidence);
+    CHECK(decision.can_enter);
+    CHECK(!decision.main_loop);
+
+    evidence.job_object_present = true;
+    evidence.fg_flags0 = 0x00020000u;
+    evidence.fg_flags7 = 0;
+    evidence.job_flags14 = 0;
+    decision = policy::derive_perform_branch(evidence);
+    CHECK(decision.main_loop);
+    CHECK(!decision.force_one);
+    CHECK(!decision.split_residual);
+    CHECK(decision.inline_group_limit == 8);
+    return true;
+}
+
 } // namespace
 
 int main() {
-    const std::array<std::pair<const char*, bool (*)()>, 12> tests{{
+    const std::array<std::pair<const char*, bool (*)()>, 14> tests{{
         {"asset constants and exact C39 targets", exact_asset_constants_and_target_inventory},
         {"source-pose layout", source_pose_layout_is_exact_and_fail_closed},
         {"exact fixture", exact_fixture_is_admitted},
@@ -977,6 +1197,10 @@ int main() {
         {"every valid-mask bit", every_valid_mask_bit_is_fail_closed},
         {"mask group coverage", mask_group_coverage_is_exact_and_unique},
         {"terminal command plan", terminal_command_plan_is_exact_and_fail_closed},
+        {"seal diagnostic classifier",
+         seal_diagnostic_classifier_is_exact_and_fail_closed},
+        {"Perform branch classifier",
+         perform_branch_classifier_matches_static_control_flow},
         {"repeat exact fixture after negatives", exact_fixture_is_admitted},
     }};
     std::size_t passed = 0;

@@ -6441,6 +6441,55 @@ Keep the postblend preservation boundary; replace only its steady content.
       any pose write; H-Chloe-order has no visual verdict. Do not relaunch
       unchanged `agf`. The agent sent no gameplay input.
 
+      STATIC / IMPLEMENTED (`agh`; diagnostic-only, one-copy prediction
+      written): exact competitors are H1 no parser candidate in either group,
+      H2 exactly one group parsed/native-captured, H3 both groups captured but
+      final owner/table identity failed, and H4 both groups plus owner/table
+      exact but cross-group skeleton identity failed. A recognized native-chain
+      inconsistency remains the separate `perform-ambiguous` outcome.
+
+      Static quota is met by three independent kinds. The normal graph is
+      `0x141A928F0 -> Perform 0x141A92905/0x141A92260 -> Build 0x141A92637 ->
+      loop 0x141A926CF..0x141A9277C -> Process 0x141A92759 -> Player+0x408
+      0x141A929A1`. Exact branch dataflow resolves cached-skeleton/global-prepass
+      `0x143682F4B` with separate Process `0x141A921E2`, force-one at
+      `0x141A92411`, and the residual split from `0x141A9238C..0x141A923BE`,
+      global DWORD/byte2 `0x143682FF5/0x143682FF7`, with the one-group limit at
+      `0x141A92424`. The independent residual route is `0x141A927D9 ->
+      0x14177FEB0 -> 0x141780100 -> SyncUpdate 0x141782B40 -> dispatch
+      0x14178327D / thunk 0x141782B30 -> Async job 0x141A92A00 -> Process
+      0x141A92E78/0x141A932F8` outside the current TLS epoch.
+
+      `agh` changes no scope, parser, Retarget/Add evaluation, ticket, 21-row
+      commit, pose, attachment, holster, IK or animation clock. It adds only TLS
+      scalar masks and a scalar-only Perform-branch snapshot. Snapshot faults
+      are isolated in a separate SEH helper and cannot alter admission. Owner/
+      table still runs exactly once in the old order; failed seals publish no
+      ticket and write nothing. Existing `agf` pose authority is not widened.
+
+      At most 24 `NADINE-P99-CHLOE-SEAL` rows expose
+      `stage,row,nonce,proc,parser,captured,entries,groups,owner,skeleton`,
+      derived `branch/enter/main/prepass/split/force1/limit`, and raw
+      `job0/job14/fg0/fg5/fg6/fg7/cb/cache/gpre/gsplit/ready/groupN/aux`;
+      contradictions are `other-incomplete`, then one `saturated=24` row.
+      `proc=00` means no group at normal `0x141A92759`; `proc=01` means only
+      group 0 inline and `split/force1/limit` distinguishes residual-split from
+      force-one; `proc=03` means both groups inline, after which parser/captured
+      plus owner/skeleton select H1--H4. Final clean Release validation is
+      focused `14/14`, `4625` checks and CTest `4/4`. Two independent reviews
+      report diagnostic GO. The sole IDB save is `1815/66/1`,
+      `save_database returned True`, with successful MCP readback. Frozen DLL is
+      875008-byte x64 PE32+, SHA
+      `9CA0E580BFC5DB13FAE0244937B8113C841A60A69ECE9FD77CF143504E90B1AA`.
+
+      Written one-copy prediction: require exact `2026-08-31agh`, role B/local
+      Nadine, INSTALLED and READY. The user draws the real P99, remains in state2
+      without aim/fire and holds still 3--5 seconds; the agent sends no gameplay
+      input. The first non-ambiguous incomplete epoch must produce a bounded row
+      selecting H1--H4 or a proven prepass/force-one/residual-split branch.
+      Silence is packaging failure. There is no visual grip verdict without the
+      unchanged exact `applied=21 groups=0,1 state=2 art=8075397D` marker.
+
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
       resolve a complete `strap2..strap14` owner locator set; Nadine has no such

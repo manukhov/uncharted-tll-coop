@@ -809,6 +809,11 @@ constexpr std::uintptr_t kAnimManagerCreateAnimCmdsNormalCallsiteRva =
 // command-DAG producer that writes the persistent FgAnimData+0x100 local pose
 // before Player post-blend and the later Async joint-palette rebuild.
 constexpr std::uintptr_t kAnimManagerPerformAnimBlendRva = 0x1A92260;
+// PerformAnimBlend's cached-skeleton prepass and residual-group split switches.
+// The latter is BYTE2(dword_143682FF5), read at 0x141A9238C; both are captured
+// only as diagnostic scalars for an already-admitted P99 Perform epoch.
+constexpr std::uintptr_t kAnimManagerForcePrepassGlobalRva = 0x3682F4B;
+constexpr std::uintptr_t kAnimManagerResidualGroupSplitGlobalRva = 0x3682FF7;
 // Sole normal Perform call in AnimManager's post-blend worker.  The wrapper
 // scopes the nested CreateAnimCmds call above without touching either function
 // entry.  Its stock bytes are E8 56 F9 FF FF.
