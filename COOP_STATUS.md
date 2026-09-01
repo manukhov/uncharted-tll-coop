@@ -31504,3 +31504,83 @@ skeleton identity change, the 100 ms ticket TTL, a different Player callsite,
 or an invalid source/destination 48-byte row. Static work must now resolve the
 exact failing invariant and eliminate competitors before any mutation or new
 runtime launch.
+
+### 2026-09-01 STATIC / IMPLEMENTED (`agl`): preserve raw JointCache rollback rows opaquely
+
+The postblend audit found a proved type/contract defect rather than an engine
+owner swap. `seh_preflight_p99_chloe_transfer_commit` validated both the
+generated ticket value and the current raw destination through
+`p99_chloe_transfer_row_valid`, which aliases
+`virtual_chloe_source_row_valid`. That predicate treats bytes `+0x00..+0x0B`
+as three finite scale floats, `+0x10..+0x1F` as a normalized quaternion and
+`+0x20..+0x2B` as finite translation. The ticket is a reconstructed value-only
+JointParams row, but `FgAnimData+0x100 + joint*48` is a raw JointCache row: its
+leading 16 bytes are companion/service state, while only the Locator at
+`+0x10/+0x20` has transform semantics. Applying the value predicate to the
+raw destination is therefore invalid even when Player/Fg/pose ownership is
+unchanged.
+
+Three independent evidence classes select this defect. First, the earlier
+P99 `acf` census reached the exact WeaponIK pre-boundary on both owners yet
+repeatedly failed when raw JointCache rows were interpreted as finite/value
+floats; Mazur passed only accidentally. Removing that content predicate while
+retaining Player/runtime/Fg/local-pose/span checks made the subsequent `acg`
+P99 census complete on both owners. Second, the JointCache layout and native
+users resolve the 48-byte row's Locator at `+0x10/+0x20`, independently making
+the leading service words non-float data. Third, the present transaction never
+computes with the old destination: it copies all 48 bytes only as a rollback
+before-image, restores them opaquely on failure and verifies with `memcmp`.
+Historical `abw`/`adr` also copied/restored raw rows at this same postblend
+handoff without requiring value semantics.
+
+The alternatives are correspondingly ranked. A one-shot busy SkelTable lock,
+the broad repeated owner resolver and the 100 ms TTL remain possible later
+fail-closed causes, but none justifies rejecting a readable before-image by its
+contents. Native parent `AnimManager_PerformBlendAndDispatchPostBlendJob
+0x141A928F0` keeps the same retained owner/generation across
+`0x141A92905 -> 0x141A929A1`; direct `Player_PostAnimBlending_Async
+0x1410EB6A0` contains controller/IK dispatches and no direct replacement of
+Player->Fg, Fg `+0x100`, skeleton, weapon/runtime identity or registry epochs.
+Thus a post-`+0x408` owner/pose swap is not promoted from AGK's aggregate
+marker.
+
+AGL removes only the raw destination content test. Every generated
+`ticket.rows[index]` remains value-validated; the exact 142-row readable span,
+Player/Fg/local-pose/skeleton/weapon/runtime IDs, P99/state2, registry epochs
+and row20/124/157 identities remain mandatory. The complete old 48-byte rows
+are copied opaquely before any write; the 21-row commit, exact readback,
+registry recheck, all-row rollback and rollback readback are unchanged. A new
+Release regression places a quiet-NaN bit pattern in the leading service lane
+and proves all 48 bytes survive the before-image copy exactly, while null
+inputs fail closed.
+
+Release validation passes focused `13/13`, `5452` checks and full CTest `4/4`.
+Generator `--check`, Python compilation and `git diff --check` pass. No new
+engine function/data identity was discovered, and the sole IDB already carries
+the required JointCache and Player-postblend names/comments, so no IDB mutation
+is required. The frozen x64 DLL is 863744 bytes, SHA-256
+`35283F1CD501B6CB6350DC03549F028B3B0FFA6ED2C6574EEC150DF8DBC97AE7`.
+It contains exact init `2026-09-01agl`, READY text
+`opaque raw JointCache before-images` and `applied=21`, and contains no AGK
+init marker. Frozen source hashes are `coop_runtime.cpp`
+`760B6C606D0321D3A98D312A332C8436DC3611A1C9175874D1CE679CA1F844CF`, policy
+header `79FEFB5ECD5065F25D343D79E5846BACAF0BE29DE702BFA79C89EE3A643504EC`
+and policy test
+`98E40AF3BC8BC841C2A0300F08EE3F369C9D724079C058B8E0A030066B642D99`.
+
+The falsifiable one-copy prediction is written before runtime. Require exact
+AGL init, role B/local Nadine, unchanged two-site INSTALLED and READY containing
+`opaque raw JointCache before-images`. The user draws the real P99, remains in
+WeaponOut/state2 without aiming/firing and holds for 3--5 seconds. If the proved
+raw-destination predicate was AGK's blocking preflight condition, AGL must emit
+`NADINE-P99-CHLOE-ORDER applied=21 source=offline-generated-D350-B8
+target-groups=0,1 state=2 art=8075397D` and no `postblend-preflight` marker.
+Only `applied=21` authorizes the visual verdict: a Chloe-like right/trigger hand
+wrapped around the grip supports H-Chloe-order; the same wrong right-palm/
+finger orientation rejects it. The left/support hand remains outside the
+21-row authority. Another postblend-preflight row rejects this correction as
+sufficient and gives no visual verdict; it selects lock availability, broad
+owner re-resolution or TTL for a new static split. Any crash, jerk, broken
+draw/hold/holster, attachment/back regression, ADS/state4 mutation or change to
+another weapon rejects AGL. The agent starts/injects one copy only and sends no
+gameplay input.

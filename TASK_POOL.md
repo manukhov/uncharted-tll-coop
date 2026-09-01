@@ -6678,12 +6678,29 @@ Keep the postblend preservation boundary; replace only its steady content.
       is gone, so AGK reached and sealed the complete evaluated ticket; the new
       screenshot is stock pose only. PID 15644 was stopped and unchanged AGK
       must not be rerun.
-- [ ] Statically decompose `seh_preflight_p99_chloe_transfer_commit` after the
+- [x] Statically decompose `seh_preflight_p99_chloe_transfer_commit` after the
       stock Player `+0x408`: prove the exact failing invariant and eliminate
       local-pose/owner swap, TTL, Player/callsite, weapon/controller/runtime/art,
       registry/skeleton and 48-byte-row alternatives. Do not add a diagnostic
       runtime or launch the game until the evidence quota supports a correction
-      and a new distinguishing prediction is written.
+      and a new distinguishing prediction is written. STATIC RESULT: the
+      preflight reapplied a value-row predicate to raw `Fg+0x100` JointCache
+      destinations. Their leading 16 bytes are service/companion state, not
+      floats; the same P99 predicate was already rejected by `acf` and its
+      removal confirmed by `acg`. No owner/pose swap is inferred from AGK.
+- [x] Implement/build `2026-09-01agl`: keep semantic validation for all 21
+      generated ticket rows, but copy each readable 48-byte destination only as
+      an opaque rollback before-image. Retain every owner/Fg/local-pose/skeleton/
+      weapon/runtime/registry identity, span, commit/readback and all-row
+      rollback guard. Focused Release tests pass `13/13` (`5452` checks), CTest
+      `4/4`, generator `--check`, Python compilation and `git diff --check`.
+      Frozen 863744-byte DLL SHA-256 is
+      `35283F1CD501B6CB6350DC03549F028B3B0FFA6ED2C6574EEC150DF8DBC97AE7`.
+- [ ] After final independent review and commit/push, run exactly one AGL exam.
+      Require exact AGL/role-B/INSTALLED/opaque-before-image READY, then the real
+      P99 state2 hold. `applied=21` with no postblend reject earns visual judging
+      of only the right palm/19 right fingers; another preflight reject gives no
+      visual verdict. Do not send gameplay input or start a second instance.
 
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to

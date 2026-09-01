@@ -2650,7 +2650,7 @@ constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
 // is therefore insufficient, not an admission failure. Keep this experiment
 // and the rejected abk resolver mutation off; do not widen either boundary.
 constexpr bool kEnableLegacyNadinePistolPoseGripRepair = false;
-// Build agk evaluates exact offline-generated D350/B8 rows in Chloe space, then
+// Build agl evaluates exact offline-generated D350/B8 rows in Chloe space, then
 // applies the live authored Chloe->legacy-Nadine retarget copied under the
 // SkelTable lock. Native runtime-record mode is the byte at +0x2c; +0x2d is
 // unowned padding, and authored/map pointers are independently fixed up rather
@@ -61612,6 +61612,8 @@ namespace p99_order = coop::p99_chloe_order;
 namespace p99_rows = coop::p99_chloe_source_rows;
 
 constexpr std::size_t kP99ChloeTransferRowBytes = 48;
+static_assert(kP99ChloeTransferRowBytes ==
+              p99_order::kRawJointCacheRowBytes);
 constexpr std::size_t kP99ChloeTransferBlendBlobBytes = 112;
 constexpr std::uint16_t kP99ChloeTransferBlendEncoding = 0x0108;
 constexpr ULONGLONG kP99ChloeTransferTicketTtlMs = 100;
@@ -63255,11 +63257,10 @@ bool seh_preflight_p99_chloe_transfer_commit(
                 static_cast<std::size_t>(joint) *
                     kP99ChloeTransferRowBytes;
             if (!p99_chloe_transfer_row_valid(ticket.rows[index].data()) ||
-                !p99_chloe_transfer_row_valid(destination)) {
+                !p99_order::capture_raw_joint_cache_before_image(
+                    destination, &(*before)[index])) {
                 return false;
             }
-            std::memcpy((*before)[index].data(), destination,
-                        kP99ChloeTransferRowBytes);
         }
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -80017,7 +80018,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-01agk "
+        "TLL co-op runtime init 2026-09-01agl "
         "(byte retarget mode; relocated authored-map safe; compressed parameter/reference indices; offline-derived D350/B8 rows; locked SkelTable snapshot; two-site P99 commit; no live clip dereference; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
@@ -80534,7 +80535,7 @@ DWORD WINAPI install_hook(void*) {
             install_legacy_nadine_p99_chloe_grip_transfer();
         boot_log_line(
             p99_chloe_transfer_ready
-                ? "legacy-Nadine P99 Chloe-order grip transfer READY (state2; byte mode at +2C; relocated-map safe; compressed row20/157 indices; offline-generated D350/B8; palm/prop/19 fingers)"
+                ? "legacy-Nadine P99 Chloe-order grip transfer READY (state2; opaque raw JointCache before-images; byte mode at +2C; relocated-map safe; compressed row20/157 indices; offline-generated D350/B8; palm/prop/19 fingers)"
                 : "legacy-Nadine P99 Chloe-order grip transfer SKIPPED (combined package)");
     }
     bool weapon_ik_goal_package_ready = false;

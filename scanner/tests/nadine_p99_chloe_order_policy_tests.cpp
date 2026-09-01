@@ -678,6 +678,24 @@ bool runtime_mode_ignores_unowned_tail_padding() {
     return true;
 }
 
+bool raw_joint_cache_before_image_is_opaque() {
+    std::array<std::byte, policy::kRawJointCacheRowBytes> raw{};
+    for (std::size_t index = 0; index < raw.size(); ++index) {
+        raw[index] = static_cast<std::byte>((index * 37u + 0xA5u) & 0xFFu);
+    }
+    // Reproduce the already-rejected P99 content assumption: a quiet NaN in
+    // the leading service lane is legal raw JointCache state and must survive
+    // the rollback snapshot byte-for-byte. It is not a value-row scale float.
+    constexpr std::uint32_t kServiceQuietNan = 0x7FC00001u;
+    std::memcpy(raw.data(), &kServiceQuietNan, sizeof(kServiceQuietNan));
+    std::array<std::byte, policy::kRawJointCacheRowBytes> before{};
+    CHECK(policy::capture_raw_joint_cache_before_image(raw.data(), &before));
+    CHECK(before == raw);
+    CHECK(!policy::capture_raw_joint_cache_before_image(nullptr, &before));
+    CHECK(!policy::capture_raw_joint_cache_before_image(raw.data(), nullptr));
+    return true;
+}
+
 bool every_required_record_field_is_checked() {
     for (std::size_t i = 0; i < fixture_transfers.size(); ++i) {
         {
@@ -906,7 +924,7 @@ bool mask_group_coverage_is_exact_and_unique() {
 } // namespace
 
 int main() {
-    const std::array<std::pair<const char*, bool (*)()>, 12> tests{{
+    const std::array<std::pair<const char*, bool (*)()>, 13> tests{{
         {"asset constants and exact C39 targets", exact_asset_constants_and_target_inventory},
         {"generated source rows", generated_source_rows_match_independent_fixture},
         {"exact fixture", exact_fixture_is_admitted},
@@ -914,6 +932,7 @@ int main() {
         {"entry identity and join", exact_entry_identity_and_entry_join},
         {"record counts and duplicates", record_counts_and_duplicates_fail_closed},
         {"runtime mode byte and tail padding", runtime_mode_ignores_unowned_tail_padding},
+        {"raw JointCache before-image is opaque", raw_joint_cache_before_image_is_opaque},
         {"every required record field", every_required_record_field_is_checked},
         {"semantic middle join", semantic_middle_join_and_order_are_mandatory},
         {"every valid-mask bit", every_valid_mask_bit_is_fail_closed},

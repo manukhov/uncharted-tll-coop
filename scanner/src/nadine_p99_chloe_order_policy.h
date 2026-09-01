@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <span>
 
 // Pure, build-pinned admission contract for the P99 state-2 transfer:
@@ -42,6 +43,23 @@ inline constexpr std::uint16_t kRuntimeRetargetRecordStride = 0x2Eu;
 inline constexpr std::size_t kRequiredJointCount = 21;
 inline constexpr std::size_t kRequiredFingerCount = 19;
 inline constexpr std::size_t kGlobalMaskWordCount = 11; // 704 normalized bits.
+inline constexpr std::size_t kRawJointCacheRowBytes = 48;
+
+// FgAnimData+0x100 owns raw JointCache rows, not value-only animation rows.
+// Their leading 16 bytes are companion/service state; only the Locator at
+// +0x10/+0x20 has transform semantics.  A rollback before-image must therefore
+// preserve all 48 bytes opaquely and must not interpret the service words as
+// floats. Pointer identity and full-span readability are enforced by the
+// runtime preflight before this bounded copy.
+[[nodiscard]] inline bool capture_raw_joint_cache_before_image(
+    const std::byte* row,
+    std::array<std::byte, kRawJointCacheRowBytes>* output) noexcept {
+    if (row == nullptr || output == nullptr) {
+        return false;
+    }
+    std::memcpy(output->data(), row, output->size());
+    return true;
+}
 
 // BuildRetargetEntry writes the native mode as one byte at +0x2c.  Byte +0x2d
 // is tail padding in the 0x2e-byte record: it is neither initialized by the
