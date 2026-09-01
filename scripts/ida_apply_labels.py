@@ -135,7 +135,8 @@ FUNCTIONS = {
     0x141AE2100: (
         "RetargetPlugin_DoJointRetarget",
         "Exact DoJointRetarget source assertion. Decodes the source/target "
-        "reference locators and selects correction by record+0x2C mode. "
+        "reference locators and selects correction by the single byte at "
+        "record+0x2C; record+0x2D is not read. "
         "Mode 1 includes relative-reference composition (Transform_Compose "
         "at 0x141AE27FE), not a raw quaternion copy; mode 3 copies source "
         "S/T/Q at 0x141AE28F3. Player and Chloe finger/palm maps can therefore "
@@ -3847,8 +3848,12 @@ FUNCTIONS = {
         "resolved 0x2E-byte record stores skeleton-global source/target joints at "
         "+0x24/+0x28, compressed processing-table source-parameter index at +0x26, "
         "complete compressed target-reference index at +0x2A, and retarget mode at "
-        "+0x2C. These indices are not skeleton-global joints: Nadine group 1 maps "
-        "global 104..141 to reference rows 66..103 (for example 105 -> 67).",
+        "+0x2C as one byte. Runtime-record +0x2D is untouched tail padding; the "
+        "native consumer also reads only byte +0x2C. The builder consumes the "
+        "fixed-up authored-row and map pointers directly, so on-disk DC offsets "
+        "cannot be reconstructed as a live contiguity invariant. These indices are "
+        "not skeleton-global joints: Nadine group 1 maps global 104..141 to "
+        "reference rows 66..103 (for example 105 -> 67).",
     ),
     0x141936490: (
         "RetargetPlugin_AddJointRetargetCommands",

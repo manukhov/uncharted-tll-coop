@@ -43,6 +43,16 @@ inline constexpr std::size_t kRequiredJointCount = 21;
 inline constexpr std::size_t kRequiredFingerCount = 19;
 inline constexpr std::size_t kGlobalMaskWordCount = 11; // 704 normalized bits.
 
+// BuildRetargetEntry writes the native mode as one byte at +0x2c.  Byte +0x2d
+// is tail padding in the 0x2e-byte record: it is neither initialized by the
+// builder nor read by RetargetPlugin_DoJointRetarget, so it must never be
+// folded into mode validation.
+[[nodiscard]] inline constexpr std::uint8_t runtime_retarget_record_mode(
+    const std::byte* record) noexcept {
+    return record == nullptr ? 0xFFu :
+        std::to_integer<std::uint8_t>(record[0x2C]);
+}
+
 struct ScopeEvidence {
     bool is_role_b = false;
     bool is_retained_local_owner = false;
@@ -59,12 +69,14 @@ struct ScopeEvidence {
 // compared only after the entry/resource/skeleton values have been copied under
 // the SkelTable lock; this policy never dereferences a live clip.
 struct RetargetEntryMetadata {
-    // Build-pinned DC provenance.
+    // Build-pinned DC provenance used by the offline generator and frozen
+    // manifest.  Resource fixups may relocate the authored row and its map
+    // independently, so these offsets are not live-pointer arithmetic.
     std::uint32_t table_object_id = 0;
     std::uint32_t table_type_id = 0;
     std::uint16_t entry_index = 0;
     // Build-pinned native layout; the live entry stores the pointer/count but
-    // not the 0x2e stride.
+    // not the 0x2e stride.  The two file offsets remain offline provenance.
     std::uint16_t record_stride = 0;
     std::uint32_t authored_row_offset = 0;
     std::uint32_t authored_map_offset = 0;
@@ -102,7 +114,8 @@ struct RetargetEntryMetadata {
 // stores skeleton-global joint indices at +0x24/+0x28 and cumulative flattened
 // parameter/reference-pose indices at +0x26/+0x2a.  The latter are not local to
 // the current processing group: ApplyJointRetargets uses +0x2a directly against
-// the complete target reference pose.  Group numbers are captured beside the
+// the complete target reference pose.  Mode is the single byte at +0x2c;
+// adjacent +0x2d is unowned padding.  Group numbers are captured beside the
 // record and checked against the build-pinned skeleton ranges.
 struct RetargetRecordMetadata {
     std::uint16_t source_global = 0;

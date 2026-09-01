@@ -667,6 +667,17 @@ bool record_counts_and_duplicates_fail_closed() {
     return true;
 }
 
+bool runtime_mode_ignores_unowned_tail_padding() {
+    std::array<std::byte, policy::kRuntimeRetargetRecordStride> record{};
+    record[0x2C] = std::byte{3};
+    record[0x2D] = std::byte{0xA5};
+    CHECK(policy::runtime_retarget_record_mode(record.data()) == 3);
+    record[0x2C] = std::byte{4};
+    CHECK(policy::runtime_retarget_record_mode(record.data()) == 4);
+    CHECK(policy::runtime_retarget_record_mode(nullptr) == 0xFFu);
+    return true;
+}
+
 bool every_required_record_field_is_checked() {
     for (std::size_t i = 0; i < fixture_transfers.size(); ++i) {
         {
@@ -895,13 +906,14 @@ bool mask_group_coverage_is_exact_and_unique() {
 } // namespace
 
 int main() {
-    const std::array<std::pair<const char*, bool (*)()>, 11> tests{{
+    const std::array<std::pair<const char*, bool (*)()>, 12> tests{{
         {"asset constants and exact C39 targets", exact_asset_constants_and_target_inventory},
         {"generated source rows", generated_source_rows_match_independent_fixture},
         {"exact fixture", exact_fixture_is_admitted},
         {"scope", scope_is_exact_and_fail_closed},
         {"entry identity and join", exact_entry_identity_and_entry_join},
         {"record counts and duplicates", record_counts_and_duplicates_fail_closed},
+        {"runtime mode byte and tail padding", runtime_mode_ignores_unowned_tail_padding},
         {"every required record field", every_required_record_field_is_checked},
         {"semantic middle join", semantic_middle_join_and_order_are_mandatory},
         {"every valid-mask bit", every_valid_mask_bit_is_fail_closed},

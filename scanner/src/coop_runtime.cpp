@@ -2650,12 +2650,14 @@ constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
 // is therefore insufficient, not an admission failure. Keep this experiment
 // and the rejected abk resolver mutation off; do not widen either boundary.
 constexpr bool kEnableLegacyNadinePistolPoseGripRepair = false;
-// Build agi evaluates exact offline-generated D350/B8 rows in Chloe space, then
+// Build agk evaluates exact offline-generated D350/B8 rows in Chloe space, then
 // applies the live authored Chloe->legacy-Nadine retarget copied under the
-// SkelTable lock.  Stock's receiver-specific retargets and reference-pose scale
-// profiles make direct Player/Nadine ordinal copying non-equivalent.  The
-// transfer is state-2/P99-only and owns only r_palm, r_prop and the nineteen
-// right-finger rows.
+// SkelTable lock. Native runtime-record mode is the byte at +0x2c; +0x2d is
+// unowned padding, and authored/map pointers are independently fixed up rather
+// than reconstructed from disk offsets. Stock's receiver-specific retargets
+// and reference-pose scale profiles make direct Player/Nadine ordinal copying
+// non-equivalent. The transfer is state-2/P99-only and owns only r_palm, r_prop
+// and the nineteen right-finger rows.
 constexpr bool kEnableLegacyNadineP99ChloeGripTransfer = true;
 static_assert(!kEnableLegacyNadinePistolPoseGripRepair ||
               !kEnableLegacyNadineActiveWeaponGripOverlayRepair);
@@ -62105,27 +62107,17 @@ bool seh_capture_p99_chloe_transfer_entry(
                 expected.leg_ik) {
             return false;
         }
-        const std::uintptr_t authored_address =
-            reinterpret_cast<std::uintptr_t>(authored);
-        if (authored_address < expected.authored_row_offset) {
-            return false;
-        }
-        auto* const raw_base = reinterpret_cast<std::byte*>(
-            authored_address - expected.authored_row_offset);
         auto* const authored_map =
             *reinterpret_cast<std::byte* const*>(authored + 0x18);
         const std::size_t authored_map_bytes =
             static_cast<std::size_t>(expected.authored_record_count) * 12;
-        if (authored_map != raw_base + expected.authored_map_offset ||
-            readable_bytes(raw_base) <
-                static_cast<std::size_t>(expected.authored_map_offset) +
-                    authored_map_bytes ||
-            *reinterpret_cast<const std::uint32_t*>(raw_base) !=
-                0x44433030u ||
-            *reinterpret_cast<const std::uint32_t*>(raw_base + 0x20) !=
-                expected.table_object_id ||
-            *reinterpret_cast<const std::uint32_t*>(raw_base + 0x24) !=
-                expected.table_type_id ||
+        // The resource loader fixes up entry+0x00 and authored+0x18 as
+        // independent live pointers.  Native BuildRetargetEntry consumes those
+        // pointers directly and never reconstructs the on-disk DC00 base from
+        // file offsets.  The offsets remain generator provenance only; making
+        // their in-memory contiguity an admission condition would reject a
+        // valid relocated resource.
+        if (authored_map == nullptr ||
             readable_bytes(authored_map) < authored_map_bytes) {
             return false;
         }
@@ -62174,8 +62166,8 @@ bool seh_capture_p99_chloe_transfer_entry(
                 *reinterpret_cast<const std::uint16_t*>(record + 0x28);
             metadata.target_reference_index =
                 *reinterpret_cast<const std::uint16_t*>(record + 0x2A);
-            const std::uint16_t mode =
-                *reinterpret_cast<const std::uint16_t*>(record + 0x2C);
+            const std::uint8_t mode =
+                p99_order::runtime_retarget_record_mode(record);
             const int source_group = index == 20
                 ? p99_chloe_transfer_group_for_global(
                       p99_order::kPlayerGroups, metadata.source_global)
@@ -62195,8 +62187,7 @@ bool seh_capture_p99_chloe_transfer_entry(
                     *reinterpret_cast<const std::uint16_t*>(record + 0x28) ||
                 metadata.target_reference_index !=
                     *reinterpret_cast<const std::uint16_t*>(record + 0x2A) ||
-                mode != *reinterpret_cast<const std::uint16_t*>(
-                            record + 0x2C)) {
+                mode != p99_order::runtime_retarget_record_mode(record)) {
                 *output = {};
                 return false;
             }
@@ -62423,7 +62414,7 @@ bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
                 *reinterpret_cast<const std::uint16_t*>(row20_copy + 0x28) !=
                     transfer.chloe_global ||
                 chloe_reference_index != chloe_parameter_index ||
-                *reinterpret_cast<const std::uint16_t*>(row20_copy + 0x2C) !=
+                p99_order::runtime_retarget_record_mode(row20_copy) !=
                     transfer.mode ||
                 *reinterpret_cast<const std::uint16_t*>(row157_copy + 0x24) !=
                     transfer.chloe_global ||
@@ -62432,7 +62423,7 @@ bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
                 *reinterpret_cast<const std::uint16_t*>(row157_copy + 0x28) !=
                     transfer.nadine_global ||
                 nadine_reference_index != nadine_parameter_index ||
-                *reinterpret_cast<const std::uint16_t*>(row157_copy + 0x2C) !=
+                p99_order::runtime_retarget_record_mode(row157_copy) !=
                     transfer.mode ||
                 player_parameter_index < 0 ||
                 chloe_parameter_index < 0 ||
@@ -62632,10 +62623,10 @@ bool seh_evaluate_p99_chloe_transfer_joint(
             *reinterpret_cast<const std::uint16_t*>(row20 + 0x2A);
         const std::uint16_t row157_reference_index =
             *reinterpret_cast<const std::uint16_t*>(row157 + 0x2A);
-        const std::uint16_t row20_mode =
-            *reinterpret_cast<const std::uint16_t*>(row20 + 0x2C);
-        const std::uint16_t row157_mode =
-            *reinterpret_cast<const std::uint16_t*>(row157 + 0x2C);
+        const std::uint8_t row20_mode =
+            p99_order::runtime_retarget_record_mode(row20);
+        const std::uint8_t row157_mode =
+            p99_order::runtime_retarget_record_mode(row157);
         const int player_parameter_index =
             p99_order::parameter_index_for_global(
                 p99_order::kPlayerGroups, transfer.player_global);
@@ -80026,8 +80017,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-08-31agj "
-        "(compressed retarget parameter/reference indices; offline-derived D350/B8 rows; locked SkelTable snapshot; two-site P99 commit; no live clip dereference; AGC back profiles retained)");
+        "TLL co-op runtime init 2026-09-01agk "
+        "(byte retarget mode; relocated authored-map safe; compressed parameter/reference indices; offline-derived D350/B8 rows; locked SkelTable snapshot; two-site P99 commit; no live clip dereference; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "
@@ -80543,7 +80534,7 @@ DWORD WINAPI install_hook(void*) {
             install_legacy_nadine_p99_chloe_grip_transfer();
         boot_log_line(
             p99_chloe_transfer_ready
-                ? "legacy-Nadine P99 Chloe-order grip transfer READY (state2; compressed row20/157 indices; offline-generated D350/B8; palm/prop/19 fingers)"
+                ? "legacy-Nadine P99 Chloe-order grip transfer READY (state2; byte mode at +2C; relocated-map safe; compressed row20/157 indices; offline-generated D350/B8; palm/prop/19 fingers)"
                 : "legacy-Nadine P99 Chloe-order grip transfer SKIPPED (combined package)");
     }
     bool weapon_ik_goal_package_ready = false;

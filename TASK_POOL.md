@@ -6626,8 +6626,10 @@ Keep the postblend preservation boundary; replace only its steady content.
       WeaponOut/state2 for 3-5 seconds without aim/fire. Only exact
       `NADINE-P99-CHLOE-ORDER applied=21 source=offline-generated-D350-B8
       target-groups=0,1 state=2 art=8075397D` authorizes a visual verdict.
-      Marker plus wrapped support hand supports; marker plus the screenshot's
-      edge-on hand rejects; no marker is a stage-specific static boundary, not
+      Marker plus a Chloe-like right/trigger hand wrapped around the pistol
+      grip supports; the same wrong right-palm/finger orientation rejects. The
+      left/support hand is outside this 21-row authority. No marker is a
+      stage-specific static boundary, not
       a visual result. Any draw/hold/holster, attachment/back, ADS, other-art or
       other-weapon regression rejects. Agent uses one copy and no gameplay
       input.
@@ -6642,6 +6644,35 @@ Keep the postblend preservation boundary; replace only its steady content.
       split locked capture among registry/lock shape, ArtItemSkeleton reference
       layout, rows 20/124/157 identity, record/reference validation, and final
       epoch/identity recheck before another runtime prediction.
+
+- [x] Decompose the AGJ locked snapshot statically. `SkelTable_BuildRetargetEntry
+      0x1417CE210` allocates `count*0x2E` without clearing it, writes mode only as
+      byte `record+0x2C` (`0x1417CE8A8`, `0x1417CF577`) and never owns `+0x2D`;
+      `RetargetPlugin_DoJointRetarget 0x141AE2100` likewise reads only byte
+      `+0x2C` at `0x141AE23CB`. AGJ incorrectly read a u16 in capture, selected-
+      record validation and evaluation, so stable allocator padding could reject
+      every otherwise valid entry before the corrected compressed-index checks.
+- [x] Remove the second unsupported locked predicate. Native initialization
+      stores a fixed-up authored row pointer in entry `+0x00` and the builder
+      directly consumes fixed-up authored map `row+0x18`; it never reconstructs
+      a common in-memory DC00 base from on-disk row/map offsets. AGK keeps those
+      offsets as generator provenance, validates the live pointers/entry IDs/
+      counts/profile/scale/semantic map under the SkelTable lock, but no longer
+      requires relocated resources to remain file-contiguous.
+- [x] Implement/build `2026-09-01agk`, add a Release regression with mode `3`
+      and deliberately nonzero tail padding `+0x2D=0xA5`, pass focused `12/12`
+      (`5448` checks), CTest `4/4`, generator `--check`, Python compilation and
+      `git diff --check`. Save/read back the single IDB comments; frozen DLL is
+      863744 bytes, SHA-256
+      `1887C0DB580C92D80A0ECD160EB7C9E63BD3B7F9A30C2876BCD82B8C8B6D6824`.
+- [ ] Run the earned one-copy AGK exam only after commit/push. Require exact AGK,
+      role B, INSTALLED and byte-mode/relocated-map READY. The real P99 state2
+      hold must produce `applied=21`; another locked-operands row rejects the
+      mode/pointer correction as insufficient and gives no visual verdict. With
+      `applied=21`, a Chloe-like right/trigger hand wrapped around the pistol
+      grip supports the transfer; the same wrong right-palm/finger orientation
+      rejects it. The left/support hand is outside AGK's authority. Do not
+      send gameplay input or start a second instance.
 
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to

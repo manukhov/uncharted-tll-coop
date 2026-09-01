@@ -31320,9 +31320,10 @@ palm/prop/19 fingers)`. The user draws the real P99 and stays in
 WeaponOut/state2 without aiming or firing for 3-5 seconds. A valid visual exam
 requires exact
 `NADINE-P99-CHLOE-ORDER applied=21 source=offline-generated-D350-B8
-target-groups=0,1 state=2 art=8075397D`. That marker plus a Chloe-like wrapped
-support-hand grip supports H-Chloe-order; that marker plus the same edge-on hand
-shown in the new overhead screenshot rejects it. No marker is not a visual
+target-groups=0,1 state=2 art=8075397D`. That marker plus a Chloe-like
+right/trigger hand wrapped around the pistol grip supports H-Chloe-order; the
+same wrong right-palm/finger orientation rejects it. The left/support hand is
+outside this 21-row authority. No marker is not a visual
 verdict: the new stage-specific reject identifies the next static boundary.
 Any jerk, broken draw/hold/holster animation, attachment/back regression, or
 mutation in ADS/state4/Mazur/Type95/M30/another art rejects the implementation.
@@ -31350,3 +31351,110 @@ layout, row20/124/157 entry identity, required-record mapping/reference-row
 validation, and post-copy epoch/identity recheck. No further runtime is earned
 until one of those alternatives is proved and a new distinguishing prediction
 is written.
+
+### 2026-09-01 STATIC CONTRACT DEFECT / IMPLEMENTED (`agk`): native retarget mode is byte-sized and fixed-up authored pointers are not a reconstructed DC image
+
+AGJ's `materialize-locked-operands` result has now been decomposed without
+launching the game. The leading exact defect is in our contract, not in the
+shipped row indices. Each runtime retarget record is `0x2E` bytes, but mode is
+only the byte at `+0x2C`; `+0x2D` is unowned tail padding. AGJ read a u16 at
+`+0x2C` in three separate stages. A correct mode `1` or `3` followed by any
+nonzero allocator residue therefore became a value greater than three and
+rejected the complete locked snapshot before native evaluation.
+
+The competing causes were separated explicitly.
+
+1. **H-mode-padding (proven contract defect; leading AGJ cause).** AGJ combined
+   the owned mode byte with uninitialized runtime-record padding. Static code
+   cannot recover PID 4820's live padding value, but a stable nonzero byte
+   naturally explains 24 identical locked failures.
+2. **H-relocated-DC (separate unsupported gate removed).** AGJ subtracted the
+   on-disk row offset from the fixed-up live authored-row pointer, then required
+   the fixed-up map pointer to equal that reconstructed base plus its file
+   offset. Native code never imposes this topology; a legal relocation/copy can
+   make the test fail even when both live pointers and their contents are valid.
+3. **H-compressed-index (REJECTED).** Builder ranges and all three shipped group
+   tables independently reproduce Player `30,32,436..472`, Chloe
+   `39,41,91..127` and Nadine `28,30,67..103` for the 21 semantic joins. AGJ's
+   compressed `+0x26/+0x2A` correction remains valid.
+4. **H-reference-layout / invalid shipped pose (REJECTED).** Native reference
+   base is `underlying + *(u32 *)(underlying+0x20)`; the shipped Player/Chloe/
+   Nadine bases contain 473/430/426 finite 48-byte rows. All 1329 rows pass the
+   same quaternion/scale validator.
+5. **H-lock contention or missing live Chloe residency (still a fail-closed
+   runtime alternative).** Static code finds no fault in the 64-bit CAS lock,
+   384-bucket/sentinel shape or epoch/identity recheck. A later no-marker result
+   would select this remaining lifecycle class; it cannot be promoted into a
+   visual verdict.
+
+The evidence quota is met by independent code/data-flow, consumer and
+deterministic-regression evidence.
+
+1. **Builder allocation/write set.** `SkelTable_BuildRetargetEntry 0x1417CE210`
+   allocates `runtime_count * 0x2E` at `0x1417CE5EB..0x1417CE635` without a
+   clearing pass. It writes default mode with
+   `mov byte ptr [r13+2Ch],0` at `0x1417CE8A8` and authored mode with
+   `mov [rbx+2Ch],al` at `0x1417CF577`. No runtime-record `+0x2D` store exists;
+   the apparent `+0x2D` use later in the function is the separate authored-row
+   arm/leg-IK header reached through entry `+0x00`.
+2. **Independent native consumer.** `RetargetPlugin_DoJointRetarget
+   0x141AE2100` loads `movzx eax, byte ptr [rdi+2Ch]` at `0x141AE23CB` and never
+   reads `record+0x2D`. This is the exact helper AGK calls for row20 and row157,
+   so a wider validation read directly contradicted the consuming ABI.
+3. **Resource-pointer data flow and regression.** Runtime entry initialization
+   stores the already fixed-up authored row pointer; builder loads the already
+   fixed-up map from `row+0x18` at `0x1417CF354/0x1417CF368`. It does not recover
+   a DC00 base. The new Release test sets mode byte `3` and deliberately fills
+   `+0x2D` with `0xA5`; parsing remains `3`. Mode byte `4` remains rejected by
+   the unchanged policy boundary.
+
+AGK makes only two contract repairs. Every runtime mode read in locked capture,
+selected-record validation and value evaluation now uses the byte at `+0x2C`.
+The live authored-map check validates its fixed-up pointer/readability and the
+existing exact count/IDs/profile/scale/flags plus every required same-StringId
+semantic join; disk row/map offsets remain frozen generator provenance, not
+live address arithmetic. The SkelTable lock, exact Player/Chloe/C39 resolver
+identities, rows 20/124/157, epochs, 21+21 copied native records, 21+21 copied
+reference rows, compressed-index bounds, value-only DoJoint/blend calls,
+state2/P99 ownership, 21-row transaction, readback and rollback are unchanged.
+No clip pointer, attachment, IK state, clock, holster/back transform, ADS path,
+other art or other weapon gains authority.
+
+Release validation passes focused `12/12`, `5448` checks and full CTest `4/4`.
+`generate_p99_chloe_source_rows.py --check`, Python compilation and
+`git diff --check` pass. The sole IDB was updated only while MCP was stopped;
+`reports/ida_apply_agk_p99_mode_status.log` reports
+`apply_labels OK: 1818 functions, 72 data names, 1 function types` and
+`save_database returned True`. The updated comments pin byte mode/unowned
+padding on `SkelTable_BuildRetargetEntry 0x1417CE210` and
+`RetargetPlugin_DoJointRetarget 0x141AE2100`, plus the fixed-up-pointer rule.
+
+The frozen x64 Release DLL is 863744 bytes, SHA-256
+`1887C0DB580C92D80A0ECD160EB7C9E63BD3B7F9A30C2876BCD82B8C8B6D6824`.
+It is newer than all modified runtime sources and contains exact AGK,
+byte-mode/relocated-map-safe and `applied=21` markers, with no AGJ init marker.
+Frozen source hashes are `coop_runtime.cpp`
+`5F617AB51B96D8F402442FAFAE31D0BAE0BE59F02527EE23F189D121D7EDE188`, policy
+header `5A5B174318159D2CDDF37C4F761BA59E202CDC16B964CDADC3C93801FC8EFAF2`, policy
+test `D7386C9283F948FCD860F8DF1E76DE9453BAD2B2CF4012EF14FD019DA71FD033` and IDA
+label script `2652B876134C66199EBBC03362FC696FDBD33078A8ADBBEB9752FB54B396AC88`.
+
+The falsifiable one-copy prediction is written before any AGK runtime. Require
+exact init `2026-09-01agk`, role B/local Nadine,
+`INSTALLED (21 offline-generated rows; two sites/one page; nested stock=3/3)`
+and READY containing `byte mode at +2C`, `relocated-map safe` and
+`compressed row20/157 indices`. The user draws the real P99, stays in
+WeaponOut/state2 without aiming/firing and holds for 3--5 seconds. If the two
+removed false predicates explain AGJ, AGK must emit
+`NADINE-P99-CHLOE-ORDER applied=21 source=offline-generated-D350-B8
+target-groups=0,1 state=2 art=8075397D` and specifically must not emit
+`reject=materialize-locked-operands`. Only that applied marker authorizes the
+visual comparison: a Chloe-like right/trigger hand wrapped around the pistol
+grip supports H-Chloe-order; the same wrong right-palm/finger orientation in the
+user's overhead screenshot rejects it. The left/support hand is outside AGK's
+21-row authority.
+Another locked-operands marker rejects this repair as sufficient and selects a
+remaining live registry/residency/lock gate, with no visual verdict. Any jerk,
+broken draw/hold/holster, attachment/back regression, ADS/state4 mutation or
+change to Mazur/Type95/M30/another art rejects the implementation. The agent
+starts/injects exactly one copy and sends no gameplay input.
