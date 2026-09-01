@@ -31479,3 +31479,28 @@ installation evidence only, not a transfer or visual verdict. The user must
 draw the real P99, remain in WeaponOut/state2 without aiming or firing and hold
 still for 3--5 seconds. The agent has sent no keyboard, mouse, controller or
 menu input, and no second game instance was started.
+
+### 2026-09-01 RUNTIME REJECTED (`agk`, PID 15644): materialization passes; postblend preflight blocks every commit
+
+The user's deliberate P99/state2 hold produced 24 consecutive
+`NADINE-P99-CHLOE-ORDER reject=postblend-preflight` rows, followed by
+`reject=saturated rows=24`. There is no `applied=21`, no commit/readback/
+rollback result and no exception. In particular, AGK emitted no
+`materialize-locked-operands`: the byte-mode and relocated-map correction
+removed AGJ's earlier locked-snapshot barrier, and the complete offline/native
+21-row evaluation was sealed into a ticket before the stock Player `+0x408`
+call. The next and only observed failure is the all-or-nothing owner/identity/
+row preflight after that stock virtual returns.
+
+Therefore AGK performed no pose write. The user's new front screenshot still
+shows the stock bad P99 hold and is not evidence for or against the computed
+Chloe-order rows; the left/support hand remains outside this experiment's
+authority. The process was stopped after the result and is now absent.
+Re-running unchanged AGK is forbidden.
+
+The remaining preflight alternatives are: a post-`+0x408` local-pose/owner
+change, controller/weapon/runtime/art identity change, registry epoch or
+skeleton identity change, the 100 ms ticket TTL, a different Player callsite,
+or an invalid source/destination 48-byte row. Static work must now resolve the
+exact failing invariant and eliminate competitors before any mutation or new
+runtime launch.

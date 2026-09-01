@@ -6665,17 +6665,25 @@ Keep the postblend preservation boundary; replace only its steady content.
       `git diff --check`. Save/read back the single IDB comments; frozen DLL is
       863744 bytes, SHA-256
       `1887C0DB580C92D80A0ECD160EB7C9E63BD3B7F9A30C2876BCD82B8C8B6D6824`.
-- [ ] Run the earned one-copy AGK exam only after commit/push. Require exact AGK,
+- [x] Run the earned one-copy AGK exam only after commit/push. Require exact AGK,
       role B, INSTALLED and byte-mode/relocated-map READY. The real P99 state2
       hold must produce `applied=21`; another locked-operands row rejects the
       mode/pointer correction as insufficient and gives no visual verdict. With
       `applied=21`, a Chloe-like right/trigger hand wrapped around the pistol
       grip supports the transfer; the same wrong right-palm/finger orientation
       rejects it. The left/support hand is outside AGK's authority. Do not
-      send gameplay input or start a second instance. BOOT READY: committed/
-      pushed AGK is injected into the sole responsive PID 15644; exact init,
-      role B, INSTALLED and READY are present. No result marker exists yet; the
-      user's deliberate P99/state2 hold is pending.
+      send gameplay input or start a second instance. RUNTIME REJECTED: PID
+      15644 emitted 24 `postblend-preflight` rows and saturation, with no
+      `applied=21`, exception or pose write. The prior `locked-operands` barrier
+      is gone, so AGK reached and sealed the complete evaluated ticket; the new
+      screenshot is stock pose only. PID 15644 was stopped and unchanged AGK
+      must not be rerun.
+- [ ] Statically decompose `seh_preflight_p99_chloe_transfer_commit` after the
+      stock Player `+0x408`: prove the exact failing invariant and eliminate
+      local-pose/owner swap, TTL, Player/callsite, weapon/controller/runtime/art,
+      registry/skeleton and 48-byte-row alternatives. Do not add a diagnostic
+      runtime or launch the game until the evidence quota supports a correction
+      and a new distinguishing prediction is written.
 
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
