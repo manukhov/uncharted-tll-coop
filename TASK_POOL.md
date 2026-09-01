@@ -6696,11 +6696,26 @@ Keep the postblend preservation boundary; replace only its steady content.
       `4/4`, generator `--check`, Python compilation and `git diff --check`.
       Frozen 863744-byte DLL SHA-256 is
       `35283F1CD501B6CB6350DC03549F028B3B0FFA6ED2C6574EEC150DF8DBC97AE7`.
-- [ ] After final independent review and commit/push, run exactly one AGL exam.
+- [x] After final independent review and commit/push, run exactly one AGL exam.
       Require exact AGL/role-B/INSTALLED/opaque-before-image READY, then the real
       P99 state2 hold. `applied=21` with no postblend reject earns visual judging
       of only the right palm/19 right fingers; another preflight reject gives no
       visual verdict. Do not send gameplay input or start a second instance.
+      BOOT READY: pushed commit `4cd1796` is injected into the sole responsive
+      PID 22180; exact AGL, role B, INSTALLED and opaque-before-image READY are
+      present. RUNTIME REJECTED: the hold emitted `applied=21`; the pistol then
+      disappeared and PID 22180 crashed. No postblend reject/rollback/exception
+      row or Windows crash dump exists. The result rejects the full 48-byte
+      value-row write into raw JointCache, not the computed grip visually.
+- [ ] Keep `agl-safe` disabled and statically prove the native field-level
+      JointCache write/publication ABI before another launch. Trace the exact
+      meaning/writers of raw row `+0x00..+0x0F`, Locator Q at `+0x10`, T at
+      `+0x20`, padding/validity, `JointCache_RecomputeWorldLocator 0x141688320`
+      and the later Async cmd14 import. Do not authorize a guessed `+0x10..+0x2F`
+      memcpy; it must preserve every non-value field and satisfy all dependent
+      caches/validity consumers statically. Safe 819712-byte DLL SHA-256 is
+      `BB7F7DE0BA58758A8A9E23872923DEE55136EE19776ADF51208D1148B6AD7AC7`;
+      it contains no P99 INSTALLED/READY strings and was not launched.
 
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to

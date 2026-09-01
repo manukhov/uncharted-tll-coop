@@ -31584,3 +31584,62 @@ owner re-resolution or TTL for a new static split. Any crash, jerk, broken
 draw/hold/holster, attachment/back regression, ADS/state4 mutation or change to
 another weapon rejects AGL. The agent starts/injects one copy only and sends no
 gameplay input.
+
+### 2026-09-01 RUNTIME BOOT READY (`agl`, PID 22180): awaiting deliberate P99/state2 hold
+
+After static commit `4cd1796` was pushed to `origin/master`, preflight found no
+running `tll.exe`. `launch_coop.ps1 -Count 1 -SettleSeconds 14` started exactly
+one responsive process, PID 22180, and injected the frozen 863744-byte AGL DLL.
+The PID-scoped log proves the exact package rather than a stale binary:
+
+- `TLL co-op runtime init 2026-09-01agl`;
+- `co-op role = B (player 2, local Nadine)`;
+- `legacy-Nadine P99 Chloe-order transfer INSTALLED (21 offline-generated rows;
+  two sites/one page; nested stock=3/3)`;
+- READY containing `opaque raw JointCache before-images`, byte-mode,
+  relocated-map, compressed-index and exact palm/prop/19-finger scope.
+
+There is no P99 result or exception yet, so this is installation evidence only.
+The user must draw the real P99, remain in WeaponOut/state2 without aiming or
+firing and hold for 3--5 seconds. The agent has sent no gameplay input and no
+second game instance was started.
+
+### 2026-09-01 RUNTIME REJECTED (`agl`, PID 22180): `applied=21`, pistol disappearance, then process crash
+
+The deliberate P99/state2 hold passed every AGL gate and emitted
+`NADINE-P99-CHLOE-ORDER applied=21 source=offline-generated-D350-B8
+target-groups=0,1 state=2 art=8075397D` at log line 102862. There is no
+postblend rejection, rollback row or logged exception after it. The user
+immediately observed that the pistol disappeared from Nadine's hand and the
+process crashed; PID 22180 is absent. Windows Application Event Log and the
+configured LocalDumps directory contain no matching tll crash record/dump, and
+the production crash observer was disabled, so no exception address is
+available from this run.
+
+This is a hard runtime rejection of the AGL full-row commit, not a visual grip
+verdict. The marker proves that all 21 writes and immediate readbacks completed;
+the disappearance/crash proves those bytes violate the downstream live-object
+contract. The raw-row correction exposed the deeper type mismatch: AGL
+correctly preserved the old leading 16-byte JointCache service/companion lane
+in its rollback image, but `seh_commit_p99_chloe_transfer_rows` then copied an
+entire value-only JointParams row over all 48 destination bytes. That replaces
+the same service lane with animation scale/value words before Async/weapon
+consumers run, exactly matching an immediate object loss and crash signature.
+
+The dangerous mutation is disabled in source as `2026-09-01agl-safe`; unchanged
+AGL must never be launched again. A successor may not copy another full 48-byte
+value row into raw `Fg+0x100`. Static work must resolve the native field-level
+JointCache publication contract: which destination bytes encode the local
+rotation/translation Locator, whether its service/companion lane and padding
+must be preserved, whether the per-joint world cache/validity needs an engine
+helper call, and how the later Async cmd14 import consumes those fields. No
+runtime is earned by merely changing the memcpy range.
+
+The rebuilt safe Release DLL is 819712 bytes, SHA-256
+`BB7F7DE0BA58758A8A9E23872923DEE55136EE19776ADF51208D1148B6AD7AC7`;
+`coop_runtime.cpp` SHA-256 is
+`B6C48AD050094240515A2C7CA794AE3EC420EE319BB37E052275F03FFA00AC8E`.
+It contains `2026-09-01agl-safe`, contains no active AGL init marker, and the
+compiler removed both P99 INSTALLED and READY strings. CTest remains `4/4` and
+the focused policy remains `13/13`, `5452` Release-safe checks. This safe DLL
+was not launched.

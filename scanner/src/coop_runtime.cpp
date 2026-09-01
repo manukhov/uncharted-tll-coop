@@ -2650,15 +2650,12 @@ constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
 // is therefore insufficient, not an admission failure. Keep this experiment
 // and the rejected abk resolver mutation off; do not widen either boundary.
 constexpr bool kEnableLegacyNadinePistolPoseGripRepair = false;
-// Build agl evaluates exact offline-generated D350/B8 rows in Chloe space, then
-// applies the live authored Chloe->legacy-Nadine retarget copied under the
-// SkelTable lock. Native runtime-record mode is the byte at +0x2c; +0x2d is
-// unowned padding, and authored/map pointers are independently fixed up rather
-// than reconstructed from disk offsets. Stock's receiver-specific retargets
-// and reference-pose scale profiles make direct Player/Nadine ordinal copying
-// non-equivalent. The transfer is state-2/P99-only and owns only r_palm, r_prop
-// and the nineteen right-finger rows.
-constexpr bool kEnableLegacyNadineP99ChloeGripTransfer = true;
+// Build agl reached applied=21, then the pistol disappeared and the process
+// crashed. The value-only JointParams rows overwrote the leading 16-byte
+// companion/service lane of raw Fg+0x100 JointCache rows. Keep the rejected
+// full-row commit disabled; any successor must prove a field-level native
+// JointCache writer contract before another launch.
+constexpr bool kEnableLegacyNadineP99ChloeGripTransfer = false;
 static_assert(!kEnableLegacyNadinePistolPoseGripRepair ||
               !kEnableLegacyNadineActiveWeaponGripOverlayRepair);
 static_assert(
@@ -80018,7 +80015,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-01agl "
+        "TLL co-op runtime init 2026-09-01agl-safe "
         "(byte retarget mode; relocated authored-map safe; compressed parameter/reference indices; offline-derived D350/B8 rows; locked SkelTable snapshot; two-site P99 commit; no live clip dereference; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
