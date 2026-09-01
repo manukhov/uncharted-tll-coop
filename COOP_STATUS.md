@@ -31458,3 +31458,24 @@ remaining live registry/residency/lock gate, with no visual verdict. Any jerk,
 broken draw/hold/holster, attachment/back regression, ADS/state4 mutation or
 change to Mazur/Type95/M30/another art rejects the implementation. The agent
 starts/injects exactly one copy and sends no gameplay input.
+
+### 2026-09-01 RUNTIME BOOT READY (`agk`, PID 15644): awaiting deliberate P99/state2 hold
+
+After static commit `02aa5c4` was pushed to `origin/master`, preflight found no
+running `tll.exe`. `launch_coop.ps1 -Count 1 -SettleSeconds 14` started exactly
+one responsive process, PID 15644, and injected the frozen 863744-byte AGK DLL.
+The PID-scoped log proves the expected package rather than a stale binary:
+
+- `TLL co-op runtime init 2026-09-01agk` with byte-mode and relocated-map-safe
+  text;
+- `co-op role = B (player 2, local Nadine)`;
+- `legacy-Nadine P99 Chloe-order transfer INSTALLED (21 offline-generated rows;
+  two sites/one page; nested stock=3/3)`;
+- READY with `byte mode at +2C`, `relocated-map safe`, compressed row20/157
+  indices, offline-generated D350/B8 and the exact 21-row ownership.
+
+There is no `NADINE-P99-CHLOE-ORDER` result or exception yet, so this is boot/
+installation evidence only, not a transfer or visual verdict. The user must
+draw the real P99, remain in WeaponOut/state2 without aiming or firing and hold
+still for 3--5 seconds. The agent has sent no keyboard, mouse, controller or
+menu input, and no second game instance was started.

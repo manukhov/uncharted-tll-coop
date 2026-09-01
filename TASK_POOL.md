@@ -6672,7 +6672,10 @@ Keep the postblend preservation boundary; replace only its steady content.
       `applied=21`, a Chloe-like right/trigger hand wrapped around the pistol
       grip supports the transfer; the same wrong right-palm/finger orientation
       rejects it. The left/support hand is outside AGK's authority. Do not
-      send gameplay input or start a second instance.
+      send gameplay input or start a second instance. BOOT READY: committed/
+      pushed AGK is injected into the sole responsive PID 15644; exact init,
+      role B, INSTALLED and READY are present. No result marker exists yet; the
+      user's deliberate P99/state2 hold is pending.
 
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
