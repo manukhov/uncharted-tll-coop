@@ -32057,3 +32057,11 @@ must disable it. Do not revive persistent-bank writes or retry native work.
 State2 admission is instantaneous, not a guarantee against transition frames.
 Only the user controls gameplay. Launch/injection and visual outcome follow;
 installation/test counts alone do not confirm the fix.
+
+AGN exam launched2026-09-17 at21:20 Moscow afterf54796b was pushed. Exactly
+one process PID15744, frozen DLL injected successfully. Current boot log
+confirms exact2026-09-17agn, roleB/localNadine, four-siteINSTALLED and READY;
+process responds. No gameplay input was sent. At handoff the user still needs
+to load/drawP99/stand3-5s and report the visible grip. There is no captured
+EXECUTED/visual result yet, so the grip remains UNCONFIRMED. Next turn read
+PID15744's P99-GROUP lines and user's image; do not infer success from READY.
