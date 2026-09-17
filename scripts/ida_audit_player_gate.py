@@ -10,7 +10,7 @@ import idautils
 
 FUNCTION_TARGETS = {
     0x1410F0D10: "GetRetainedPlayerEntityBySlot",
-    0x1410F0DD0: "FindRetainedPlayerSlotIndex",
+    0x1410F0DD0: "PlayerSlots_ContainsRetainedIdentity",
     0x1410F0F60: "ResolveRetainedPlayerHandleBySlot",
     0x140298D70: "ResolveLocalPlayerVFunc_A8",
     0x140289150: "Input_PerSlotApply",

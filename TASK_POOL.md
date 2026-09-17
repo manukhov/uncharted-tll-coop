@@ -11,14 +11,17 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-17, AGP-safe): AGO is REJECTED after the user's severe
-lag report. Both P99 transfer packages are compile-time disabled; all four
-new hooks are absent from the next injection. Safe DLL rebuilt, CTest9/9 pass;
-no runtime performance recovery claimed and no game relaunched. Grip is NOT
-fixed. First audit/bound hot-path admission: AGO put VirtualQuery before the
-local-owner filter, reintroducing the API implicated in the CONFIRMED July4
-lag finding. Do not relaunch AGO or drop storage/guard-page safety checks.
-See final2026-09-17 COOP_STATUS entry for hashes, competing causes and next step.
+Current handoff (2026-09-17, AGQ-safe): AGO remains REJECTED for severe lag.
+Both P99 packages remain compile-time disabled. A statically grounded early
+Fg-versus-slot handle64/generation32 filter now rejects unrelated native jobs
+before VQ/source work; no retained-cell/Player dereference or cross-frame cache.
+Noncopyable bounded page-query batches are stage-local, never cross-native.
+Source-preparation reentry is also guarded. Release/CTest11/11 pass, including
+100000 foreign-job policy cases and actual guard-page non-touch tests in a
+separate test process. No game launch, no runtime performance/grip success.
+Next add/test selected-job cost budget and safe overrun policy; do not enable
+before that work and a new falsifiable exam. See final2026-09-17 COOP_STATUS
+entry for precise contracts, labels, test counts, limitations and frozen hash.
 
 Earlier storage finding: AGL's admitted21-row attempt corrupted memory:
 the persistent `Fg+100` bank has66 rows, but finger globals105..141 were used
@@ -6766,10 +6769,13 @@ Keep the postblend preservation boundary; replace only its steady content.
       only INSTALLED/READY, no EXECUTED/REFUSED/PARTIAL. Grip remains untested.
       Disable the whole package in AGP-safe, preserve old-writer ban and AGC
       attachments. Release/CTest9/9 pass; no new game launch.
-- [ ] Audit and bound admission/validation cost before another P99 candidate.
-      Start with broad pre-owner VirtualQuery calls and existing July4 lag
-      finding; account for source-lock and repeated manifest work separately.
-      Add offline rejected-job call-count tests; retain full safety checks.
+- [x] Add reject-only Fg/slot tuple filter before broad VQ work; keep full owner
+      admission. Add stage-local bounded query batching, not whole-job caching.
+      Test foreign-job call counts, guard preservation and source-entry nesting.
+      AGQ-safe remains disabled; Release/CTest11/11 pass, no game launch.
+- [ ] Bound selected-owner source/validation cost and fail-closed overrun policy
+      before a new runtime candidate. No late rollback/native retry, no stale
+      registry pointers, no loosening allocator/guard/program checks.
 
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to

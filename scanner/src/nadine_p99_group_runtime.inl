@@ -20,6 +20,7 @@ struct P99GroupProcess {
 };
 thread_local P99GroupJob* g_p99_group_job = nullptr;
 thread_local P99GroupProcess* g_p99_group_process = nullptr;
+thread_local coop::p99_group_entry::Active* g_p99_group_entry = nullptr;
 AnimManagerAsyncObjectUpdateJointBlendJobFunction g_p99_group_async = nullptr;
 std::atomic<bool> g_p99_group_failed{false};
 std::atomic<unsigned> g_p99_group_reject_logs{0};
@@ -51,26 +52,16 @@ template<class T> T p99_group_load(const void* pointer, std::size_t offset = 0) 
     std::memcpy(&value, static_cast<const std::byte*>(pointer) + offset, sizeof(value));
     return value;
 }
-bool p99_group_readable(std::uintptr_t address, std::size_t bytes) {
+using P99ReadBatch = coop::p99_group_readability::Batch;
+bool p99_group_readable(P99ReadBatch& pages, std::uintptr_t address, std::size_t bytes) {
     // The shared fast readable_bytes helper is capped around0xB000 and can
     // NEVER admit the native0x20000 arena. Walk precisely the requested pages
     // here; do not widen that unrelated hot-path probe or skip allocator checks.
-    return coop::p99_group_readability::readable(address,bytes,
-        [](std::uintptr_t cursor,coop::p99_group_readability::Region& region) {
-            MEMORY_BASIC_INFORMATION mbi{};
-            if(VirtualQuery(reinterpret_cast<const void*>(cursor),&mbi,sizeof(mbi))!=sizeof(mbi)) return false;
-            const auto protection=mbi.Protect&0xFF;
-            const bool accessible=protection==PAGE_READONLY || protection==PAGE_READWRITE ||
-                protection==PAGE_EXECUTE_READ || protection==PAGE_EXECUTE_READWRITE ||
-                protection==PAGE_WRITECOPY || protection==PAGE_EXECUTE_WRITECOPY;
-            region={reinterpret_cast<std::uintptr_t>(mbi.BaseAddress),mbi.RegionSize,
-                mbi.State==MEM_COMMIT,accessible,(mbi.Protect&PAGE_GUARD)!=0};
-            return true;
-        });
+    return pages.readable(address, bytes, coop::p99_group_memory::query_region);
 }
 
-bool p99_group_program_exact(std::uintptr_t raw, std::uintptr_t custom, std::uint16_t count) {
-    if (!p99_group_readable(raw, p99_program::kRequiredRawExtent) ||
+bool p99_group_program_exact(P99ReadBatch& pages, std::uintptr_t raw, std::uintptr_t custom, std::uint16_t count) {
+    if (!p99_group_readable(pages, raw, p99_program::kRequiredRawExtent) ||
         custom != g_module + p99_program::kCustomTableRva || count != p99_program::kCustomCount)
         return false;
     std::array<p99_program::RegionView, p99_program::kRegions.size()> regions{};
@@ -94,11 +85,12 @@ bool p99_group_program_exact(std::uintptr_t raw, std::uintptr_t custom, std::uin
 }
 
 bool seh_p99_group_normal_job(void* job, P99GroupJob* output) {
+    P99ReadBatch pages; // Expires before source/retarget work, not at job end.
     __try {
-        if (!p99_group_readable(reinterpret_cast<std::uintptr_t>(job), 0x38) ||
+        if (!p99_group_readable(pages, reinterpret_cast<std::uintptr_t>(job), 0x38) ||
             p99_group_load<std::uintptr_t>(job) == 0) return false;
         const auto fg = p99_group_load<std::uintptr_t>(job, 8);
-        if (!p99_group_readable(fg, 0x2A8)) return false;
+        if (!p99_group_readable(pages, fg, 0x2A8)) return false;
         const auto* f = reinterpret_cast<const void*>(fg);
         const auto art = p99_group_load<std::uintptr_t>(f, 0x18);
         if (p99_group_load<std::uint8_t>(f, 6) != 2 ||
@@ -107,9 +99,9 @@ bool seh_p99_group_normal_job(void* job, P99GroupJob* output) {
             p99_group_load<std::uintptr_t>(f, 0x2A0) != 0 ||
             art == 0 || art != p99_group_load<std::uintptr_t>(f, 0x1A0) ||
             *reinterpret_cast<const std::uint8_t*>(g_module + 0x3682F4B) != 0 ||
-            !p99_group_readable(art, 0x48)) return false;
+            !p99_group_readable(pages, art, 0x48)) return false;
         const auto raw = p99_group_load<std::uintptr_t>(reinterpret_cast<const void*>(art), 0x40);
-        if (!p99_group_readable(raw, 0x40) ||
+        if (!p99_group_readable(pages, raw, 0x40) ||
             p99_group_load<std::uint32_t>(reinterpret_cast<const void*>(raw), 4) != p99_order::kNadineSkeletonId ||
             p99_group_load<std::uint16_t>(reinterpret_cast<const void*>(raw), 0x1A) != 6480) return false;
         output->fg = fg;
@@ -143,27 +135,71 @@ bool prepare_p99_group_values(void* job, P99GroupJob* output) {
     return true;
 }
 
+bool seh_p99_group_entry_observations(void* job, coop::p99_group_entry::Observations* output) {
+    __try {
+        // Native entry contract only: both producers give this invocation a
+        // live job/Fg. Read no retained-cell/Player/weapon/Art pointer here.
+        // Async producer141781502; sync141782AF3; native reader141A92A43.
+        const auto* slot = reinterpret_cast<const void*>(g_module + kRetainedSlotTableRva);
+        output->slot_before = {p99_group_load<std::uintptr_t>(slot),
+            p99_group_load<std::uint32_t>(slot, 8)};
+        if (!coop::p99_group_entry::same(output->slot_before, output->slot_before)) return false;
+        const auto fg = p99_group_load<std::uintptr_t>(job, 8);
+        if (fg == 0) return false;
+        const auto* f = reinterpret_cast<const void*>(fg);
+        // Exact copies of Process+ A8/BC: Fg producer14177F975,
+        // slot producers1410F17E9/1410F3AC9; equality consumer1410F0DD0.
+        output->fg = {p99_group_load<std::uintptr_t>(f, kFgAnimDataRetainedHandleOffset),
+            p99_group_load<std::uint32_t>(f, kFgAnimDataRetainedIdOffset)};
+        // Volatile reload: detect observed turnover, not an atomic pair/lease.
+        const auto* again = reinterpret_cast<const volatile std::byte*>(slot);
+        output->slot_after = {*reinterpret_cast<const volatile std::uintptr_t*>(again),
+            *reinterpret_cast<const volatile std::uint32_t*>(again + 8)};
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+
+// No large source/job values are initialized for foreign animation objects.
+// Keep this separate from the outer native-entry/TLS wrapper.
+__declspec(noinline) void p99_group_candidate_async(void* job, const coop::p99_group_entry::Active& entry) {
+    P99GroupJob current{};
+    if (prepare_p99_group_values(job, &current) && !entry.reentered) g_p99_group_job = &current;
+    __try { g_p99_group_async(job); }
+    __finally {
+        if (current.incomplete()) p99_group_partial(current, "job-ended-without-both-groups");
+        g_p99_group_job = nullptr;
+    }
+}
+
 void __fastcall hooked_p99_group_async(void* job) {
     auto* previous_job = g_p99_group_job;
     auto* previous_process = g_p99_group_process;
-    P99GroupJob current{};
+    auto* previous_entry = g_p99_group_entry;
+    coop::p99_group_entry::Active entry{};
+    coop::p99_group_entry::mark_parent(previous_entry);
+    g_p99_group_entry = &entry;
     g_p99_group_job = nullptr;
     g_p99_group_process = nullptr;
     if (previous_job != nullptr) {
         p99_group_partial(*previous_job, "nested-async");
-    } else if (g_p99_group_shadow_ready.load(std::memory_order_acquire) &&
-               !g_p99_group_failed.load(std::memory_order_relaxed) &&
-               prepare_p99_group_values(job, &current)) {
-        g_p99_group_job = &current;
     }
     // No exception handler retries stock. The finally block expires all scope
     // identities even when native execution unwinds exceptionally.
-    __try { g_p99_group_async(job); }
+    __try {
+        const bool eligible = previous_entry == nullptr && previous_job == nullptr && previous_process == nullptr &&
+            job != nullptr && g_module != 0 && g_state_net.enabled && g_net_role_b &&
+            g_p99_group_shadow_ready.load(std::memory_order_acquire) &&
+            !g_p99_group_failed.load(std::memory_order_relaxed);
+        const bool candidate = coop::p99_group_entry::admit(eligible,
+            [&](coop::p99_group_entry::Observations& seen) { return seh_p99_group_entry_observations(job, &seen); },
+            [] { return true; });
+        if (candidate) p99_group_candidate_async(job, entry);
+        else g_p99_group_async(job);
+    }
     __finally {
-        if (current.incomplete())
-            p99_group_partial(current, "job-ended-without-both-groups");
         g_p99_group_process = previous_process;
         g_p99_group_job = previous_job;
+        g_p99_group_entry = previous_entry;
     }
 }
 
@@ -243,8 +279,8 @@ std::uint32_t* __fastcall hooked_p99_group_cmd16(std::uint32_t* status, const vo
     return result;
 }
 
-bool p99_group_identity_exact(const P99GroupJob& job) {
-    if (!p99_group_readable(job.fg,0x2A8) || !p99_group_readable(job.art,0x48)) return false;
+bool p99_group_identity_exact(P99ReadBatch& pages, const P99GroupJob& job) {
+    if (!p99_group_readable(pages,job.fg,0x2A8) || !p99_group_readable(pages,job.art,0x48)) return false;
     const auto* fg=reinterpret_cast<const void*>(job.fg);
     return p99_group_load<std::uintptr_t>(fg,0x18)==job.art &&
         p99_group_load<std::uintptr_t>(fg,0x1A0)==job.art &&
@@ -256,20 +292,21 @@ bool p99_group_identity_exact(const P99GroupJob& job) {
 
 bool seh_prepare_p99_group_process(const std::uint32_t* commands, std::uint32_t words,
     const void* context, std::uint32_t group, const void* callback, P99GroupProcess*) {
+    P99ReadBatch pages; // Never reused by cmd16 or the other group's Process.
     __try {
         auto& job=*g_p99_group_job;
         if (group>1 || words==0 || words>p99_admit::kMaxCommandWords ||
-            !p99_group_identity_exact(job) ||
-            !p99_group_readable(reinterpret_cast<std::uintptr_t>(context),0x28) ||
-            !p99_group_readable(reinterpret_cast<std::uintptr_t>(commands),words*sizeof(std::uint32_t)) ||
+            !p99_group_identity_exact(pages,job) ||
+            !p99_group_readable(pages,reinterpret_cast<std::uintptr_t>(context),0x28) ||
+            !p99_group_readable(pages,reinterpret_cast<std::uintptr_t>(commands),words*sizeof(std::uint32_t)) ||
             p99_group_load<std::uintptr_t>(context)!=job.art ||
             p99_group_load<std::uintptr_t>(context,0x10)!=job.fg+0x1C0 ||
             p99_group_load<std::uint32_t>(context,0x20)!=0) return false;
         const auto scratch=p99_group_load<std::uintptr_t>(context,0x18);
-        if (!p99_group_readable(scratch,6480) || (scratch&15)!=0 ||
+        if (!p99_group_readable(pages,scratch,6480) || (scratch&15)!=0 ||
             (group==1 && scratch!=job.scratch)) return false;
         const auto count=*reinterpret_cast<const std::uint16_t*>(g_module+p99_program::kCustomCountRva);
-        if (!p99_group_program_exact(job.raw,g_module+p99_program::kCustomTableRva,count)) return false;
+        if (!p99_group_program_exact(pages,job.raw,g_module+p99_program::kCustomTableRva,count)) return false;
         const auto* fg=reinterpret_cast<const void*>(job.fg);
         p99_admit::CommandBindings binding{};
         binding.image_base=g_module;
@@ -301,10 +338,11 @@ bool seh_prepare_p99_group_process(const std::uint32_t* commands, std::uint32_t 
 
 bool seh_prepare_p99_group_shadow(const void* context, P99GroupProcess* process,
     p99_shadow::Shadow* shadow, p99_shadow::Context* copied) {
+    P99ReadBatch pages; // Destroyed before native cmd16; no cross-group approval.
     __try {
         const auto& job=*process->job;
-        if (!p99_group_identity_exact(job) ||
-            !p99_group_readable(reinterpret_cast<std::uintptr_t>(context),0x80))
+        if (!p99_group_identity_exact(pages,job) ||
+            !p99_group_readable(pages,reinterpret_cast<std::uintptr_t>(context),0x80))
             return p99_group_gate_failed("cmd16-job/context-range");
         alignas(16) p99_shadow::Context original{};
         std::memcpy(original.data(),context,original.size());
@@ -319,7 +357,7 @@ bool seh_prepare_p99_group_shadow(const void* context, P99GroupProcess* process,
             p99_group_load<std::uintptr_t>(c,0x20)!=0 ||
             p99_group_load<std::uintptr_t>(c,0x28)!=job.raw ||
             p99_group_load<std::uintptr_t>(c,0x30)!=job.scratch ||
-            !p99_group_program_exact(job.raw,custom,custom_count))
+            !p99_group_program_exact(pages,job.raw,custom,custom_count))
             return p99_group_gate_failed("cmd16-context/program-binding");
         const auto descriptor=job.raw+0x40+group*0x20;
         const auto processing_index=p99_group_load<std::uint16_t>(reinterpret_cast<const void*>(descriptor),2);
@@ -330,7 +368,7 @@ bool seh_prepare_p99_group_shadow(const void* context, P99GroupProcess* process,
             return p99_group_gate_failed("cmd16-descriptors");
         p99_admit::WorkBuffer work{};
         work.address=p99_group_load<std::uintptr_t>(c);
-        if (!p99_group_readable(work.address,88)) return p99_group_gate_failed("cmd16-workbuffer-range");
+        if (!p99_group_readable(pages,work.address,88)) return p99_group_gate_failed("cmd16-workbuffer-range");
         const auto* w=reinterpret_cast<const void*>(work.address);
         work.arena=p99_group_load<std::uint64_t>(w,0);
         work.arena_bytes=p99_group_load<std::uint64_t>(w,8);
@@ -344,8 +382,8 @@ bool seh_prepare_p99_group_shadow(const void* context, P99GroupProcess* process,
         work.back_count=p99_group_load<std::uint32_t>(w,0x4C);
         work.capacity=p99_group_load<std::uint32_t>(w,0x50);
         if (work.arena_bytes!=p99_admit::kArenaBytes || work.metadata_bytes!=p99_admit::kMetadataBytes ||
-            !p99_group_readable(work.arena,p99_admit::kArenaBytes) ||
-            !p99_group_readable(work.metadata,p99_admit::kMetadataBytes))
+            !p99_group_readable(pages,work.arena,p99_admit::kArenaBytes) ||
+            !p99_group_readable(pages,work.metadata,p99_admit::kMetadataBytes))
             return p99_group_gate_failed("cmd16-arena/metadata-range");
         std::array<p99_admit::Allocation,p99_admit::kCapacity> records{};
         std::array<p99_admit::Address,p99_admit::kCapacity> table{};

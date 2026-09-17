@@ -33,7 +33,8 @@
 #include "nadine_p99_group_program_manifest.h"
 #include "nadine_p99_group_admission.h"
 #include "nadine_p99_group_scope.h"
-#include "nadine_p99_group_readability.h"
+#include "nadine_p99_group_memory.h"
+#include "nadine_p99_group_entry.h"
 #include "nadine_pistol_grip_policy.h"
 
 // ============================================================================
@@ -61636,7 +61637,8 @@ std::atomic<bool> g_p99_chloe_transfer_ready{false};
 // Independent admission for cmd16-owned expanded storage. Never authorizes
 // the rejected persistent JointCache writer below.
 // AGO runtime rejected: severe user-visible lag. Keep the entire four-site
-// package absent until broad Async admission and per-job costs are audited.
+// package absent. AGQ adds offline-tested early identity admission and stage
+// batching; selected-owner source/validation cost still needs a bounded budget.
 constexpr bool kEnableP99GroupShadow = false;
 static_assert(!kEnableP99GroupShadow || !kEnableLegacyNadineP99ChloeGripTransfer,
     "Expanded group shadows must never coexist with the rejected persistent writer");
@@ -80060,8 +80062,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-17agp-safe "
-        "(P99 group-shadow hooks disabled after AGO lag; legacy persistent grip writer disabled; AGC back profiles retained)");
+        "TLL co-op runtime init 2026-09-17agq-safe "
+        "(P99 hooks remain disabled; early identity filter/stage batches offline-tested only; legacy persistent grip writer disabled; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "

@@ -32170,3 +32170,87 @@ accessibility, allocation membership and guard-page safety; do not replace
 them with stale pointer caches or globally widen/change readable_bytes.
 Any optimized runtime candidate needs a new static quota and falsifiable
 prediction including both frame-time and grip outcomes before a game exam.
+
+### 2026-09-17 STATIC / OFFLINE (`agq-safe`): reject foreign jobs before page queries
+
+Both P99 packages remain disabled. This turn adds a bounded candidate filter
+and read-only-stage query batching, NOT a runtime grip/performance success.
+The legacy persistent-bank writer and all AGC attachment settings are unchanged.
+
+**Early identity gate, three independent evidence types.** Producer/caller
+graph: async141781390 stores job+8=Fg at141781502 and job+0=*(Fg+10) at
+141781506/50A; sync callback141782AF0, referenced by AnimMgr_SyncUpdate at
+1417831B7, constructs the same0x38-byte record at141782AF3/AFE. Native consumer
+141A92A43/4F reads job/Fg directly. Dataflow: AllocateAnimData14177F7F0 loads
+Process+A8/BC at14177F94E/95A and copies handle64/id32 to Fg+1A8/1B0 at
+14177F975. Spawn writer1410F14C0 loads the same fields at1410F17BB/17C6 and
+publishes the slot tuple at1410F17E9. Independent writer1410F36C0 does the
+same at1410F3AB4/3ABA/3AC9. Structural lifetime agreement: the existing
+agm-job-contract covers current native job/Fg within normal animation phase;
+the filter neither resolves a retained cell nor dereferences Player/weapon.
+
+Compare nonzero full handle64 and generation32 with module slot0 at143EEBE80
+and143EEBE88. Native1410F0DD0 compares those exact fields, no mask and no
+padding+0C. Its old label FindRetainedPlayerSlotIndex was wrong: disassembly
+returns AL=1/0, not R8D index. Relabeled PlayerSlots_ContainsRetainedIdentity.
+Reject job+0-as-Player (it is an AnimControl pointer), pointer-only equality,
+memcmp16 padding comparison, and cross-frame cached Player/Fg. The native
+getter1410F0D10 is not used (it also mutates entity+72).
+
+`nadine_p99_group_entry.h` is reject-only. Runtime samples slot tuple, the
+current native Fg tuple, then volatile-reloads slot tuple; mismatch/observed
+turnover goes stock. Matching rereads are NOT an atomic snapshot or a lifetime
+lease; the original full owner/Fg/generation/P99/state2/source selector is
+still mandatory. Before candidate admission there are no page walks, VQ,
+native getters, SkelTable locks or large SourceRows initializations. An
+explicit entry TLS sentinel now covers source preparation too: nested entry
+marks its parent, runs stock, and cannot publish parent rows after reentry.
+All three TLS pointers restore under __finally; no retry of a native call.
+These exact direct reads assume the real native invocation/job contract,
+not arbitrary invalid caller-provided pointers or external lifecycle mutation.
+
+**Separate read-only batches, never a whole-job cache.** Normal admission,
+Process0, cmd16/g0, Process1 and cmd16/g1 each create their own noncopyable
+Batch. An accepted VirtualQuery region can cover several exact spans inside
+that stage; total queries/regions are bounded by64, each span by128KiB.
+Zero/overflow/gap/guard/uncommitted/inaccessible/limit failures latch closed.
+No batch is reused after source/retarget/allocator/native/callback work.
+Terminal logging can occur before destruction but is followed immediately
+by return, never another read using the batch. Full allocator metadata,
+identity, command grammar, program bytes and isolation checks remain fresh.
+
+Rejected alternatives: a whole-Async protection cache is not established by
+the Fg destruction schedule; each Process allocates fresh WorkBuffer/arena/
+metadata and native commands mutate allocation membership. A SEH byte probe
+would consume PAGE_GUARD on first access even if its exception is caught.
+Windows protection queries are snapshots, not locks against concurrent
+VirtualProtect. Sources: Microsoft [guard pages](https://learn.microsoft.com/en-us/windows/win32/memory/creating-guard-pages)
+and [VirtualQuery](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualquery).
+Do not extend the adapter's guard non-touch result to every direct/SEH read.
+
+**Offline verification only.** Release build and CTest11/11 pass. Entry-policy
+suite112294 checks includes100000 foreign identities with zero expensive
+callback executions, disabled/failed reads, full32-bit generation differences,
+turnover and refusal propagation. Readability4364 checks cover bounded region
+reuse, guard at every page, total query cap, fresh stage after changed protection
+and permanent refusal. Shared Windows adapter suite104 checks allocates ONLY
+test-process pages, proves same-region Batch reuse with one query, destroys
+that Batch, sets a guard page, then proves a fresh Batch rejects while the
+guard bit remains set. It also checks128KiB coverage and reserve/decommit/
+noaccess transitions. Tests do not measure game frame times or execute hooks.
+
+Independent read-only entry/Batch reviews found no blocking defects; their
+nesting gap and test suggestions were addressed. Selected-owner work still
+includes repeated owner/source/registry and manifest checks. Savings from
+Batch depend on actual region placement; do not promise a fixed reduction
+from AGO's minimum30 queries per fully admitted job. Runtime eligibility
+remains withheld until selected-job work has a bounded cost/failure policy.
+
+Frozen disabled DLL2026-09-17agq-safe,819712bytes SHA256
+`BCE85BEDF7CDD2D99B86CC9168250F54FB8ABE7557347EA558DE2D4FCEB0A16A`.
+No game launch/injection/gameplay. Sole IDB labels saved:1828functions,
+72data,1type; reports/ida_apply_agq_status.txt says save_database returned True.
+Next: add/test a selected-job cost budget with fail-closed shutdown BEFORE
+publication, explicitly handle a late overrun without rollback/native retry,
+and audit redundant source work without keeping borrowed registry pointers.
+Only then formulate a new one-copy grip/frame-time prediction and enable it.

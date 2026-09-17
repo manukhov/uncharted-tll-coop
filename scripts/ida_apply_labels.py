@@ -2798,7 +2798,16 @@ FUNCTIONS = {
     0x141781390: (
         "AnimManager_CreateAsyncUpdateJobFunctor",
         "Creates the async animation-manager job for an FgAnimData object. The "
-        "job callback is AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00.",
+        "job callback is AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00. "
+        "At 0x141781502 writes job+8=Fg; 0x141781506/50A copies *(Fg+0x10) "
+        "into job+0 (AnimControl, NOT Player). Appends a 0x38-byte record.",
+    ),
+    0x141782AF0: (
+        "AnimManager_AppendSyncUpdateJobAndStepParams",
+        "Sync-manager callback referenced at 0x1417831B7. Appends a 0x38-byte "
+        "job to *arg2: job+8=Fg at 0x141782AF3, job+0=*(Fg+0x10) at "
+        "0x141782AFE, job+0x30=0, then tail-dispatches animation parameter step. "
+        "Independent producer proof for native animation job layout.",
     ),
     0x1417816B0: (
         "AnimMgr_AsyncUpdateAndWaitForBuckets",
@@ -5041,7 +5050,12 @@ FUNCTIONS = {
         "command list itself owns canonical clip liveness. "
         "When job.byte(+0x14)==0 and Fg.flags(+0)&0x20, resolves retained "
         "owner at +0x1A8/+0x1B0 "
-        "and dispatches owner vtable+0x410 then +0x418.",
+        "and dispatches owner vtable+0x410 then +0x418. "
+        "STATIC reject-only early owner candidate: native job+8 supplies Fg; "
+        "compare Fg handle64@1A8/generation32@1B0 with slot0@143EEBE80/+8, "
+        "without dereferencing retained cell/Player. AllocateAnimData and "
+        "spawn commit copy the same Process+A8/BC pair. Matching is NOT a "
+        "lease or write admission; full owner checks remain mandatory.",
     ),
     0x141A8F9D0: (
         "AnimManager_DispatchRetainedOwnerPhase",
@@ -5690,7 +5704,17 @@ FUNCTIONS = {
         "now clearly tags that path with `Player` and `*player-health-settings*`, "
         "materializes a runtime object through 0x1417C3790, then harvests the "
         "returned object's +0xA8/+0xBC retained-live pair and stores it in the "
-        "global retained player-slot table at 0x143EEBE80.",
+        "global retained player-slot table at 0x143EEBE80. "
+        "Exact copies at 0x1410F17BB/17C6/17E9 establish bit-equivalence with "
+        "Fg+1A8/1B0 written by AllocateAnimData; padding+0xC is not identity.",
+    ),
+    0x1410F36C0: (
+        "PlayerSlots_SpawnAndPublishPrimaryPlayer",
+        "Front-end path called at 0x14093C55D builds Player ProcessSpawnInfo "
+        "and resolves an object. Reads Process+BC at 0x1410F3AB4 and +A8 at "
+        "0x1410F3ABA, publishes this handle64/id32 pair to retained slot0 at "
+        "0x1410F3AC9 and mirrors the result to caller output. Independent "
+        "slot0 identity writer, equivalent to CommitResolvedPlayerSpawn.",
     ),
     0x1417C32A0: (
         "InitializeSelectorBackedProcessSpawnPacket",
@@ -5781,9 +5805,11 @@ FUNCTIONS = {
         "focus/activation path at 0x14029ACB0.",
     ),
     0x1410F0DD0: (
-        "FindRetainedPlayerSlotIndex",
+        "PlayerSlots_ContainsRetainedIdentity",
         "Searches the 6-entry g_RetainedPlayerSlotTable for a matching "
-        "(handle,id) pair and returns the slot index.",
+        "handle64 at +0 and generation32 at +8, exact bit equality without "
+        "masking or comparing padding+0xC. Returns AL=1/0, NOT the index: "
+        "the old FindRetainedPlayerSlotIndex interpretation was incorrect.",
     ),
     0x1410F0E00: (
         "CopyRetainedPlayerSlot0Entry",
@@ -10627,7 +10653,10 @@ FUNCTIONS = {
         "identity. Claims a 0x380-byte FgAnimData slot from the global pool "
         "at 0x1466D0200, copies Process+0xA8/+0xBC into the retained pair at "
         "+0x1A8/+0x1B0, and initializes the driven-instance capacity/count/"
-        "index array at +0x208/+0x20C/+0x210.",
+        "index array at +0x208/+0x20C/+0x210. Pair loads 0x14177F94E/95A "
+        "and store 0x14177F975 match the slot-table spawn writers bit-for-bit; "
+        "this permits reject-only Fg-versus-slot identity comparison without "
+        "resolving a possibly unrelated retained cell.",
     ),
     0x14177FA70: (
         "AnimMgr_FreeAnimData",
@@ -13266,10 +13295,11 @@ DATA_NAMES = {
     ),
     0x143EEBE80: (
         "g_PlayerHandleForHudPublish",
-        "Global {pointer, id} handle (id at +8, validated against object+0xBC) "
-        "consumed once per frame by PlayerHud_GlobalHandleUpdateEntry to run "
-        "PlayerHud_ScreenStatePublishUpdate. ~830 xrefs across the binary — "
-        "behaves like THE primary local-player handle singleton.",
+        "Primary slot of six 16-byte retained player entries: handle64+0, "
+        "generation32+8, padding+0xC. Slot0 also serves the legacy HUD global "
+        "handle name. Spawn writers copy Process+A8/BC, identical to the Fg "
+        "owner pair at +1A8/1B0; ContainsRetainedIdentity compares exactly "
+        "12 identity bytes, not the padding. A raw tuple is NOT a lifetime lease.",
     ),
     0x143EF1E30: (
         "g_PerScreenPlayerHudState",
