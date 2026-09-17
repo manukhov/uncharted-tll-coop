@@ -457,10 +457,22 @@ FUNCTIONS = {
     ),
     0x141686CD0: (
         "JointCache_InitializeAndAllocatePoseBuffers",
-        "Initializes the JointCache embedded at FgAnimData+0x30. For config "
-        "type 2 it allocates the 48-byte-per-joint local pose at overall "
-        "+0x100, the 32-byte world Locator array at +0x108 and the 64-byte "
-        "matrix workspace at +0x110.",
+        "Initializes JointCache at FgAnimData+0x30. Config 2 allocates the "
+        "local JointParams bank at Fg+0x100 as 48*u16(ArtItemSkeleton+0x3C) "
+        "at 0x141686DF5..0x141686E28. World Locators +0x108 and matrices "
+        "+0x110 use 32/64*group0.workspace_count. C39 has local 66 rows, "
+        "world/matrix 104 rows; neither is the full 580-joint workspace or "
+        "426-row packed reference pose. Readable virtual memory beyond the "
+        "3168-byte C39 local allocation grants no row ownership.",
+    ),
+    0x141687150: (
+        "JointCache_ResetAndSeedGroup0Pose",
+        "Resets group-0 world/matrix caches and validity, then at "
+        "0x1416872CB..0x141687353 seeds exactly group0.parameter_count "
+        "48-byte numeric JointParams from rawSkeleton+u32(rawSkeleton+0x20) "
+        "into JointCache+0xD0 (Fg+0x100). C39 seeds 66 rows, not fingers "
+        "in group 1. Scale.xyz/Q/translation.xyz are values; only the two "
+        "scale/translation W lanes may contain nonfinite service bits.",
     ),
     0x141687970: (
         "JointCache_ComputeJointWorldLocatorAndMarkValid",
@@ -471,13 +483,19 @@ FUNCTIONS = {
         "JointCache_RecomputeWorldLocatorFromLocalPose",
         "Reads one 48-byte local-pose row from the JointCache, resolves and "
         "composes its parent world Locator, writes the joint's 32-byte world "
-        "Locator, and marks that joint valid. ABI: RCX=JointCache, EDX=joint.",
+        "Locator, and marks that joint valid. ABI: RCX=JointCache, EDX=joint. "
+        "Guard 0x14168834F requires joint < group0.parameter_count: C39 "
+        "indices >=66 return without work. The scale read at 0x141688361 "
+        "comes from local row zero; Q/T use the selected row+0x10/+0x20. "
+        "This is not a recompute API for the complete global skeleton.",
     ),
     0x14181ECD0: (
         "JointSet_CommitJointTransformsAndReset",
         "Copies each valid numeric JointSet result into the live 48-byte-per-joint "
         "JointCache local pose using the receiver-local index array at +0x18, "
-        "then dispatches the JointSet reset slot.",
+        "then dispatches the JointSet reset slot. It performs no local-bank "
+        "extent check; authored indices must already belong to that bank. "
+        "Its full-row stores do not authorize arbitrary global finger indices.",
     ),
     0x14181F450: (
         "JointSet_ApplyRelativeJointRotation",
@@ -2283,9 +2301,12 @@ FUNCTIONS = {
         "the six-word command 14 at 0x141A8FF52..0x141A8FF89 from build-context "
         "qwords 7/6 (JointParams/scalar source pointers), after the preceding "
         "command-3/4 close and before command 15. "
-        "For every finalized skeleton group it also emits opcode 27 (0x6001B) "
-        "with destination FgAnimData+0x100+48*groupStart, the persistent local "
-        "JointParams array consumed by post-blend IK. Normal builder return "
+        "Opcode 27 (0x6001B) is emitted only if the selected flags permit "
+        "export and packedFirst+parameterCount <= CreateContext+0x50 "
+        "(0x141A9046E). Destination is context+0x48 plus 48*packedFirst "
+        "when flags&4, otherwise 48*workspaceFirst (0x141A90484). Perform "
+        "supplies Fg+0x100 with capacity group0.parameter_count: C39 group1 "
+        "66+38 exceeds 66 and is never exported there. Normal builder return "
         "0x141A91604 receives the complete command list; the separate prepass "
         "return 0x141A920A7 must not be confused with that final group build. "
         "Local role-B Mazur runtime confirms both Perform and final Async normal "
@@ -3435,7 +3456,9 @@ FUNCTIONS = {
         "+0x230 into previous buffer +0x238. Its normal command path reads the "
         "persistent local JointParams pointer at FgAnimData+0x100 at "
         "0x141A92547 and passes it to BuildCommandSegmentsForObjectMask; this "
-        "buffer is separate from the current/previous skinning pair. It reads "
+        "buffer is separate from the current/previous skinning pair. Its "
+        "destination capacity is group0.parameter_count at "
+        "0x141A9254E..0x141A9256A (C39 66), not the full skeleton count. It reads "
         "and evaluates the normal AnimControl command DAG before the later Player "
         "post-blend phase. The final Async job's mode-2 command 14 subsequently "
         "imports this same +0x100 pose into its group WorkBuffer. It reads "
@@ -4047,7 +4070,9 @@ FUNCTIONS = {
         "AnimCmdEvaluator_CopyGroupPoseToWorkBuffer",
         "Copies the current processing group's JointParams and scalar range into "
         "SegmentContext WorkBuffer pointers +0x50/+0x60. The joint source starts "
-        "at suppliedPose + 48*programGroup[3], the destination is WorkBuffer+0x50, "
+        "at suppliedPose + 48*u16(processingDescriptor+6), the packed "
+        "first_parameter rather than workspace-global firstJoint. The "
+        "destination is WorkBuffer+0x50, "
         "and the copied count is targetGroup+0x12. ProcessAnimCmdListSegment case "
         "14 calls it for the flags-byte-zero external-pose branch; the wrapper at "
         "0x141AB78C0 supplies the target skeleton default arrays.",

@@ -45,12 +45,11 @@ inline constexpr std::size_t kRequiredFingerCount = 19;
 inline constexpr std::size_t kGlobalMaskWordCount = 11; // 704 normalized bits.
 inline constexpr std::size_t kRawJointCacheRowBytes = 48;
 
-// FgAnimData+0x100 owns raw JointCache rows, not value-only animation rows.
-// Their leading 16 bytes are companion/service state; only the Locator at
-// +0x10/+0x20 has transform semantics.  A rollback before-image must therefore
-// preserve all 48 bytes opaquely and must not interpret the service words as
-// floats. Pointer identity and full-span readability are enforced by the
-// runtime preflight before this bounded copy.
+// Byte-exact rollback capture only; this does NOT establish that the address
+// belongs to a JointCache allocation or that its contents form a valid pose.
+// Native rows contain scale.xyz, quaternion and translation.xyz; the scale/T
+// W lanes need not be finite. The caller must prove the allocation's extent
+// and index domain before passing a row (VirtualQuery readability is not it).
 [[nodiscard]] inline bool capture_raw_joint_cache_before_image(
     const std::byte* row,
     std::array<std::byte, kRawJointCacheRowBytes>* output) noexcept {
@@ -301,6 +300,32 @@ inline constexpr std::array<ExpectedJointTransfer, kRequiredJointCount>
         {0xCCFA674Au, 674, 302, 133, 7, 2, 1, 1},
         {0xC83B7AFDu, 676, 304, 135, 7, 2, 1, 1},
     }};
+
+// JointCache_InitializeAndAllocatePoseBuffers (0x141686DF5..E28) allocates
+// 48 * ArtItemSkeleton.u16(+0x3C), which is ONLY 66 rows for C39. It is not
+// the 426-row packed reference pose or the 580-joint workspace. Fingers live
+// in group-1 evaluator buffers: neither global 105..141 nor packed 67..103
+// belongs to this allocation. Check the complete plan before any row access.
+// This is a storage gate, not authority to apply a partial grip transfer.
+[[nodiscard]] inline constexpr bool joint_cache_local_plan_fits(
+    std::uint16_t allocated_rows,
+    std::span<const ExpectedJointTransfer> transfers) noexcept {
+    if (allocated_rows != kNadineGroups[0].parameter_count || transfers.empty()) {
+        return false;
+    }
+    for (const auto& transfer : transfers) {
+        if (transfer.nadine_group != 0 ||
+            transfer.nadine_global >= allocated_rows ||
+            parameter_index_for_global(kNadineGroups, transfer.nadine_global) !=
+                transfer.nadine_global) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static_assert(!joint_cache_local_plan_fits(66, kExpectedTransfers),
+              "The 21-row P99 transfer cannot target the group-0 JointCache");
 
 inline constexpr std::array<std::uint16_t, 2> kExpectedNadineGroup0Targets{
     28, 30,

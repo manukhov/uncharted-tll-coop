@@ -11,6 +11,13 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
+Current handoff (2026-09-17): AGL's admitted21-row attempt corrupted memory:
+the persistent `Fg+100` bank has66 rows, but finger globals105..141 were used
+as indices. AGM-safe blocks that complete plan at every access path and stays
+disabled. Grip is not fixed. Continue the proven group-local cmd16 boundary
+audit below; the service-lane explanation and blanket world-recompute remedy
+are withdrawn. No new runtime test is authorized by this containment alone.
+
 - [x] Follow the user's new request, "Почини хват пистолета". Leave the
       AGC back-placement package unchanged and do not infer a visual verdict
       from the priority change. Pistol grip is reopened; Mazur grip, Draw/Put
@@ -6683,11 +6690,11 @@ Keep the postblend preservation boundary; replace only its steady content.
       local-pose/owner swap, TTL, Player/callsite, weapon/controller/runtime/art,
       registry/skeleton and 48-byte-row alternatives. Do not add a diagnostic
       runtime or launch the game until the evidence quota supports a correction
-      and a new distinguishing prediction is written. STATIC RESULT: the
-      preflight reapplied a value-row predicate to raw `Fg+0x100` JointCache
-      destinations. Their leading 16 bytes are service/companion state, not
-      floats; the same P99 predicate was already rejected by `acf` and its
-      removal confirmed by `acg`. No owner/pose swap is inferred from AGK.
+      and a new distinguishing prediction is written. HISTORICAL RESULT
+      WITHDRAWN on2026-09-17: treating all leading16 bytes as service state was
+      false. The nineteen finger addresses are outside the allocation; their
+      contents cannot establish JointCache semantics. Numeric scale.xyz/Q/T.xyz
+      and unused W lanes were already distinguished by `ael`.
 - [x] Implement/build `2026-09-01agl`: keep semantic validation for all 21
       generated ticket rows, but copy each readable 48-byte destination only as
       an opaque rollback before-image. Retain every owner/Fg/local-pose/skeleton/
@@ -6705,17 +6712,25 @@ Keep the postblend preservation boundary; replace only its steady content.
       PID 22180; exact AGL, role B, INSTALLED and opaque-before-image READY are
       present. RUNTIME REJECTED: the hold emitted `applied=21`; the pistol then
       disappeared and PID 22180 crashed. No postblend reject/rollback/exception
-      row or Windows crash dump exists. The result rejects the full 48-byte
-      value-row write into raw JointCache, not the computed grip visually.
-- [ ] Keep `agl-safe` disabled and statically prove the native field-level
-      JointCache write/publication ABI before another launch. Trace the exact
-      meaning/writers of raw row `+0x00..+0x0F`, Locator Q at `+0x10`, T at
-      `+0x20`, padding/validity, `JointCache_RecomputeWorldLocator 0x141688320`
-      and the later Async cmd14 import. Do not authorize a guessed `+0x10..+0x2F`
-      memcpy; it must preserve every non-value field and satisfy all dependent
-      caches/validity consumers statically. Safe 819712-byte DLL SHA-256 is
-      `BB7F7DE0BA58758A8A9E23872923DEE55136EE19776ADF51208D1148B6AD7AC7`;
-      it contains no P99 INSTALLED/READY strings and was not launched.
+      row or Windows crash dump exists. The result rejects this implementation;
+      later allocation analysis proves its nineteen out-of-bounds writes.
+- [x] Close the actual storage defect statically: allocator141686DF5..E28
+      uses Art+3C=66, native reset copies66 rows, Perform supplies capacity66,
+      and cmd27's141A9046E gate excludes group1. Recompute also rejects>=66.
+      Both globals105..141 and packed67..103 are outside the persistent bank.
+      Add reproducible `p99_joint_cache_layout_audit.py`, bounded storage gates
+      on the entire old plan and regression tests. AGM-safe stays disabled;
+      Release/CTest4/4 and focused14/14 /5500 checks pass. No game launch.
+- [ ] Prove and implement a separate group-local cmd16 transfer at141ABA973.
+      Group0 palm/prop use locals28/30, group1 fingers use odds1..37; native
+      op53/op40 shared scratch+FD0 propagates the palm parent. Normal Async
+      mode2 executes both groups in order on one worker, but the second list
+      is built only after the first has published. Resolve exact terminal
+      grammar/custom bindings, snapshot lifetime and partial-group failure
+      policy before mutation; do not promise an atomic21-row transaction.
+      Copied SegmentContext+50 may point at per-call bounded values only;
+      retain the engine's original pointer for cleanup. Runtime remains
+      unearned. Follow the detailed2026-09-17 COOP_STATUS evidence.
 
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to

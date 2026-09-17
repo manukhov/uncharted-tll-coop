@@ -31505,33 +31505,23 @@ or an invalid source/destination 48-byte row. Static work must now resolve the
 exact failing invariant and eliminate competitors before any mutation or new
 runtime launch.
 
-### 2026-09-01 STATIC / IMPLEMENTED (`agl`): preserve raw JointCache rollback rows opaquely
+### 2026-09-01 HISTORICAL / REJECTED RATIONALE (`agl`): opaque rollback capture bypassed an invalid destination
 
-The postblend audit found a proved type/contract defect rather than an engine
-owner swap. `seh_preflight_p99_chloe_transfer_commit` validated both the
-generated ticket value and the current raw destination through
-`p99_chloe_transfer_row_valid`, which aliases
-`virtual_chloe_source_row_valid`. That predicate treats bytes `+0x00..+0x0B`
-as three finite scale floats, `+0x10..+0x1F` as a normalized quaternion and
-`+0x20..+0x2B` as finite translation. The ticket is a reconstructed value-only
-JointParams row, but `FgAnimData+0x100 + joint*48` is a raw JointCache row: its
-leading 16 bytes are companion/service state, while only the Locator at
-`+0x10/+0x20` has transform semantics. Applying the value predicate to the
-raw destination is therefore invalid even when Player/Fg/pose ownership is
-unchanged.
+**Correction on 2026-09-17:** the original claim that all leading 16 bytes
+are service/companion state was false. Native JointParams contain numeric
+scale.xyz, quaternion and translation.xyz; the earlier `ael` evidence already
+limited nonfinite service bits to W at `+0x0C/+0x2C`. More seriously, AGL's
+nineteen finger destinations were outside the 66-row allocation altogether.
+Their bytes cannot establish any JointCache field semantics. See the AGM
+allocation proof below. The following build/test history is retained as the
+record of the rejected implementation, not as evidence of a correct contract.
 
-Three independent evidence classes select this defect. First, the earlier
-P99 `acf` census reached the exact WeaponIK pre-boundary on both owners yet
-repeatedly failed when raw JointCache rows were interpreted as finite/value
-floats; Mazur passed only accidentally. Removing that content predicate while
-retaining Player/runtime/Fg/local-pose/span checks made the subsequent `acg`
-P99 census complete on both owners. Second, the JointCache layout and native
-users resolve the 48-byte row's Locator at `+0x10/+0x20`, independently making
-the leading service words non-float data. Third, the present transaction never
-computes with the old destination: it copies all 48 bytes only as a rollback
-before-image, restores them opaquely on failure and verifies with `memcmp`.
-Historical `abw`/`adr` also copied/restored raw rows at this same postblend
-handoff without requiring value semantics.
+AGL removed destination content validation from
+`seh_preflight_p99_chloe_transfer_commit` while preserving validation of the
+generated ticket. Byte-exact rollback capture itself does not require numeric
+contents, but it does require a proven allocation and valid index domain.
+The implementation substituted virtual-memory readability for that proof.
+Earlier arm-only `abw`/`adr` results do not authorize group-1 finger indices.
 
 The alternatives are correspondingly ranked. A one-shot busy SkelTable lock,
 the broad repeated owner resolver and the 100 ms TTL remain possible later
@@ -31550,9 +31540,9 @@ Player/Fg/local-pose/skeleton/weapon/runtime IDs, P99/state2, registry epochs
 and row20/124/157 identities remain mandatory. The complete old 48-byte rows
 are copied opaquely before any write; the 21-row commit, exact readback,
 registry recheck, all-row rollback and rollback readback are unchanged. A new
-Release regression places a quiet-NaN bit pattern in the leading service lane
-and proves all 48 bytes survive the before-image copy exactly, while null
-inputs fail closed.
+Release regression placed a quiet-NaN bit pattern in the leading lane and
+proved byte-exact copying and null rejection. That test established no engine
+layout, valid pose, or allocation extent and did not detect the overflow.
 
 Release validation passes focused `13/13`, `5452` checks and full CTest `4/4`.
 Generator `--check`, Python compilation and `git diff --check` pass. No new
@@ -31616,24 +31606,17 @@ configured LocalDumps directory contain no matching tll crash record/dump, and
 the production crash observer was disabled, so no exception address is
 available from this run.
 
-This is a hard runtime rejection of the AGL full-row commit, not a visual grip
-verdict. The marker proves that all 21 writes and immediate readbacks completed;
-the disappearance/crash proves those bytes violate the downstream live-object
-contract. The raw-row correction exposed the deeper type mismatch: AGL
-correctly preserved the old leading 16-byte JointCache service/companion lane
-in its rollback image, but `seh_commit_p99_chloe_transfer_rows` then copied an
-entire value-only JointParams row over all 48 destination bytes. That replaces
-the same service lane with animation scale/value words before Async/weapon
-consumers run, exactly matching an immediate object loss and crash signature.
+This is a hard runtime rejection of AGL. The marker proves that all 21 writes
+and immediate readbacks completed. It does not prove that the addresses were
+owned by JointCache, or identify the exception. The initial service-lane/type
+mismatch explanation is withdrawn: the 2026-09-17 allocation audit below
+instead proves nineteen out-of-allocation writes. Missing world-cache refresh
+was another candidate, but cannot repair or explain away this memory error.
 
-The dangerous mutation is disabled in source as `2026-09-01agl-safe`; unchanged
-AGL must never be launched again. A successor may not copy another full 48-byte
-value row into raw `Fg+0x100`. Static work must resolve the native field-level
-JointCache publication contract: which destination bytes encode the local
-rotation/translation Locator, whether its service/companion lane and padding
-must be preserved, whether the per-joint world cache/validity needs an engine
-helper call, and how the later Async cmd14 import consumes those fields. No
-runtime is earned by merely changing the memcpy range.
+The dangerous mutation was disabled in `2026-09-01agl-safe`; unchanged AGL
+must never be launched again. A successor must prove allocation, index domain,
+owner lifetime and complete publication. Merely shortening memcpy or calling
+the group-0 world-cache helper does not meet that requirement.
 
 The rebuilt safe Release DLL is 819712 bytes, SHA-256
 `BB7F7DE0BA58758A8A9E23872923DEE55136EE19776ADF51208D1148B6AD7AC7`;
@@ -31643,3 +31626,96 @@ It contains `2026-09-01agl-safe`, contains no active AGL init marker, and the
 compiler removed both P99 INSTALLED and READY strings. CTest remains `4/4` and
 the focused policy remains `13/13`, `5452` Release-safe checks. This safe DLL
 was not launched.
+
+### 2026-09-17 STATIC / CONTAINED (`agm-safe`): P99 fingers escaped the 66-row JointCache allocation
+
+The precise defect is in `seh_commit_p99_chloe_transfer_rows`: it indexed
+`Fg+0x100` by C39 workspace-global targets `105,107,...,141`. The local bank
+has only **66 rows / 3168 bytes**. AGL therefore wrote **912 bytes in nineteen
+disjoint rows at offsets 5040..6815**, beyond the allocation ending at 3167.
+Its `readable_bytes >= 142*48` and immediate `memcmp` could succeed within a
+larger committed virtual-memory region while corrupting other allocations.
+No dump identifies the eventual faulting instruction; the buffer overrun is
+statically proven and agrees with the admitted disappearance/crash sequence.
+
+Independent evidence types establish the storage contract:
+
+1. **Allocation dataflow:** `JointCache_InitializeAndAllocatePoseBuffers
+   141686CD0` reads `u16(ArtItemSkeleton+3C)` at `141686DF5`, computes
+   `48*count` at `141686E0E`, and stores the allocation in JointCache `+D0`
+   / Fg `+100` at `141686E28`. World/matrix allocations instead use
+   group0 workspace count 104. `FgAnimData_Init 1418C487D` supplies the
+   concrete ArtItemSkeleton. The skinning swap changes `+230/+238`, not `+100`.
+2. **Exact authored data:** pinned `nadine-dlc-base.pak` SHA-256
+   `2bf66e61fae156a41952d8d2659e06215dbe8f0c827a9f6a89cada0c9490b06b`, loader
+   `52240`, DWORDs `+10/+14/+18/+1C = 8/580/104/66`. Runtime Art fields are
+   loader fields shifted by `+20`: Art `+24` is the database ID and Art `+40`
+   is the raw skeleton pointer, so Art `+3C` is the local allocation count66.
+   Group1 globals104..141 map to packed reference66..103; even correctly
+   compressed finger indices67..103 exceed the persistent 66-row bank.
+3. **Independent native writer:** `AnimManager_PerformAnimBlend` passes
+   group0 parameter count66 as destination capacity at `141A9254E..141A9256A`.
+   `AnimManager_CreateAnimCmdsForObject` sums preceding parameter counts and
+   checks `firstParameter+parameterCount <= context+50` at `141A9046E` before
+   emitting cmd27. Group1's `66+38 > 66` is excluded. Native reset
+   `JointCache_ResetAndSeedGroup0Pose 141687150`, `1416872CB..141687353`, also
+   seeds only66 complete numeric rows from the reference pose.
+4. **Consumers/previous facts:** `14168834F` rejects recompute indices>=66;
+   its scalar scale read uses row0, while Q/T use the selected row. Cmd14
+   `14217B34C` uses packed `processing+6` first_parameter, not global first.
+   Prior `ael` confirmed numeric xyz and only service W lanes; its arm rows
+   19..30 were in bounds and cannot be generalized to fingers.
+
+Alternatives are separated: blanket first16 service state is **REJECTED**;
+Q/T-only writes, global-to-packed conversion inside this bank, and recomputing
+all21 joints are **REJECTED as fixes for this overrun**. The last helper
+silently excludes fingers. Stale world caches may matter for a legitimate
+group0 mutation but are not the proven cause here. No visual verdict on the
+offline Chloe-order value calculation follows from corrupted memory.
+
+Containment `2026-09-17agm-safe` retains the disabled transfer flag and adds
+`joint_cache_local_plan_fits` against the actual Art `+3C` count. Every member
+of the complete plan must be group0 and in its allocation before any old-row
+capture, write, readback or rollback. The unchanged21-row plan is always
+rejected, even if this old flag is accidentally enabled. A static assertion
+and regression cover the complete21 set, exact boundaries, wrong capacities
+426/580, and all nineteen packed finger aliases. The old142-row readability
+model and unsupported local-pose-swap comment were removed. The opaque-copy
+test now expressly proves only byte preservation, with NaN in unused W.
+
+`scripts/p99_joint_cache_layout_audit.py` reproduces the exact asset identity,
+serialized extents, all21 semantic name joins and out-of-allocation offsets.
+Release build, CTest4/4 and focused14/14 /5500 checks pass. This package is
+containment, not a grip fix, and no game was launched.
+
+The frozen AGM-safe DLL is 819712 bytes, SHA-256
+`4060D7FFE48E233FD12E1BF8CB9FB066B7B8333BFB9591D7E10935448965C047`;
+runtime source SHA-256 is
+`F8984A680752048E82287B5F8068AADB042EFDE2490DB5AE4064439F6749712F`.
+Independent containment review found every legacy destination access behind
+the complete-plan rejection. The single `ida/tll.i64` was saved after stopping
+MCP: `1819 functions, 72 data names, 1 function types`,
+`save_database returned True` in `reports/ida_apply_agm_storage.log`. Restarted
+MCP resolves `JointCache_ResetAndSeedGroup0Pose` at `141687150`; its initializer
+tail reference remains at `141686ECD`. The unrelated pre-existing untracked
+`tmp/` directory is preserved and excluded from this commit.
+
+**Next boundary (STATIC, not runtime-ready):** direct cmd16 callsite
+`141ABA973 -> AnimCmdEvaluator_ExecuteSkeletonJointPrograms 14217B630` has
+group-local expanded JointParams at SegmentContext `+50`. C39 group0 has
+104 workspace rows, selected locals28/30; group1 has38 rows, selected locals
+1,3,...,37. Group0 op53 exports palm28 to shared scratch `+FD0`; group1's
+first op40 reads this same parent. Thus native matrix propagation can carry
+the corrected palm to fingers without any finger JointCache access. Exact
+group1 program `pak+5CD70` has only op40 then op53. For normal mode2 without
+cached-skeleton prepass, groups0/1 run on the same Async worker in that order
+at `141A92E78` and `141A932F8`, even with the known residual split.
+
+A copied SegmentContext pointing `+50` at a bounded full-group value copy is
+a candidate, preserving native matrices/shared scratch and leaving original
+allocation cleanup intact. Remaining proof obligations: exact terminal
+grammar and custom-operator bindings, owner/retarget snapshot lifetime across
+both groups, and partial-group failure policy. Group1's command list and
+allocation do not exist until after group0 publishes, so two calls must not
+be advertised as an atomic21-row transaction. Do not launch this proposal or
+restore the rejected postblend writer while these obligations remain open.

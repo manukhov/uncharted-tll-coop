@@ -2651,10 +2651,10 @@ constexpr bool kEnableLegacyNadineActiveWeaponGripOverlayRepair = false;
 // and the rejected abk resolver mutation off; do not widen either boundary.
 constexpr bool kEnableLegacyNadinePistolPoseGripRepair = false;
 // Build agl reached applied=21, then the pistol disappeared and the process
-// crashed. The value-only JointParams rows overwrote the leading 16-byte
-// companion/service lane of raw Fg+0x100 JointCache rows. Keep the rejected
-// full-row commit disabled; any successor must prove a field-level native
-// JointCache writer contract before another launch.
+// crashed. Static audit: Fg+0x100 owns only 66 C39 rows; the 19 finger writes
+// indexed 105..141 and escaped that allocation. The earlier service-lane
+// explanation was false. Keep this route disabled: fingers require their
+// group-local evaluator buffer, not a smaller memcpy or world-cache refresh.
 constexpr bool kEnableLegacyNadineP99ChloeGripTransfer = false;
 static_assert(!kEnableLegacyNadinePistolPoseGripRepair ||
               !kEnableLegacyNadineActiveWeaponGripOverlayRepair);
@@ -62868,8 +62868,8 @@ bool seh_select_p99_chloe_transfer_epoch(
         output->job = job;
         output->player = player;
         output->fg_anim_data = fg;
-        // Stock Perform can swap Fg+0x100.  Materialization captures the
-        // post-Perform bank instead of carrying this pre-Perform pointer.
+        // Capture the current bank after Perform and recheck its identity.
+        // The native skinning swap is +0x230/+0x238, not this +0x100 bank.
         output->local_pose = nullptr;
         output->target_skeleton = target_skeleton;
         output->weapon = owner.weapon;
@@ -62891,11 +62891,27 @@ bool seh_select_p99_chloe_transfer_epoch(
 }
 
 
+bool seh_p99_chloe_joint_cache_plan_fits(const void* target_skeleton) {
+    __try {
+        if (target_skeleton == nullptr ||
+            readable_bytes(target_skeleton) < 0x48) {
+            return false;
+        }
+        const auto allocated_rows = *reinterpret_cast<const std::uint16_t*>(
+            static_cast<const std::byte*>(target_skeleton) + 0x3C);
+        return p99_order::joint_cache_local_plan_fits(
+            allocated_rows, p99_order::kExpectedTransfers);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 bool seh_p99_chloe_transfer_epoch_owner_still_exact(
     const P99ChloeTransferEpoch& epoch) {
     __try {
         IdleArmPoseOwnerScope owner{};
-        if (!epoch.active || !epoch.valid || epoch.ambiguous ||
+        if (!seh_p99_chloe_joint_cache_plan_fits(epoch.target_skeleton) ||
+            !epoch.active || !epoch.valid || epoch.ambiguous ||
             epoch.depth != 1 || retained_player_object(0) != epoch.player ||
             !seh_resolve_idle_arm_pose_owner_scope(
                 epoch.player, 0, &owner) ||
@@ -62908,7 +62924,7 @@ bool seh_p99_chloe_transfer_epoch_owner_still_exact(
             (epoch.local_pose != nullptr &&
              owner.local_pose != epoch.local_pose) ||
             readable_bytes(owner.local_pose) <
-                static_cast<std::size_t>(142) *
+                static_cast<std::size_t>(p99_order::kNadineGroups[0].parameter_count) *
                     kP99ChloeTransferRowBytes ||
             *reinterpret_cast<void* const*>(
                 static_cast<const std::byte*>(epoch.player) +
@@ -62963,7 +62979,7 @@ P99ChloeTransferMaterializeResult seh_materialize_p99_chloe_embedded_epoch(
                 p99_order::kWeaponOutState ||
             post_perform_owner.local_pose == nullptr ||
             readable_bytes(post_perform_owner.local_pose) <
-                static_cast<std::size_t>(142) *
+                static_cast<std::size_t>(p99_order::kNadineGroups[0].parameter_count) *
                     kP99ChloeTransferRowBytes) {
             return P99ChloeTransferMaterializeResult::kPostPerformOwner;
         }
@@ -63209,7 +63225,8 @@ bool seh_preflight_p99_chloe_transfer_commit(
     __try {
         const ULONGLONG now = GetTickCount64();
         IdleArmPoseOwnerScope owner{};
-        if (!ticket.valid || ticket.nonce == 0 || player != ticket.player ||
+        if (!seh_p99_chloe_joint_cache_plan_fits(ticket.target_skeleton) ||
+            !ticket.valid || ticket.nonce == 0 || player != ticket.player ||
             ticket.captured_ms == 0 || now < ticket.captured_ms ||
             now - ticket.captured_ms > kP99ChloeTransferTicketTtlMs ||
             retained_player_object(0) != ticket.player ||
@@ -63222,7 +63239,7 @@ bool seh_preflight_p99_chloe_transfer_commit(
             owner.weapon_art_id != p99_order::kP99ArtId ||
             owner.controller_state != p99_order::kWeaponOutState ||
             readable_bytes(ticket.local_pose) <
-                static_cast<std::size_t>(142) *
+                static_cast<std::size_t>(p99_order::kNadineGroups[0].parameter_count) *
                     kP99ChloeTransferRowBytes ||
             *reinterpret_cast<void* const*>(
                 static_cast<const std::byte*>(ticket.fg_anim_data) +
@@ -63269,6 +63286,9 @@ bool seh_preflight_p99_chloe_transfer_commit(
 bool seh_commit_p99_chloe_transfer_rows(
     const P99ChloeTransferTicket& ticket) {
     __try {
+        if (!seh_p99_chloe_joint_cache_plan_fits(ticket.target_skeleton)) {
+            return false;
+        }
         for (std::size_t index = 0;
              index < p99_order::kExpectedTransfers.size(); ++index) {
             const std::uint16_t joint =
@@ -63307,9 +63327,10 @@ bool seh_rollback_p99_chloe_transfer_rows(
     const std::array<std::array<std::byte, kP99ChloeTransferRowBytes>,
                      p99_order::kRequiredJointCount>& before) {
     __try {
-        if (ticket.local_pose == nullptr ||
+        if (!seh_p99_chloe_joint_cache_plan_fits(ticket.target_skeleton) ||
+            ticket.local_pose == nullptr ||
             readable_bytes(ticket.local_pose) <
-                static_cast<std::size_t>(142) *
+                static_cast<std::size_t>(p99_order::kNadineGroups[0].parameter_count) *
                     kP99ChloeTransferRowBytes) {
             return false;
         }
@@ -80015,7 +80036,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-01agl-safe "
+        "TLL co-op runtime init 2026-09-17agm-safe "
         "(byte retarget mode; relocated authored-map safe; compressed parameter/reference indices; offline-derived D350/B8 rows; locked SkelTable snapshot; two-site P99 commit; no live clip dereference; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(

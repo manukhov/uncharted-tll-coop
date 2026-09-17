@@ -683,16 +683,48 @@ bool raw_joint_cache_before_image_is_opaque() {
     for (std::size_t index = 0; index < raw.size(); ++index) {
         raw[index] = static_cast<std::byte>((index * 37u + 0xA5u) & 0xFFu);
     }
-    // Reproduce the already-rejected P99 content assumption: a quiet NaN in
-    // the leading service lane is legal raw JointCache state and must survive
-    // the rollback snapshot byte-for-byte. It is not a value-row scale float.
-    constexpr std::uint32_t kServiceQuietNan = 0x7FC00001u;
-    std::memcpy(raw.data(), &kServiceQuietNan, sizeof(kServiceQuietNan));
+    // Byte capture preserves arbitrary bits; it does not grant pose validity
+    // or prove allocation ownership. Native scale/translation W lanes may be
+    // NaN, unlike their semantic xyz components.
+    constexpr std::uint32_t kUnusedLaneQuietNan = 0x7FC00001u;
+    std::memcpy(raw.data() + 0x0C, &kUnusedLaneQuietNan,
+                sizeof(kUnusedLaneQuietNan));
     std::array<std::byte, policy::kRawJointCacheRowBytes> before{};
     CHECK(policy::capture_raw_joint_cache_before_image(raw.data(), &before));
     CHECK(before == raw);
     CHECK(!policy::capture_raw_joint_cache_before_image(nullptr, &before));
     CHECK(!policy::capture_raw_joint_cache_before_image(raw.data(), nullptr));
+    return true;
+}
+
+bool joint_cache_rejects_fingers_before_any_row_access() {
+    // Independent asset facts: 66 persistent rows, 426 reference parameters,
+    // 580 workspace joints. A readable page cannot widen the first extent.
+    CHECK(!policy::joint_cache_local_plan_fits(66, policy::kExpectedTransfers));
+    CHECK(!policy::joint_cache_local_plan_fits(426, policy::kExpectedTransfers));
+    CHECK(!policy::joint_cache_local_plan_fits(580, policy::kExpectedTransfers));
+    const auto primary = std::span(policy::kExpectedTransfers).first(2);
+    CHECK(policy::joint_cache_local_plan_fits(66, primary));
+    CHECK(!policy::joint_cache_local_plan_fits(0, primary));
+    CHECK(!policy::joint_cache_local_plan_fits(65, primary));
+    CHECK(!policy::joint_cache_local_plan_fits(67, primary));
+    CHECK(!policy::joint_cache_local_plan_fits(66, {}));
+    for (std::size_t index = 2; index < policy::kExpectedTransfers.size(); ++index) {
+        auto finger = policy::kExpectedTransfers[index];
+        CHECK(!policy::joint_cache_local_plan_fits(66, {&finger, 1}));
+        // Relabelling packed reference ordinals as JointCache rows is also
+        // invalid: even the first right finger is packed row 67 >= 66.
+        finger.nadine_global = static_cast<std::uint16_t>(
+            policy::parameter_index_for_global(policy::kNadineGroups,
+                                                finger.nadine_global));
+        finger.nadine_group = 0;
+        CHECK(!policy::joint_cache_local_plan_fits(66, {&finger, 1}));
+    }
+    auto boundary = policy::kExpectedTransfers[0];
+    boundary.nadine_global = 65;
+    CHECK(policy::joint_cache_local_plan_fits(66, {&boundary, 1}));
+    boundary.nadine_global = 66;
+    CHECK(!policy::joint_cache_local_plan_fits(66, {&boundary, 1}));
     return true;
 }
 
@@ -924,7 +956,7 @@ bool mask_group_coverage_is_exact_and_unique() {
 } // namespace
 
 int main() {
-    const std::array<std::pair<const char*, bool (*)()>, 13> tests{{
+    const std::array<std::pair<const char*, bool (*)()>, 14> tests{{
         {"asset constants and exact C39 targets", exact_asset_constants_and_target_inventory},
         {"generated source rows", generated_source_rows_match_independent_fixture},
         {"exact fixture", exact_fixture_is_admitted},
@@ -933,6 +965,7 @@ int main() {
         {"record counts and duplicates", record_counts_and_duplicates_fail_closed},
         {"runtime mode byte and tail padding", runtime_mode_ignores_unowned_tail_padding},
         {"raw JointCache before-image is opaque", raw_joint_cache_before_image_is_opaque},
+        {"JointCache allocation excludes fingers", joint_cache_rejects_fingers_before_any_row_access},
         {"every required record field", every_required_record_field_is_checked},
         {"semantic middle join", semantic_middle_join_and_order_are_mandatory},
         {"every valid-mask bit", every_valid_mask_bit_is_fail_closed},
