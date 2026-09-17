@@ -32065,3 +32065,53 @@ process responds. No gameplay input was sent. At handoff the user still needs
 to load/drawP99/stand3-5s and report the visible grip. There is no captured
 EXECUTED/visual result yet, so the grip remains UNCONFIRMED. Next turn read
 PID15744's P99-GROUP lines and user's image; do not infer success from READY.
+
+### 2026-09-17 REJECTED (`agn` admission) / STATIC (`ago` full-span guard)
+
+User image `codex-clipboard-cd591e3e-4da6-414c-acf5-a4c0ab350460.png` still
+shows an incorrect grip. PID15744 log lines102976..103000 contain24 bounded
+`P99-GROUP REFUSED reason=cmd16-admission`, zero EXECUTED and zero PARTIAL.
+This rejects AGN as an applied fix, NOT the still-unexecuted Chloe value-pose
+candidate. The gate passed source/Process admission but refused before shadow
+publication; no group0-only publication occurred. The process was responding
+at first inspection and exited later; cause of exit is not established (user
+asked whether manual close or crash). No crash-observer entry exists; it was
+disabled, so absence is not proof against a crash.
+
+Deterministic source defect: `p99_group_readable(arena,0x20000)` delegated to
+the shared `readable_bytes()` with `g_readable_bytes_fast=true`. That helper
+probes only0xB000 bytes of pages; at page offset d it returns0xB000 ifd=0,
+otherwise0xC000-d, always<=0xBFFF. Native Process allocates and records0x20000
+at141AB98A0/98EB, so AGN could NEVER pass its arena readability check. This
+occurs before the metadata validator and explains why even inner allocation
+reason messages were absent. Independent static review verified arithmetic,
+native constructor fields, and the remaining cmd0/15/16 offsets. Competing
+wrong-descriptor/custom-table-offset explanations were not supported by that
+recheck; no claim is made that this was the only possible later refusal.
+
+AGO uses a separate bounded VirtualQuery region walker for this package only.
+It verifies full continuous coverage, readable MEM_COMMIT pages without guard,
+checked address/region-end arithmetic, monotonic progress, max128KiB/max64
+regions. It does not read or touch guard pages and does not widen the shared
+probe. Accessibility remains separate from mandatory allocator membership:
+all existing metadata, identity, exact program, isolation and source checks
+remain unchanged. Silent cmd16 branches now emit bounded stage-specific
+reasons. Startup banner correctly says four-site shadows, not legacytwo-site.
+
+Regression tests cover the native128KiB arena, unaligned33-page coverage,
+every page made unreadable/uncommitted/guarded, gaps, invalid query responses,
+overflow/zero/excess span, iteration cap and all4096 legacy probe alignments.
+Release build and CTest9/9 pass. This is a local guard correction, no new
+engine function/field discovery requiring an IDB rename; sole IDB remains
+saved with the prior verified labels.
+
+Independent review found no full-span arithmetic/protection regression;
+readability test4209checks/0failures. Frozen AGO DLL893440bytes SHA256
+`8196764B8504FA4DABD0848792FA49B39EDA5C2D427E1BF1CBB6EFE2C38154F8`.
+
+**AGO prediction before any launch:** same single-copy P99 idle3-5s scenario.
+Unlike AGN, a readable native0x20000 arena must no longer reject solely due
+to the0xB000 probe ceiling. Full success still requires groups2/rows21 EXECUTED,
+noPARTIAL and user's visibly correct grip with pistol present. A more specific
+REFUSED keeps the candidate untested and must not be called a visual fix.
+The old persistent writer remains disabled; native exceptions never retry.

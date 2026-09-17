@@ -32,6 +32,10 @@ void p99_group_reject(const char* reason) {
         boot_log_line(line);
     }
 }
+bool p99_group_gate_failed(const char* reason) {
+    p99_group_reject(reason);
+    return false;
+}
 void p99_group_partial(P99GroupJob& job, const char* reason) {
     job.refused = true;
     if (job.entered != 0 && !g_p99_group_failed.exchange(true)) {
@@ -48,8 +52,21 @@ template<class T> T p99_group_load(const void* pointer, std::size_t offset = 0) 
     return value;
 }
 bool p99_group_readable(std::uintptr_t address, std::size_t bytes) {
-    return address != 0 && bytes != 0 && address <= UINTPTR_MAX - bytes &&
-        readable_bytes(reinterpret_cast<const void*>(address)) >= bytes;
+    // The shared fast readable_bytes helper is capped around0xB000 and can
+    // NEVER admit the native0x20000 arena. Walk precisely the requested pages
+    // here; do not widen that unrelated hot-path probe or skip allocator checks.
+    return coop::p99_group_readability::readable(address,bytes,
+        [](std::uintptr_t cursor,coop::p99_group_readability::Region& region) {
+            MEMORY_BASIC_INFORMATION mbi{};
+            if(VirtualQuery(reinterpret_cast<const void*>(cursor),&mbi,sizeof(mbi))!=sizeof(mbi)) return false;
+            const auto protection=mbi.Protect&0xFF;
+            const bool accessible=protection==PAGE_READONLY || protection==PAGE_READWRITE ||
+                protection==PAGE_EXECUTE_READ || protection==PAGE_EXECUTE_READWRITE ||
+                protection==PAGE_WRITECOPY || protection==PAGE_EXECUTE_WRITECOPY;
+            region={reinterpret_cast<std::uintptr_t>(mbi.BaseAddress),mbi.RegionSize,
+                mbi.State==MEM_COMMIT,accessible,(mbi.Protect&PAGE_GUARD)!=0};
+            return true;
+        });
 }
 
 bool p99_group_program_exact(std::uintptr_t raw, std::uintptr_t custom, std::uint16_t count) {
@@ -287,7 +304,8 @@ bool seh_prepare_p99_group_shadow(const void* context, P99GroupProcess* process,
     __try {
         const auto& job=*process->job;
         if (!p99_group_identity_exact(job) ||
-            !p99_group_readable(reinterpret_cast<std::uintptr_t>(context),0x80)) return false;
+            !p99_group_readable(reinterpret_cast<std::uintptr_t>(context),0x80))
+            return p99_group_gate_failed("cmd16-job/context-range");
         alignas(16) p99_shadow::Context original{};
         std::memcpy(original.data(),context,original.size());
         const auto* c=original.data();
@@ -301,16 +319,18 @@ bool seh_prepare_p99_group_shadow(const void* context, P99GroupProcess* process,
             p99_group_load<std::uintptr_t>(c,0x20)!=0 ||
             p99_group_load<std::uintptr_t>(c,0x28)!=job.raw ||
             p99_group_load<std::uintptr_t>(c,0x30)!=job.scratch ||
-            !p99_group_program_exact(job.raw,custom,custom_count)) return false;
+            !p99_group_program_exact(job.raw,custom,custom_count))
+            return p99_group_gate_failed("cmd16-context/program-binding");
         const auto descriptor=job.raw+0x40+group*0x20;
         const auto processing_index=p99_group_load<std::uint16_t>(reinterpret_cast<const void*>(descriptor),2);
         // Program manifest pins both descriptor tables before these reads.
         const auto processing=job.raw+0x140+static_cast<std::uintptr_t>(processing_index)*10;
         if (processing_index!=group || p99_group_load<std::uintptr_t>(c,0x38)!=descriptor ||
-            p99_group_load<std::uintptr_t>(c,0x40)!=processing) return false;
+            p99_group_load<std::uintptr_t>(c,0x40)!=processing)
+            return p99_group_gate_failed("cmd16-descriptors");
         p99_admit::WorkBuffer work{};
         work.address=p99_group_load<std::uintptr_t>(c);
-        if (!p99_group_readable(work.address,88)) return false;
+        if (!p99_group_readable(work.address,88)) return p99_group_gate_failed("cmd16-workbuffer-range");
         const auto* w=reinterpret_cast<const void*>(work.address);
         work.arena=p99_group_load<std::uint64_t>(w,0);
         work.arena_bytes=p99_group_load<std::uint64_t>(w,8);
@@ -325,7 +345,8 @@ bool seh_prepare_p99_group_shadow(const void* context, P99GroupProcess* process,
         work.capacity=p99_group_load<std::uint32_t>(w,0x50);
         if (work.arena_bytes!=p99_admit::kArenaBytes || work.metadata_bytes!=p99_admit::kMetadataBytes ||
             !p99_group_readable(work.arena,p99_admit::kArenaBytes) ||
-            !p99_group_readable(work.metadata,p99_admit::kMetadataBytes)) return false;
+            !p99_group_readable(work.metadata,p99_admit::kMetadataBytes))
+            return p99_group_gate_failed("cmd16-arena/metadata-range");
         std::array<p99_admit::Allocation,p99_admit::kCapacity> records{};
         std::array<p99_admit::Address,p99_admit::kCapacity> table{};
         std::memcpy(records.data(),reinterpret_cast<const void*>(work.metadata),sizeof(records));
@@ -345,18 +366,19 @@ bool seh_prepare_p99_group_shadow(const void* context, P99GroupProcess* process,
             {reinterpret_cast<std::uintptr_t>(copied->data()),0x80},
             {reinterpret_cast<std::uintptr_t>(shadow->bytes.data()),shadow->bytes.size()},
             {reinterpret_cast<std::uintptr_t>(job.rows.data()),sizeof(job.rows)}};
-        if (!p99_admit::validate_isolation(work,segment,isolation).accepted()) return false;
+        if (!p99_admit::validate_isolation(work,segment,isolation).accepted())
+            return p99_group_gate_failed("cmd16-isolation");
         const auto& shape=p99_order::kNadineGroups[group];
         auto result=p99_shadow::build({group,shape.first,shape.parameter_count,shape.count},
             {reinterpret_cast<const std::byte*>(segment.joint_params),shape.count*p99_shadow::kRowBytes},
             job.rows,p99_shadow::kCompleteMask);
-        if (result.reason!=p99_shadow::Reject::kNone) return false;
+        if (result.reason!=p99_shadow::Reject::kNone) return p99_group_gate_failed("cmd16-shadow-values");
         *shadow=result.shadow; // Move value BEFORE forming self-referential copy.
         const auto context_copy=p99_shadow::copied_context(original,*shadow);
-        if (!context_copy) return false;
+        if (!context_copy) return p99_group_gate_failed("cmd16-context-copy");
         *copied=*context_copy;
         return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return p99_group_gate_failed("cmd16-read-exception"); }
 }
 
 bool install_p99_group_shadow() {

@@ -6749,9 +6749,14 @@ Keep the postblend preservation boundary; replace only its steady content.
       scoped hooks, exact programs/allocations/command guards, owned21 values
       and partial-failure shutdown. Release/CTest8/8 and independent review
       pass; see2026-09-17 COOP_STATUS prediction and frozen DLL hash.
-- [ ] Run the earned single-copy AGN P99 idle exam; require groups2/rows21
-      EXECUTED plus user's visible correct grip, no disappearance/crash or
-      PARTIAL. Installation alone is not confirmation. User controls input.
+- [x] Run AGN exam: user image still wrong,24cmd16-admission REFUSED and no
+      EXECUTED/PARTIAL. Reject applied-fix claim; value pose remains untested.
+      Local fast readability helper's0xB000 cap can never admit0x20000 arena.
+- [x] Correct only the scoped accessibility gate in AGO; preserve allocator
+      membership/source/program/isolation checks; add precise rejection stages.
+      Full-span/overflow/guard-page regression suite and CTest9/9 pass.
+- [ ] AGO P99 idle exam: require groups2/rows21 EXECUTED plus user's visible
+      correct grip, no disappearance/crash or PARTIAL. User controls input.
 
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
