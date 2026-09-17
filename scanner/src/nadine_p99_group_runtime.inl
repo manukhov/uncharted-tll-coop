@@ -11,6 +11,7 @@ struct P99GroupJob : coop::p99_group_scope::State {
     std::uintptr_t raw = 0;
     std::uintptr_t scratch = 0;
     std::uint64_t nonce = 0;
+    coop::p99_group_budget::Budget cost{};
 };
 struct P99GroupProcess {
     P99GroupJob* job = nullptr;
@@ -25,6 +26,33 @@ AnimManagerAsyncObjectUpdateJointBlendJobFunction g_p99_group_async = nullptr;
 std::atomic<bool> g_p99_group_failed{false};
 std::atomic<unsigned> g_p99_group_reject_logs{0};
 std::atomic<unsigned> g_p99_group_apply_logs{0};
+std::uint64_t g_p99_group_cost_limit = 0; // Published by shadow_ready release.
+
+struct P99CostStamp { LARGE_INTEGER value{}; bool valid = false; };
+P99CostStamp p99_group_cost_start() {
+    P99CostStamp stamp{};
+    stamp.valid = QueryPerformanceCounter(&stamp.value) != FALSE && stamp.value.QuadPart >= 0;
+    return stamp;
+}
+bool p99_group_cost_finish(P99GroupJob& job, P99CostStamp begin, const char* stage) {
+    const auto end = p99_group_cost_start();
+    if (job.cost.charge(static_cast<std::uint64_t>(begin.value.QuadPart),
+            static_cast<std::uint64_t>(end.value.QuadPart), begin.valid && end.valid)) return true;
+    job.refused = true;
+    if (!g_p99_group_failed.exchange(true, std::memory_order_acq_rel)) {
+        char line[384]{};
+        const auto stage_ticks = begin.valid && end.valid && end.value.QuadPart >= begin.value.QuadPart
+            ? static_cast<std::uint64_t>(end.value.QuadPart - begin.value.QuadPart) : 0;
+        std::snprintf(line, sizeof(line),
+            "P99-GROUP COST-STOP stage=%s completed=%u entered=%u publication=%s stage_ticks=%llu prior_ticks=%llu limit_ticks=%llu; future overlays disabled; no rollback/retry",
+            stage, job.completed, job.entered, job.incomplete() ? "PARTIAL" : "NONE",
+            static_cast<unsigned long long>(stage_ticks),
+            static_cast<unsigned long long>(job.cost.spent),
+            static_cast<unsigned long long>(job.cost.limit));
+        boot_log_line(line);
+    }
+    return false;
+}
 
 void p99_group_reject(const char* reason) {
     if (g_p99_group_reject_logs.fetch_add(1, std::memory_order_relaxed) < 24) {
@@ -162,8 +190,13 @@ bool seh_p99_group_entry_observations(void* job, coop::p99_group_entry::Observat
 // No large source/job values are initialized for foreign animation objects.
 // Keep this separate from the outer native-entry/TLS wrapper.
 __declspec(noinline) void p99_group_candidate_async(void* job, const coop::p99_group_entry::Active& entry) {
+    const auto begin = p99_group_cost_start();
     P99GroupJob current{};
-    if (prepare_p99_group_values(job, &current) && !entry.reentered) g_p99_group_job = &current;
+    current.cost.limit = g_p99_group_cost_limit;
+    const bool prepared = begin.valid && prepare_p99_group_values(job, &current);
+    const bool within_cost = p99_group_cost_finish(current, begin, "source");
+    if (prepared && within_cost && !entry.reentered && !g_p99_group_failed.load(std::memory_order_acquire))
+        g_p99_group_job = &current;
     __try { g_p99_group_async(job); }
     __finally {
         if (current.incomplete()) p99_group_partial(current, "job-ended-without-both-groups");
@@ -220,9 +253,12 @@ std::uint32_t p99_group_process_call(bool first_site,
     auto* job = g_p99_group_job;
     g_p99_group_process = nullptr;
     if (job != nullptr && !job->refused && group <= 1) {
-        if (previous != nullptr || !job->can_start(group,first_site) ||
-            g_p99_group_failed.load(std::memory_order_relaxed) ||
-            !seh_prepare_p99_group_process(commands, words, context, group, a6, &process)) {
+        const auto begin = p99_group_cost_start();
+        const bool prepared = begin.valid && previous == nullptr && job->can_start(group,first_site) &&
+            !g_p99_group_failed.load(std::memory_order_relaxed) &&
+            seh_prepare_p99_group_process(commands, words, context, group, a6, &process);
+        const bool within_cost = p99_group_cost_finish(*job, begin, group == 0 ? "process0" : "process1");
+        if (!prepared || !within_cost || g_p99_group_failed.load(std::memory_order_acquire)) {
             p99_group_partial(*job, "process-admission");
             p99_group_reject("process-admission");
         } else {
@@ -257,10 +293,14 @@ std::uint32_t* __fastcall hooked_p99_group_cmd16(std::uint32_t* status, const vo
     auto* process = g_p99_group_process;
     if (process == nullptr || process->job == nullptr) return stock(status, context);
     auto& job = *process->job;
+    const auto begin = p99_group_cost_start();
     p99_shadow::Shadow shadow{}; // Final stable address, never moved below.
     alignas(16) p99_shadow::Context copied{};
-    if (process->consumed || !job.can_start(process->group,process->group==0) ||
-        !seh_prepare_p99_group_shadow(context, process, &shadow, &copied)) {
+    const bool prepared = begin.valid && !process->consumed && job.can_start(process->group,process->group==0) &&
+        !g_p99_group_failed.load(std::memory_order_acquire) &&
+        seh_prepare_p99_group_shadow(context, process, &shadow, &copied);
+    const bool within_cost = p99_group_cost_finish(job, begin, process->group == 0 ? "cmd16-0" : "cmd16-1");
+    if (!prepared || !within_cost || g_p99_group_failed.load(std::memory_order_acquire)) {
         p99_group_partial(job, "cmd16-admission");
         p99_group_reject("cmd16-admission");
         return stock(status, context);
@@ -421,6 +461,10 @@ bool seh_prepare_p99_group_shadow(const void* context, P99GroupProcess* process,
 
 bool install_p99_group_shadow() {
     g_p99_group_shadow_ready.store(false, std::memory_order_release);
+    LARGE_INTEGER frequency{};
+    if (!QueryPerformanceFrequency(&frequency) || frequency.QuadPart < 1000) return false;
+    g_p99_group_cost_limit = coop::p99_group_budget::one_millisecond(
+        static_cast<std::uint64_t>(frequency.QuadPart));
     if (g_enable_aim_case6_probe || kEnableLegacyNadineP99ChloeGripTransfer ||
         kEnableLegacyNadineMazurSteadyHandsCommandCensus ||
         kEnableLegacyNadineMazurDrawEndpointRepair ||

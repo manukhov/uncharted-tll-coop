@@ -35,6 +35,7 @@
 #include "nadine_p99_group_scope.h"
 #include "nadine_p99_group_memory.h"
 #include "nadine_p99_group_entry.h"
+#include "nadine_p99_group_budget.h"
 #include "nadine_pistol_grip_policy.h"
 
 // ============================================================================
@@ -61636,10 +61637,10 @@ P99ChloeTransferPerformFunction g_original_p99_chloe_transfer_perform = nullptr;
 std::atomic<bool> g_p99_chloe_transfer_ready{false};
 // Independent admission for cmd16-owned expanded storage. Never authorizes
 // the rejected persistent JointCache writer below.
-// AGO runtime rejected: severe user-visible lag. Keep the entire four-site
-// package absent. AGQ adds offline-tested early identity admission and stage
-// batching; selected-owner source/validation cost still needs a bounded budget.
-constexpr bool kEnableP99GroupShadow = false;
+// AGR exam: reject foreign identities before queries; stage-local page batches;
+// cumulative selected-source/validation budget disables overlays on overrun.
+// This is not a hard frame-time guarantee. Never restore the persistent writer.
+constexpr bool kEnableP99GroupShadow = true;
 static_assert(!kEnableP99GroupShadow || !kEnableLegacyNadineP99ChloeGripTransfer,
     "Expanded group shadows must never coexist with the rejected persistent writer");
 std::atomic<bool> g_p99_group_shadow_ready{false};
@@ -80062,8 +80063,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-17agq-safe "
-        "(P99 hooks remain disabled; early identity filter/stage batches offline-tested only; legacy persistent grip writer disabled; AGC back profiles retained)");
+        "TLL co-op runtime init 2026-09-17agr "
+        "(P99 early retained-identity gate; stage-local page batches; 1ms cumulative validation stop; no persistent grip writes; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "
@@ -80575,7 +80576,7 @@ DWORD WINAPI install_hook(void*) {
     const bool state_net_started = start_state_net();
     if constexpr (kEnableP99GroupShadow && !kEnableRejectedNadineWeaponRuntimeProbes) {
         const bool ready = state_net_started && install_p99_group_shadow();
-        boot_log_line(ready ? "P99-GROUP READY state2; owned 21-row source; cmd16 shadows only"
+        boot_log_line(ready ? "P99-GROUP READY state2; owned 21-row source; cmd16 shadows only; early-owner gate; validation budget 1ms"
                             : "P99-GROUP SKIPPED combined package");
     } else if constexpr (!kEnableP99GroupShadow) {
         boot_log_line("P99-GROUP DISABLED after AGO lag; no Async/Process/cmd16 hooks installed");

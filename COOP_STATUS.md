@@ -32254,3 +32254,56 @@ Next: add/test a selected-job cost budget with fail-closed shutdown BEFORE
 publication, explicitly handle a late overrun without rollback/native retry,
 and audit redundant source work without keeping borrowed registry pointers.
 Only then formulate a new one-copy grip/frame-time prediction and enable it.
+
+### 2026-09-17 STATIC (`agr` cost containment and exam prediction)
+
+Follow-up implements the selected-job overhead budget instead of leaving AGQ's
+next step pending. The QPC frequency is obtained before hook installation;
+source preparation plus Process0/cmd16-0/Process1/cmd16-1 validation share a
+1ms cumulative budget. Stock Async/Process/cmd16 execution is outside these
+intervals. Invalid/reversed clocks, zero budget or overflow fail closed.
+Start-clock failure skips validation. Every stage accounts cost even if its
+normal admission fails, so repeated expensive source refusals are contained.
+No skipped safety check or registry pointer cache is used to meet the budget.
+
+An overrun marks the job refused and atomically disables future overlays.
+Before first publication this falls through to untouched stock context. A
+late overrun after g0 is logged as COST-STOP publication=PARTIAL with entered/
+completed masks; this is explicitly NOT rollback, retry or atomicity. There
+is one bounded stop log with stage/prior/limit ticks. Later foreign or disabled
+entries do not call QPC, VirtualQuery, source selectors or initialize rows.
+The guard is post-stage containment: it cannot preempt the FIRST blocking
+OS/native call, and scheduling pauses may conservatively disable the package.
+It is not a hard frame-time guarantee. Standard SEH/TLS cleanup remains.
+
+Budget suite147632 checks covers sums at/below/over limit, irreversible failure,
+invalid/reversed clocks, arithmetic extremes and no-publication/late-partial
+outcomes. Release and CTest12/12 pass while switches are still disabled.
+No additional engine function/field discovery; AGQ's verified IDB labels stand.
+
+**Evidence quota for the narrow re-exam:** (1) producer/caller graph and native
+job/Fg layout, (2) exact producer/consumer dataflow for retained tuple equality,
+(3) agreement with already-recorded normal native lifetime and the confirmed
+historical broad VirtualQuery lag. Pure cost/coverage tests and independent
+reviews are supporting evidence, not a substitute for engine evidence or a
+visual pass. Competing hypotheses remain: broad foreign-object VQ overhead
+(removed before candidate), selected-source/program cost (now measured and
+fail-stopped), and unrelated engine workload (not explained by this patch).
+
+**Falsifiable prediction BEFORE launch:** one roleB/legacy-Nadine instance,
+user loads the same scene, draws P99 and stands without aiming for3-5s. Expect
+no sustained AGO-like severe stutter. Grip success additionally requires
+EXECUTED groups2/rows21, pistol visibly present, fingers wrapping the grip,
+and unchanged rear attachments. COST-STOP/REFUSED means NOT an applied fix;
+do not raise the budget or bypass a gate to manufacture success. PARTIAL,
+disappearance, crash or repeated severe lag rejects the candidate. Correct
+installation alone is never confirmation. Only the user performs gameplay.
+
+Final independent budget/TLS/stock-once review found no enable-blocking defect.
+Timer starts were moved before Job/Shadow value initialization as well. Entry
+identity checks, QPC calls, bounded logging and bookkeeping remain outside the
+measured intervals; this is still not a total hook/frame guarantee. Fresh
+enabled AGR Release and CTest12/12 pass. Frozen DLL896000bytes SHA256
+`E1A0EF38CD79A470DBA577DF4B04AD80C434E39AA0A5FBE313CCDF5479477521`.
+kEnableP99GroupShadow=true only for this exam; legacy writer remains false.
+No tll process existed at pre-launch check. Launch/result will be recorded below.

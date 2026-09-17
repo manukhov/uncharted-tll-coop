@@ -11,17 +11,16 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-17, AGQ-safe): AGO remains REJECTED for severe lag.
-Both P99 packages remain compile-time disabled. A statically grounded early
-Fg-versus-slot handle64/generation32 filter now rejects unrelated native jobs
-before VQ/source work; no retained-cell/Player dereference or cross-frame cache.
-Noncopyable bounded page-query batches are stage-local, never cross-native.
-Source-preparation reentry is also guarded. Release/CTest11/11 pass, including
-100000 foreign-job policy cases and actual guard-page non-touch tests in a
-separate test process. No game launch, no runtime performance/grip success.
-Next add/test selected-job cost budget and safe overrun policy; do not enable
-before that work and a new falsifiable exam. See final2026-09-17 COOP_STATUS
-entry for precise contracts, labels, test counts, limitations and frozen hash.
+Current handoff (2026-09-17, AGR exam): AGO remains REJECTED for severe lag.
+New group-shadow package re-enabled only after early retained-identity gate,
+stage-local query batches, source-entry reentry sentinel and cumulative1ms
+source/validation cost shutdown. The old persistent writer remains disabled.
+Full Release/CTest12/12 pass; IDB1828/72/1 saved. No runtime success yet.
+Next read AGR process's P99-GROUP logs and user result: require smooth enough
+gameplay AND EXECUTED groups2/rows21 with visible correct grip/pistol present.
+COST-STOP/REFUSED is NOT success; do not raise budget or bypass checks to force
+application. PARTIAL/crash/disappearance/severe sustained lag rejects candidate.
+See final2026-09-17 COOP_STATUS prediction, review, limitations and frozen hash.
 
 Earlier storage finding: AGL's admitted21-row attempt corrupted memory:
 the persistent `Fg+100` bank has66 rows, but finger globals105..141 were used
@@ -6773,9 +6772,11 @@ Keep the postblend preservation boundary; replace only its steady content.
       admission. Add stage-local bounded query batching, not whole-job caching.
       Test foreign-job call counts, guard preservation and source-entry nesting.
       AGQ-safe remains disabled; Release/CTest11/11 pass, no game launch.
-- [ ] Bound selected-owner source/validation cost and fail-closed overrun policy
-      before a new runtime candidate. No late rollback/native retry, no stale
-      registry pointers, no loosening allocator/guard/program checks.
+- [x] Add cumulative1ms selected-owner source/validation budget; invalid clocks
+      and overruns disable future overlays. Late g0 publication is PARTIAL,
+      never rollback/retry. Budget147632checks, fullCTest12/12, final review pass.
+- [ ] AGR one-copy exam per written prediction: actual performance AND visible
+      P99 grip/presence/attachments. Read exact-version log, not just READY.
 
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
