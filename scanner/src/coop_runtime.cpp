@@ -36,6 +36,7 @@
 #include "nadine_p99_group_memory.h"
 #include "nadine_p99_group_entry.h"
 #include "nadine_p99_group_budget.h"
+#include "nadine_p99_group_ingress.h"
 #include "nadine_pistol_grip_policy.h"
 
 // ============================================================================
@@ -61638,11 +61639,12 @@ std::atomic<bool> g_p99_chloe_transfer_ready{false};
 // Independent admission for cmd16-owned expanded storage. Never authorizes
 // the rejected persistent JointCache writer below.
 // AGR rejected: user-reported crash after source COST-STOP with no publication.
-// Exclude the entire four-site package, not just overlay writes. No re-enable
-// before crash provenance and pass-through/source side effects are resolved.
+// Exclude the entire package, not just overlay writes. The moved-prologue
+// installer has been removed, but source purity/cost and fault capture remain
+// unresolved. Offline ingress tests are NOT permission for a new game exam.
 constexpr bool kEnableP99GroupShadow = false;
 static_assert(!kEnableP99GroupShadow,
-    "Rejected Async entry trampoline has no unwind table; replace/prove the boundary before re-enabling");
+    "P99 remains blocked: prove fiber-local scope, read-only bounded source preparation and fault capture before re-enabling");
 static_assert(!kEnableP99GroupShadow || !kEnableLegacyNadineP99ChloeGripTransfer,
     "Expanded group shadows must never coexist with the rejected persistent writer");
 std::atomic<bool> g_p99_group_shadow_ready{false};
@@ -80065,7 +80067,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-17ags-safe "
+        "TLL co-op runtime init 2026-09-17agt-safe "
         "(all P99 group-shadow hooks disabled after AGR crash; legacy persistent grip writer disabled; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(

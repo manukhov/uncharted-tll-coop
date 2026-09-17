@@ -32427,3 +32427,142 @@ passes Release/CTest12/12,819712bytes SHA256
 Updated Async unwind and DoJoint assertion-path annotations were applied to
 the sole IDB:1828functions/72data/1type; reports/ida_apply_ags_status.txt says
 save_database returned True. MCP restarted. No game has been relaunched.
+
+### 2026-09-17 STATIC / implemented-disabled (`agt` no-moved-prologue ingress)
+
+User said "Давай" after AGS containment. No game launch or injection in this
+turn. AGR crash provenance remains unresolved; this unit removes one known
+packaging defect, NOT a demonstrated cause of that crash or a grip fix.
+
+**Competitors:** (a) revive/register the43-byte entry trampoline; rejected as
+unnecessary stack/unwind relocation and same failed design class; (b) change
+only sync thunk, missing queued jobs; (c) change only async producer, missing
+SyncUpdate; (d) intercept the global worker dispatcher, unnecessarily affecting
+all job types; (e) redirect the two narrow callback ingress instructions while
+leaving the native function intact. Implemented(e), disabled. No relocation
+of native stack/nonvolatile instructions survives in this package installer.
+
+**Independent evidence:** graph/data ownership, exact instruction/ABI, native
+source-identified job/spawner subsystem, and independent synchronous dispatch:
+
+- Async producer141781390 stores job+8=Fg, job+0=AnimControl in0x38 records.
+  LEA RAX at1417815B7 is `48 8D 05 42 14 31 00`; callback goes into the
+  local template at141781601, then all0x80 bytes copy to r14 at141781636..165B.
+  Manager1417816B0 derives record count from cursor delta/0x80 at141781FB0;
+  descriptor base/count at141782080/2083 flows through the third spawner's
+  data at1417821B6/1BA. Spawner1415C51E0 replaces the completion counter
+  at1415C530F..5316, copies records at1415C5350 and submits at1415C53D5.
+- NdjobCopyJobRecords1415B4870 copies four32-byte blocks and advances queue
+  count/cursor. Worker dequeue1415D0810 destructively removes one0x80 record
+  under lock at1415D0C8F..D18. Generic executor1415D0F20 passes record+8 in
+  RCX at1415D11B3 and calls record+0 at1415D11B7; completion-counter handling
+  follows at1415D135F..13BE. Callback result is unused. There is no CFG
+  dispatch helper at this call. No new scheduler hook is required.
+- Async scoped temporary allocator starts141781C9E; arrays/data/spawner
+  records remain until six counter wait/release pairs1417829B9..9EE, before
+  scope cleanup141782A56. Spawner itself waits children1415C53F9. This backs
+  normal native lifetime, not independent future leases or crash delivery.
+- Other Async xrefs are not ingress alternatives:143714A18 is callback field
+  in registration row143714A10 (name142B37488, next+10, CRC+18). Init1400F6090
+  links it into1437E96D8; ndjob init1415B2AAD..2B8F consumes it as an address
+  lookup key, not a call.146E9D7E0 is the PE RUNTIME_FUNCTION row, not a vtable.
+- SyncUpdate141782B40 allocates0x38 records and fills them via141782AF0.
+  It resets cursor at141783267, dispatches14178327D through iterator141783380
+  (actual `call r12` at14178348A). Thunk141782B30 reads RCX=[RDX], advances
+  [RDX] by0x38, then `E9 C1 FE 30 00` at141782B3A tail-jumps to141A92A00.
+  Retargeting that JMP preserves cursor work and caller return address.
+
+The implementation redirects only the producer's LEA target and sync JMP
+target to nearby14-byte `FF25 [rip+0]; dq hook` leaf relays. Existing two
+Process calls141A92E78/141A932F8 and cmd16 call141ABA973 stay unchanged in
+scope: five sites in one suspended-thread/RIP-check transaction. Compiled
+wrapper CALLs original141A92A00 directly. Stock43-byte prefix is still checked
+before/after, but neither overwritten nor copied into executable memory.
+Original Process prefix remains checked. No persistent JointCache writes.
+
+Review caught a retry hazard: a second installation could clear original target
+while previously captured relays remained reachable. Fixed with irreversible
+atomic InstallationGate before ANY ready/target changes; freeing current-attempt
+allocations no longer clears native target. Uncertain rollback retains all
+potentially reachable relays, ready=false. Existing suspend helper uses one
+thread snapshot; it does not prove absence of newly created threads afterwards.
+Transaction fault injection has NOT been tested by the new planner suite.
+
+**Important remaining ingress limitation:** old queued records retain native
+callback addresses. With empty TLS they bypass overlay; new records use the
+wrapper. Do NOT generalize this to all old records: indirect native callbacks
+at141A92B4D and owner vtable calls141A934D5/34E8/3572 have not excluded
+cooperative waits/reentrant dispatch. A same-Fg old callback could inherit
+an active wrapper's TLS; foreign-Fg Process checks alone do not settle that.
+Require exclusion proof or exact job-boundary validation before enabling.
+Destructive dequeue + one call implies at-most-once for a dequeued record,
+exactly once on normal completed wait path, not unconditional global scheduling.
+
+The scheduler audit strengthens this beyond hypothetical recursive calls:
+worker Ndjob_WaitForCounter1415B5300 calls1415D1BE0 at1415B5419;
+1415D1E43 calls142205850, whose body is SwitchToFiber(*arg1). Native worker
+state uses FlsGetValue at1415D1F29. Therefore C++ thread_local job/process/entry
+state is NOT isolated across cooperative jobs on different fibers on the same
+OS thread. A new wrapped job on another fiber can poison a suspended parent
+as nested/partial; an old unwrapped same-Fg job can inherit its scope. Admitted
+jobs already exclude Fg+2A0 at entry, closing callback141A92B4D there, but
+owner vtable calls141A934D5/34E8/3572 and transitive waits are unclosed.
+Required next scope work: bind to actual execution fiber/FLS, check every
+consumer/restore path, and test switching A->B->A with nested and old-stock
+callbacks. Alternatively prove all reachable owner methods cannot wait/yield.
+Changing ingress alone is NOT safe to enable; no game run is earned.
+
+`nadine_p99_group_ingress.h` is a value-only version/ASLR/opcode/rel32/overflow
+planner with no executable game state. New tests cover both signs/range limits,
+all input instruction bit mutations, truncation, null/overflow, exact leaf
+bytes, and one-shot installation. Windows smoke executes both generated ingress
+kinds plus the actual leaf bytes in an isolated fixture: one compiled callback,
+one stock fixture call, exactly one finally cleanup on normal return AND raised
+SEH exception. RtlLookupFunctionEntry finds compiled wrapper unwind metadata;
+leaf relay has none and changes no stack. This is NOT production-TLS, engine,
+crash-provenance or visual verification. Fixture initially failed because
+VirtualAlloc returned0x1A0000 below synthetic RVA; MEM_TOP_DOWN fixes fixture
+setup, not the game. Final914checks0fail; Release and CTest13/13 pass.
+
+**Next bounded source unit (not implemented):** successful owned-source path
+still reaches approximately120 shared readable_bytes calls (owner subtree
+18x5=90; selector2; local-pose4; Art snapshots9; registry4; row20/157 eight;
+row124 three). Fast helper32747 probes0xB000, roughly11..12 pages each: about
+1320..1440 volatile touches in that full path. This is static counting, NOT a
+measured AGR sample, and does not establish the cause of18.1726ms or the crash.
+
+Implement a dedicated owned-P99 owner snapshot, leaving shared getter/resolver
+and attachment callers unchanged. Preserve Player/vtable/screen0/look1,
+retained/Fg identity+generation, C39 Art/raw, mode2, controller owner/vtable,
+state2/slot0..17/grenade idle, weapon vtable/P99/parent/runtime IDs and transform
+checks. Direct checked slot record controller+148+10*slot has handle64/id32;
+handle+8 gives weapon, weapon+BC must match generation. Recheck observed slot,
+state, handle/object/id; no virtual GetWeaponBySlot and no write to weapon+72.
+Repeated reads are turnover witnesses, NOT a lease or ABA guarantee.
+
+Replace the THREE lexical shared-owner calls in selection, owner revalidation
+and materializer behind owned-purpose (five executions on success). Also replace
+unchecked retained_player_object in selection/revalidation and especially seal
+outside SEH. Use fresh exact-range Batch per snapshot; validate handles before
+dereference. Player extent4014, Fg1B4, Art48/raw12, local bank66*48,
+controller138 plus selected record0C, grenade124, weapon864, handles10.
+Registry/Art/retarget helpers must also replace broad probes, not just getter.
+Preserve FULL record/reference/map extents; entry_count4096*40 is40000, so
+reader cap20000 needs checked splitting, not validation of only3selected rows.
+No certificate crosses native resolver/math/logging/callback/unlock boundaries.
+
+Tests must show zero getter/broad-probe calls in owned path; unchanged input
+bytes including weapon72 (read-only allocation succeeds); selected slot and
+generation/owner/Art/parent rejection; checked retained reads including seal;
+guard preservation inside/after requested range; fresh protection after native
+boundary; full second-half table rejection; exact existing21 output rows/masks.
+Known native assertion callbacks still preclude blanket source-purity claims.
+Keep1ms budget unchanged and establish fresh fault-capture coverage. Both flags
+remain false, with unconditional static_assert blocking re-enable. Back/hip
+attachments, rifle transition timing and all other weapons are untouched.
+
+Build tag2026-09-17agt-safe; DLL819712bytes SHA256
+`5DBF284BF23727F941E98F23FAAA7083ABC6AF776C17CCCB318CDF1780384E39`.
+Final rebuild after the fiber-scope guardrail still passes914checks and
+CTest13/13. Sole IDB saved1835functions/73data/1type with
+`save_database returned True` in reports/ida_apply_agt_status.txt; MCP restarted.

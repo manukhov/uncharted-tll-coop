@@ -11,21 +11,34 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-17, AGS-safe): AGR PID11444 is REJECTED after the user
+Current handoff (2026-09-17, AGT-safe): AGR PID11444 is REJECTED after the user
 reported a crash. Log shows source COST-STOP18.1726ms, entered/completed0,
 publicationNONE; no EXECUTED/REFUSED/PARTIAL. The budget stopped overlay work,
 not the installed detours. Do not blame published rows or increase the budget.
-ALL four group hooks are now compile-time excluded; legacy writer remains off.
-Release/CTest12/12 pass; no relaunch. No fresh exception stack/dump exists:
+The entire group package is still compile-time excluded; legacy writer remains off.
+Release/CTest13/13 pass; no relaunch. No fresh exception stack/dump exists:
 game's only .dmp is July12, not this crash. AGR DLL and current tiny crash
 markers are preserved in reports/agr-crash-11444; no PDB was available.
 Static audit found a re-enable blocker: moved Async prologue has no unwind
-metadata (same rejected class as July27 ib), now guarded by static_assert.
+metadata (same rejected class as July27 ib). AGT removes that installer and
+implements disabled producer-LEA/sync-tail-JMP leaf relays, retaining the full
+native prologue. Planner plus isolated Windows ABI/unwind smoke:914 checks.
+One-shot atomic installation gate closes retry/partial-relay target lifetime.
 This is not the proven crash PC. Source admission also calls GetWeaponBySlot,
 which marks weapon+72; no-publication does not mean no native side effects.
-Next trace async callback producer1417815B7/601/636 and sync thunk141782B30
-for a no-moved-prologue boundary; prove both invocation paths before replacing
-anything. Secure crash capture before another justified exam. See COOP_STATUS.
+Async trace now reaches worker1415D11B7 via copied0x80 records; sync preserves
+the cursor and native call. At-most-once dequeue/normal completion is not a
+global delivery promise. Worker wait1415B5419->1415D1BE0->142205850 uses
+SwitchToFiber. C++ thread_local scope is NOT fiber-local; both new and pending
+old callbacks could inherit suspended state. Fiber/FLS-bound scope is mandatory
+unless every reachable owner callback/wait is excluded statically.
+Next implement the COMPLETE owned-P99 checked read-only source plan in the AGT
+COOP_STATUS entry: exact current-slot weak reads, zero broad probes/getter calls,
+checked retained resolver (including seal), fresh bounded range checks across
+native boundaries, full retarget-table extent. About120 broad reads remain on
+the successful path, not a measured AGR sample. Do not raise budget or change
+shared helpers used by attachments. Secure crash capture before another exam;
+static_assert still prevents re-enabling. No game test is earned yet.
 
 Earlier storage finding: AGL's admitted21-row attempt corrupted memory:
 the persistent `Fg+100` bank has66 rows, but finger globals105..141 were used
@@ -6782,6 +6795,16 @@ Keep the postblend preservation boundary; replace only its steady content.
       never rollback/retry. Budget147632checks, fullCTest12/12, final review pass.
 - [x] Reject AGR one-copy exam: user crash after source COST-STOP with no shadow
       publication. Disable whole four-site package in AGS-safe; no relaunch.
+- [x] Replace the rejected moved-prologue installer with disabled five-site
+      callback ingress at1417815B7/141782B3A and unchanged Process/cmd16 relays.
+      Preserve full native unwind; trace worker1415D11B7 and sync iterator.
+      Test914 planner/one-shot/isolated executable checks, Release/CTest13/13.
+- [ ] Remove all known getter/broad-probe/unchecked retained reads from owned
+      P99 source preparation only. Preserve full extents, weak generations,
+      ordinary shared helpers and current1ms budget; AGT source plan below.
+- [ ] Bind overlay scope to actual execution fiber/FLS, including validation
+      in every consumer, or exclude every reachable wait/owner callback. New
+      and old callbacks on a different fiber must see no suspended TLS state.
 - [ ] Resolve crash provenance: ABI/unwind of still-installed pass-through,
       source-preparation side effects and other hooks; no fresh dump currently.
       Do not treat passing offline policy tests or budget cutoff as runtime GO.

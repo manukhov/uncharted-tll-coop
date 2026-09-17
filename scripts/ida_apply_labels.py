@@ -2804,7 +2804,12 @@ FUNCTIONS = {
         "Creates the async animation-manager job for an FgAnimData object. The "
         "job callback is AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00. "
         "At 0x141781502 writes job+8=Fg; 0x141781506/50A copies *(Fg+0x10) "
-        "into job+0 (AnimControl, NOT Player). Appends a 0x38-byte record.",
+        "into job+0 (AnimControl, NOT Player). Appends a 0x38-byte record. "
+        "JointBlend callback LEA RAX at 0x1417815B7 flows to template+0 at "
+        "0x141781601 and the copied 0x80-byte third-category record at "
+        "0x141781636. Generic worker invokes record+0 with RCX=record+8 "
+        "at 0x1415D11B7. This callback-value boundary leaves native unwind "
+        "intact; already queued old callbacks are not rewritten.",
     ),
     0x141782AF0: (
         "AnimManager_AppendSyncUpdateJobAndStepParams",
@@ -9677,7 +9682,58 @@ FUNCTIONS = {
         "NdjobCopyJobRecords",
         "Copies one or more 0x80-byte ndjob job records into the batch. In the "
         "NdiNetInit path this stages the record whose callback field 0 is "
-        "0x1409F9B20.",
+        "0x1409F9B20. Animation SpawnerJob calls at 0x1415C5350; four "
+        "32-byte copies preserve callback+0/data+8/counter+0x10 before "
+        "queue count/cursor advancement at 0x1415B48ED..0x1415B494E.",
+    ),
+    0x1415D0810: (
+        "Ndjob_TryAcquireRunnableWork",
+        "Generic ndjob ready-work selection, called from 0x1415D16AA. "
+        "Ordinary queued-record branch at 0x1415D0C8F..0x1415D0D18 "
+        "decrements count, advances/wraps cursor under scheduler lock, "
+        "then copies the 0x80-byte job into worker storage; surrounding "
+        "paired continuation/work branch at 0x1415D0B08..0x1415D0C6D "
+        "is distinct from that ordinary dequeue. At-most-once removal is "
+        "not unconditional execution or a no-reentrant-dispatch proof.",
+    ),
+    0x1415D0F20: (
+        "Ndjob_ExecuteWorkerRecordAndFinalize",
+        "Generic worker execution from 0x1415D1AD4/0x1415D1AF2. At "
+        "0x1415D11B3 loads RCX=record+8 and at 0x1415D11B7 calls "
+        "record+0 directly; result ignored. Completion handling reads "
+        "record+0x10 at 0x1415D135F when continuation field +0xA8 is zero. "
+        "Animation third-category records "
+        "carry AsyncObjectUpdateJointBlendJob and its 0x38-byte data. "
+        "Do not detour this global dispatcher just to scope one job type.",
+    ),
+    0x1400F6090: (
+        "Ndjob_RegisterJointBlendJobName",
+        "Static initializer for registration row 0x143714A10. Hashes name "
+        "AsyncObjectUpdate_JointBlend_Job, links prior head 0x1437E96D8 "
+        "into row+0x10 and publishes the new head at 0x1400F60F4. Row+8 "
+        "is callback 0x141A92A00, but this initializer does not call it.",
+    ),
+    0x1415D15B0: (
+        "Ndjob_WorkerFiberLoop",
+        "Generic worker fiber loop: acquires runnable work at 0x1415D16AA "
+        "through 0x1415D0810 and dispatches ordinary/resumed worker state "
+        "through 0x1415D0F20 at 0x1415D1AD4/0x1415D1AF2. Scheduling is "
+        "fiber-based, not one indivisible job per OS thread.",
+    ),
+    0x1415D1BE0: (
+        "Ndjob_CooperativelyWaitCounterOnWorkerFiber",
+        "Worker branch of Ndjob_WaitForCounter at 0x1415B5419. Copies "
+        "continuation state, schedules waiting/resume records, obtains a "
+        "fiber through 0x1415D0330 and calls Platform_SwitchToStoredFiber "
+        "at 0x1415D1E43. FLS profiling state is restored at 0x1415D1F29. "
+        "C++ thread_local overlay scopes are not fiber-local: any reachable "
+        "wait may expose suspended state to another job on the OS thread.",
+    ),
+    0x142205850: (
+        "Platform_SwitchToStoredFiber",
+        "Thin platform wrapper: SwitchToFiber(*arg1) at 0x142205853. "
+        "Called by ndjob cooperative worker wait at 0x1415D1E43; preserves "
+        "OS thread while changing execution stack/fiber-local storage.",
     ),
     0x1415B47C0: (
         "NdjobFinalizeAndSubmitBatch",
@@ -10694,7 +10750,18 @@ FUNCTIONS = {
         "AnimMgr_DispatchAsyncObjectUpdateJointBlendJob",
         "SyncUpdate callback thunk for the residual joint-blend category. "
         "Advances the 56-byte work-item cursor and tail-jumps to "
-        "AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00.",
+        "AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00. Exact "
+        "tail JMP at 0x141782B3A is E9 C1 FE 30 00; changing its target "
+        "preserves cursor advancement and dispatcher return address. "
+        "Independent ingress from queued callback LEA 0x1417815B7.",
+    ),
+    0x141783380: (
+        "AnimMgr_VisitUnblockedReadyObjects",
+        "Iterates set bits from arg2's 64-qword ready mask, skips blocked "
+        "bits in 0x1466CE600, and limits pool indices to below 0x600. "
+        "At 0x14178348A invokes callback arg3 with RCX=pool+index*0x380 "
+        "and RDX=arg4. SyncUpdate resets its 0x38-job cursor and dispatches "
+        "residual JointBlend thunk 0x141782B30 through 0x14178327D.",
     ),
     0x141782B40: (
         "AnimMgr_SyncUpdate",
@@ -12369,7 +12436,10 @@ FUNCTIONS = {
         "Ndjob_WaitForCounter",
         "Blocking job-counter wait identified by embedded ndjob::WaitForCounter "
         "assertions. ProcessWeapon_SpawnProjectile waits here after submitting its "
-        "materialization callback.",
+        "materialization callback. Worker branch 0x1415B5419 invokes "
+        "Ndjob_CooperativelyWaitCounterOnWorkerFiber, which SwitchToFiber's "
+        "at 0x1415D1E43; non-worker branch sleeps/polls. Thread-local mod "
+        "state alone is insufficient isolation across these job waits.",
     ),
     0x1415B4200: (
         "Ndjob_ReleaseCounter",
@@ -12900,6 +12970,14 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x143714A10: (
+        "g_NdjobJointBlendJobRegistration",
+        "0x20-byte registration record: +0 name AsyncObjectUpdate_JointBlend_Job "
+        "at 0x142B37488; +8 callback 0x141A92A00; +0x10 next; +0x18 hash. "
+        "Initializer 0x1400F6090 computes name CRC and links into "
+        "0x1437E96D8. Distinct from the copied executable job records and "
+        "the PE runtime-function row 0x146E9D7E0.",
+    ),
     0x143682F4B: (
         "g_AnimManagerForceCachedSkeletonPrepass",
         "Nonzero forces PerformAnimBlend's cached-skeleton prepass even when "

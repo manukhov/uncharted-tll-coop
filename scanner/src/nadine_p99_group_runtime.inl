@@ -27,6 +27,7 @@ std::atomic<bool> g_p99_group_failed{false};
 std::atomic<unsigned> g_p99_group_reject_logs{0};
 std::atomic<unsigned> g_p99_group_apply_logs{0};
 std::uint64_t g_p99_group_cost_limit = 0; // Published by shadow_ready release.
+coop::p99_group_ingress::InstallationGate g_p99_group_install_gate;
 
 struct P99CostStamp { LARGE_INTEGER value{}; bool valid = false; };
 P99CostStamp p99_group_cost_start() {
@@ -460,6 +461,8 @@ bool seh_prepare_p99_group_shadow(const void* context, P99GroupProcess* process,
 }
 
 bool install_p99_group_shadow() {
+    if (!g_p99_group_install_gate.begin())
+        return g_p99_group_shadow_ready.load(std::memory_order_acquire);
     g_p99_group_shadow_ready.store(false, std::memory_order_release);
     LARGE_INTEGER frequency{};
     if (!QueryPerformanceFrequency(&frequency) || frequency.QuadPart < 1000) return false;
@@ -470,6 +473,7 @@ bool install_p99_group_shadow() {
         kEnableLegacyNadineMazurDrawEndpointRepair ||
         kEnableLegacyNadinePistolPoseGripRepair ||
         kEnableLegacyNadineActiveWeaponGripOverlayRepair) return false;
+    // Verification only. Never copy or overwrite this unwind-described code.
     constexpr std::array<std::uint8_t,43> prologue{
         0x48,0x8B,0xC4,0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57,
         0x48,0x81,0xEC,0xD0,0x05,0,0,0x48,0xC7,0x80,0x48,0xFB,0xFF,
@@ -481,45 +485,56 @@ bool install_p99_group_shadow() {
         std::uint8_t* address = nullptr;
         std::uint8_t* allocation = nullptr;
         std::size_t size = 0;
-        std::array<std::uint8_t,43> before{}, after{};
+        std::array<std::uint8_t,7> before{}, after{};
     };
-    std::array<Site,4> sites{};
+    std::array<Site,5> sites{};
+    const auto* native_async = reinterpret_cast<const std::uint8_t*>(
+        g_module + kAnimManagerAsyncObjectUpdateJointBlendJobRva);
+    static_assert(kAnimManagerAsyncObjectUpdateJointBlendJobRva ==
+        coop::p99_group_ingress::kNativeJobRva);
     const auto stock_process = [&]() {
         return std::memcmp(reinterpret_cast<const void*>(g_module + kProcessAnimCmdListSegmentRva),
-            process_prologue.data(), process_prologue.size()) == 0;
+            process_prologue.data(), process_prologue.size()) == 0 &&
+            std::memcmp(native_async, prologue.data(), prologue.size()) == 0;
     };
     const auto free_allocations = [&]() {
         for (auto& s : sites) if (s.allocation != nullptr) VirtualFree(s.allocation,0,MEM_RELEASE);
-        g_p99_group_async = nullptr;
     };
-    auto& async = sites[0];
-    async.address = reinterpret_cast<std::uint8_t*>(g_module + kAnimManagerAsyncObjectUpdateJointBlendJobRva);
-    async.size = prologue.size();
-    async.before = prologue;
-    if (!stock_process() || std::memcmp(async.address,prologue.data(),prologue.size()) != 0) return false;
-    // RIP-relative absolute jump preserves RAX, unlike the older generic hook.
-    async.allocation = static_cast<std::uint8_t*>(VirtualAlloc(nullptr,prologue.size()+14,
-        MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE));
-    if (async.allocation == nullptr) return false;
-    const auto absolute_jump = [](std::uint8_t* at, std::uintptr_t target) {
-        at[0]=0xFF; at[1]=0x25; std::memset(at+2,0,4); std::memcpy(at+6,&target,8);
-    };
-    std::memcpy(async.allocation,prologue.data(),prologue.size());
-    absolute_jump(async.allocation+prologue.size(),reinterpret_cast<std::uintptr_t>(async.address+prologue.size()));
-    async.after.fill(0x90);
-    absolute_jump(async.after.data(),reinterpret_cast<std::uintptr_t>(&hooked_p99_group_async));
-    FlushInstructionCache(GetCurrentProcess(),async.allocation,prologue.size()+14);
+    if (!stock_process()) return false;
+    for (std::size_t i=0;i<coop::p99_group_ingress::kSites.size();++i) {
+        auto& s=sites[i];
+        const auto& spec=coop::p99_group_ingress::kSites[i];
+        s.address=reinterpret_cast<std::uint8_t*>(g_module+spec.rva);
+        s.size=spec.size;
+        std::memcpy(s.before.data(),s.address,s.size);
+        // Reject a changed instruction before allocating executable memory.
+        if (std::memcmp(s.before.data(),spec.stock.data(),s.size)!=0) {
+            free_allocations(); return false;
+        }
+        s.allocation=static_cast<std::uint8_t*>(allocate_executable_near(
+            s.address,coop::p99_group_ingress::kRelayBytes));
+        const auto patch=coop::p99_group_ingress::plan(i,g_module,
+            {s.before.data(),s.size},reinterpret_cast<std::uintptr_t>(s.allocation),
+            reinterpret_cast<std::uintptr_t>(&hooked_p99_group_async));
+        if (!patch) { free_allocations(); return false; }
+        s.after=patch->instruction;
+        std::memcpy(s.allocation,patch->relay.data(),patch->relay.size());
+        FlushInstructionCache(GetCurrentProcess(),s.allocation,patch->relay.size());
+    }
     constexpr std::array<std::uintptr_t,3> rvas{0x1A92E78,0x1A932F8,kAnimCmdExecuteJointProgramsCallsiteRva};
     const std::array<const void*,3> hooks{reinterpret_cast<const void*>(&hooked_p99_group_process0),
         reinterpret_cast<const void*>(&hooked_p99_group_process1),reinterpret_cast<const void*>(&hooked_p99_group_cmd16)};
     for (std::size_t i=0;i<3;++i) {
-        auto& s=sites[i+1]; std::int32_t displacement=0; s.size=5;
+        auto& s=sites[i+2]; std::int32_t displacement=0; s.size=5;
         if (!prepare_plain_callsite_relay(rvas[i],i==2?kAnimCmdExecuteJointProgramsRva:kProcessAnimCmdListSegmentRva,
             hooks[i],s.address,s.allocation,displacement)) { free_allocations(); return false; }
         std::memcpy(s.before.data(),s.address,5);
         s.after=s.before; s.after[0]=0xE8; std::memcpy(s.after.data()+1,&displacement,4);
     }
-    g_p99_group_async = reinterpret_cast<AnimManagerAsyncObjectUpdateJointBlendJobFunction>(async.allocation);
+    // The compiled wrapper CALLs the complete native function. No anonymous
+    // stack-changing trampoline, no original-prologue detour or jump-back.
+    g_p99_group_async = reinterpret_cast<AnimManagerAsyncObjectUpdateJointBlendJobFunction>(
+        g_module + kAnimManagerAsyncObjectUpdateJointBlendJobRva);
     const auto all_match = [&](bool patched) {
         for (const auto& s:sites) if (std::memcmp(s.address,(patched?s.after:s.before).data(),s.size)!=0) return false;
         return stock_process();
@@ -527,7 +542,7 @@ bool install_p99_group_shadow() {
     // Collect unique pages BEFORE suspending threads (no allocating while
     // another suspended thread might own a process heap lock).
     struct Page { void* address=nullptr; DWORD old=0; bool writable=false; };
-    std::array<Page,4> pages{}; std::size_t page_count=0;
+    std::array<Page,5> pages{}; std::size_t page_count=0;
     for (const auto& s:sites) {
         const auto address=reinterpret_cast<std::uintptr_t>(s.address);
         if ((address>>12)!=((address+s.size-1)>>12)) { free_allocations(); return false; }
@@ -588,10 +603,10 @@ bool install_p99_group_shadow() {
     const bool clean=!ready&&restored&&all_match(false);
     if(ready) g_p99_group_shadow_ready.store(true,std::memory_order_release);
     resume_suspended_process_threads(suspended);
-    // Partial installation must retain every potentially reachable trampoline;
+    // Partial installation must retain every potentially reachable leaf relay;
     // ready=false makes all reachable hooks stock-only.
     if(clean||(!wrote&&restored)) free_allocations();
-    boot_log_line(ready?"P99-GROUP INSTALLED four sites; original buffers preserved":
+    boot_log_line(ready?"P99-GROUP INSTALLED five sites; native Async prologue intact; original buffers preserved":
         (clean||(!wrote&&restored))?"P99-GROUP SKIPPED stock/preflight or verified rollback":
             "P99-GROUP PARTIAL pass-through; allocations retained; inspect code protections");
     return ready;
