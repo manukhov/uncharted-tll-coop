@@ -29,6 +29,10 @@
 #include "nadine_holster_binding.h"
 #include "nadine_p99_chloe_order_policy.h"
 #include "nadine_p99_chloe_source_rows.h"
+#include "nadine_p99_group_shadow.h"
+#include "nadine_p99_group_program_manifest.h"
+#include "nadine_p99_group_admission.h"
+#include "nadine_p99_group_scope.h"
 #include "nadine_pistol_grip_policy.h"
 
 // ============================================================================
@@ -61628,6 +61632,13 @@ using P99ChloeTransferBlendFunction = void(__fastcall*)(
 
 P99ChloeTransferPerformFunction g_original_p99_chloe_transfer_perform = nullptr;
 std::atomic<bool> g_p99_chloe_transfer_ready{false};
+// Independent admission for cmd16-owned expanded storage. Never authorizes
+// the rejected persistent JointCache writer below.
+constexpr bool kEnableP99GroupShadow = true; // AGN: reviewed cmd16-only exam.
+static_assert(!kEnableP99GroupShadow || !kEnableLegacyNadineP99ChloeGripTransfer,
+    "Expanded group shadows must never coexist with the rejected persistent writer");
+std::atomic<bool> g_p99_group_shadow_ready{false};
+enum class P99SourcePurpose { kPersistentJointCache, kOwnedGroupValues };
 
 struct P99ChloeTransferArtSkeleton {
     bool valid = false;
@@ -62815,14 +62826,18 @@ bool build_p99_chloe_embedded_source_rows(
 
 
 bool seh_select_p99_chloe_transfer_epoch(
-    void* job, P99ChloeTransferEpoch* output) {
+    void* job, P99ChloeTransferEpoch* output,
+    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
     if (output == nullptr) {
         return false;
     }
     *output = {};
     __try {
-        if (!kEnableLegacyNadineP99ChloeGripTransfer ||
-            !g_p99_chloe_transfer_ready.load(std::memory_order_acquire) ||
+        const bool enabled = purpose == P99SourcePurpose::kOwnedGroupValues
+            ? kEnableP99GroupShadow && g_p99_group_shadow_ready.load(std::memory_order_acquire)
+            : kEnableLegacyNadineP99ChloeGripTransfer &&
+                g_p99_chloe_transfer_ready.load(std::memory_order_acquire);
+        if (!enabled ||
             !g_state_net.enabled || !g_net_role_b || g_module == 0 ||
             job == nullptr || readable_bytes(job) < 0x10) {
             return false;
@@ -62907,10 +62922,12 @@ bool seh_p99_chloe_joint_cache_plan_fits(const void* target_skeleton) {
 }
 
 bool seh_p99_chloe_transfer_epoch_owner_still_exact(
-    const P99ChloeTransferEpoch& epoch) {
+    const P99ChloeTransferEpoch& epoch,
+    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
     __try {
         IdleArmPoseOwnerScope owner{};
-        if (!seh_p99_chloe_joint_cache_plan_fits(epoch.target_skeleton) ||
+        if ((purpose == P99SourcePurpose::kPersistentJointCache &&
+             !seh_p99_chloe_joint_cache_plan_fits(epoch.target_skeleton)) ||
             !epoch.active || !epoch.valid || epoch.ambiguous ||
             epoch.depth != 1 || retained_player_object(0) != epoch.player ||
             !seh_resolve_idle_arm_pose_owner_scope(
@@ -62957,14 +62974,15 @@ bool seh_p99_chloe_transfer_epoch_owner_still_exact(
 }
 
 P99ChloeTransferMaterializeResult seh_materialize_p99_chloe_embedded_epoch(
-    P99ChloeTransferEpoch* epoch) {
+    P99ChloeTransferEpoch* epoch,
+    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
     if (epoch == nullptr || !epoch->active || !epoch->valid ||
         epoch->ambiguous || epoch->depth != 1) {
         return P99ChloeTransferMaterializeResult::kEpochGate;
     }
     __try {
         P99ChloeTransferEpoch prepared = *epoch;
-        if (!seh_p99_chloe_transfer_epoch_owner_still_exact(prepared)) {
+        if (!seh_p99_chloe_transfer_epoch_owner_still_exact(prepared, purpose)) {
             return P99ChloeTransferMaterializeResult::kOwnerBefore;
         }
         IdleArmPoseOwnerScope post_perform_owner{};
@@ -63026,7 +63044,7 @@ P99ChloeTransferMaterializeResult seh_materialize_p99_chloe_embedded_epoch(
         prepared.entries_captured = true;
         prepared.groups = groups;
         prepared.source_group_mask = 0x03u;
-        if (!seh_p99_chloe_transfer_epoch_owner_still_exact(prepared) ||
+        if (!seh_p99_chloe_transfer_epoch_owner_still_exact(prepared, purpose) ||
             !p99_chloe_transfer_registry_identity_exact(
                 prepared.anim_registry_epoch,
                 prepared.skel_table_epoch,
@@ -63045,14 +63063,15 @@ P99ChloeTransferMaterializeResult seh_materialize_p99_chloe_embedded_epoch(
 
 bool seal_p99_chloe_transfer_ticket(
     const P99ChloeTransferEpoch& epoch,
-    P99ChloeTransferTicket* output) {
+    P99ChloeTransferTicket* output,
+    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
     if (output == nullptr || !epoch.entries_captured ||
         epoch.source_group_mask != 0x03u ||
         !epoch.groups[0].valid || !epoch.groups[1].valid) {
         return false;
     }
     const bool owner_exact =
-        seh_p99_chloe_transfer_epoch_owner_still_exact(epoch);
+        seh_p99_chloe_transfer_epoch_owner_still_exact(epoch, purpose);
     if (!owner_exact) {
         return false;
     }
@@ -63682,6 +63701,8 @@ bool install_legacy_nadine_p99_chloe_grip_transfer() {
                    : "legacy-Nadine P99 Chloe-order transfer PARTIAL (pass-through; relays retained)"));
     return ready;
 }
+
+#include "nadine_p99_group_runtime.inl"
 
 void clear_local_nadine_mazur_weapon_palette_census_target() {
     g_nadine_mazur_weapon_palette_census_fg.store(
@@ -80036,7 +80057,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-17agm-safe "
+        "TLL co-op runtime init 2026-09-17agn "
         "(byte retarget mode; relocated authored-map safe; compressed parameter/reference indices; offline-derived D350/B8 rows; locked SkelTable snapshot; two-site P99 commit; no live clip dereference; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
@@ -80547,6 +80568,11 @@ DWORD WINAPI install_hook(void*) {
     log_line("local-player-1 -> Nadine bind hook ENABLED");
     log_line("one-shot split render activation ENABLED after login_state==3");
     const bool state_net_started = start_state_net();
+    if constexpr (kEnableP99GroupShadow && !kEnableRejectedNadineWeaponRuntimeProbes) {
+        const bool ready = state_net_started && install_p99_group_shadow();
+        boot_log_line(ready ? "P99-GROUP READY state2; owned 21-row source; cmd16 shadows only"
+                            : "P99-GROUP SKIPPED combined package");
+    }
     if constexpr (kEnableLegacyNadineP99ChloeGripTransfer &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         const bool p99_chloe_transfer_ready = state_net_started &&

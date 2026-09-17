@@ -6737,7 +6737,7 @@ Keep the postblend preservation boundary; replace only its steady content.
       Add reproducible `p99_joint_cache_layout_audit.py`, bounded storage gates
       on the entire old plan and regression tests. AGM-safe stays disabled;
       Release/CTest4/4 and focused14/14 /5500 checks pass. No game launch.
-- [ ] Prove and implement a separate group-local cmd16 transfer at141ABA973.
+- [x] Prove and implement a separate group-local cmd16 transfer at141ABA973.
       Group0 palm/prop use locals28/30, group1 fingers use odds1..37; native
       op53/op40 shared scratch+FD0 propagates the palm parent. Normal Async
       mode2 executes both groups in order on one worker, but the second list
@@ -6745,8 +6745,13 @@ Keep the postblend preservation boundary; replace only its steady content.
       grammar/custom bindings, snapshot lifetime and partial-group failure
       policy before mutation; do not promise an atomic21-row transaction.
       Copied SegmentContext+50 may point at per-call bounded values only;
-      retain the engine's original pointer for cleanup. Runtime remains
-      unearned. Follow the detailed2026-09-17 COOP_STATUS evidence.
+      retain the engine's original pointer for cleanup. AGN implements four
+      scoped hooks, exact programs/allocations/command guards, owned21 values
+      and partial-failure shutdown. Release/CTest8/8 and independent review
+      pass; see2026-09-17 COOP_STATUS prediction and frozen DLL hash.
+- [ ] Run the earned single-copy AGN P99 idle exam; require groups2/rows21
+      EXECUTED plus user's visible correct grip, no disappearance/crash or
+      PARTIAL. Installation alone is not confirmation. User controls input.
 
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to

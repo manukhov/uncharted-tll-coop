@@ -31974,3 +31974,86 @@ Single IDB saved with1826 function/72 data/1 type labels; evidence
 Restarted MCP resolves the spawner and coalescing-query names and preserves
 the exact-start lookup xrefs. Runtime remains unmodified; no tll process is
 running. Existing unrelated untracked `tmp/` remains untouched.
+
+### 2026-09-17 STATIC / EXAM-PENDING (`agn`): scoped expanded-group P99 transfer
+
+Implemented the separate cmd16-only path in `nadine_p99_group_runtime.inl`.
+The rejected persistent JointCache writer remains false and is compile-time
+mutually excluded. The new source-purpose mode bypasses only its inappropriate
+storage test while producing owned numeric values; all old mutation/preflight
+calls retain the default persistent-storage gate. No old commit routine is
+called by the new path.
+
+Four sites: Async prologue141A92A00, Process calls141A92E78/141A932F8, and
+cmd16 call141ABA973. Async freezes all21 validated row20/D350/B8/row157 values
+once, then retains only numeric rows and current-job Fg/Art/raw identities.
+Native owner/weapon pointers never cross groups. TLS expires in `__finally`;
+nesting/reentry refuses, every native call executes once, and exceptional
+native execution is never retried. The production State helper enforces
+0/0 -> entered1/completed1 -> entered3/completed3. A late failure disables
+future overlays, NOT rollback or an atomic-publication promise.
+
+Admission checks normal mode2/no override/no cached-prepass; parent flags+20
+must be zero (distinct from reserved Segment+20). Processing descriptors use
+**decimal10-byte stride**, not16. Segment flags&3 and derived100/200 must
+clear aftercmd15. Exact source/program/descriptor/callback/scratch identities
+are rechecked inside the scoped calls. Entire WorkBuffer metadata is copied
+read-only: all64 records, active/free partition, ranges, counts/cursors, exact
+JP/W/aux starts and type/first/count/size tags. Scratch, arena, metadata,
+original/copied contexts, shadow and owned values must be disjoint. This
+proves allocation membership; VirtualQuery alone is only readability.
+
+`generate_p99_group_program_manifest.py` pins the asset SHA and seven raw
+regions,16104 bytes, all53 operators and16 bindings. G0/g1 full blocks are
+raw[53E0,8D90)/[8D90,8F40), whose directory sizes also equal the next starts
+and final indirect-table ends. No raw region has PAK pointer fixups. This is
+exact byte comparison, not a guessed hash extent. It does not claim integrity
+of unrelated skeleton data or arbitrary third-party code mutation.
+
+Exact g0 48/58-word commands and narrow g1 direct-native prefix whitelist
+plus4/15/16/17/26/5 suffix are required. Prefix is unchanged and runs before
+our shadow/context exists; no injected address is exposed there. This proves
+the overlay envelope, not arbitrary native clip/retarget operand correctness.
+Command bindings are derived independently: Fg100 pose, Fg118 cmd15 input,
+Fg120 scalar, Fg110 conversion target, sphere{*Fg200,&Fg1C0,Fg}, palette
+{*Fg230+48*first,*Fg240+48*first,&Fg220}. The cmd15 input is NOT a root matrix.
+
+Independent proof types already closed in prior STATIC entries and checked
+against integration: (1) Async caller/scheduler and synchronous operator call
+graphs; (2) native field/allocator/command dataflow; (3) exact asset program
+and relocation data; (4) concrete lifetime/destructor vtable chain. Competing
+persistent-global and packed-index writes are REJECTED by66-row capacity;
+Process-only cross-group tickets are rejected for reuse/ABA. Expanded rows
+remain the selected boundary, without changing attachment resolvers/bones.
+
+Independent review found and fixed processing stride16->10, missing parent
+flags, postcmd15 ownership mask, protection-restore retry gaps, old/new switch
+mutual exclusion, and muted proof logs. Four-site installation verifies stock
+targets/prologue, suspends threads and rejects RIPs inside patch spans,
+patches three unique pages, verifies bytes, restores protections/rolls back;
+unknown partial state stays inert and retains reachable trampolines. Bounded
+REFUSED/PARTIAL/EXECUTED now use boot logging even with general logging off.
+
+Validation: Release runtime build PASS, CTest8/8 PASS; manifest4/4/32285 checks,
+admission7/7/66783, scope1044, existing shadow6/6/2105216. Offline53-op audit,
+manifest generator --check, and decoder regressions4/4 pass. IDB saved after
+comment update (1826 functions/72 data/1 type; `save_database returned True`
+in reports/ida_apply_agn_status.txt); restarted MCP resolves updated Process
+comment and preserves its callsites. First relative-path idat invocation
+failed before opening; absolute paths/executable working-directory succeeded.
+
+Frozen AGN DLL:892416 bytes, SHA256
+`7921A107792ECF1A72102D66A5ADFD49A040F27B1CC323B1C42AEA8E96E9B683`.
+
+**Falsifiable single-copy exam, before launch:** user loads legacy Nadine,
+draws P99 and stands idle without aiming for3-5 seconds. Require exactAGN,
+roleB, four-site INSTALLED/READY, then EXECUTED groups2/rows21 with noPARTIAL.
+Prediction: the right-hand fingers visibly wrap the pistol grip, with the
+pistol remaining visible in-hand; original attachment/rear-weapon placement
+does not jump. REFUSED means this exam never applied the intended candidate,
+not visual success. EXECUTED with unchanged/wrong grip rejects the value-pose
+candidate; disappearance/crash or PARTIAL rejects this implementation and
+must disable it. Do not revive persistent-bank writes or retry native work.
+State2 admission is instantaneous, not a guarantee against transition frames.
+Only the user controls gameplay. Launch/injection and visual outcome follow;
+installation/test counts alone do not confirm the fix.
