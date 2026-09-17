@@ -137,4 +137,13 @@ if(BUILD_TESTING)
         NAME nadine_p99_chloe_order_policy
         COMMAND tll_nadine_p99_chloe_order_policy_tests
     )
+    add_executable(tll_nadine_p99_group_shadow_tests tests/nadine_p99_group_shadow_tests.cpp)
+    target_include_directories(tll_nadine_p99_group_shadow_tests PRIVATE src)
+    target_compile_features(tll_nadine_p99_group_shadow_tests PRIVATE cxx_std_20)
+    if(MSVC)
+        target_compile_options(tll_nadine_p99_group_shadow_tests PRIVATE /W4 /permissive- /EHsc)
+    else()
+        target_compile_options(tll_nadine_p99_group_shadow_tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME nadine_p99_group_shadow COMMAND tll_nadine_p99_group_shadow_tests)
 endif()

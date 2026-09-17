@@ -24,6 +24,11 @@ so refusal of group1 is partial output, not rollback or guaranteed one-frame
 recovery. The service-lane explanation and blanket world-recompute remedy
 are withdrawn. No new runtime test is earned yet; do not re-enable AGL.
 
+Offline implementation is now available in `nadine_p99_group_shadow.h`:
+full104/38-row owned copies, complete21 source validation and128-byte copied
+context. Dedicated suite6/6, CTest5/5. It is NOT wired into the runtime; live
+job/grammar/allocation admission still needs its own proof and implementation.
+
 - [x] Follow the user's new request, "Почини хват пистолета". Leave the
       AGC back-placement package unchanged and do not infer a visual verdict
       from the priority change. Pistol grip is reopened; Mazur grip, Draw/Put

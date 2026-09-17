@@ -31845,3 +31845,28 @@ The single IDB was saved with1820 function/72 data/1 type labels;
 After restart, MCP resolves the world-cache preparation name and returns the
 corrected custom132 +70 comment. Runtime source/DLL remain AGM-safe from the
 containment section; no game process is running and no test was launched.
+
+### 2026-09-17 IMPLEMENTED / OFFLINE-TESTED (`agm-shadow-values`): bounded owned group copies
+
+`scanner/src/nadine_p99_group_shadow.h` implements only the value/storage part
+of the static contract. It is deliberately not included by the runtime DLL
+and installs no hook. Both exact C39 shapes are required, source coverage must
+be all21, and every numeric source component is validated before copying any
+native input. It copies all104/38 expanded rows, replaces only semantic locals
+28/30 and right-finger1,3,...,37, and leaves both native input and source values
+untouched. Static checks reject duplicate/out-of-group constant mappings.
+There are no retained owner, weapon, clip, or registry pointers.
+
+The separate128-byte context-copy helper changes only+50, accepts only stable
+mutable lvalue shadow storage and rejects invalid/incomplete shadows. Thus it
+does not install a temporary pointer into the original native context that
+cmd5 will free. The caller still must prove actual buffer allocation, native
+job lifetime, exact programs/bindings and terminal grammar: these value tests
+cannot grant runtime admission or atomic two-group publication.
+
+New Release-safe suite passes6/6 with2105216 checks: all104/38 output rows,
+semantic thumb reordering, unchanged input/canaries, every group field,
+wrong/truncated extents, each source-mask bit, nonfinite xyz/Q in every source
+row, quaternion normalization, opaque W lanes, and exact context preservation.
+CTest now passes5/5. This is executable preparation for the new path, not a
+visual grip result. Old AGL remains blocked; AGM-safe runtime is unchanged.
