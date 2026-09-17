@@ -32120,3 +32120,53 @@ AGO single-copy exam started after25211a3 push: PID22496, injected frozenDLL,
 exact2026-09-17ago/roleB/INSTALLED/READY verified; process responding. No agent
 gameplay input. User must drawP99 and holdidle3-5s; no EXECUTED/visual verdict
 at handoff. Previous PID15744 exit reason still awaits user's clarification.
+
+### 2026-09-17 REJECTED (`ago` performance) / STATIC containment (`agp-safe`)
+
+User reports severe lag in the AGO exam ("игра лагает ужас"). PID22496 has
+already exited at inspection; no process was terminated by the agent and the
+exit cause remains unknown. Its P99-GROUP log contains only INSTALLED/READY
+(lines103210..103211), no EXECUTED, REFUSED or PARTIAL. Therefore AGO is
+REJECTED as a usable runtime build; neither grip application nor its visual
+correctness is established. Silence does not prove that no early admission
+work ran: normal-job/source-selection refusals can return without logging.
+
+STATIC cost regression: AGO changed every call of p99_group_readable from
+the shared fast SEH probe to VirtualQuery. The global Async detour
+(141A92A00) calls prepare_p99_group_values -> seh_p99_group_normal_job BEFORE
+the retained local-player/P99 owner check in seh_select_p99_chloe_transfer_epoch.
+For a valid top-level job there are two readability calls (job/Fg) before
+the mode2 gate and four (job/Fg/Art/raw) before the C39/local-owner filter if
+normal-path gates pass. Each is one VirtualQuery when its span lies in one
+region, more across region boundaries. Independent static review agrees.
+Thus unrelated jobs pay the new memory-query path too. This reintroduces the
+same API in a broad animation hot path that the 2026-07-04 CONFIRMED lag entry
+and commit10ece75 explicitly removed. The full-span arithmetic fix did not
+justify its per-job cost; the existing performance warning was missed.
+This is the leading mechanism, not a measured attribution of this run's stalls.
+Competing costs include source materialization/SkelTable lock work for an
+eligible owner, repeated exact-program validation, and unrelated engine
+streaming. No timing capture exists to separate their actual contribution.
+
+Containment: kEnableP99GroupShadow=false compile-time removes the only
+installation call for all four Async/Process/cmd16 hooks. The old persistent
+P99 transfer remains false; it must NOT be revived. Boot tag is
+2026-09-17agp-safe with an explicit P99-GROUP DISABLED marker. Existing AGC
+back attachments and other weapon/animation settings are unchanged. This is
+not a speculative replacement optimization and it does not fix the grip.
+
+Release DLL rebuilt819712bytes, SHA256
+`0DCA3CFDEDFB58B39621384EE7DD7546AAB2884B4DDADC5BA14071C69BA600E2`.
+CTest9/9 and git diff --check pass. No launch/injection/gameplay was performed
+for this containment turn; recovery of runtime performance is UNCONFIRMED.
+No new engine identities/fields were discovered; prior sole-IDB label save
+remains valid (reports/ida_apply_agn_status.txt:1826functions/72data/1type,
+save_database returned True).
+
+Next: keep the package disabled. First bound and reduce work BEFORE unrelated
+objects enter validation, audit owner lifetime for any proposed earlier gate,
+and add offline call-count/cost tests for rejected jobs. Preserve full-span
+accessibility, allocation membership and guard-page safety; do not replace
+them with stale pointer caches or globally widen/change readable_bytes.
+Any optimized runtime candidate needs a new static quota and falsifiable
+prediction including both frame-time and grip outcomes before a game exam.

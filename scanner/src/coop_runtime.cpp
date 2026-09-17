@@ -61635,7 +61635,9 @@ P99ChloeTransferPerformFunction g_original_p99_chloe_transfer_perform = nullptr;
 std::atomic<bool> g_p99_chloe_transfer_ready{false};
 // Independent admission for cmd16-owned expanded storage. Never authorizes
 // the rejected persistent JointCache writer below.
-constexpr bool kEnableP99GroupShadow = true; // AGO: full-span accessibility gate.
+// AGO runtime rejected: severe user-visible lag. Keep the entire four-site
+// package absent until broad Async admission and per-job costs are audited.
+constexpr bool kEnableP99GroupShadow = false;
 static_assert(!kEnableP99GroupShadow || !kEnableLegacyNadineP99ChloeGripTransfer,
     "Expanded group shadows must never coexist with the rejected persistent writer");
 std::atomic<bool> g_p99_group_shadow_ready{false};
@@ -80058,8 +80060,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-17ago "
-        "(byte retarget mode; relocated authored-map safe; compressed parameter/reference indices; offline-derived D350/B8 rows; locked SkelTable snapshot; four-site cmd16 P99 shadows; full-span page checks; no live clip dereference; AGC back profiles retained)");
+        "TLL co-op runtime init 2026-09-17agp-safe "
+        "(P99 group-shadow hooks disabled after AGO lag; legacy persistent grip writer disabled; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "
@@ -80573,6 +80575,8 @@ DWORD WINAPI install_hook(void*) {
         const bool ready = state_net_started && install_p99_group_shadow();
         boot_log_line(ready ? "P99-GROUP READY state2; owned 21-row source; cmd16 shadows only"
                             : "P99-GROUP SKIPPED combined package");
+    } else if constexpr (!kEnableP99GroupShadow) {
+        boot_log_line("P99-GROUP DISABLED after AGO lag; no Async/Process/cmd16 hooks installed");
     }
     if constexpr (kEnableLegacyNadineP99ChloeGripTransfer &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {

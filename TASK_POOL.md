@@ -11,7 +11,16 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-17): AGL's admitted21-row attempt corrupted memory:
+Current handoff (2026-09-17, AGP-safe): AGO is REJECTED after the user's severe
+lag report. Both P99 transfer packages are compile-time disabled; all four
+new hooks are absent from the next injection. Safe DLL rebuilt, CTest9/9 pass;
+no runtime performance recovery claimed and no game relaunched. Grip is NOT
+fixed. First audit/bound hot-path admission: AGO put VirtualQuery before the
+local-owner filter, reintroducing the API implicated in the CONFIRMED July4
+lag finding. Do not relaunch AGO or drop storage/guard-page safety checks.
+See final2026-09-17 COOP_STATUS entry for hashes, competing causes and next step.
+
+Earlier storage finding: AGL's admitted21-row attempt corrupted memory:
 the persistent `Fg+100` bank has66 rows, but finger globals105..141 were used
 as indices. AGM-safe blocks that complete plan at every access path and stays
 disabled. Grip is not fixed. The group-local cmd16 audit now closes the exact
@@ -23,16 +32,14 @@ as an unbounded owner-lease search. Generation checks alone still are not a
 lifetime lease. Group0 publishes before group1,
 so refusal of group1 is partial output, not rollback or guaranteed one-frame
 recovery. The service-lane explanation and blanket world-recompute remedy
-are withdrawn. No new runtime test is earned yet; do not re-enable AGL.
+are withdrawn. Do not re-enable AGL.
 
-Offline implementation is now available in `nadine_p99_group_shadow.h`:
+Storage implementation is available in `nadine_p99_group_shadow.h`:
 full104/38-row owned copies, complete21 source validation and128-byte copied
-context. Dedicated suite6/6, CTest5/5. It is NOT wired into the runtime. Next
-implement four-site scoped integration (Async entry/exit, both Process calls,
-cmd16) with exact metadata extents, command suffix/program bindings and owned
-source snapshot. Validate nesting/end-of-job, partial-group refusal and hook
-installation rollback before building and launching the new DLL. WeaponOut2
-is entry-time admission, not a proved whole-job state freeze.
+context. Four-site integration (Async entry/exit, both Process calls, cmd16)
+was implemented in AGN/AGO with exact extents, programs and owned source values,
+but is now disabled after the performance regression. WeaponOut2 is entry-time
+admission, not a proved whole-job state freeze. No new runtime test is earned.
 
 - [x] Follow the user's new request, "Почини хват пистолета". Leave the
       AGC back-placement package unchanged and do not infer a visual verdict
@@ -6755,8 +6762,14 @@ Keep the postblend preservation boundary; replace only its steady content.
 - [x] Correct only the scoped accessibility gate in AGO; preserve allocator
       membership/source/program/isolation checks; add precise rejection stages.
       Full-span/overflow/guard-page regression suite and CTest9/9 pass.
-- [ ] AGO P99 idle exam: require groups2/rows21 EXECUTED plus user's visible
-      correct grip, no disappearance/crash or PARTIAL. User controls input.
+- [x] Reject AGO runtime performance: user reports severe lag; PID22496 has
+      only INSTALLED/READY, no EXECUTED/REFUSED/PARTIAL. Grip remains untested.
+      Disable the whole package in AGP-safe, preserve old-writer ban and AGC
+      attachments. Release/CTest9/9 pass; no new game launch.
+- [ ] Audit and bound admission/validation cost before another P99 candidate.
+      Start with broad pre-owner VirtualQuery calls and existing July4 lag
+      finding; account for source-lock and repeated manifest work separately.
+      Add offline rejected-job call-count tests; retain full safety checks.
 
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to
