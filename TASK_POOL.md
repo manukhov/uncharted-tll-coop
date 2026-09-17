@@ -17,17 +17,22 @@ as indices. AGM-safe blocks that complete plan at every access path and stays
 disabled. Grip is not fixed. The group-local cmd16 audit now closes the exact
 53 operators, 128-byte copied context, native parent propagation and terminal
 consumers (final `agm-group-audit` section in COOP_STATUS). Repro script:
-`scripts/p99_group_program_audit.py`. Next: trace owner/weapon destruction and
-look-rebuild barriers against Async141A92A00/CreateFunctor141781390; current
-generation checks are not a lifetime lease. Group0 publishes before group1,
+`scripts/p99_group_program_audit.py`. Normal-schedule lifetime and real buffer
+extent contracts are now recorded in `agm-job-contract`; do not reopen them
+as an unbounded owner-lease search. Generation checks alone still are not a
+lifetime lease. Group0 publishes before group1,
 so refusal of group1 is partial output, not rollback or guaranteed one-frame
 recovery. The service-lane explanation and blanket world-recompute remedy
 are withdrawn. No new runtime test is earned yet; do not re-enable AGL.
 
 Offline implementation is now available in `nadine_p99_group_shadow.h`:
 full104/38-row owned copies, complete21 source validation and128-byte copied
-context. Dedicated suite6/6, CTest5/5. It is NOT wired into the runtime; live
-job/grammar/allocation admission still needs its own proof and implementation.
+context. Dedicated suite6/6, CTest5/5. It is NOT wired into the runtime. Next
+implement four-site scoped integration (Async entry/exit, both Process calls,
+cmd16) with exact metadata extents, command suffix/program bindings and owned
+source snapshot. Validate nesting/end-of-job, partial-group refusal and hook
+installation rollback before building and launching the new DLL. WeaponOut2
+is entry-time admission, not a proved whole-job state freeze.
 
 - [x] Follow the user's new request, "Почини хват пистолета". Leave the
       AGC back-placement package unchanged and do not infer a visual verdict

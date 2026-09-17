@@ -2770,10 +2770,44 @@ FUNCTIONS = {
         "Resolves the grenade owner from its screen index or retained owner pair.",
     ),
     # --- 2026-07-10: Player FgAnimData async lifecycle ---
+    0x14015E8B0: (
+        "GameLoop_RunAnimationUpdateBucket",
+        "Runs one animation/process bucket. Before the next AnimMgr update, "
+        "calls ProcessMgr_DestroyDeadProcesses at 0x14015E9D7. Chooses async "
+        "manager 0x1417816B0 or AnimMgr_SyncUpdate; bucket 5 waits/releases "
+        "the escaped counter 0x146AF2798 at 0x14015EAA6/AAE. Normal job "
+        "lifetime is a phase barrier, not a refcount lease on weapon state.",
+    ),
+    0x1415C51E0: (
+        "Ndjob_SpawnerJobAndWaitForChildren",
+        "Source-identified SpawnerJob in spawner-job.cpp. Replaces child "
+        "completion counters at 0x1415C5316, submits batches, waits for all "
+        "children at 0x1415C53F9, and only then releases original completion "
+        "counters at 0x1415C541C. AnimMgr_AsyncUpdateAndWaitForBuckets waits "
+        "these spawners before returning, covering normal g0/g1 Async work.",
+    ),
+    0x1416229C0: (
+        "ProcessMgr_DestroyDeadProcesses",
+        "Under the ProcessMgr recursive lock, calls dead-process cleanup "
+        "0x1416A6720 -> 0x1416A6620 -> 0x1416A62B0 -> process vtable slot0. "
+        "Normal animation bucket wrapper invokes this before the next manager "
+        "update, after prior native animation jobs have completed. Player "
+        "destruction eventually reaches NdGameObject teardown and FreeAnimData; "
+        "the pool free function itself has no job wait.",
+    ),
     0x141781390: (
         "AnimManager_CreateAsyncUpdateJobFunctor",
         "Creates the async animation-manager job for an FgAnimData object. The "
         "job callback is AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00.",
+    ),
+    0x1417816B0: (
+        "AnimMgr_AsyncUpdateAndWaitForBuckets",
+        "Normal asynchronous animation manager. Creates three SpawnerJob "
+        "records per bucket set at 0x1417820BA/212C/21B6 and waits all six "
+        "spawner counters in the loop at 0x1417829B9/C6/D4 before returning. "
+        "Spawner completion includes its native children, so the normal "
+        "AsyncObjectUpdateJointBlendJob g0/g1 work is bounded by this phase. "
+        "This does not freeze gameplay WeaponOut or arbitrary mod callbacks.",
     ),
     0x141BB7DD0: (
         "NdGameObject_DisableAnimationAsyncPhases",
@@ -4515,6 +4549,24 @@ FUNCTIONS = {
         "initialize only the auxiliary prefix; they do not author the workspace "
         "matrix-chain root, which command 15 leaves as identity.",
     ),
+    0x14217AA60: (
+        "AnimWorkBuffer_FindAllocationIndexByOffset",
+        "Read-only exact-start lookup in WorkBuffer+0x28 pointer table. "
+        "Input is arena-relative offset, not a pointer. Scans the front "
+        "prefix (count+0x48) if offset<cursor+0x30, else the back suffix "
+        "(count+0x4C) when offset>=cursor+0x38. Record+0 must equal offset; "
+        "interior addresses fail. Returns table index or 0xFFFFFFFF. Native "
+        "records are 56 bytes: offset,size,first,count,flags,type,nextFree.",
+    ),
+    0x14217A4D0: (
+        "AnimWorkBuffer_CoalesceAdjacentAllocationsAndGetSize",
+        "NOT a read-only allocation-size query. Calls exact offset lookup, "
+        "then coalesces compatible adjacent records: adds bytes/count at "
+        "0x14217A59A/A5A5, recycles records through +0x20 free list and "
+        "compacts the pointer table/counts at A5FA/A64F. Runtime admission "
+        "must not invoke this to check extent; use a bounded read-only "
+        "metadata walk. P99 shadow expects JP type0, matrices type3, aux type5.",
+    ),
     0x14217B630: (
         "AnimCmdEvaluator_ExecuteSkeletonJointPrograms",
         "Command-16 evaluator that walks the target skeleton's bounded joint "
@@ -4982,7 +5034,8 @@ FUNCTIONS = {
         "Retained presentation-Player addresses may turn over before this job; "
         "each invocation revalidates the current Player/Fg generation and the "
         "command list itself owns canonical clip liveness. "
-        "When job flags contain 0x20, resolves retained owner at +0x1A8/+0x1B0 "
+        "When job.byte(+0x14)==0 and Fg.flags(+0)&0x20, resolves retained "
+        "owner at +0x1A8/+0x1B0 "
         "and dispatches owner vtable+0x410 then +0x418.",
     ),
     0x141A8F9D0: (

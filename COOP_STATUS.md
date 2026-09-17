@@ -31870,3 +31870,107 @@ wrong/truncated extents, each source-mask bit, nonfinite xyz/Q in every source
 row, quaternion normalization, opaque W lanes, and exact context preservation.
 CTest now passes5/5. This is executable preparation for the new path, not a
 visual grip result. Old AGL remains blocked; AGM-safe runtime is unchanged.
+
+### 2026-09-17 STATIC (`agm-job-contract`): normal phase lifetime and live-buffer admission model
+
+The lifetime question is closed **for owned values used only inside the
+current normal native Async/cmd16 call**. This is not a refcount lease, an
+arbitrary external ChangeLook guarantee, or a promise of constant WeaponOut2.
+Independent evidence types: caller/scheduler graph, counter dataflow/waits,
+and concrete Player destructor vtable-slot resolution to the Fg pool free.
+
+`GameLoopUpdate1401676D0` calls PreFrame at14016778C; deferred ChangeLook is
+14015CE69. UpdateProcesses14015F020 then runs via1415B5210 (submit, wait at
+1415B52D7, release at1415B52E4). Its animation bucket wrapper14015E8B0 chooses
+async manager1417816B0 or sync141782B40. Async creates three SpawnerJobs
+1415C51E0: each substitutes child counters at1415C5316, waits all children at
+1415C53F9 and releases original counters at1415C541C. Manager waits all six
+spawner counters at1417829B9/C6/D4, so normal g0/g1 completes before return.
+Escaped counter146AF2798 is separately waited/released in bucket5 at14015EAA6/AAE.
+
+Before the next AnimMgr call, bucket wrapper calls
+`ProcessMgr_DestroyDeadProcesses1416229C0` at14015E9D7. Cleanup traverses
+1416A6720 ->1416A6620 ->1416A62B0 ->process vtable[0]. Concrete Player path:
+vtable142A4BFE8 ->1410C9E50 ->1410D8B30 ->140CBFEF0 ->141E991F0 ->NdGameObject
+destructor141BB3660 ->FreeAnimData14177FA70. Actual free141622A60/compaction
+141622130 are later phase7 at140166889/88E, after UpdateProcesses. FreeAnimData
+and Fg reset1418C4AD0 have no internal job wait: phase ordering is the proof.
+Fg+320 mutex/retained-pair-as-lease are rejected as alternative explanations.
+
+Weapon state is weaker. Player+410 at1410EC230 runs after both groups
+(Async141A934D5), but a direct path from it to controller Update was not
+established. Controller vtable142A47F90 slot358 resolves1410AD410;
+ApplyState1410AAFB0 is reached at1410AE3A8 and1410A2C9C, with script bindings
+also present. Snapshot state2 is instantaneous admission. Owned numeric rows
+with no deferred owner/weapon dereference avoid an added use-after-free; an
+intervening state change can still correct a transition frame. Do not promise
+unchanged ADS/holster transitions. Front-end ChangeLook14093EFBB and arbitrary
+mod-owned lifecycle mutation are outside this normal-schedule conclusion.
+
+**Four scoped hook sites, not Process-only TLS.** Async entry/exit must supply
+the generation/end boundary. Process callsites141A92E78/141A932F8 use different
+caller-stack AnimCmdContext objects (rsp+110/rsp+160). Root+10 identifies
+Fg+1C0, but reused stack/scratch pointers cannot exclude a later job after a
+missing g1. Cmd0 at141AB9B39 puts current Process argument3 in SegmentContext
++08; cmd5 clears it. Cmd16 can require that exact parent and active generation
+without consulting old owner/weapon pointers. Place Shadow at its final
+address before creating the context; never move it afterward.
+
+Conservative normal admission: raw Fg.byte6==2, nonnull job.qword0, null
+Fg+2A0 override, equal nonnull Fg+18/Fg+1A0, global143682F4B==0, and
+`job.byte14==0 || (Fg.byte8&8)!=0`. The whole-byte job test is not a bitmask.
+Raw mode2 avoids the fallback controlled by global143682F49 or Fg.flags&2.
+Owner callbacks require job.byte14==0 plus **Fg.flags&20**, not the former
+incorrect annotation about job flags containing20.
+
+**Real allocation extent, read-only.** WorkBuffer is88 bytes: arena+00,
+arena-size+08 (20000hex), metadata+10, metadata-size+18 (1000hex), free-head+20,
+table+28 (metadata+E00), front/back cursors+30/+38, counts+48/+4C, capacity+50
+(64). Each56-byte record has qwords offset/size/first/count/flags/type/nextFree.
+`AnimWorkBuffer_FindAllocationIndexByOffset14217AA60` matches exact starts in
+active front/back table portions. By contrast14217A4D0 **coalesces and mutates**
+records/table/counts; never call it as a read-only extent check.
+
+Live admission requires a checked-arithmetic walk of at most64 active records:
+metadata pointer alignment/ranges, front+back count<=64, cursor ordering,
+arena bounds, uniqueness/non-overlap, and exact allocation tags:
+
+| Buffer | g0 bytes /type /first /count | g1 bytes /type /first /count |
+|---|---|---|
+| expanded JP | 4992 /0 /0 /104 | 1824 /0 /104 /38 |
+| matrices | 6720 /3 /0 /105 | 2496 /3 /104 /39 |
+| auxiliary | 1072 /5 /0 /266 | null |
+
+After cmd15, Segment+60 must be null and ownership bit1 at+4A cleared.
+Builder flags9/8 are NOT Segment+4A flags (which include derived100/200).
+External scratch is6480 bytes from raw+1A and must not alias arena/metadata/
+context/shadow. Fallback can allocate scratch separately if initial shared
+allocation is null: recheck g0/g1 identity and treat late mismatch as partial
+publication, never rollback.
+
+**Command boundaries.** Native advances by header high16 DWORD length and
+terminates at cmd5, rather than enforcing supplied word count. Integration
+must enforce positive bounded lengths, exactly one final5/2, no trailing
+words, one cmd16 and no later context reset or cmd27. Exact g0 mode2 grammar:
+`0/2 1/2 2/4 9/2 3/2 4/2 14/6 15/4 16/2 17/4 24/6[248B1AAE]`
+`[24/10[514C0761]] 26/10 5/2` (48 or58 words). G1 has a variable native
+AnimControl prefix, then `4/2 15/4 16/2 17/4 26/10 5/2`. Approved postpose
+callback is1406CD220. Prefix length parsing is not a complete semantic grammar
+proof. Unknown suffix plugins reject.
+
+**Next implementation, not another lifetime fishing pass:** wrap one Async
+epoch plus its two Process calls and cmd16; freeze validated21 numeric values
+at entry; implement allocation/grammar/program-binding guards; construct
+aligned shadow/context after final placement; call stock once and preserve
+original allocation pointers. Test scope termination/nesting, partial-group
+refusal and installer rollback, then build/review the new DLL before a
+single-copy P99 idle visual exam. Current DLL remains AGM-safe, no hook was
+wired and no game was launched. Independent pure-helper review found no defect
+within its storage-only contract (6/6,2105216 checks); no runtime GO is implied.
+
+Handoff validation: both offline program audits pass, CTest5/5 remains green.
+Single IDB saved with1826 function/72 data/1 type labels; evidence
+`reports/ida_apply_agm_job_contract.log` includes `save_database returned True`.
+Restarted MCP resolves the spawner and coalescing-query names and preserves
+the exact-start lookup xrefs. Runtime remains unmodified; no tll process is
+running. Existing unrelated untracked `tmp/` remains untouched.
