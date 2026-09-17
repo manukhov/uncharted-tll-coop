@@ -15169,10 +15169,15 @@ The destination audit covers every opcode present in either stream that can
 write an encoded operand: builtins `40/41/44/47/49/50/51/52/53/54` and custom
 `128..132`. Custom opcode 130 obtains its output count from descriptor dword
 `+8` and its encoded destination array through descriptor word `+22`; opcode
-132 obtains its count from dword `+4`, its output table through word `+76`, and
-uses `{component,destination}` entries with destination dword `+4`. With these
-schemas resolved, no non-op40 destination overlaps any active chain node. This
-eliminates a hidden later writer rather than merely failing to observe one.
+132 obtains its count from dword `+4` and uses `{component,destination}`
+entries with destination dword `+4`. **2026-09-17 correction:** the output table
+is at word `+70` (`0x46`), not the originally recorded `+76` (`0x4C`), and custom
+destinations retain all32 bits. The old temporary decoder and the exhaustive
+no-hidden-writer proof based on it are withdrawn pending a corrected audit of
+these historical chains. The later P99 `agm-group-audit` independently reruns
+only its selected C39 g0/g1 rows with the corrected schema; it does not
+retroactively revalidate every old chain. Historical runtime observations
+below are preserved, distinct from that flawed static schema proof.
 
 The remaining competitors are therefore:
 
@@ -31697,7 +31702,7 @@ the complete-plan rejection. The single `ida/tll.i64` was saved after stopping
 MCP: `1819 functions, 72 data names, 1 function types`,
 `save_database returned True` in `reports/ida_apply_agm_storage.log`. Restarted
 MCP resolves `JointCache_ResetAndSeedGroup0Pose` at `141687150`; its initializer
-tail reference remains at `141686ECD`. The unrelated pre-existing untracked
+tail instruction reference remains at `141686ED9`. The unrelated pre-existing untracked
 `tmp/` directory is preserved and excluded from this commit.
 
 **Next boundary (STATIC, not runtime-ready):** direct cmd16 callsite
@@ -31719,3 +31724,124 @@ both groups, and partial-group failure policy. Group1's command list and
 allocation do not exist until after group0 publishes, so two calls must not
 be advertised as an atomic21-row transaction. Do not launch this proposal or
 restore the rejected postblend writer while these obligations remain open.
+
+### 2026-09-17 STATIC (`agm-group-audit`): exact C39 cmd16 shadow consumer and non-atomic publication
+
+This is a static successor design, **not an enabled grip repair or runtime GO**.
+Competing storage candidates are separated: persistent JointCache is rejected
+above; packed reference pose is immutable authored input, not a per-frame
+destination; cmd15-expanded per-group JointParams is the native cmd16 input.
+The exact cmd16 copied-context contract now has three independent evidence
+types: dispatcher/worker dataflow, exact asset program/descriptor decoding,
+and the independent builder/Async publication path.
+
+**Context and full operator closure.** `141AB998A` zeroes an `0x80`-byte
+SegmentContext. `141ABA973` passes it to `14217B630`; preserve the original
+status pointer and copy all128 context bytes, replacing only shadow `+50`.
+The executor does not modify this context. All53 actual C39 g0/g1 operators
+select its nested base table and authored program descriptors, never the
+outer owner-arena base. All inspected workers are synchronous and do not
+retain context/JointParams pointers. Custom132 alone reads third-argument
+context `+4A` flags100/200; custom workers also update profiling counters, so
+stock must be called exactly once. Its final `*status=0` is unconditional,
+including null/skipped handlers: it does not prove operator coverage.
+
+Exact binding table (g0/g1 invocation counts), from builtin table143026D20
+and custom table143026CB0:
+
+| Opcode | Count | Native handler |
+|---|---|---|
+| 40 | 10/1 | 142194470 |
+| 41 | 1/0 | 142194680 |
+| 44 | 3/0 | 1421946D0 |
+| 47 | 6/0 | 142194720 |
+| 49 | 4/0 | 142194880 |
+| 50 | 3/0 | 142194940 |
+| 51 | 3/0 | 1421949E0 |
+| 52 | 1/0 | 142194AB0 |
+| 53 | 1/1 | 142194B10 |
+| 54 | 1/0 | 142194C30 |
+| 128 | 8/0 | 141A97060 |
+| 129 | 4/0 | 141A951F0 |
+| 130 | 2/0 | 141A945F0 |
+| 131 | 2/0 | 141A94D80 |
+| 132 | 2/0 | 141A95E80 |
+
+The full shadow sizes are4992/1824 bytes (104/38 expanded48-byte rows), not
+just the66/38 parameter prefixes. Group0's51 operators decode870 destinations;
+group1's2 decode100. None overwrites selected JP locals28/30 or1,3,...,37.
+Other expanded rows do have native writes and must be copied/preserved.
+The new reproducible `scripts/p99_group_program_audit.py` requires the exact
+asset SHA-256, resolves group programs through native descriptor tables,
+rejects unknown opcodes/base selectors and verifies complete destination
+coverage. It checks op53 export entries125..128 (`FD3/FE3/FF3/1003` from
+`741/751/761/771`) and op40 right-root locals1/9/17/25/33 reading encodedFDB.
+This closes the palm28 matrix -> scratchFD0 -> finger-root parent chain.
+
+Independent decoder review caught and corrected two defects inherited from
+the old ignored `reports/analyze_joint_program_destinations.py`: custom132's
+output-table offset is u16(+70), **not +76**, proven by dataflow
+`141A95FC5 -> 141A95FEB -> 141A96903 -> 141A96AF2`; custom128..132 destinations
+are32-bit operands, not low16. The old +76 decoded float coefficients as
+addresses while still reporting the same870 count. The corrected audit
+therefore also pins custom132's nine exact outputs: EC0/EC4/EC8 and
+EF0/EF4/EF8/2E2/34E/3B2. `scripts/test_p99_group_program_audit.py` covers wrong
+selectors/unknown opcodes/truncation, bounded termination, +46 versus +4C,
+and full32-bit destinations for each of the five custom handlers. The older
+historical exhaustive-chain claim above is explicitly withdrawn, not silently
+carried forward from the faulty decoder. Corrected independent review still
+finds zero selected-JP overwrites for these exact P99 groups.
+
+**Terminal consumers.** With exact constructed flags g0=9/g1=8, builder
+`141A9038F` excludes cmd27 through `flags&6==0`. Cmd17 has27 scalar pairs
+(28 padded) at pak541E0, exclusively auxiliary selector2 -> scalar-bank
+selector1; g1 has zero. The audit checks every padded pair. Approved conversion
+callback248B1AAE and sphere callback514C0761 consume matrices+58, as does cmd26.
+Unknown callbacks, altered programs/bindings, other flags, JP-export commands
+or aliasing would require rejection. Cmd5 frees original allocations at
+`141ABB0BE` onward: an owned shadow must never escape into original context.
+
+**Ordering/publication.** The exact branch requires effective mode2, no
+forced cached-skeleton prepass, `Fg+1A0==Fg+18`, and override`Fg+2A0==null`.
+C39 dependency closure87 means inline residual maskFE or86 always contains
+g1; queued mask78 contains neither g0 nor g1. Thus same-worker g0 at141A92E78
+precedes g1 at141A932F8. This is not true for every broader animation mode.
+Before g0, call141A92BA5 to
+`JointCache_InvalidateGroup0WorldCacheAndSetRoot 1416878F0` clears group0 world
+validity, sets the root and returns Fg+110 for native conversion. A separate
+world-recompute from intentionally unchanged Fg+100 would be wrong here.
+Builder141A91557/562 passes Fg+230/+240 as CPU/upload palette destinations;
+cmd26 publishes at141ABAE8C/141ABAF06 under Fg+220 spinlock. That lock is not
+an owner-lifetime lock. Fg+320 ndjob::Mutex protects deferred command state
+in checked callers, not this complete Async job.
+
+**Remaining lifetime boundary / failure policy.** There is no owner dispatch
+between these two Process calls; owner vtable410/418/420 calls occur later.
+But `AnimManager_CreateAsyncUpdateJobFunctor 141781390` retaining Fg plus
+generation checks does not establish a retained owner/weapon/look lease.
+Pointer/generation revalidation detects an observed change, not TOCTOU or
+atomic all21 publication. Source values and retarget records can be owned
+immutable snapshots; external object pointers still must not be treated as
+such a lease. Owner/weapon destruction and look-rebuild barriers against this
+job need a bounded writer/scheduler audit before implementing live admission.
+
+If g0 is refused before native execution, both groups can stay stock. If g1
+is refused after g0, native g1 sees the already-changed palm scratch: this is
+a partial current result, **not rollback**. Disabling subsequent overlays
+prevents further changes; a subsequent successful stock evaluation restores
+current matrices, but `FgAnimData` history update1418C4FB0 retains the previous
+palette at+238/+248. Neither immediate recovery nor one-frame recovery is
+guaranteed when evaluation is skipped. Do not retry stock after a partially
+executed native callback/exception. Process's return is consumed DWORD count,
+not a success boolean. These constraints are recorded; no new hook is enabled
+and no game is launched by this static unit.
+
+Validation: the pinned-asset program audit passes, its asset-independent
+decoder suite passes4/4, Python compilation succeeds, and existing CTest stays
+4/4. Independent review rechecked all custom output layouts against native
+code and the corrected nine-output regression, not just destination counts.
+The single IDB was saved with1820 function/72 data/1 type labels;
+`reports/ida_apply_agm_group_final.log` records `save_database returned True`.
+After restart, MCP resolves the world-cache preparation name and returns the
+corrected custom132 +70 comment. Runtime source/DLL remain AGM-safe from the
+containment section; no game process is running and no test was launched.

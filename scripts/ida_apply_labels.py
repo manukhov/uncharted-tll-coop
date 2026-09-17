@@ -474,6 +474,15 @@ FUNCTIONS = {
         "in group 1. Scale.xyz/Q/translation.xyz are values; only the two "
         "scale/translation W lanes may contain nonfinite service bits.",
     ),
+    0x1416878F0: (
+        "JointCache_InvalidateGroup0WorldCacheAndSetRoot",
+        "Prepares the group-0 matrix publication target: clears JointCache+0x40 "
+        "validity bits 0 through group0.workspace_count (inclusive native helper "
+        "0x14160D8E0), copies the supplied 64-byte root matrix into JointCache+0, "
+        "clears byte +0xF8 and returns the matrix bank +0xE0 (Fg+0x110). "
+        "Callsites 0x141A9170C, 0x141A9257C and 0x141A92BA5. Async passes "
+        "Fg+0x30/Fg+0x1C0 before its group evaluation, not a finger local bank.",
+    ),
     0x141687970: (
         "JointCache_ComputeJointWorldLocatorAndMarkValid",
         "Converts one 64-byte JointCache matrix into the 32-byte world Locator "
@@ -4522,7 +4531,16 @@ FUNCTIONS = {
         "corrected that scope: command 16 rewrites selected JointParams rows in "
         "the command-15 expanded tail, which the old prefix hash did not cover. "
         "The executor itself performs no JointParams preamble store; the writes "
-        "must occur in dispatched operators.",
+        "must occur in dispatched operators. STATIC C39 g0/g1 shadow contract: "
+        "SegmentContext is 0x80 bytes, dispatcher never writes it and all 53 "
+        "pinned operators use nested bases (not ownerBase). Custom132 reads "
+        "context+0x4A flags; no admitted worker retains the JP/context pointer. "
+        "Preserve original status pointer: status is always set to zero, even "
+        "when an operator was skipped, so it is not coverage evidence. Copy "
+        "all 104/38 expanded rows for g0/g1. Replacing only shadow-context+0x50 "
+        "preserves native allocator ownership; never replace original+0x50 "
+        "because cmd5 frees it. This does not establish owner lifetime or "
+        "arbitrary terminal callback safety.",
     ),
     0x14217BF30: (
         "AnimCmdEvaluator_ExpandJointParamsToTargetWorkspaceCount",
@@ -4792,8 +4810,13 @@ FUNCTIONS = {
         "AnimJointProgramCustomOp132",
         "Custom joint-program operator 132. Its large descriptor resolves encoded "
         "matrix/scalar inputs and encoded scalar outputs for buffer-local IK/math; "
-        "its output count is descriptor dword +4 and word +76 addresses a table "
+        "its output count is descriptor dword +4 and word +70 (0x46), read at "
+        "0x141A95FC5, addresses a table "
         "of {component,destination} records whose encoded destination is dword +4. "
+        "The earlier +76 (0x4C) output-table annotation is REJECTED. Output "
+        "destinations are full 32-bit encoded values, masked 0xFFFFFFFC, "
+        "not truncated 16-bit indices. C39 g0's two instances write encoded "
+        "EC0/EC4/EC8 and EF0/EF4/EF8/2E2/34E/3B2. "
         "It also reads SegmentContext+0x4A flags 0x100/0x200. It has no Player, "
         "camera, screen-route or gameplay-global read.",
     ),

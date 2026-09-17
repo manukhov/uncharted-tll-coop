@@ -14,9 +14,15 @@
 Current handoff (2026-09-17): AGL's admitted21-row attempt corrupted memory:
 the persistent `Fg+100` bank has66 rows, but finger globals105..141 were used
 as indices. AGM-safe blocks that complete plan at every access path and stays
-disabled. Grip is not fixed. Continue the proven group-local cmd16 boundary
-audit below; the service-lane explanation and blanket world-recompute remedy
-are withdrawn. No new runtime test is authorized by this containment alone.
+disabled. Grip is not fixed. The group-local cmd16 audit now closes the exact
+53 operators, 128-byte copied context, native parent propagation and terminal
+consumers (final `agm-group-audit` section in COOP_STATUS). Repro script:
+`scripts/p99_group_program_audit.py`. Next: trace owner/weapon destruction and
+look-rebuild barriers against Async141A92A00/CreateFunctor141781390; current
+generation checks are not a lifetime lease. Group0 publishes before group1,
+so refusal of group1 is partial output, not rollback or guaranteed one-frame
+recovery. The service-lane explanation and blanket world-recompute remedy
+are withdrawn. No new runtime test is earned yet; do not re-enable AGL.
 
 - [x] Follow the user's new request, "Почини хват пистолета". Leave the
       AGC back-placement package unchanged and do not infer a visual verdict
