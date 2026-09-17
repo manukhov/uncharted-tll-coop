@@ -32115,3 +32115,8 @@ to the0xB000 probe ceiling. Full success still requires groups2/rows21 EXECUTED,
 noPARTIAL and user's visibly correct grip with pistol present. A more specific
 REFUSED keeps the candidate untested and must not be called a visual fix.
 The old persistent writer remains disabled; native exceptions never retry.
+
+AGO single-copy exam started after25211a3 push: PID22496, injected frozenDLL,
+exact2026-09-17ago/roleB/INSTALLED/READY verified; process responding. No agent
+gameplay input. User must drawP99 and holdidle3-5s; no EXECUTED/visual verdict
+at handoff. Previous PID15744 exit reason still awaits user's clarification.
