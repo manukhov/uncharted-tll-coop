@@ -31114,8 +31114,11 @@ The static evidence quota is met by four independent kinds.
   the C++ test compares every row and rich join to an independent fixture.
 - **Native ABI/call graph.** `RetargetPlugin_DoJointRetarget 0x141AE2100`
   consumes one copied 0x2e record, source row and copied target-reference row
-  and calls only `Transform_Compose`;
-  `AnimJointParams_BlendTransformsByValidBits 0x142188A30` is value-only.
+  on its admitted ordinary path; the former claim that it calls only
+  `Transform_Compose` is superseded by the2026-09-17 AGS source audit below
+  (native assertion/callback branches exist).
+  `AnimJointParams_BlendTransformsByValidBits 0x142188A30` ordinary selected
+  kernel operates on copied values, not borrowed game pose buffers.
   AGI passes aligned local pose arrays and local packed 0x2e record copies,
   never a borrowed clip or registry node.
 - **Skeleton-registry lifetime.**
@@ -32362,3 +32365,65 @@ is the confirmed cause without discriminating static evidence or a fresh
 crash stack. Do not repeat AGR or replace its hook boundary speculatively.
 Next: finish those bounded static audits and establish fault-capture coverage
 for any future justified exam; guardrail success is not hook correctness.
+
+### 2026-09-17 STATIC / REJECTED (`ags` entry packaging and source-purity audit)
+
+**Concrete re-enable blocker, NOT a proven AGR fault PC.** Async entry
+141A92A00 has PE runtime-function range RVA1A92A00..1A9363D, unwind data
+RVA2EDEA34, flags3 (EHANDLER|UHANDLER), prologue0x3D,13 unwind slots.
+Both a bounded independent audit and fresh pefile read of the game executable
+confirm saves RDI/R12-R15, stack allocation5D0, saved RBX/RSI and XMM6.
+The package relocates the first0x2B bytes (43) into VirtualAlloc memory with
+no RUNTIME_FUNCTION/RtlAddFunctionTable registration. During that window,
+leaf-unwind assumptions are wrong because RSP/nonvolatiles have changed.
+Once execution returns to stock+2B, the stack shape and unwind offset match;
+FF25 preserves RAX, so the old clobbered-RAX bug is not reproduced here.
+This is the same rejected design class explicitly recorded in the July27
+ib finding above. Earlier package reviews missed this pre-existing criterion.
+Current code adds a compile-time assertion preventing the switch from being
+re-enabled until this boundary is replaced/proved; it does not patch a live
+process or pretend that disabling overlays removes the trampoline.
+Microsoft's [x64 unwind rules](https://learn.microsoft.com/en-us/cpp/build/exception-handling-x64?view=msvc-170)
+require metadata for dynamically generated non-leaf/stack-changing code.
+
+Other checked ABI rivals did not produce a defect: Process141AB97C0 has
+exactly7 args and unsigned-int result (ignored by both Async callsites);
+cmd16 returns its status pointer (ignored by141ABA973); Async is void and
+its generic callback consumer ignores RAX. CALL-rel32 to an FF25-only relay
+keeps return address/stack args intact; those three relays do not change RSP
+or nonvolatiles and can use leaf-unwind rules. Do not generalize the entry
+trampoline problem to every relay or claim the current crash was identified.
+
+**Source-purity claim is withdrawn.** Owner resolution uses
+PlayerWeaponController vtable142A47F90+B0 -> GetWeaponBySlot1410A1F90;
+1410A1FCB writes weapon+72=1 after weak-generation validation. Fully admitted
+source preparation can call this up to5times. The field/write is already
+named in IDB. publicationNONE excludes shadow group writes, not this earlier
+native write. Merely setting raw_inventory_only is WRONG for P99: that
+existing branch explicitly searches kCoopRifleArtId. A future read-only
+P99 slot resolver must preserve exact slot/handle/generation validation.
+
+The common buffer-overrun rival was not supported for the admitted constants:
+DoJointRetarget141AE2100 writes48 bytes at141AE2A34/2A38/2A3D; Blend142188A30
+encoding0108 selects142191AE0, with padded offsets0/48/48/48 and output0..95,
+plus masks96..111, fitting the112-byte owned buffer. SkelTable capture/recheck
+uses1466EC4B0 with __finally release, and math occurs after unlock over owned
+copies. No prepublication Fg/JointCache/WorkBuffer writes were found in that
+bounded pass. However shared readable_bytes still probes pages beyond exact
+objects and can consume guard state; DoJoint assertion paths can call
+qword146B17C08 and assert/debugbreak. No evidence shows AGR reached them.
+
+**Next static boundary, not an implemented fix:** async producer141781390
+loads callback141A92A00 at1417815B7, installs it in a functor template at
+141781601 and queues the copied0x80-byte functor at141781636. A separate
+sync thunk141782B30 advances its record cursor and tail-jumps at141782B3A.
+Trace eventual generated-callback invocation/exactly-once semantics and both
+paths before replacing the rejected entry detour. Stock prologue/metadata
+should remain intact. Still no fresh crash stack, no new game test.
+
+After adding the compile-time re-enable block, final AGS-safe rebuild still
+passes Release/CTest12/12,819712bytes SHA256
+`2BBC443DD531ABCE9BBB1BE71CE936481E9928C3F88C7F8749A8467560E48BF0`.
+Updated Async unwind and DoJoint assertion-path annotations were applied to
+the sole IDB:1828functions/72data/1type; reports/ida_apply_ags_status.txt says
+save_database returned True. MCP restarted. No game has been relaunched.

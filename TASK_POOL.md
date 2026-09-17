@@ -19,9 +19,13 @@ ALL four group hooks are now compile-time excluded; legacy writer remains off.
 Release/CTest12/12 pass; no relaunch. No fresh exception stack/dump exists:
 game's only .dmp is July12, not this crash. AGR DLL and current tiny crash
 markers are preserved in reports/agr-crash-11444; no PDB was available.
-Next statically separate pass-through ABI/unwind from preparation side effects
-and other active paths, then secure suitable crash capture before any new
-justified exam. Grip and runtime stability are NOT confirmed. See COOP_STATUS.
+Static audit found a re-enable blocker: moved Async prologue has no unwind
+metadata (same rejected class as July27 ib), now guarded by static_assert.
+This is not the proven crash PC. Source admission also calls GetWeaponBySlot,
+which marks weapon+72; no-publication does not mean no native side effects.
+Next trace async callback producer1417815B7/601/636 and sync thunk141782B30
+for a no-moved-prologue boundary; prove both invocation paths before replacing
+anything. Secure crash capture before another justified exam. See COOP_STATUS.
 
 Earlier storage finding: AGL's admitted21-row attempt corrupted memory:
 the persistent `Fg+100` bank has66 rows, but finger globals105..141 were used

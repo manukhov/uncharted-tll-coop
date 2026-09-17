@@ -61641,6 +61641,8 @@ std::atomic<bool> g_p99_chloe_transfer_ready{false};
 // Exclude the entire four-site package, not just overlay writes. No re-enable
 // before crash provenance and pass-through/source side effects are resolved.
 constexpr bool kEnableP99GroupShadow = false;
+static_assert(!kEnableP99GroupShadow,
+    "Rejected Async entry trampoline has no unwind table; replace/prove the boundary before re-enabling");
 static_assert(!kEnableP99GroupShadow || !kEnableLegacyNadineP99ChloeGripTransfer,
     "Expanded group shadows must never coexist with the rejected persistent writer");
 std::atomic<bool> g_p99_group_shadow_ready{false};

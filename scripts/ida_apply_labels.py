@@ -144,7 +144,11 @@ FUNCTIONS = {
         "different processing-group indices and reference poses. Its third "
         "argument is one concrete target-reference JointParams row, not the "
         "reference-pose base: ApplyJointRetargets forms it as whole-reference "
-        "base + 48 * record[+0x2A].",
+        "base + 48 * record[+0x2A]. Output writes are three 16-byte stores "
+        "at 0x141AE2A34/2A38/2A3D. Ordinary admitted math uses local values, "
+        "but assertion branches can call engine callback qword_146B17C08 "
+        "and assert/debugbreak: do not describe the entire function as "
+        "side-effect-free or as calling only Transform_Compose.",
     ),
     # --- 2026-08-27: node-local pose overlays before clip caching ---
     0x1400EDBC0: (
@@ -5055,7 +5059,12 @@ FUNCTIONS = {
         "compare Fg handle64@1A8/generation32@1B0 with slot0@143EEBE80/+8, "
         "without dereferencing retained cell/Player. AllocateAnimData and "
         "spawn commit copy the same Process+A8/BC pair. Matching is NOT a "
-        "lease or write admission; full owner checks remain mandatory.",
+        "lease or write admission; full owner checks remain mandatory. "
+        "Stock PE unwind row spans RVA1A92A00..1A9363D, xdata RVA2EDEA34, "
+        "flags3 EHANDLER|UHANDLER, prologue0x3D. Moving first0x2B bytes to "
+        "anonymous memory without unwind metadata is REJECTED: it moves "
+        "RSP allocation and nonvolatile saves outside the registered range. "
+        "This packaging defect is not proven as the AGR crash PC.",
     ),
     0x141A8F9D0: (
         "AnimManager_DispatchRetainedOwnerPhase",
