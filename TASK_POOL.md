@@ -11,17 +11,17 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-17, AGR exam): AGO remains REJECTED for severe lag.
-New group-shadow package re-enabled only after early retained-identity gate,
-stage-local query batches, source-entry reentry sentinel and cumulative1ms
-source/validation cost shutdown. The old persistent writer remains disabled.
-Full Release/CTest12/12 pass; IDB1828/72/1 saved. AGR PID11444 launched/injected
-at22:56 Moscow, exact tag/roleB/INSTALLED/READY verified. No runtime success yet.
-Next read PID11444's P99-GROUP logs and user result: require smooth enough
-gameplay AND EXECUTED groups2/rows21 with visible correct grip/pistol present.
-COST-STOP/REFUSED is NOT success; do not raise budget or bypass checks to force
-application. PARTIAL/crash/disappearance/severe sustained lag rejects candidate.
-See final2026-09-17 COOP_STATUS prediction, review, limitations and frozen hash.
+Current handoff (2026-09-17, AGS-safe): AGR PID11444 is REJECTED after the user
+reported a crash. Log shows source COST-STOP18.1726ms, entered/completed0,
+publicationNONE; no EXECUTED/REFUSED/PARTIAL. The budget stopped overlay work,
+not the installed detours. Do not blame published rows or increase the budget.
+ALL four group hooks are now compile-time excluded; legacy writer remains off.
+Release/CTest12/12 pass; no relaunch. No fresh exception stack/dump exists:
+game's only .dmp is July12, not this crash. AGR DLL and current tiny crash
+markers are preserved in reports/agr-crash-11444; no PDB was available.
+Next statically separate pass-through ABI/unwind from preparation side effects
+and other active paths, then secure suitable crash capture before any new
+justified exam. Grip and runtime stability are NOT confirmed. See COOP_STATUS.
 
 Earlier storage finding: AGL's admitted21-row attempt corrupted memory:
 the persistent `Fg+100` bank has66 rows, but finger globals105..141 were used
@@ -6776,8 +6776,11 @@ Keep the postblend preservation boundary; replace only its steady content.
 - [x] Add cumulative1ms selected-owner source/validation budget; invalid clocks
       and overruns disable future overlays. Late g0 publication is PARTIAL,
       never rollback/retry. Budget147632checks, fullCTest12/12, final review pass.
-- [ ] AGR one-copy exam per written prediction: actual performance AND visible
-      P99 grip/presence/attachments. Read exact-version log, not just READY.
+- [x] Reject AGR one-copy exam: user crash after source COST-STOP with no shadow
+      publication. Disable whole four-site package in AGS-safe; no relaunch.
+- [ ] Resolve crash provenance: ABI/unwind of still-installed pass-through,
+      source-preparation side effects and other hooks; no fresh dump currently.
+      Do not treat passing offline policy tests or budget cutoff as runtime GO.
 
   Strap is PARKED by the user (2026-08-27), not next. Do not re-enable the rejected
       ShowMesh-only path.  Stock physics needs all five guide-lookup sites to

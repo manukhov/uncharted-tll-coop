@@ -61637,10 +61637,10 @@ P99ChloeTransferPerformFunction g_original_p99_chloe_transfer_perform = nullptr;
 std::atomic<bool> g_p99_chloe_transfer_ready{false};
 // Independent admission for cmd16-owned expanded storage. Never authorizes
 // the rejected persistent JointCache writer below.
-// AGR exam: reject foreign identities before queries; stage-local page batches;
-// cumulative selected-source/validation budget disables overlays on overrun.
-// This is not a hard frame-time guarantee. Never restore the persistent writer.
-constexpr bool kEnableP99GroupShadow = true;
+// AGR rejected: user-reported crash after source COST-STOP with no publication.
+// Exclude the entire four-site package, not just overlay writes. No re-enable
+// before crash provenance and pass-through/source side effects are resolved.
+constexpr bool kEnableP99GroupShadow = false;
 static_assert(!kEnableP99GroupShadow || !kEnableLegacyNadineP99ChloeGripTransfer,
     "Expanded group shadows must never coexist with the rejected persistent writer");
 std::atomic<bool> g_p99_group_shadow_ready{false};
@@ -80063,8 +80063,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-17agr "
-        "(P99 early retained-identity gate; stage-local page batches; 1ms cumulative validation stop; no persistent grip writes; AGC back profiles retained)");
+        "TLL co-op runtime init 2026-09-17ags-safe "
+        "(all P99 group-shadow hooks disabled after AGR crash; legacy persistent grip writer disabled; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "
@@ -80579,7 +80579,7 @@ DWORD WINAPI install_hook(void*) {
         boot_log_line(ready ? "P99-GROUP READY state2; owned 21-row source; cmd16 shadows only; early-owner gate; validation budget 1ms"
                             : "P99-GROUP SKIPPED combined package");
     } else if constexpr (!kEnableP99GroupShadow) {
-        boot_log_line("P99-GROUP DISABLED after AGO lag; no Async/Process/cmd16 hooks installed");
+        boot_log_line("P99-GROUP DISABLED after AGR crash; no Async/Process/cmd16 hooks installed");
     }
     if constexpr (kEnableLegacyNadineP99ChloeGripTransfer &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {

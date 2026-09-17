@@ -32314,3 +32314,51 @@ tll.exe PID11444; frozen DLL injection succeeded. Boot log confirms exact
 Process responds. No gameplay input was sent. At handoff no EXECUTED/COST-STOP/
 REFUSED/PARTIAL has been observed; user is to load/drawP99/stand3-5s and report
 smoothness and visible grip. Runtime improvement remains UNCONFIRMED.
+
+### 2026-09-17 REJECTED (`agr` crash) / containment (`ags-safe`)
+
+User reports "краш" for AGR PID11444. The process is already gone; the agent
+did not terminate it. No relaunch/injection is authorized by this result and
+none was performed this turn. Exact user action at the crash was asked but
+is not yet known. AGR is REJECTED as a usable build, not a confirmed grip fix.
+
+Critical ordering: after READY, log line103284 records
+`COST-STOP stage=source completed=0 entered=0 publication=NONE stage_ticks=181726 prior_ticks=0 limit_ticks=10000`.
+This is18.1726ms for the measured source stage, not total frame time. There
+are zero EXECUTED/REFUSED/PARTIAL records for this PID. No group-shadow pose
+was published by the intended path. The budget disabled future overlay work,
+NOT the installed four detours: their stock pass-through continued to exist.
+The marker is emitted AFTER prepare_p99_group_values returns; it does not
+prove source materialization ran, succeeded, or was side-effect-free. Early
+normal-job/owner selection can fail silently. Later attachment/state-net logs
+exist, so the COST-STOP record is not an exception address or immediate crash
+site. Do not attribute the crash to published finger rows or raise the budget.
+
+Crash evidence checks: Application events1000/1001/1002 yielded no matching
+new tll record. No fresh tll dump in Local/CrashDumps, game dump folder, saved
+games or matching WER queue/archive. Game Uncharted4_data/crash.info was
+updated22:57:13 and contains only game=1. Crashpad metadata updated22:57:15
+still references its sole July12 dump f07c69b6-8581-40a9-a386-8721dba0eaf7;
+that stale dump is NOT evidence for AGR. The mod crash observer was disabled,
+so no fresh fault PC/exception/stack was captured. Absence of a dump is not
+proof against the user's crash. Frozen exact AGR DLL (896000bytes,
+E1A0EF38CD79A470DBA577DF4B04AD80C434E39AA0A5FBE313CCDF5479477521)
+and small game crash markers are preserved locally in reports/agr-crash-11444.
+No matching PDB existed in scanner/build.
+
+Containment disables kEnableP99GroupShadow at compile time, excluding ALL
+four installation sites, rather than just relying on the runtime failed flag.
+Legacy persistent writer stays false. AGC back/hip attachments are unchanged.
+New tag2026-09-17ags-safe, DLL819712bytes SHA256
+`2ECD3A32160DC67022ADB30D5303D91C1FA5E03782EC339959214A482462EFAA`.
+Release and CTest12/12 pass; these tests did NOT cover the failing in-game
+pass-through/source behavior and cannot certify runtime stability. Sole IDB
+remains saved1828/72/1 (ida_apply_agq_status.txt, save_database returned True).
+
+Competing causes under READ-ONLY audit: remaining detour/trampoline ABI or
+unwind behavior; source preparation/native helper or broad SEH-probe side
+effects before publication; another active existing hook/native path. None
+is the confirmed cause without discriminating static evidence or a fresh
+crash stack. Do not repeat AGR or replace its hook boundary speculatively.
+Next: finish those bounded static audits and establish fault-capture coverage
+for any future justified exam; guardrail success is not hook correctness.
