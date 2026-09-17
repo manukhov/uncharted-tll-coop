@@ -15,8 +15,9 @@ Current handoff (2026-09-17, AGR exam): AGO remains REJECTED for severe lag.
 New group-shadow package re-enabled only after early retained-identity gate,
 stage-local query batches, source-entry reentry sentinel and cumulative1ms
 source/validation cost shutdown. The old persistent writer remains disabled.
-Full Release/CTest12/12 pass; IDB1828/72/1 saved. No runtime success yet.
-Next read AGR process's P99-GROUP logs and user result: require smooth enough
+Full Release/CTest12/12 pass; IDB1828/72/1 saved. AGR PID11444 launched/injected
+at22:56 Moscow, exact tag/roleB/INSTALLED/READY verified. No runtime success yet.
+Next read PID11444's P99-GROUP logs and user result: require smooth enough
 gameplay AND EXECUTED groups2/rows21 with visible correct grip/pistol present.
 COST-STOP/REFUSED is NOT success; do not raise budget or bypass checks to force
 application. PARTIAL/crash/disappearance/severe sustained lag rejects candidate.

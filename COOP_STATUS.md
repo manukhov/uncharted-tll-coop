@@ -32307,3 +32307,10 @@ enabled AGR Release and CTest12/12 pass. Frozen DLL896000bytes SHA256
 `E1A0EF38CD79A470DBA577DF4B04AD80C434E39AA0A5FBE313CCDF5479477521`.
 kEnableP99GroupShadow=true only for this exam; legacy writer remains false.
 No tll process existed at pre-launch check. Launch/result will be recorded below.
+
+AGR exam launched2026-09-17 at22:56 Moscow after926eeaa push: exactly one
+tll.exe PID11444; frozen DLL injection succeeded. Boot log confirms exact
+2026-09-17agr, roleB/localNadine, four-site INSTALLED and READY with1ms budget.
+Process responds. No gameplay input was sent. At handoff no EXECUTED/COST-STOP/
+REFUSED/PARTIAL has been observed; user is to load/drawP99/stand3-5s and report
+smoothness and visible grip. Runtime improvement remains UNCONFIRMED.
