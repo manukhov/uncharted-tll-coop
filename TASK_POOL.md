@@ -11,12 +11,12 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-18, AGU-safe): AGR PID11444 is REJECTED after the user
+Current handoff (2026-09-18, AGV-safe): AGR PID11444 is REJECTED after the user
 reported a crash. Log shows source COST-STOP18.1726ms, entered/completed0,
 publicationNONE; no EXECUTED/REFUSED/PARTIAL. The budget stopped overlay work,
 not the installed detours. Do not blame published rows or increase the budget.
 The entire group package is still compile-time excluded; legacy writer remains off.
-Release/CTest15/15 pass; no relaunch. No fresh exception stack/dump exists:
+Release/CTest17/17 pass; no relaunch. No fresh AGR exception stack/dump exists:
 game's only .dmp is July12, not this crash. AGR DLL and current tiny crash
 markers are preserved in reports/agr-crash-11444; no PDB was available.
 Static audit found a re-enable blocker: moved Async prologue has no unwind
@@ -41,12 +41,26 @@ checks retained resolution even in seal, and re-admits full retarget table
 before every native FindEntry. Source fixture137 checks: read-only unchanged
 inputs, guards, turnover and full0x40000 table. Lexical wiring tests are not
 a whole C++ callgraph proof. Shared attachment helpers are unchanged.
-Next close the native DoJoint assertion/callback preconditions and add complete
-21-row/mask output regression for the new source adapter; existing math tests
-alone do not test that native chain. Then secure fresh crash capture and
-establish native preparation cost without raising1ms budget. Offline tests
-are NOT engine performance/visual confirmation. static_assert still prevents
-re-enabling; no game test is earned yet. See final AGU COOP_STATUS entry.
+AGV closes the bounded DoJoint numerical assertion paths for admitted modes1/3:
+both46-byte records must contain finite packed half fields and two nonzero
+quaternions before ANY native call. Existing expanded-row checks alone missed
+decoder141AE1F10 zero/nonfinite refs -> output assertion141AE29BD.
+The shared production21-row orchestration now has23751 checks (all rows/masks,
+42 retarget/21 blend ordering and failure injection), but scalar callbacks
+are NOT native numerical equivalence or live SkelTable evidence.
+External PID/image-bound crash watcher has57 checks using owned child processes,
+actual second-chance dumps/registers/stacks and safe timeout detach. Handled
+exit/TerminateProcess may yield no fault context; global VEH stays off.
+Release now preserves optimized DLL+PDB; frozen AGV artifacts are local under
+reports/agv-safe-20260918-final. No game was launched/attached.
+Next reuse scripts/native_anim_pose_audit.py's build-pinned isolated MappedImage
+and the authored joins in generate_p99_chloe_source_rows.py to check actual42
+retarget operands against the conservative gate and compare the complete native
+21-row chain through a production bridge; do not call a scalar oracle native
+equivalence. Resolve remaining same-fiber old-ingress limitation before GO.
+Preparation cost remains unmeasured; do not raise1ms budget. Watcher-altered
+timing is not production performance. static_assert still prevents re-enabling.
+See final AGV COOP_STATUS entry and scanner/CRASH_CAPTURE.md.
 
 Earlier storage finding: AGL's admitted21-row attempt corrupted memory:
 the persistent `Fg+100` bank has66 rows, but finger globals105..141 were used
@@ -6813,9 +6827,14 @@ Keep the postblend preservation boundary; replace only its steady content.
 - [x] Bind overlay scope to actual execution fiber/FLS, validate every consumer
       and restoration. AGU2228 checks include real switching/migration/SEH;
       new and old callbacks on a different fiber see no suspended TLS state.
-- [ ] Close native source assertion/callback preconditions and compare complete
-      21 output rows/masks through the new source adapter, not just old math
-      fixtures. Native preparation cost is still unmeasured after AGU changes.
+- [x] Close bounded native numeric assertion paths with pre-native packed-half
+      guard; share production21-row loops with23751-check routing/failure suite.
+      Scalar callbacks are NOT a native-output or live-registry test.
+- [x] Add external PID-bound second-chance watcher and same-build optimized PDB.
+      Fifty-seven fixture checks include real minidump streams and timeout survival;
+      no game capture yet; handled exit has no proven fault PC.
+- [ ] Validate actual authored records and full native21-row/mask output offline
+      using existing MappedImage, then finish remaining ingress/cost admission.
 - [ ] Resolve crash provenance: ABI/unwind of still-installed pass-through,
       source-preparation side effects and other hooks; no fresh dump currently.
       Do not treat passing offline policy tests or budget cutoff as runtime GO.

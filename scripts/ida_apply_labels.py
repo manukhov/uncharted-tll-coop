@@ -130,7 +130,12 @@ FUNCTIONS = {
         "Decodes one 14-byte reference locator containing half-float "
         "translation and quaternion components into the runtime locator and "
         "normalizes the quaternion. DoJointRetarget calls it for the two "
-        "reference locators at retarget-joint record +0 and +0xE.",
+        "reference locators at retarget-joint record +0 and +0xE. STATIC AGV: "
+        "quaternion halves at locator+6/+8/+A/+C feed norm-squared and "
+        "rsqrt/Newton at 0x141AE1F7C..1FF2 unconditionally. Zero or nonfinite "
+        "packed rotations can reach DoJoint's assertion before its caller "
+        "validates output. Finite nonzero half components bound norm-squared "
+        "to [2^-48,4*65504^2]; zero includes all signed-zero combinations.",
     ),
     0x141AE2100: (
         "RetargetPlugin_DoJointRetarget",
@@ -148,7 +153,13 @@ FUNCTIONS = {
         "at 0x141AE2A34/2A38/2A3D. Ordinary admitted math uses local values, "
         "but assertion branches can call engine callback qword_146B17C08 "
         "and assert/debugbreak: do not describe the entire function as "
-        "side-effect-free or as calling only Transform_Compose.",
+        "side-effect-free or as calling only Transform_Compose. STATIC AGV "
+        "assert sites: input T/Q/S 0x141AE2197/21F2/225F, null output "
+        "0x141AE230A, output S/Q/T 0x141AE2963/29BD/2A28. Fixed modes1/3 "
+        "with a4=false are admitted only after expanded-row and BOTH packed "
+        "reference-rotation checks. Mode1 copies target S/T at 272B/2730; "
+        "mode3 copies source at 28F3..28FC. Conservative all18-half finiteness "
+        "is sufficient policy, not native necessity for every unused lane.",
     ),
     # --- 2026-08-27: node-local pose overlays before clip caching ---
     0x1400EDBC0: (
@@ -4110,7 +4121,25 @@ FUNCTIONS = {
         "cmd7 weight. This rule alone does not make WeaponPartial's empty state "
         "one-sided: AnimStateSnapshot_GenerateAnimCommands has already emitted its "
         "{0,output,output} tail and copied lane-zero validity into that track before "
-        "the outer track fold.",
+        "the outer track fold. STATIC AGV: fixed encoding0x0108 selects "
+        "mode2 table 0x142BDD940[2]=0x142191AE0; count1/masks{MSB,0} "
+        "produce offsets0/48/48/48 within the owned112-byte blend blob. "
+        "No per-joint weight or one-sided-copy branch under that contract.",
+    ),
+    0x142191AE0: (
+        "AnimJointParams_BlendMode2FourLane",
+        "STATIC: mode2 leaf-math dispatcher selected by 0x142188A30 "
+        "through table0x142BDD940+0x10. Fixed P99 encoding0108 reaches "
+        "this path. Ordinary helpers 0x14217FB70/0x1421803E0 are SIMD "
+        "leaves without assertion/callback edges; security-cookie failure "
+        "is an exceptional corruption path, not a numeric assertion.",
+    ),
+    0x14217E7C0: (
+        "AnimBitset_Popcount64",
+        "STATIC: branchless staged 64-bit bit population count using "
+        "0x55/0x33/0x0F/0x00FF/0x0000FFFF masks (zero fast path). "
+        "Used by transform blend valid-bit offset calculation. No calls "
+        "or assertions; not an engine callback boundary.",
     ),
     0x142193E90: (
         "AnimJointProgramOp28_RefinePackedQuaternion",

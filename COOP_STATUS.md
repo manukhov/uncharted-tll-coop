@@ -32675,3 +32675,124 @@ Six new fiber lifecycle names applied to sole ida/tll.i64;1841functions,
 MCP restarted; readback resolves fiber entry/create names and ReleaseFiber
 xrefs to the two shutdown calls. Fiber/source/scope suites also pass20
 consecutive runs each. No tll.exe process is running at handoff.
+
+### 2026-09-18 STATIC / implemented-disabled (`agv` numeric guard and capture)
+
+User said "Продолжай". No game launch/injection/attachment/input. Both P99 flags
+remain false and static_assert blocks re-enable. This unit does not identify
+AGR's actual crash PC or demonstrate a corrected grip. Attachments are unchanged.
+
+**Native assertion rivals:** (a) expanded48-byte row checks already close all
+DoJoint assertions; rejected: decoder also reads unvalidated packed references;
+(b) catch SEH or validate returned row; too late to prevent engine assertion
+callback side effects; (c) skip native math or revive persistent pose writes;
+rejected/out of scope; (d) validate the exact admitted numerical envelope before
+either native call. Implemented(d) and retained the native numerical functions.
+
+Independent evidence: graph DoJoint141AE2100->decoder141AE1F10 twice and
+mode1->Transform_Compose1401998F0, independent native caller141AE2EBE forms
+targetref+48*record[2A]; exact half decoding/rsqrt instructions and constants;
+source assertion strings IsFinite(srcJointLs.*), IsFinite(retargetedRot),
+pRetargetJointOut. DoJoint has seven assertion sites: input T/Q/S at
+141AE2197/21F2/225F; null output141AE230A; output S/Q/T141AE2963/29BD/2A28.
+Postcall row validation occurs AFTER these side effects and is not prevention.
+
+Both packed locators at record+0/+E are decoded unconditionally. Quaternion
+halves+6/+8/+A/+C and+14/+16/+18/+1A normalize through norm-squared
+141AE1F7C..1F84 and rsqrt/Newton1FBD..1FF2. Constants142BEF790=-0.5x4 and
+142BED5B0=1.5x4; finite-mask constants142881F50/142881C20=7F800000x4.
+Finite nonzero half quaternion norm-squared is in[2^-48,4*65504^2]: positive,
+normal and nonoverflowing float even with FTZ. Zero/nonfinite reference rotation
+can reach retargetedRot callback141AE29BD before output stores2A34/2A38/2A3D.
+Exact manifest admits only modes1/3,a4=false. Mode1 copies target S/T at
+141AE272B/2730 and composes bounded normalized reference/source Q; mode3 copies
+source at141AE28F3..28FC. Existing expanded-input row checks and nonnull aligned
+output48 cover input assertions. These are STATIC sufficient conditions, not
+observations of bad data in AGR.
+
+New `nadine_p99_source_native_guard.h` checks exact46-byte extent, mode1/3,
+all18 packed half fields finite, and both quaternions not all signed-zero.
+All18-half finiteness is conservative: some lanes do not contribute to mode1/3
+output, so refusal of an unused lane is not proof of corrupt authored data.
+Both records are checked before the FIRST native call. Do not loosen this
+policy without comparing the actual authored records.
+
+Blend closure: encoding0108 fixes count1/mode2/left-output/no per-joint weights;
+table142BDD940[2]=142191AE0. Equal masks{MSB,0} give offsets0/48/48/48 in112bytes,
+excluding weighted helper142190F00 and one-sided copy. Ordinary callees
+14217FB70/1421803E0 and popcount14217E7C0 are SIMD/integer leaves without
+assertion/callback edges. Security-cookie failure is exceptional corruption,
+not a numeric assertion. Named mode2 blend and popcount in the sole IDB.
+
+**Shared regression, not a parallel imitation of the production loop.**
+`nadine_p99_source_materialize.h` owns source-row construction, group iteration
+and DoJoint->blend->DoJoint orchestration. Runtime delegates through its existing
+SEH wrapper and exact native function pointers, keeping registry/owner gates.
+Same48/112-byte aligned buffers, metadata snapshots, arguments,21 rows and masks;
+invalid group>1 and failed operations now clear output without publishing a
+partial value result. This is before shadow publication; it is not runtime
+group1 rollback.
+
+Source materialize23751checks0fail: real Reader/owner traverses serialized
+owner/operand fixtures; complete21x48-byte scalar expected results and literal
+Player/Chloe/Nadine masks; exactly42retarget/21blend calls; every63-step failure,
+missing source, malformed expanded row, all packed NaN/Inf lanes, signed-zero
+quaternions, truncation, tail/mode boundaries and postcall metadata mutations.
+The scalar callbacks verify routing/order/fail-closed behavior, NOT bitwise
+retail numerical equality and NOT the live SkelTable locked adapter. Native
+callback preconditions are supported by static analysis above, independently
+of these scalar fixtures. The full native comparison remains open.
+
+**Fresh capture mechanism prepared, not attached to tll.** New external
+`tll_crash_watch` requires PID and matching absolute image path, uses a new
+session directory, records process creation time, and emits ready only after
+continuing the debugger attach breakpoint. It passes every subsequent exception
+with DBG_EXCEPTION_NOT_HANDLED. Handled first-chance events get only bounded
+32-entry code/PC/thread memory-ring bookkeeping, no stack formatting/file I/O
+on every event. On first second-chance event, MiniDumpWriteDump uses local
+exception/context with ClientPointers=FALSE before continuing the event.
+Single debugger thread serializes DbgHelp. It adds no game VEH/hook/input or
+global WER registry setting. Existing production VEH remains disabled.
+
+No-kill-on-exit is set immediately after attach; timeout detaches. Review fixed
+the double-failure hazard: if setting no-kill and detach both fail, the watcher
+holds/retries rather than exiting under Windows' default kill policy. Do not
+terminate a watcher reporting SAFETY_HOLD. That rare policy-failure branch is
+reviewed, not fault-injected. Ready-file existence alone is not ongoing liveness.
+Debugger attach/events alter timing, so capture runs cannot prove production
+performance. If the game handles an exception and explicitly exits, external
+termination or I/O failure occurs, a fault dump may still be absent; the tool
+reports NO_SECOND_CHANCE_CONTEXT and does NOT attribute the last handled event
+as the crash PC. No universal capture claim. Instructions in scanner/CRASH_CAPTURE.md.
+
+Watcher57checks0fail on six owned child processes: handled exception, handled
+exit77, unhandled exception, program breakpoint, fail-fast and timeout. Tests
+parse actual dump exception/module/thread streams and nonzero fault registers/
+stack, preserve handler/exit behavior, refuse wrong image/existing output and
+verify timeout child survival. Fixture loader-ready handshake separates startup
+from debugger breakpoint; no tll.exe execution. Early fixture needed separate
+SEH helper due MSVC C2712 (C++ destructor in __try function); corrected.
+
+Release now emits /Zi /DEBUG:FULL PDB while explicitly retaining /OPT:REF and
+/OPT:ICF (otherwise /DEBUG changes optimizer defaults). Full CTest17/17 passes.
+Build2026-09-18agv-safe DLL819712bytes SHA256
+`379AA26EAC7699D13123B000F2E43806D15181C0E7436EB7CDCA896F9DD3C948`;
+PDB5984256bytes SHA256
+`8BB0C4B732284D2C424AC4D362BEFCA21E742753D6D109D94F13791AC03439A8`;
+watcher89600bytes SHA256
+`CEF3F9462C666684ACA35C831A48BAC80E77BCE7F1FB414493EE7E57C9E29857`.
+All three frozen in ignored reports/agv-safe-20260918-final (earlier pre-final
+copy retained separately). Final watcher tests additionally verify the child
+is alive immediately after timeout detach and its actual final exit code.
+Verify dump module/PDB
+signature during future attribution, not just same filenames. IDB saved
+1843functions/73data/1type; reports/ida_apply_agv_status.txt says
+save_database returned True; MCP restarted with both new names resolving.
+
+**Next bounded step:** extend the existing build-pinned isolated MappedImage
+in scripts/native_anim_pose_audit.py and authored joins from
+generate_p99_chloe_source_rows.py to validate real packed references and compare
+complete21 native outputs/masks through the shared production bridge. This
+must remain an isolated helper, not a game run or a claim from scalar fixtures.
+Then settle same-fiber old-ingress limitation and native preparation cost
+without increasing1ms budget. Game exam still not earned; current tll count0.
