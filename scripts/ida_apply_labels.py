@@ -144,7 +144,11 @@ FUNCTIONS = {
         "AnimationDatabase_ResolveClip adds optional fallback outside this "
         "function; BuildRetargetEntries calls this exact lookup directly at "
         "0x1417CDF35 for raw-row+0x24 and target skeleton+0x24. A profile id "
-        "found in another package/database is not proof this lookup succeeds.",
+        "found in another package/database is not proof this lookup succeeds. "
+        "AGY: C8BDF/E3 reads the ORIGINAL authored LOD+0x20/count+0x1C "
+        "table, compares u32 entry+0 atC8C19/C39, dereferences slot+8. "
+        "Not the compact table/resource-name hash/group-row name hash. "
+        "ARTGROUP_DATA case16 copies clip keys unchanged at141CC2BAD.",
     ),
     0x1418AB8F0: (
         "AnimUtil_AnimateObject",
@@ -167,7 +171,9 @@ FUNCTIONS = {
         "0x1438401BC (write 0x1417C9185). The body mutates the table, count and "
         "listeners directly and contains no CMPXCHG or other internal registry "
         "lock. Clip lookup only searches these registered groups; neither this "
-        "body nor the epoch is a resource pin.",
+        "body nor the epoch is a resource pin. AGY: sole direct caller "
+        "141CC2934 is ANIM login case decimal42/0x2A. Art+0x40 database "
+        "gate at1417C91EB precedes observer slot0; no clip-key synthesis.",
     ),
     0x1417C93F0: (
         "AnimMasterTable_LogoutArtGroup",
@@ -4018,9 +4024,131 @@ FUNCTIONS = {
         "GameLoading_PackageLoginResItem",
         "STATIC AGX: registered by GameLoading_Initialize through "
         "PackageMgr_Init and invoked by doing-login manager slot+0x38. "
-        "Case0x42 iterates ARTGROUP_DATA LOD tables and calls "
-        "AnimMasterTable_LoginArtGroup at 0x141CC2934 with resource+0x40 "
-        "as database; no local animation descriptor database rebinding.",
+        "AGY correction: ANIM case decimal42/0x2A, NOT hex0x42 or "
+        "ARTGROUP_DATA, writes incoming ANIM+0x38=packageName, resolves "
+        "ARTGROUP_DATA LOD tables and calls AnimMasterTable_LoginArtGroup "
+        "at 0x141CC2934 using incoming ANIM+0x40 as database. "
+        "ARTGROUP_DATA itself is case16; no local database rebinding. "
+        "Case16 hashes only group-row names at141CC2A55/62, copies authored "
+        "u32 clip keys at141CC2BAD and slot pointers at141CC2BB5, then sorts "
+        "at141CC2BFC. Entry padding+4 is not initialized at141CC2B10/12 "
+        "and cannot be required to equal zero by a generic asset parser.",
+    ),
+    0x1416272D0: (
+        "PackageMgr_CopyRingBytes",
+        "STATIC AGY: package loading ring-buffer copy using memcpy; "
+        "copies disk bytes without interpreting or rewriting ANIM fields. "
+        "Used during metadata/content-page loading before login state0xB.",
+    ),
+    0x1416356A0: (
+        "Package_PreparePageResourceHeaders",
+        "STATIC AGY: content page u16+0x12 count, rows+0x14 stride16. "
+        "Rebases each row's name qword and descriptor+0/+8 pointers; "
+        "hashes names/type strings into descriptor+0x18/+0x1C. Does not "
+        "write ANIM+0x40. All35 pinned Elena resources' write ranges do "
+        "not overlap profile descriptor page0+0x51DE0 database+0x40.",
+    ),
+    0x141635760: (
+        "Package_ApplyPointerRelocations",
+        "STATIC AGY: header+0x18==8 is DIRECTORY COUNT, not record stride. "
+        "Signed header+0x1C offset in loginPages[0] points to eight12-byte "
+        "{i32 loginPage,i32 tableOffset,i32 count} directories. Positive "
+        "count selects loginPages[loginPage]+tableOffset; records8bytes "
+        "are {i16 sourceContentPage,i16 targetContentPage,i32 sourceOffset}. "
+        "Nonnull source is patched by target-base addition or, if target "
+        "absent, sentinel0x00DEB06000DEB060. Source null skips. Login/content "
+        "page arrays are DISTINCT. Empty dirs skip here but their pageIndex "
+        "is still consumed later by FreeLoginPages. Elena has861 records "
+        "in dir0 plus sevenzero dirs; no write overlaps ANIM database.",
+    ),
+    0x141635820: (
+        "Package_ResolveAndApplyPointerRelocations",
+        "STATIC AGY: resolves login-page and content-page handles into "
+        "separate pointer arrays before calling Package_ApplyPointerRelocations "
+        "at0x141635995. Decompiled temporary names alias; machine operands "
+        "RCX/RDX/R8 at5990 preserve distinct header/login/content arguments.",
+    ),
+    0x1416359C0: (
+        "Package_PrepareInMemory",
+        "STATIC AGY: independent in-memory package preparation shares "
+        "PreparePageResourceHeaders and ApplyPointerRelocations with normal "
+        "loading. Login chunk size comes from1437E9774 (default0x200000 "
+        "set at141CC4AF5), not content-page offsets or1MiB transfer chunks.",
+    ),
+    0x14162C1C0: (
+        "PackageMgr_FreeLoginPages",
+        "STATIC AGY: scans pageIndex of ALL eight12-byte fixup directories "
+        "at0x14162C2B0..2DE, including zero-count entries, deduplicates and "
+        "frees metadata/login-page handles. Content resources remain live. "
+        "Do not infer unconstrained empty-directory pageIndex from the "
+        "relocator's earlier count<=0 skip.",
+    ),
+    0x1419B25A0: (
+        "VramItemUpgrader_BuildLookup",
+        "STATIC AGY: builds heap-side lookup for VRAM resources. Elena "
+        "TEXTURE_TABLE has one slot atpage0+51F40 pointing to payload51BC0, "
+        "version2; upgrader1419B2990 returns unchanged. No alias to "
+        "profile ANIM database page0+51E20 in the pinned package.",
+    ),
+    0x1417C8B10: (
+        "AnimMasterTable_ResetObserverList",
+        "STATIC AGY: resets sentinel143682F08. Startup14015504C..506F "
+        "links default AnimTableObserver14303DF10/vtable1428D5CA8 as the "
+        "single initial node; registration dispatch uses this list.",
+    ),
+    0x1417C8B30: (
+        "AnimMasterTable_RegisterDefaultObserver",
+        "STATIC AGY: inserts default observer node into AnimMasterTable "
+        "list. No direct code/data xrefs in current IDB; this alone is "
+        "not universal proof of unreachability.",
+    ),
+    0x1417CA7F0: (
+        "AnimMasterTable_RegisterObserverNode",
+        "STATIC AGY: generic linked observer-node insertion. RTTI closure "
+        "finds AnimTableObserver and AnimStat::AnimObserver; the latter "
+        "has no-op callbacks. No direct xrefs to this insertion helper.",
+    ),
+    0x1417AAF20: (
+        "AnimStat_AnimObserver_OnLoginArt_NoOp",
+        "STATIC AGY: RTTI AnimStat::AnimObserver vtable142AF0770 slot0. "
+        "Only security-cookie check and return; slots1..6 also no-ops. "
+        "Cannot rebind ANIM database through this callback.",
+    ),
+    0x1406D82C0: (
+        "AnimTableObserver_RefreshMatchingArtGroup",
+        "STATIC AGY: default AnimTableObserver vtable1428D5CA8 slot5. "
+        "Resets effect pointers and reprocesses matching descriptors, "
+        "without changing ArtItemAnim+0x40 database.",
+    ),
+    0x1406FBA30: (
+        "SkelTableObserver_OnLogin_UpdateMeshPhysics",
+        "STATIC AGY: default SkelTableObserver vtable1428D5C20 slot1, "
+        "dispatched at1417CD78C. Iterates stride64 mesh registry143843200, "
+        "requires mesh+0x28==skeleton+0x24, then calls142003B60 for Havok "
+        "collision/destruction properties. Skeleton+0x40/+0x58 are inputs; "
+        "no ANIM descriptor/registry insertion in resolved dataflow. "
+        "TLS allocators are not a universal arbitrary-alias proof.",
+    ),
+    0x1417AAF50: (
+        "AnimStat_SkelObserver_OnLogin_NoOp",
+        "STATIC AGY: RTTI AnimStat::SkelObserver vtable142AF0758 slot1. "
+        "Cookie check then return; slot0 also no-op. No database rebinding.",
+    ),
+    0x1417D1060: (
+        "SkelTable_RegisterObserverNode",
+        "STATIC AGY: generic insertion into sentinel143683078. Startup "
+        "140155385..53A8 installs defaultnode14303DF48. RTTI resolves "
+        "default SkelTableObserver and no-op AnimStat::SkelObserver; "
+        "this generic helper has no direct code/data references.",
+    ),
+    0x1412F9F00: (
+        "PlayerClimbCache_OnLoginAnimation",
+        "STATIC AGY: called by AnimTableObserver_OnLoginArt. Resolves "
+        "skeletons by package names proto/young-drake-base/chloe-base, "
+        "reads their ArtItemSkeleton+0x24 databases, and compares ANIM "
+        "+0x40 at1412FA236..251 before climb-cache builder1412FA530. "
+        "No descriptor+0x40 store. These are skeleton Arts, NOT upper "
+        "player-state records (old lookup1417CD200 label was misleading).",
     ),
     0x1406D7FD0: (
         "AnimTableObserver_OnLoginArt",
@@ -11075,11 +11203,13 @@ FUNCTIONS = {
         "pointer; it does not create or populate the scalar bank.",
     ),
     0x1417CD200: (
-        "LookupUpperPlayerStateRecordByAuthoredHash",
-        "Global authored-state lookup keyed by a hashed token. Searches the "
-        "registry rooted at 0x1466EC480 / 0x143862600 and returns the matched "
-        "upper Player state record object, used by 0x140CC1450 to resolve the "
-        "`proto`-tagged state before writing it into player+0x1A0.",
+        "SkelTable_FindArtItemSkeletonByPackageNameHash",
+        "STATIC AGY correction: returns ArtItemSkeleton*, NOT upper Player "
+        "state. Registry143862600 stride24/bitmap1466EC480 is populated "
+        "by LoginArtItemSkeleton: ptr+0 at1417CD681, package-name ptr+8 "
+        "atCD684, hash+0x10 atCD6AE. Lookup compares requested package hash "
+        "atCD244 and returns entry+0 atCD2DD. proto/young-drake-base/ "
+        "chloe-base callers subsequently read skeleton database+0x24.",
     ),
     0x1417CD3D0: (
         "FinalizeOrActivateUpperPlayerStateRecord",

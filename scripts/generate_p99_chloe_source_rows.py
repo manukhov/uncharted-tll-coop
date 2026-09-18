@@ -99,33 +99,35 @@ class PagedPak:
         self.pages = tuple(pages)
 
         fixup_descriptor = page_table + page_count * 0xC
-        if native.u32(data, 0x18) != 8:
-            raise ValueError("unexpected PAK fixup-record stride")
+        directory_count = native.u32(data, 0x18)
+        if directory_count != 8:
+            raise ValueError("unexpected PAK fixup-directory count")
         if native.u32(data, 0x1C) != fixup_descriptor:
             raise ValueError("PAK fixup descriptor is not after the page table")
-        if fixup_descriptor + 0x10 > pages[0].file_offset:
+        if fixup_descriptor + directory_count * 12 > pages[0].file_offset:
             raise ValueError("truncated fixup descriptor")
-        fixup_page, fixup_table, fixup_count, fixup_reserved = struct.unpack_from(
-            "<IIII", data, fixup_descriptor
-        )
-        if fixup_page != 0 or fixup_reserved != 0:
-            raise ValueError("unexpected fixup descriptor")
-        if (
-            fixup_table < fixup_descriptor + 0x10
-            or fixup_table + fixup_count * 8 > pages[0].file_offset
-        ):
-            raise ValueError("fixup table is outside PAK metadata")
         fixups: dict[tuple[int, int], list[int]] = defaultdict(list)
-        for index in range(fixup_count):
-            offset = fixup_table + index * 8
-            source_page, target_page, pointer_local = struct.unpack_from(
-                "<HHI", data, offset
-            )
-            if source_page >= page_count or target_page >= page_count:
-                raise ValueError(f"fixup {index} has an invalid page")
-            if pointer_local + 8 > pages[source_page].size:
-                raise ValueError(f"fixup {index} points outside its source page")
-            fixups[(source_page, pointer_local)].append(target_page)
+        # Native141635760: +18 is eight 12-byte directories, NOT record stride.
+        # Directory page indexes LOGIN chunks, unlike fixup source/target pages.
+        # This owned PAK parser admits metadata residing in login chunk0 only;
+        # do not silently treat a later login chunk as a content-page index.
+        for directory in range(directory_count):
+            login_page, table, count = struct.unpack_from("<iii", data, fixup_descriptor + directory * 12)
+            if count <= 0:
+                # Relocator skips this directory; the full loader later uses
+                # login_page in FreeLoginPages. This is not a loader-safety proof.
+                continue
+            if login_page != 0:
+                raise ValueError("nonzero fixup login chunk is not supported")
+            if table < fixup_descriptor + directory_count * 12 or table + count * 8 > pages[0].file_offset:
+                raise ValueError("fixup table is outside PAK metadata")
+            for index in range(count):
+                source_page, target_page, pointer_local = struct.unpack_from("<hhi", data, table + index * 8)
+                if not 0 <= source_page < page_count or not 0 <= target_page < page_count:
+                    raise ValueError(f"fixup {index} has an invalid page")
+                if pointer_local < 0 or pointer_local + 8 > pages[source_page].size:
+                    raise ValueError(f"fixup {index} points outside its source page")
+                fixups[(source_page, pointer_local)].append(target_page)
         self.fixups = fixups
 
     def absolute(self, page: int, local: int) -> int:

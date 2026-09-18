@@ -13,9 +13,11 @@ import argparse
 from collections import deque
 import ctypes
 import math
+import mmap
 import re
 import struct
 import sys
+import zlib
 from pathlib import Path
 
 
@@ -60,9 +62,12 @@ def find_oodle(archive: Path, explicit: Path | None) -> Path:
 
 
 class Psarc:
-    def __init__(self, path: Path, oodle_path: Path | None) -> None:
+    def __init__(self, path: Path, oodle_path: Path | None,
+                 *, data: bytes | mmap.mmap | None = None) -> None:
         self.path = path
-        self.data = path.read_bytes()
+        # Optional borrowed read-only mapping: the caller owns its lifetime.
+        # Default behavior remains a complete owned bytes snapshot.
+        self.data = path.read_bytes() if data is None else data
         if len(self.data) < 32:
             raise ValueError("truncated PSARC header")
 
@@ -80,6 +85,9 @@ class Psarc:
             raise ValueError(f"not a PSARC archive: {magic!r}")
         if entry_size < 30:
             raise ValueError(f"unsupported TOC entry size: {entry_size}")
+        if (entry_count < 1 or self.block_size < 1 or toc_size > len(self.data)
+                or 32 + entry_count * entry_size > toc_size):
+            raise ValueError("invalid PSARC TOC/block extent")
 
         self.entries: list[tuple[int, int, int]] = []
         for index in range(entry_count):
@@ -94,19 +102,22 @@ class Psarc:
         # A full block is represented by zero, so 64 KiB blocks use two bytes.
         width = max(1, (self.block_size.bit_length() + 6) // 8)
         block_table = 32 + entry_count * entry_size
+        if (toc_size - block_table) % width:
+            raise ValueError("partial PSARC block-table item")
         self.block_lengths = [
             int.from_bytes(self.data[pos : pos + width], "big")
             for pos in range(block_table, toc_size, width)
         ]
 
-        if self.compression != b"oodl":
+        if self.compression not in (b"oodl", b"zlib"):
             raise ValueError(
-                f"unsupported PSARC compression {self.compression!r}; expected b'oodl'"
+                f"unsupported PSARC compression {self.compression!r}"
             )
-        dll_path = find_oodle(path, oodle_path)
-        library = ctypes.WinDLL(str(dll_path))
-        self.decompress = library.OodleLZ_Decompress
-        self.decompress.restype = ctypes.c_longlong
+        if self.compression == b"oodl":
+            dll_path = find_oodle(path, oodle_path)
+            library = ctypes.WinDLL(str(dll_path))
+            self.decompress = library.OodleLZ_Decompress
+            self.decompress.restype = ctypes.c_longlong
 
         manifest = self.extract_index(0).decode("utf-8", "replace")
         self.names = manifest.splitlines()
@@ -118,20 +129,40 @@ class Psarc:
         self.name_to_index = {name: index + 1 for index, name in enumerate(self.names)}
 
     def extract_index(self, index: int) -> bytes:
+        return b"".join(self.iter_index_chunks(index))
+
+    def iter_index_chunks(self, index: int, start: int = 0, size: int | None = None):
+        """Yield a bounded uncompressed range; skip unrelated compressed blocks."""
         block_index, total_size, data_offset = self.entries[index]
-        output = bytearray()
+        if size is None:
+            size = total_size - start
+        if start < 0 or size < 0 or start > total_size or size > total_size - start:
+            raise ValueError("PSARC range outside entry")
+        end = start + size
+        logical = 0
         remaining = total_size
         position = data_offset
 
-        while remaining:
+        while remaining and logical < end:
             wanted = min(self.block_size, remaining)
             compressed_size = self.block_lengths[block_index] or wanted
+            if logical + wanted <= start:
+                position += compressed_size
+                remaining -= wanted
+                logical += wanted
+                block_index += 1
+                continue
             source = self.data[position : position + compressed_size]
             if len(source) != compressed_size:
                 raise ValueError(f"truncated data block {block_index}")
 
             if compressed_size == wanted:
                 chunk = source
+            elif self.compression == b"zlib":
+                decoder = zlib.decompressobj()
+                chunk = decoder.decompress(source, wanted + 1)
+                if len(chunk) != wanted or not decoder.eof or decoder.unused_data:
+                    raise RuntimeError(f"zlib block {block_index}: expected {wanted}, got {len(chunk)}")
             else:
                 source_buffer = ctypes.create_string_buffer(source)
                 target_buffer = ctypes.create_string_buffer(wanted)
@@ -158,12 +189,14 @@ class Psarc:
                     )
                 chunk = target_buffer.raw[:produced]
 
-            output.extend(chunk)
+            yield chunk[max(0, start - logical):min(wanted, end - logical)]
             position += compressed_size
             remaining -= wanted
+            logical += wanted
             block_index += 1
 
-        return bytes(output)
+    def extract_range(self, name: str, start: int, size: int) -> bytes:
+        return b"".join(self.iter_index_chunks(self.name_to_index[name], start, size))
 
     def extract(self, name: str) -> bytes:
         try:

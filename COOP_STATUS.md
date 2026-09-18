@@ -33106,3 +33106,177 @@ Then build justified row157 operands and run all42 records/21 final Nadine rows
 and masks through the actual shared production materializer in isolation.
 No game exam earned;1ms budget, AGR exception-PC uncertainty and visible grip
 remain unchanged. User-owned untracked tmp/ is preserved.
+
+## 2026-09-18 AGY: row157 profile provenance and ordinary package producers (STATIC)
+
+No game launch, attach, injection or input; no mapped retail math this turn.
+Runtime code/DLL and both disabled grip writers are unchanged. This is NOT a
+visual P99 fix or a proven live-null profile lookup. AGX row20 numerical result
+remains the completed first stage; the full21-row Nadine materializer is pending.
+
+Competing row157 explanations were: another shipped FC34096C registration for
+Nadine; Elena descriptor database rebinding during package preparation/login;
+observer-driven rebinding; clip-key synthesis from a name without literal ID;
+or no exact profile in the ordinary TLL asset path. Evidence now favors the
+last explanation within the scope below, without proving every runtime producer.
+
+### Disk scope and rejected false candidates
+
+New scripts/p99_profile_archive_audit.py maps PSARCs read-only and streams every
+case-insensitive .pak entry under build/pc/thelostlegacy. All16 archives were
+indexed, all6226PAKs/49581713648 uncompressed bytes scanned and individually
+hashed. Non-PAK payloads and other roots (pc/main, pc/uncharted4) are NOT scanned;
+an exploratory main/sound1 index refused its non-name manifest, not evidence of
+absence there. No live registry/process memory is inspected by this script.
+
+- actor77:2494PAKs/6903579696bytes, one FC34096C hit.
+- pak54:1191PAKs/13568174768bytes, no hits.
+- texturedict2:13PAKs/24788329776bytes, two nonregistration byte hits.
+- updated-fx-paks2:2528PAKs/4321629408bytes, no hits.
+- Other12 archives contain no .pak entries in their manifests.
+
+The sole resolved graph remains elena-base.pak, SHA256
+`d77161503375df9a06ffc81646a88692dc437947274cf172ac7481be8d9b26f2`:
+registration file536F8 -> slot page0+51A98 -> descriptor page0+51DE0 -> raw
+page0+41F00. Source skeleton8592680F, database46622D19 != NadineED25C708;
+10576-byte raw ANIM SHA256
+`dae4196e649d2071a0e628a7821b416c3b8ff74c4d72c9979f4c85b19e9a9ec1`.
+The exact NUL-terminated name retarget-pose-npc-normal also occurs only here,
+at file offset343984. Streaming searches include all cross-block boundaries.
+
+REJECTED as ordinary registrations: global-dict-1.pak hit1703441077 is outside
+its only content page [66208,883360bytes]; global-dict-2.pak hit431819477 is
+outside pages [79008,993712bytes] and [1072736,8368bytes]. These are appended
+texture bytes, not a content-page registration->slot->descriptor graph.
+Their SHA256 values are respectively
+`c3c754c9c572f792af15650b9e984326a7cfb2b5194a601c9ae7ae89f4e2726b` and
+`452fab28a05dcc5412e859ce2c07c9e148639480bdb8558a78fcab80b3e2e0b5`.
+
+Review correction: registration padding+4 need NOT be zero. Native compact
+entry initialization141CC2B10/12 writes only u32+0/qword+8. The first scan's
+padding-based rejection was invalid and is superseded by content-page proof.
+Unsupported small/large PAK layouts now explicitly remain unresolved; a parser
+refusal is not an absent registration. Synthetic regressions cover both errors.
+Final local evidence: reports/p99-profile-archive-scan-agy-complete.json schema2.
+
+### Pre-login write domains and parser correction
+
+STATIC graph: PackageMgr_InternalTick1416290E0 -> loading states1419C5020 ->
+metadata copy1419C39C0 -> content load/preparation1419C4120 -> optional VRAM
+1419C44F0 -> queued state0A ->141627F60 -> doing-login0B1419C4D50 -> installed
+GameLoading_PackageLoginResItem141CC0BF0. Ring copy1416272D0 only memcpy-copies
+bytes. Independent in-memory path1416359C0 uses the same preparation routines.
+
+1416356A0 reads content-page u16+12 count and16-byte rows at+14. It rebases
+row+0, descriptor+0/+8 and hashes names/type into descriptor+18/+1C. All35
+Elena resource-header write domains are disjoint from profile database51E20.
+141635760 consumes eight12-byte {i32 loginPage,i32 tableOffset,i32 count}
+directories from signed header+1C relative to LOGIN page0. Header+18 is the
+directory count8, NOT an8-byte record stride. Positive counts select LOGIN
+page+tableOffset; records are signed {i16 sourceContentPage,i16 targetContentPage,
+i32 sourceOffset}, eight bytes each. Login and content pointer arrays are
+different operands at141635990 despite misleading decompiler temporary names.
+Nonnull source pointers add target base, or receive00DEB06000DEB060 when the
+target page is absent. Null source is skipped. Elena dir0=(0,160,861), remaining
+seven=(0,0,0); none of861 qword writes overlaps database51E20.
+
+generate_p99_chloe_source_rows.PagedPak now parses ALL eight directories and
+signed records. It deliberately refuses nonzero LOGIN chunks; those indexes
+must not be mistaken for content pages. Count<=0 is ignored by the relocator,
+but FreeLoginPages14162C1C0 later consumes pageIndex from all eight directories.
+Thus arbitrary empty-directory fields are not a whole-loader safety proof.
+In-memory login chunk maximum1437E9774 is initialized to200000hex at141CC4AF5,
+not the1MiB transfer chunk size. Existing pinned authored outputs are unchanged.
+
+Elena PAK_LOGIN_TABLE is page0+51D60: signed count at+20,8-byte signed page/local
+pairs at+28; reserved+24 is12345hex, not zero. Its nine ordered resources are
+ARTGROUP_DATA51A40, TEXTURE_TABLE51F00, LEVEL_PATS_2 51F60, FLOOR_PATS_2 51FA0,
+JOINT_HIERARCHY260, profile ANIM51DE0, ANIM51E40, collision45720, lookup51EA0.
+Earlier texture callback1417D2D50 builds heap pointers;1417D2E00 ->1419B25A0 ->
+1419B2990 leaves version2 unchanged. The sole texture pointer at51F40 targets
+VRAM payload51BC0, not51E20; PATS callbacks update level pointers.
+The machine-readable certificate covers header and relocation writes only;
+arbitrary_callback_absence_proven remains false.
+
+AGX label correction: classifier141CC01F0 maps ANIM hash6D1FBC6E to decimal42
+(0x2A) at141CC0353, NOT hexadecimal0x42. This ANIM case starts141CC2855, writes
+incoming ANIM+38=packageName, resolves same-package ARTGROUP_DATA and passes
+incoming ANIM+40 at141CC2930 to LoginArtGroup141CC2934. ARTGROUP_DATA is case16.
+
+REJECTED name-only clip-key synthesis on this path: ARTGROUP_DATA handling
+hashes its24-byte group-row name at141CC2A55/62 into row+0C, but copies the
+authored clip u32 key at141CC2BAD and slot pointer at141CC2BB5 unchanged.
+141CC2BFC sorts those keys. Exact lookup1417C8BA0 searches the ORIGINAL authored
+LOD+20/count+1C table at1417C8BDF/E3, comparing entry+0 at1417C8C19/C39. It does
+not use resource+18 hash, group-row+0C hash, or the new compact table. Therefore
+literalFC34096C is necessary for a registration through this ordinary path.
+
+### Resolved observers and corrected object identity
+
+Animation registry143840200 insertion1417C9070 has one direct callerCC2934;
+database gate1417C91EB precedes observer slot0. Lookup independently checks
+Art+40 at1417C8C6A. Registering an Elena group under Nadine alone cannot make
+Elena descriptors pass. Sentinel143682F08/default node14303DF10 is initialized
+as a single-node list at14015504C..506F. RTTI base142C71EF8 resolves default
+AnimTableObserver1428D5CA8 and AnimStat::AnimObserver142AF0770. The latter's
+slot0 1417AAF20 only cookie-checks/returns; slots1..6 are no-ops. Default slot0
+1406D7FD0 writes effect state+48 and calls climb processing; slots1/2 clear
+context/validate; slot5 1406D82C0 refreshes already matching Arts, not database.
+Generic/default insertion1417CA7F0/1417C8B30 has no direct xrefs, which is not
+a universal unreachability proof.
+
+Climb processing1412F9F00 resolves proto/young-drake-base/chloe-base skeletons
+and checks skeleton+24 against ANIM+40 at1412FA236..251 before1412FA530.
+Pinned proto/chloe databases27E57F43/6C2B2396 differ from Elena; absent young
+Drake in the TLL actor inventory is not a global runtime-absence assertion.
+Sampling1418A8D60 writes output Mat48/query metadata, not descriptor database.
+Corrected label1417CD200: SkelTable_FindArtItemSkeletonByPackageNameHash, NOT
+LookupUpperPlayerStateRecordByAuthoredHash. Producer LoginArtItemSkeleton
+stores Art*+0/nameptr+8/hash+10 atCD681/CD684/CD6AE in stride24 registry143862600
+(bitmap1466EC480); lookup compares+10 atCD244 and returns+0 atCD2DD.
+
+Earlier skeleton login1417CD78C invokes slot1. Sentinel143683078/default
+node14303DF48 startup140155385..53A8; RTTI identifies SkelTableObserver
+1428D5C20 slot1 1406FBA30 and no-op AnimStat::SkelObserver142AF0758 slot1
+1417AAF50. Generic insertion1417D1060 has no direct xrefs. Default callback
+iterates mesh registry143843200 stride64, matches mesh+28 to skeleton+24,
+then142003B60 uses skeleton+40/+58 for collision/destruction initialization
+through142002320 and142003170 ->142002820. Shape propertyF0010000 is48-byte
+ndRuntimeHkdShapeProps/vtable142812020;14224D5D0/610 lookup,14224D240/300 insert
+into Havok property arrays. Container allocator14280A388 slots3/5 resolve to
+14222C490/500 TLS forwards. No ANIM descriptor or registry is passed through
+the resolved dataflow; arbitrary TLS allocator aliasing was not exhaustively
+traced. Do not inflate this bounded closure into universal callback absence.
+
+### Validation and next admission boundary
+
+Validation: Python54/54 and existing CTest19/19 pass. Full scan regenerated and
+--scan-paks --check returned0; after final conservative parser-refusal review,
+all three hit graphs were re-evaluated with current code and exactly match the
+report. Existing --profile-inventory --check passes with unchanged2016-byte
+reference/378-byte tail hashes. Static retarget preflight still resolves93
+row20 records and71 CONDITIONAL row157 records (zero retail function calls).
+No C++ rebuild needed: runtime source and helper binary are unchanged.
+
+Reproduction (all disk-only except ordinary native unit-test executables):
+`py -3.12 scripts/p99_profile_archive_audit.py --scan-paks --check --output reports/p99-profile-archive-scan-agy-complete.json`;
+`py -3.12 scripts/p99_native_source_audit.py --profile-inventory --check`;
+`py -3.12 -m unittest discover -s scripts -p "test_p99*audit.py"`;
+`ctest --test-dir scanner/build -C Release --output-on-failure`.
+For a fresh checkout generate local ignored reports first without --check.
+
+IDB labels applied only to ida/tll.i64 through stopped-MCP/headless workflow:
+1877functions/73data/1type, reports/ida_apply_agy_status.txt reports
+save_database returned True. MCP restarted; loader/observer names and corrected
+skeleton lookup read back, relocation callers resolve at141635990/141635B75.
+No runtime source or DLL changes, no new runtime acceptance claim.
+
+Next bounded step: materialize row157's explicitly CONDITIONAL no-profile
+operands in the isolated helper and run both stages/all42 records/21 final rows
+through the actual shared production materializer. Retain runtime exact-lookup
+admission: a differing profile result must refuse rather than apply the fixture.
+This experiment can validate the conditional branch without claiming universal
+absence in other assets/custom producers. Its success alone does not earn a
+game exam: source-preparation cost, external AGR fault-capture plan and live
+operand identity still require admission. Both grip writers/static_assert and
+1ms budget remain unchanged; visible grip and AGR exception PC remain open.

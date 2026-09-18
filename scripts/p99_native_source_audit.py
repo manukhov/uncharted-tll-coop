@@ -275,7 +275,7 @@ def profile_inventory(actor) -> dict:
             "builder_call": "1417CDF35 calls exact lookup with target skeleton Art+24 database",
             "callback_install": "GameLoading::Initialize141CC4940 installs141CC0BF0 at config+38 (141CC4E50..57); PackageMgr::Init141625910 copies to manager+38 at1416259E7",
             "callback_dispatch": "PackageMgr::UpdateLoginPackage141627F60 case0B calls1419C4D50;1419C4F1E invokes manager+38 with resource from loaded page plus disk login-item offset, without rewriting resource database",
-            "registration": "PackageLoginResItem141CC0BF0 case42 calls LoginArtGroup1417C9070 at141CC2934 with resource+40",
+            "registration": "PackageLoginResItem141CC0BF0 ANIM case decimal42/0x2A calls LoginArtGroup1417C9070 at141CC2934 with incoming ANIM+40; ARTGROUP_DATA is case16",
             "registration_callback_gate": "1417C91EB checks Art+40 before observer slot0; registry insert does not rewrite Art+40",
             "default_observer": "RTTI AnimTableObserver vtable1428D5CA8/COL142C722D8/type14374A140; slot0 1406D7FD0 writes Art+48, not+40, and calls1412F9F00 which reads/gates+40; slot2/debug validation has no+40 store",
             "unresolved": "Other archive registrations, observer installations, and resource numeric-field producers before PackageMgr doing-login state0B are not exhaustively excluded.",

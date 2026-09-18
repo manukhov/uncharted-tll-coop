@@ -11,7 +11,32 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-18, AGX offline): no game launch/attach/injection/input.
+Current handoff (2026-09-18, AGY offline): no game launch/attach/injection/input.
+Row157 profile provenance is now bounded by a full TLL-root PAK scan and
+ordinary loader/observer dataflow, not merely the actor77 filename subset:
+16PSARCs,6226PAKs,49581713648 decompressed bytes. FC34096C has three byte hits;
+only Elena is a registration (database46622D19, not NadineED25C708). The other
+two hits are outside all authored content pages of global-dict-1/2.pak.
+Exact NUL-terminated retarget-pose-npc-normal also appears only in Elena.
+141CC2BAD copies authored clip keys; lookup1417C8BA0 searches the original
+LOD+20 table. Name-only key synthesis on this path is REJECTED. Pre-login
+header/relocation writes and resolved animation/skeleton observers do not
+rebind Elena ANIM+40. Correct parser layout: eight12-byte LOGIN directories,
+then signed8-byte CONTENT relocations; +18 is directory count, not stride.
+ANIM login is decimal42/0x2A; ARTGROUP_DATA is case16. Lookup1417CD200 returns
+ArtItemSkeleton by package-name hash, NOT an upper Player state record.
+No universal live-null assertion: non-PAK data, other archive roots and custom
+producers remain outside this disk/ordinary-path proof. Generic parser refusals
+are marked unresolved, never evidence of absence. See final AGY status for
+callback RTTI, concrete write domains, scope and reproduction.
+Next implement an explicitly CONDITIONAL no-profile row157 offline fixture,
+then compare all42 native operands/21 final rows through the shared production
+materializer. Its operand admission must retain exact runtime lookup checking;
+do not silently turn the conditional case into a global profile-absence fact.
+Keep both grip writers disabled, static_assert,1ms budget and external crash
+capture plan. AGR crash PC/preparation cost/visible grip remain open.
+
+Prior AGX handoff: no game launch/attach/injection/input.
 Row20 Player->Chloe now has actual native numerical construction, not just tails:
 scripts/p99_native_retarget_audit.py --numeric-row20 runs a terminal-fault child
 with complete owned resources, preallocated96-record capacity, real UCRT sqrtf,
