@@ -33280,3 +33280,125 @@ absence in other assets/custom producers. Its success alone does not earn a
 game exam: source-preparation cost, external AGR fault-capture plan and live
 operand identity still require admission. Both grip writers/static_assert and
 1ms budget remain unchanged; visible grip and AGR exception PC remain open.
+
+## 2026-09-18 AGZ: conditional row157 native fixture and shared full-chain exam
+
+Scope: offline terminal-fault child only, never a game process. Runtime grip
+flags/DLL are unchanged. No claim that the live profile lookup is null.
+
+STATIC admission before execution: BuildRetargetEntries1417CDF30..3A resolves
+row157 FC34096C against target database. Null branch1417CDF40..79 preserves
+authored raw+20 reference rows and raw+28 inverse-global matrices;1417CE198
+passes these to BuildRetargetEntry1417CE210. Profile-present instead samples
+target inputs; failed sampling at1417CE06F is not a bind-pose fallback. The
+offline conditional fixture retains original profileFC34096C, never rewrites0.
+
+Independent evidence: (1) caller/branch graph above, (2) builder disassembly
+explicit-map CE69C..6A6 ->CF327 and skipped allocation/IK gates, (3) independently
+hashed/reconstructed authored assets/joint joins. Row157 reserves74x46=3404
+bytes for71 resolved records, modes0:1/1:62/2:6/3:2, selected21 modes1/3.
+Entry+18 nonnull skips CE503..CE653 allocation. Raw+2C/+2D zero skips D006F and
+D0428 IK branches. D0819->GenerateSegmentMapping still requires owned zeroE0
+manager1437E98C8, then manager+D8null skips allocation atD0904. Imports/global
+dependencies match AGX: real UCRT sqrtf, original cookie/stack probing, complete
+.pdata, CPU/OS AVX/F16C/AVX2/XMM/YMM admission. Faults remain terminal.
+
+Full Chloe/Nadine PAK sizes783536/732928; raw offsets5A180/53FE0, references
+5A520(430rows)/54370(426rows), inverse globals8C350(651)/81DE0(580), parent
+records9493C/89560. All282 non-prefix determinant checks pass, magnitudes
+.9999994912505505..1.0000006055796502; max conservative scale2.3747014544653076.
+Both root parents=-1: original matrixBase-48 must remain readable even though
+CF7C5->CF937 discards the parent inverse results. Source-global T indexing at
+CF58B is retained. Chloe globals25 and2 have mathematical length8.593712e-20,
+Nadine targets14/2 length0: squared-length mask FLT_MIN atCFED1..DA and epsilon
+atCFF3E..53 select packed scale0. Do not replace with naive division.
+
+Falsifiable prediction written before child execution: original row157 builder
+returns71 exact metadata records with finite18-half/nonzero locator quaternions,
+untouched138 capacity bytes/readonly sources/entry pointers/guards. The selected
+42 records plus42 exact references enter ACTUAL shared evaluate_group and
+evaluate_joint for both target groups:42 retarget and21 mode2 blend calls,
+all21 final rows valid and four88-byte global masks equal the independently
+authored grouping oracle. Both MXCSR1F80/9FC0 must yield identical records,
+inputs and complete outputs; any refusal/mismatch stops the experiment.
+AGX row20 baseline must remain byte-identical before the second stage starts.
+This distinguishes correct conditional operand construction from profile
+substitution, truncated resources, wrong group/reference indexes or stage-only
+success; it does NOT distinguish the actual live profile-present/absent state.
+
+Implementation: new P99AuditFullChain helper export consumes21x188=3948 bytes
+(row20record46,row157record46,ChloeRef48,NadineRef48) and emits1360 bytes:
+21final48-byte rows, group0 Chloe/Nadine masks, group1 Chloe/Nadine masks, each
+11u64. Native math receives guarded inner copies; source/record/reference and
+right blend blob are compared afterward. Left discarded SIMD sentinel48..96
+may be overwritten. Failed blend poisons only shared-local masks so the next
+retarget is not called; output is copied to caller only after full success.
+All rows/records/references are preflighted before ANY native call. Invalid
+image1 unit tests verify early refusal without executing retail code.
+
+Python entry --numeric-full-chain-no-profile is explicit and mutually exclusive
+with --numeric-row20; ordinary invocation remains static-only. Group masks are
+derived from pinned Nadine workspace group ranges, not compressed parameter
+indices. Builder and materializer reset to requested masked MXCSR separately;
+sticky exception flags are reported, not silently treated as zero exceptions.
+Runtime exact-lookup/operand identity remains an admission requirement, not
+replaced by this conditional fixture. Results are recorded below after review.
+
+ISOLATED_NATIVE result: first and reviewed rerun both succeeded, each testing
+MXCSR1F80 and9FC0. Original row157 returns71 records/modes0:1,1:62,2:6,3:2;
+all1278 halves finite,142 locator quaternions nonzero, record+2D staysA7,
+three unused capacity records/readonly inputs/pointer contract/guards intact.
+Predicted scales25->14 and2->2 are exactly packed0000 at+22. Nontrivial26->15
+scale is40C0hex=2.375 (half rounding from conservative ratio2.374701).
+Shared full materializer completes42 DoJoint+21 Blend calls per FP mode.
+Four masks contain exactly2+19 targets/group with authored global LSB bits;
+native blend's separate local MSB mask remains{8000000000000000,0}.
+All21 final rows are distinct/nonidentity rotations, quaternion norms squared
+.9999991110..1.0000002850, max absolute translation.07260743, scaleXYZ1.
+No final row merely equals either reference. Output row1's lane11 is1; this
+unused lane is intentionally not required zero or finite by the row validator.
+Independent artifact inspection verified record modes/halves/joins/masks/hashes;
+this is not an independent numerical implementation or rendered grip evidence.
+
+Reviewed conditional regression hashes (host UCRT unchanged from AGX):
+
+- row15771x46=3266 bytes:
+  `483361dafa1ef93b199f4d9ac5263d68197abcbba68058277091fe745012da14`.
+- full3948-byte operands:
+  `1e54a246eddfa42597ed8fb1b912c8ee19a2c550b1fa6c2ea73d1507aac9eb7b`.
+- final21x48=1008-byte rows alone:
+  `c3613114c77ed16949d7de7d374131e86a4ab5ce57a3695a8f0b9ba2bee122e7`.
+- full1360-byte rows+masks:
+  `c91e639d918eb2492212b0c41d9d7f152217aecfd67eaa27ecc8d4a85aab4209`.
+- isolated helper DLL:
+  `682a33710ad156bec66cb41eb3225bf155372ff55093b17df35e75ddc0ef4653`.
+
+First report reports/p99-full-chain-agz-first.json; reviewed report and binary
+siblings reports/p99-full-chain-agz-final.*. Full output equality does not mean
+FP status equality: builder flags1FB3/9FF1, materializer1FA0/9FE0. Exceptions
+remain masked; no child exception recovery is implemented. New conditional
+hash checks refuse drift instead of accepting new bytes. Old row20 record and
+output baselines still match exactly after shared builder refactoring.
+
+Reproduce with `py -3.12 scripts/p99_native_retarget_audit.py --numeric-full-chain-no-profile --output reports/p99-full-chain-agz-final.json`.
+This launches only its own45s-bounded hidden Python child, never tll.exe.
+Only tll_p99_native_math_bridge and its test executable were rebuilt; no compiler
+warnings. Python62/62, CTest19/19, admission39443checks0fail. Pure tests cover
+conditional opt-in, profile preservation,3948 layout,1360 rows/masks, all output
+NaN/rotation/mask mutations, authored group/reference distinction, and baseline
+size/digest drift. Helper/report/binaries frozen in reports/agz-offline-20260918-final.
+Runtime DLL SHA remainsC8CF84C64E96CDC2539619C7E4B5E3FFA8A57DC9FCAA31A4AF64BD56E328124B.
+Single IDB annotation updated/saved1877functions/73data/1type;
+reports/ida_apply_agz_status.txt confirms save_database returned True. MCP
+restarted and builder name/caller xref read back after saving.
+
+Next: audit and reduce runtime operand preparation under the retained1ms cap,
+then prove exact live row157 lookup/complete operand identity at the scoped
+handoff. Start with capture_p99_chloe_transfer_locked_operands and its
+seh_capture_p99_chloe_transfer_locked_operands_while_locked helper in
+scanner/src/coop_runtime.cpp (called before the two shared group evaluations).
+Do not use the conditional fixture as unconditional runtime operands,
+raise the budget or enable either writer based on this isolated success.
+AGR crash PC remains unknown; any future game exam still needs the external
+PID/image-bound fault watcher and a distinct written live-behavior prediction.
+No game test is earned by this turn; no injected/runtime behavior is CONFIRMED.

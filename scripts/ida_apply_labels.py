@@ -4240,7 +4240,16 @@ FUNCTIONS = {
         "both inverse results are discarded. BoneScale source-length "
         "epsilon at CFF3E is about1e-5; prior squared-length mask uses "
         "FLT_MIN. Zero length yields scale0. AGX isolated profile0 row20 "
-        "built93 records in owned96-record capacity; no live Nadine claim.",
+        "built93 records in owned96-record capacity; no live Nadine claim. "
+        "STATIC AGZ: row157 authored74 resolves71, same explicit-map path "
+        "CE6A6->CF327, flags+2C/+2Dzero skip D006F/D0428 IK branches. "
+        "Conditional null-profile caller CDF40..79 passes authored bases; "
+        "retain raw profileFC34096C rather than changing it to zero. "
+        "Chloe globals25/2 squared lengths below FLT_MIN yield scale0 for "
+        "Nadine targets14/2; complete resources/root prefixes are required. "
+        "AGZ ISOLATED_NATIVE: conditional authored-basis row157 builds71 "
+        "records and shared full21-row materializer passes42DoJoint/21Blend "
+        "with identical output under MXCSR1F80/9FC0. Not live-null or grip proof.",
     ),
     0x141936490: (
         "RetargetPlugin_AddJointRetargetCommands",

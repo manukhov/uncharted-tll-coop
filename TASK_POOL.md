@@ -11,7 +11,28 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-18, AGY offline): no game launch/attach/injection/input.
+Current handoff (2026-09-18, AGZ offline): no game launch/attach/injection/input.
+CONDITIONAL full native chain now passes in terminal-fault children: original
+1417CE210 builds row15771 records in74-record capacity with unchanged authored
+profileFC34096C and bind-pose bases supplied only for explicit null-profile
+branch. Both FP modes1F80/9FC0 give identical records/full3948-byte operands and
+1360-byte output. P99AuditFullChain invokes ACTUAL shared evaluate_group and
+evaluate_joint for2+19 Nadine targets:42 native retarget/21 blend, exact masks,
+readonly inputs/inner and outer guards intact. Row20 AGX hashes stay unchanged.
+Two independent runs pass; baseline hashes are pinned, NOT auto-refreshed.
+Row157 recordhash483361dafa1ef93b199f4d9ac5263d68197abcbba68058277091fe745012da14;
+fulloutput c91e639d918eb2492212b0c41d9d7f152217aecfd67eaa27ecc8d4a85aab4209.
+Helper682a33710ad156bec66cb41eb3225bf155372ff55093b17df35e75ddc0ef4653;
+freeze reports/agz-offline-20260918-final. Python62/62, CTest19/19;
+bridge admission39443checks0fail refuses every bad row before any retail call.
+No live-null claim or visual success; no runtime source change or DLL relink.
+Next audit/optimize runtime operand preparation under retained1ms limit and
+bind its admission to actual row157 lookup/complete numerical operand identity,
+using this fixture only as a conditional oracle. Prove bounded cost and safe
+live handoff before considering the external-crash-captured one-game exam.
+Keep both writers disabled and static_assert; AGR crash PC remains unknown.
+
+Prior AGY handoff: no game launch/attach/injection/input.
 Row157 profile provenance is now bounded by a full TLL-root PAK scan and
 ordinary loader/observer dataflow, not merely the actor77 filename subset:
 16PSARCs,6226PAKs,49581713648 decompressed bytes. FC34096C has three byte hits;
