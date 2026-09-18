@@ -113,6 +113,118 @@ std::string read_file(const std::filesystem::path& path) {
     std::ifstream input(path,std::ios::binary);
     return {std::istreambuf_iterator<char>(input),std::istreambuf_iterator<char>()};
 }
+
+// The runtime adapter only dispatches legacy vs. owned reads. Exercise the
+// actual shared Reader primitive in its four new callback-free range shapes.
+// Counts below are query counts for explicit synthetic layouts, not timings.
+void range_batch_scopes() {
+    struct Scope {
+        std::array<std::size_t, 4> sizes;
+        std::size_t count;
+    };
+    const std::array<Scope, 4> scopes{{
+        {{{0x48, 0x24, 473 * 48, 0}}, 3}, // Art/raw/reference.
+        {{{0x40, 0x2E, 93 * 46, 96 * 12}}, 4}, // Post-lookup entry.
+        {{{0x40, 0x2E, 71 * 46, 0}}, 3}, // Post-lookup row124.
+        {{{93 * 46, 71 * 46, 430 * 48, 426 * 48}}, 4}, // Copy sources.
+    }};
+    constexpr std::uintptr_t base = 0x100000;
+    constexpr std::size_t stride = 0x8000;
+    for (const auto& scope : scopes) {
+        unsigned queries = 0, copies = 0;
+        auto copy = [&](auto, auto*, auto) { ++copies; return true; };
+        auto same_region = [&](auto, auto& region) {
+            ++queries;
+            region = {base, 0x40000, true, true, false};
+            return true;
+        };
+        for (std::size_t i = 0; i < scope.count; ++i) {
+            s::Reader independent(same_region, copy);
+            check(independent.range(base + i * stride, scope.sizes[i]),
+                  "independent full source span admitted");
+        }
+        check(queries == scope.count && copies == 0,
+              "old same-region admission queries once per span without payload");
+        queries = 0;
+        {
+            s::Reader batch(same_region, copy);
+            for (std::size_t i = 0; i < scope.count; ++i)
+                check(batch.range(base + i * stride, scope.sizes[i]),
+                      "batched same-region full source span admitted");
+            check(queries == 1 && batch.query_count() == 1 && copies == 0,
+                  "one callback-free scope shares one region observation");
+        }
+        queries = 0;
+        auto distinct_regions = [&](auto address, auto& region) {
+            ++queries;
+            region = {base + ((address - base) / stride) * stride,
+                      stride, true, true, false};
+            return true;
+        };
+        {
+            s::Reader batch(distinct_regions, copy);
+            for (std::size_t i = 0; i < scope.count; ++i)
+                check(batch.range(base + i * stride, scope.sizes[i]),
+                      "distinct source allocation is admitted independently");
+            check(queries == scope.count && copies == 0,
+                  "batch does not assume distinct allocations share pages");
+        }
+        for (std::size_t guarded_index = 0; guarded_index < scope.count; ++guarded_index) {
+            queries = 0;
+            auto guarded_region = [&](auto address, auto& region) {
+                const auto index = (address - base) / stride;
+                ++queries;
+                region = {base + index * stride, stride, true, true,
+                          index == guarded_index};
+                return true;
+            };
+            s::Reader batch(guarded_region, copy);
+            for (std::size_t i = 0; i < guarded_index; ++i)
+                check(batch.range(base + i * stride, scope.sizes[i]),
+                      "prefix before guarded source remains admissible");
+            check(!batch.range(base + guarded_index * stride, scope.sizes[guarded_index]) &&
+                  queries == guarded_index + 1 && copies == 0,
+                  "guard at every source position refuses without payload");
+            check(!batch.range(base, 1) && queries == guarded_index + 1,
+                  "failed range batch cannot retry an earlier source");
+        }
+        for (std::size_t i = 0; i < scope.count; ++i) {
+            queries = 0;
+            const auto start = base + i * stride;
+            const auto last = start + scope.sizes[i] - 1;
+            auto guarded_tail = [&](auto address, auto& region) {
+                ++queries;
+                region = address < last
+                    ? coop::p99_group_readability::Region{start, scope.sizes[i] - 1, true, true, false}
+                    : coop::p99_group_readability::Region{last, 1, true, true, true};
+                return true;
+            };
+            s::Reader batch(guarded_tail, copy);
+            check(!batch.range(start, scope.sizes[i]) && queries == 2 && copies == 0,
+                  "every complete span includes its final guarded byte");
+        }
+        queries = 0;
+        bool guarded = false;
+        auto changing_region = [&](auto, auto& region) {
+            ++queries;
+            region = {base, 0x40000, true, true, guarded};
+            return true;
+        };
+        {
+            s::Reader before_callback(changing_region, copy);
+            for (std::size_t i = 0; i < scope.count; ++i)
+                check(before_callback.range(base + i * stride, scope.sizes[i]),
+                      "pre-boundary scope sees initial accessible region");
+        }
+        guarded = true; // Simulated native callback boundary changes protection.
+        {
+            s::Reader after_callback(changing_region, copy);
+            check(!after_callback.range(base, scope.sizes[0]) && queries == 2 && copies == 0,
+                  "new post-callback scope queries again and observes guard");
+        }
+    }
+}
+
 void wiring(const std::filesystem::path& runtime_path) {
     const auto source=read_file(runtime_path);
     check(!source.empty(),"runtime source available for wiring audit");
@@ -139,9 +251,36 @@ void wiring(const std::filesystem::path& runtime_path) {
     const auto capture=body(source,"bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(");
     for(const auto edge:{"&epoch, purpose", "&player, purpose", "&chloe, purpose", "&nadine, purpose",
                         "&row20_native, purpose", "&row157_native, purpose", "&row124_entry, purpose",
-                        "&epoch_after, purpose", "p99_source_range(purpose, chloe.reference_pose",
-                        "p99_source_range(purpose, nadine.reference_pose"})
+                        "&epoch_after, purpose", "pages.range(chloe.reference_pose",
+                        "pages.range(nadine.reference_pose"})
         check(capture.find(edge)!=std::string::npos,edge);
+    const auto art_capture = body(source, "bool seh_capture_p99_chloe_transfer_art_skeleton(");
+    check(art_capture.find("P99SourceRangeBatch pages(purpose)") != std::string::npos &&
+          art_capture.find("pages.range(art, 0x48)") != std::string::npos &&
+          art_capture.find("pages.range(underlying, 0x24)") != std::string::npos &&
+          art_capture.find("pages.range(reference_pose,") != std::string::npos,
+          "three Art/raw/reference spans use one callback-free batch");
+    for (const auto signature : {"bool seh_capture_p99_chloe_transfer_entry(",
+                                "bool seh_validate_p99_chloe_transfer_row124("}) {
+        const auto function = body(source, signature);
+        const auto native_lookup = function.find("p99_source_find_entry(");
+        const auto batch = function.find("P99SourceRangeBatch pages(purpose)");
+        check(native_lookup != std::string::npos && batch != std::string::npos && native_lookup < batch,
+              "entry range batch begins only after native lookup");
+        check(function.find("pages.range(entry, 0x40)") != std::string::npos &&
+              function.find("pages.range(authored, 0x2E)") != std::string::npos &&
+              function.find("pages.range(records,") != std::string::npos,
+              "entry/authored/records all keep full range admission");
+    }
+    const auto range_adapter = source.find("class P99SourceRangeBatch {");
+    const auto adapter_end = source.find("bool p99_source_range(", range_adapter);
+    const auto adapter = range_adapter != std::string::npos && adapter_end != std::string::npos
+        ? source.substr(range_adapter, adapter_end - range_adapter) : std::string{};
+    check(range_adapter != std::string::npos && adapter_end != std::string::npos &&
+          adapter.find("purpose_ == P99SourcePurpose::kPersistentJointCache") <
+              adapter.find("readable_bytes(pointer) >= bytes") &&
+          adapter.find("reader_.range(") != std::string::npos,
+          "batch adapter preserves legacy behavior and shared owned Reader");
     check(body(source,"bool capture_p99_chloe_transfer_locked_operands(").find("target_skeleton, output, purpose")!=std::string::npos,"capture forwards purpose");
     check(body(source,"bool p99_chloe_transfer_registry_identity_exact(").find("target_skeleton, purpose")!=std::string::npos,"identity forwards purpose");
     const auto materialize=body(source,"P99ChloeTransferMaterializeResult seh_materialize_p99_chloe_embedded_epoch(");
@@ -163,6 +302,7 @@ void wiring(const std::filesystem::path& runtime_path) {
 }
 
 int main(int argc,char** argv) {
+    range_batch_scopes();
     Fixture valid;
     const auto untouched=valid.data;
     s::Owner out{};

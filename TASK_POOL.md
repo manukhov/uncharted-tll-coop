@@ -11,7 +11,32 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-18, AGZ offline): no game launch/attach/injection/input.
+Current handoff (2026-09-18, AHA offline): no game launch/attach/injection/input.
+Owned preparation now has a3906-byte exact-value gate against the pinned AGZ
+conditional input (all42record prefixes45bytes/all42refs48bytes; ignore only
+unwritten record+2D). Compare completed owned arrays EVERY preparation, before
+native math; no substitution, page/epoch cache, or unsafe profile lookup.
+Mismatch refuses as materialize-native-operand-identity. Runtime flags remain
+false/static_assert; buildtag2026-09-18aha-safe is NOT a deployed grip fix.
+STATIC: package stateC1416280FD ->SkelTablePackageObserver1406FBB40 ->1417CDDC0
+rebuilds record payloads without SkelTable lock/epoch update. Thus equal epochs
+do not prove unchanged numerical data. Current AnimMaster lookup under that
+lock is also unsafe/unpinned; value equality does NOT prove historical profile.
+Scoped batching collapses24independent range Readers into7callback-free phase
+Readers. Allowner checks/17full-table admissions/12native entry calls retained.
+Underone-region-per-span layouts this saves0..17VirtualQuery calls; theoretical
+query lower bound58->41, NOT measured latency or1ms admission.
+FullRelease clean; CTest20/20, Python65/65; operand gate73926checks0fail,
+source reader275checks0fail. NewDLL/PDB frozen reports/aha-safe-20260918-final;
+original reviewedAGW remains rollback. No mappednative rerun needed this turn:
+AGZ immutable fixture/hash is unchanged and comparator only reads owned values.
+Next extract/measure the complete owned-source preparation phases (registry,
+capture, pure checks,63native math,postcheck/seal) in a bounded isolated harness;
+current pipeline cost and live operand acceptance are still unmeasured. Keep
+1ms cap/external PID-image crash watcher and writer compile-time exclusion.
+Visible grip/AGR faultPC remain open; do not launch a game just to profile guesses.
+
+Prior AGZ handoff: no game launch/attach/injection/input.
 CONDITIONAL full native chain now passes in terminal-fault children: original
 1417CE210 builds row15771 records in74-record capacity with unchanged authored
 profileFC34096C and bind-pose bases supplied only for explicit null-profile

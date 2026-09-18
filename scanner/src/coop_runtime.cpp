@@ -37,6 +37,7 @@
 #include "nadine_p99_source_read.h"
 #include "nadine_p99_source_materialize.h"
 #include "nadine_p99_source_native_guard.h"
+#include "nadine_p99_operand_identity.h"
 #include "nadine_p99_group_entry.h"
 #include "nadine_p99_group_budget.h"
 #include "nadine_p99_group_ingress.h"
@@ -61674,6 +61675,23 @@ bool p99_source_copy(std::uintptr_t address, void* output, std::size_t count) no
 using P99SourceReader = p99_source::Reader<
     decltype(&coop::p99_group_memory::query_region), decltype(&p99_source_copy)>;
 
+// One callback-free admission phase only. Never retain this batch across a
+// native lookup/math call, logging, callback or unlock. Legacy behavior stays
+// unchanged; owned reads reuse page observations, not payloads or lifetime.
+class P99SourceRangeBatch {
+public:
+    explicit P99SourceRangeBatch(P99SourcePurpose purpose) : purpose_(purpose),
+        reader_(&coop::p99_group_memory::query_region, &p99_source_copy) {}
+    bool range(const void* pointer, std::size_t bytes) {
+        if (purpose_ == P99SourcePurpose::kPersistentJointCache)
+            return readable_bytes(pointer) >= bytes;
+        return reader_.range(reinterpret_cast<std::uintptr_t>(pointer), bytes);
+    }
+private:
+    P99SourcePurpose purpose_;
+    P99SourceReader reader_;
+};
+
 bool p99_source_range(P99SourcePurpose purpose, const void* pointer, std::size_t bytes) {
     if (purpose == P99SourcePurpose::kPersistentJointCache)
         return readable_bytes(pointer) >= bytes;
@@ -61817,6 +61835,7 @@ enum class P99ChloeTransferMaterializeResult : std::uint8_t {
     kOwnerBefore,
     kPostPerformOwner,
     kLockedOperands,
+    kOperandIdentity,
     kEmbeddedPlayerGroup0,
     kEmbeddedChloeGroup0,
     kEvaluateGroup0,
@@ -61838,6 +61857,8 @@ enum class P99ChloeTransferMaterializeResult : std::uint8_t {
         return "materialize-post-owner";
     case P99ChloeTransferMaterializeResult::kLockedOperands:
         return "materialize-locked-operands";
+    case P99ChloeTransferMaterializeResult::kOperandIdentity:
+        return "materialize-native-operand-identity";
     case P99ChloeTransferMaterializeResult::kEmbeddedPlayerGroup0:
         return "materialize-player-g0";
     case P99ChloeTransferMaterializeResult::kEmbeddedChloeGroup0:
@@ -62009,8 +62030,9 @@ bool seh_capture_p99_chloe_transfer_art_skeleton(
     }
     *output = {};
     __try {
+        P99SourceRangeBatch pages(purpose);
         auto* const art = static_cast<std::byte*>(art_skeleton);
-        if (art == nullptr || !p99_source_range(purpose, art, 0x48) ||
+        if (art == nullptr || !pages.range(art, 0x48) ||
             *reinterpret_cast<const std::uint32_t*>(art + 0x24) !=
                 expected_database_id ||
             *reinterpret_cast<const std::uint32_t*>(art + 0x28) !=
@@ -62019,7 +62041,7 @@ bool seh_capture_p99_chloe_transfer_art_skeleton(
         }
         auto* const underlying =
             *reinterpret_cast<std::byte* const*>(art + 0x40);
-        if (underlying == nullptr || !p99_source_range(purpose, underlying, 0x24) ||
+        if (underlying == nullptr || !pages.range(underlying, 0x24) ||
             *reinterpret_cast<const std::uint32_t*>(underlying + 0x04) !=
                 expected_skeleton_id ||
             *reinterpret_cast<const std::uint16_t*>(underlying + 0x10) !=
@@ -62035,7 +62057,7 @@ bool seh_capture_p99_chloe_transfer_art_skeleton(
             !p99_source::add(reinterpret_cast<std::uintptr_t>(underlying), reference_offset, reference_address))
             return false;
         auto* const reference_pose = reinterpret_cast<std::byte*>(reference_address);
-        if (!p99_source_range(purpose, reference_pose,
+        if (!pages.range(reference_pose,
                 static_cast<std::size_t>(expected_parameter_count) *
                     kP99ChloeTransferRowBytes)) {
             return false;
@@ -62152,9 +62174,13 @@ bool seh_capture_p99_chloe_transfer_entry(
         }
         auto* const entry = table + static_cast<std::size_t>(index) * 0x40;
         if (p99_source_find_entry(purpose, expected.source_database_id,
-                       expected.target_database_id) != entry ||
-            (purpose == P99SourcePurpose::kOwnedGroupValues &&
-             !p99_source_range(purpose, entry, 0x40))) {
+                       expected.target_database_id) != entry) {
+            return false;
+        }
+        // The native lookup above ends the previous admission phase.
+        P99SourceRangeBatch pages(purpose);
+        if (purpose == P99SourcePurpose::kOwnedGroupValues &&
+            !pages.range(entry, 0x40)) {
             return false;
         }
         auto* const authored =
@@ -62174,9 +62200,9 @@ bool seh_capture_p99_chloe_transfer_entry(
         void* const leg_ik =
             *reinterpret_cast<void* const*>(entry + 0x38);
         if (authored == nullptr || records == nullptr ||
-            !p99_source_range(purpose, authored, 0x2E) ||
+            !pages.range(authored, 0x2E) ||
             runtime_count != expected.runtime_record_count ||
-            !p99_source_range(purpose, records,
+            !pages.range(records,
                 static_cast<std::size_t>(runtime_count) *
                     p99_order::kRuntimeRetargetRecordStride) ||
             *reinterpret_cast<const std::uint32_t*>(entry + 0x08) !=
@@ -62216,7 +62242,7 @@ bool seh_capture_p99_chloe_transfer_entry(
         // their in-memory contiguity an admission condition would reject a
         // valid relocated resource.
         if (authored_map == nullptr ||
-            !p99_source_range(purpose, authored_map, authored_map_bytes)) {
+            !pages.range(authored_map, authored_map_bytes)) {
             return false;
         }
         for (const auto& transfer : p99_order::kExpectedTransfers) {
@@ -62335,11 +62361,15 @@ bool seh_validate_p99_chloe_transfer_row124(void** entry_out,
         auto* const records =
             *reinterpret_cast<std::byte* const*>(entry + 0x18);
         if (p99_source_find_entry(purpose, p99_order::kPlayerDatabaseId,
-                       p99_order::kNadineDatabaseId) != entry ||
-            (purpose == P99SourcePurpose::kOwnedGroupValues &&
-             !p99_source_range(purpose, entry, 0x40)) ||
-            authored == nullptr || !p99_source_range(purpose, authored, 0x2E) ||
-            records == nullptr || !p99_source_range(purpose, records, 71 * 0x2E) ||
+                       p99_order::kNadineDatabaseId) != entry) {
+            return false;
+        }
+        // Entry/authored/records checks share only this post-lookup phase.
+        P99SourceRangeBatch pages(purpose);
+        if ((purpose == P99SourcePurpose::kOwnedGroupValues &&
+             !pages.range(entry, 0x40)) ||
+            authored == nullptr || !pages.range(authored, 0x2E) ||
+            records == nullptr || !pages.range(records, 71 * 0x2E) ||
             *reinterpret_cast<const std::uint32_t*>(entry + 0x08) !=
                 p99_order::kPlayerDatabaseId ||
             *reinterpret_cast<const std::uint32_t*>(entry + 0x0C) !=
@@ -62469,18 +62499,20 @@ bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
         // Previous entry validation invoked native lookups. Re-admit every
         // complete borrowed source allocation before the callback-free copy
         // phase; do not reuse their earlier page certificates across calls.
-        if (purpose == P99SourcePurpose::kOwnedGroupValues &&
-            (!p99_source_range(purpose, row20_native,
+        if (purpose == P99SourcePurpose::kOwnedGroupValues) {
+            P99SourceRangeBatch pages(purpose);
+            if (!pages.range(row20_native,
                 static_cast<std::size_t>(captured.row20.metadata.runtime_record_count) *
                     p99_order::kRuntimeRetargetRecordStride) ||
-             !p99_source_range(purpose, row157_native,
+                !pages.range(row157_native,
                 static_cast<std::size_t>(captured.row157.metadata.runtime_record_count) *
                     p99_order::kRuntimeRetargetRecordStride) ||
-             !p99_source_range(purpose, chloe.reference_pose,
+                !pages.range(chloe.reference_pose,
                 static_cast<std::size_t>(chloe.parameter_count) * kP99ChloeTransferRowBytes) ||
-             !p99_source_range(purpose, nadine.reference_pose,
-                static_cast<std::size_t>(nadine.parameter_count) * kP99ChloeTransferRowBytes)))
-            return false;
+                !pages.range(nadine.reference_pose,
+                static_cast<std::size_t>(nadine.parameter_count) * kP99ChloeTransferRowBytes))
+                return false;
+        }
 
         for (std::size_t index = 0;
              index < p99_order::kExpectedTransfers.size(); ++index) {
@@ -62943,6 +62975,15 @@ P99ChloeTransferMaterializeResult seh_materialize_p99_chloe_embedded_epoch(
         if (!capture_p99_chloe_transfer_locked_operands(
                 prepared.target_skeleton, &operands, purpose)) {
             return P99ChloeTransferMaterializeResult::kLockedOperands;
+        }
+
+        // Compare ONLY the completed owned copies on EVERY preparation. The
+        // SkelTable lock/epochs do not exclude in-place package-callback builds.
+        // This gate proves selected operand equivalence to the AGZ conditional
+        // exam, not live profile absence. Never replace live inputs with it.
+        if (purpose == P99SourcePurpose::kOwnedGroupValues &&
+            !coop::p99_operand_identity::compare(operands).admitted()) {
+            return P99ChloeTransferMaterializeResult::kOperandIdentity;
         }
 
         std::array<P99ChloeTransferGroupResult, 2> groups{};
@@ -79993,7 +80034,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-18agw-safe "
+        "TLL co-op runtime init 2026-09-18aha-safe "
         "(all P99 group-shadow hooks disabled after AGR crash; legacy persistent grip writer disabled; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(

@@ -33402,3 +33402,125 @@ raise the budget or enable either writer based on this isolated success.
 AGR crash PC remains unknown; any future game exam still needs the external
 PID/image-bound fault watcher and a distinct written live-behavior prediction.
 No game test is earned by this turn; no injected/runtime behavior is CONFIRMED.
+
+## 2026-09-18 AHA: scoped preparation batching and exact owned operand identity
+
+No game launch/attach/injection/input or mapped retail math execution. Runtime
+source changed, but both grip writers remain compile-time disabled with the
+unconditional static_assert and cumulative1ms cap. New buildtag2026-09-18aha-safe
+identifies an undeployed safety/optimization build, not a visible grip fix.
+
+### STATIC: registry identity is weaker than numerical operand identity
+
+Competing admissions: (A) stable SkelTable/AnimMaster epochs imply stable record
+values; (B) call exact profile lookup under the existing SkelTable lock;
+(C) compare the completed owned operands against the reviewed numerical case.
+A/B are REJECTED as sufficient proofs; implementC while retaining all existing
+lock/SEH/normal-job/ownership checks. This is not a general resource lifetime fix.
+
+Evidence types: callgraph, concrete stores/lock behavior, RTTI/vtable identity.
+PackageMgr_UpdateLoginPackage stateC invokes observer slot0 at1416280FD after
+stateB resource login. RTTI SkelTablePackageObserver type14374A040,
+COL142C72238/vtable1428D5BE8 slot0 resolves1406FBB40, node14303DF60 initialized
+at140155600..634. Callback call1406FBC8B is the sole direct caller of
+BuildRetargetEntries1417CDDC0, which calls1417CE210 at1417CE198. This callback
+and builder path do not acquire SkelTable lock1466EC4B0. Do not conflate this
+package observer with skeleton-resource observer1406FBA30.
+
+Builder entry+18 nonnull branchCE503 reuses the existing allocation; allocation
+and assignment atCE635 occur only when null. Explicit record writes startCF490.
+No record-free call or registry-epoch write in the builder. Therefore records
+may be numerically rewritten without a changed registry epoch; concurrency of
+this path with the admitted job is not proven absent. Skeleton logout DOES hold
+the lock and clears affected entry identities/pointers atCD8A9..CD8B9, then frees
+the registry node and advances epoch. Keep that protection; it is not a universal
+package lifetime/producer exclusion proof.
+
+Exact profile lookup1417C8BA0 is call-free but borrows separate AnimMaster group,
+hash-slot and Art pointers. Login1417C9070/Logout1417C93F0 do not use SkelTable
+lock. Logout swap/count writes1417C9474/7B precede epoch increment1417C94A0;
+equal before/after epochs do not pin those resources. ABI is databaseECX,
+unused middleRDX, clipR8D (not an ordinary two-argument C prototype). Even a
+safely observed current lookup result would not establish the branch that
+previously built a cached retarget entry. No new lookup call was added.
+
+### Implemented exact-value admission (not a profile-absence claim)
+
+scripts/generate_p99_native_operand_fixture.py requires the exact AGZ3948-byte
+input SHA1e54a246eddfa42597ed8fb1b912c8ee19a2c550b1fa6c2ea73d1507aac9eb7b;
+it does not run native code or auto-refresh a baseline. The generated tracked
+scanner/src/nadine_p99_native_operand_fixture.h is independently decoded to the
+same size/hash. --check verifies complete header reproduction.
+
+scanner/src/nadine_p99_operand_identity.h compares ONLY already-owned arrays:
+42records x45bytes (0..2C inclusive),42references x48bytes =3906 bytes. Ignore
+only native-unwritten record+2D; conservatively compare ALL reference lanes,
+including unused W. No value replacement, native call, source address retention
+or cached result. In seh_materialize_p99_chloe_embedded_epoch, owned-purpose
+capture finishes/unlocks, then this gate runs before source-group/native math.
+Any difference refuses with materialize-native-operand-identity. The rejected
+persistent writer is unchanged. Identical selected values permit exactly the
+AGZ-tested math even if their producer/old profile differs; this does NOT prove
+live-null profile, all71row157 values, or successful live admission.
+
+Tests:31584individual bit mutations covering every byte of the3948 input; all
+3906compared bytes refuse on mutation, record padding remains ignored. Additional
+tests enumerate all256values of each42padding bytes. Gate tests73926checks0fail
+include invalidflags, source immutability and fresh last-row mismatch after a
+successful comparison. Python mutates all3948generator input bytes, including
+padding, and refuses changed size/hash. The fixture itself is fully pinned even
+though the live value comparator ignores padding. No live snapshot was captured.
+
+### Implemented callback-free range batching; cost claim remains bounded
+
+Read-only source audit of the successful preparation found5complete owner and
+5retained-player snapshots,12native skeleton resolutions,12native retarget
+lookups,17full retarget-table range admissions,42DoJoint+21Blend. Before AHA:
+47independent p99_source_range Readers +10owner/retained Readers +1normal-job
+Batch, so at least58VirtualQuery calls. These are page checks, not full payload
+copies. Historical AGR18.1726ms was the WHOLE old source stage, not attribution
+to any current sub-operation. Current flags are false, so live cost is unknown.
+
+P99SourceRangeBatch now reuses only page observations inside one uninterrupted
+callback-free phase, never payloads/lifetime authority:
+
+- Three art captures:3spans each ->oneReader each.
+- Row20/157 entry capture:4post-native-lookup spans ->oneReader each.
+- Row124:3post-native-lookup spans ->oneReader.
+- Four post-lookup record/reference source spans ->oneReader in explicit block
+  ending before copy loop and all subsequent native calls.
+
+This replaces24independent Readers with7phase Readers. If each requested span
+lies in one queried region, savings range0..17queries; theoretical successful
+path lower bound becomes41, NOT measured cost. Fragmented-region savings are
+data-dependent;17 is not a universal upper bound. Legacy readable_bytes behavior,
+all payload rereads, owner checks, native calls, and17full-table admissions are
+unchanged. A fresh reader is still required across every native lookup/math,
+callback/logging/unlock. Concurrent page changes remain handled by the existing
+SEH/job contract; page accessibility is not a lease.
+
+Source-reader tests275checks0fail cover3/4/3/4phase shapes, same/distinct regions,
+guard rejection at every span, whole-span/last-byte checking, poisoned failures,
+fresh post-callback queries and lexical wiring tripwires. Lexical tests do not
+replace the reviewed control-flow proof. Other bounded pure work remains:
+3570authored-map visits,3444selected-record searches, plus final policy's3444
+mapping visits and6763duplicate comparisons. No claim these dominate latency.
+
+Validation: fullRelease build without warnings, CTest20/20 and Python65/65.
+RuntimeDLL574CEC9CFE4B3D3DF06CB4A17FD3134C0992BE66A180DE52D5CF9A968078AE04;
+PDBFE414DFF198204EDEE464169A62C4416E1C2D0DD9696BAB7F2801EFA5B7E1C7B.
+Freeze reports/aha-safe-20260918-final is not injected; original reviewedAGW
+remains rollback. Attachments/back placement/rifle timing are unchanged.
+Single ida/tll.i64 saved1878functions/73data/1type; report
+reports/ida_apply_aha_status.txt confirms save_database returned True. New
+SkelTablePackageObserver name and its builder-call/vtable xrefs read back after
+MCP restart. No parallel IDB was created.
+
+Next bounded step: extract/measure the COMPLETE owned-source preparation path
+in an isolated harness with phase counters (registry/capture/purechecks/native
+math/postcheck/seal), not merely benchmark one comparator or mock calls and
+declare the1ms cap met. Retain all freshness boundaries; use owned registries
+only after static admission of the native read-only lookups. Live operand
+acceptance, complete preparation cost, AGR faultPC and visible grip remain open.
+No new game exam earned; any future exam must keep external PID/image-bound
+crash capture and a written behavior prediction distinct from cost measurements.

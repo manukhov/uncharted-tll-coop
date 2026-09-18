@@ -148,7 +148,11 @@ FUNCTIONS = {
         "AGY: C8BDF/E3 reads the ORIGINAL authored LOD+0x20/count+0x1C "
         "table, compares u32 entry+0 atC8C19/C39, dereferences slot+8. "
         "Not the compact table/resource-name hash/group-row name hash. "
-        "ARTGROUP_DATA case16 copies clip keys unchanged at141CC2BAD.",
+        "ARTGROUP_DATA case16 copies clip keys unchanged at141CC2BAD. "
+        "STATIC AHA: ABI uses database ECX and clip R8D; middle RDX unused. "
+        "Call-free does not mean pinned: AnimMaster writers do not acquire "
+        "SkelTable lock1466EC4B0. Do not add this borrowed lookup under "
+        "only that lock or infer record-build provenance from current null.",
     ),
     0x1418AB8F0: (
         "AnimUtil_AnimateObject",
@@ -4190,6 +4194,16 @@ FUNCTIONS = {
         "can reach unresolved __CxxFrameHandler3; .pdata registration alone "
         "does not establish exception recovery in an isolated mapper.",
     ),
+    0x1406FBB40: (
+        "SkelTablePackageObserver_BuildRetargetEntriesForPackage",
+        "STATIC AHA: SkelTablePackageObserver vtable1428D5BE8 slot0, "
+        "RTTI type14374A040/COL142C72238, node14303DF60. Package login "
+        "state0xC dispatch1416280FD invokes this package observer after "
+        "state0xB resource login. Call1406FBC8B reaches BuildRetargetEntries "
+        "1417CDDC0 then1417CE198->BuildRetargetEntry. No SkelTable lock "
+        "1466EC4B0 acquisition in this callback/build path. Distinct from "
+        "the skeleton-resource observer1406FBA30; do not conflate them.",
+    ),
     0x1417CDDC0: (
         "SkelTable_BuildRetargetEntries",
         "Exact SkelTable::BuildRetargetEntries source assertion at skel-table.cpp:482. "
@@ -4205,7 +4219,11 @@ FUNCTIONS = {
         "target local references and inverse world matrices before the "
         "0x1417CE198 builder call. Disk profile FC34096C in elena-base has "
         "Art+0x40=46622D19, not Nadine ED25C708; rebinding/residency remains "
-        "unproven, so neither profile-present nor null may be assumed live.",
+        "unproven, so neither profile-present nor null may be assumed live. "
+        "STATIC AHA: sole direct caller1406FBC8B is package observer "
+        "1406FBB40 dispatched at package-login stateC, not protected by "
+        "SkelTable registry lock1466EC4B0. Stable registry epochs alone "
+        "do not prove unchanged retarget record values or historical basis.",
     ),
     0x1417CE210: (
         "SkelTable_BuildRetargetEntry",
@@ -4249,7 +4267,12 @@ FUNCTIONS = {
         "Nadine targets14/2; complete resources/root prefixes are required. "
         "AGZ ISOLATED_NATIVE: conditional authored-basis row157 builds71 "
         "records and shared full21-row materializer passes42DoJoint/21Blend "
-        "with identical output under MXCSR1F80/9FC0. Not live-null or grip proof.",
+        "with identical output under MXCSR1F80/9FC0. Not live-null or grip proof. "
+        "STATIC AHA: existing nonnull entry+18 reused atCE503; only null "
+        "entry allocates/assigns atCE635. Explicit payload writes startCF490; "
+        "no record free or registry epoch write in builder. Package callback "
+        "path does not acquire SkelTable registry lock. Compare completed "
+        "owned operands on each preparation rather than cache epoch alone.",
     ),
     0x141936490: (
         "RetargetPlugin_AddJointRetargetCommands",
@@ -13457,7 +13480,11 @@ DATA_NAMES = {
         "g_SkelTableRegistryLock",
         "64-bit registry lock with free value 0 and owned value -1. Login/Logout "
         "spin using LOCK CMPXCHG and release with atomic XCHG; runtime probes use "
-        "one nonblocking InterlockedCompareExchange64 attempt and never spin.",
+        "one nonblocking InterlockedCompareExchange64 attempt and never spin. "
+        "STATIC AHA: protects skeleton logout invalidation, NOT separate "
+        "AnimMaster group lookup lifetime or package-observer stateC retarget "
+        "rebuild1406FBB40->1417CDDC0. That path can rewrite existing record "
+        "payloads without taking this lock or advancing registry epochs.",
     ),
     0x14386FD00: (
         "g_AuthoredTransformPointerTable",
