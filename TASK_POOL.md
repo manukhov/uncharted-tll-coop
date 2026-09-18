@@ -11,7 +11,30 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-18, AGW-safe): no new game launch/injection/input.
+Current handoff (2026-09-18, AGX offline): no game launch/attach/injection/input.
+Row20 Player->Chloe now has actual native numerical construction, not just tails:
+scripts/p99_native_retarget_audit.py --numeric-row20 runs a terminal-fault child
+with complete owned resources, preallocated96-record capacity, real UCRT sqrtf,
+zero0xE0 manager and registered full .pdata. Native1417CE210 returns93 records;
+ALL93 pass finite-half/nonzero-quaternion checks. Selected21 pass native
+DoJoint+Blend (21+21 calls per FP mode), guarded inner buffers/read-only source
+comparisons, exact masks and bitwise-equal output in MXCSR1F80/9FC0. This is
+ONLY the first Player->Chloe stage, NOT the full Nadine production materializer
+or a visual grip fix. Sentinel left[48:96] is writable, not untouched padding.
+Row157 FC34096C remains unresolved: actor77 filename-defined inventory covers
+226 entries/210PAKs/957864654 bytes and finds one occurrence, Elena database
+46622D19, not ED25C708. Pointer-fixups do not overlap numeric descriptor+40.
+GameLoading141CC4940 -> PackageMgr141625910 installs callback141CC0BF0 into
+manager+38; login141627F60 case0B ->1419C4D50 ->callback->LoginArtGroup is
+closed without database rewrite. Other archives/observers and numeric-field
+producers BEFORE state0B are not excluded; null profile lookup is NOT proved.
+Next trace that pre-login resource producer, then choose justified row157
+operands and test all42 records/full21 native rows through shared production
+materializer. Keep both grip writers disabled, static_assert,1ms budget and
+external crash-capture plan. AGR crash PC/performance/visible grip remain open.
+See final AGX COOP_STATUS entry for exact hashes, guard tests and reproduction.
+
+Prior AGW-safe handoff: no new game launch/injection/input.
 Full native21-row comparison is NOT complete. New static-only
 scripts/p99_native_source_audit.py independently reconstructs21 semantic joins,
 42 nine-byte record tails and42 exact local reference rows from pinned assets;

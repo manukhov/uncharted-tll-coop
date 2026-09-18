@@ -32958,3 +32958,151 @@ an isolated helper. Current artifacts deliberately cannot masquerade as those
 operands. Same-fiber old Async scope is now separated by exact invocation;
 do not reopen a universal owner-callback no-yield search. Preparation cost
 is still unmeasured,1ms budget unchanged, actual AGR crash PC still unknown.
+
+### 2026-09-18 STATIC / isolated-native (`agx` row20 numerical construction)
+
+User said "Продолжай". No game launch/attachment/injection/input. Runtime
+source and its AGW-safe tag are unchanged; both grip writers remain false,
+the unconditional static_assert stays, and AGC placement/rifle timing remain
+parked. This unit executes original numerical functions only in an owned
+terminal-fault Python child. It is NOT live Nadine confirmation, full native
+materializer equivalence, crash attribution or a visible grip fix.
+
+**Bounded hypothesis and competing constructions.** For authored profile-zero
+row20, BuildRetargetEntry1417CE210 consumes the shipped Player/Chloe raw arrays
+and must produce93 resolved records from96 authored rows. Local-reference
+copies remain rejected (AGW); profile sampling does not apply to profile0;
+allocating the live engine entry or running global startup is unnecessary for
+this owned preallocated branch. Evidence types: caller1417CDDC0 and downstream
+DoJoint141AE2100 graph, exact builder loads/stores/branches, and independent
+build-pinned authored-name/parameter joins. Test contract:93 matching metadata
+records, three untouched capacity records,21 successful native retarget+blend
+calls, exact masks, unchanged source inputs and intact guards. No live-profile
+claim or scalar callback is used to satisfy that contract.
+
+Static closure for the original builder:
+
+- Actual ABI is seven pointers; the last two parameters in its assertion
+  signature are not read. Nonnull entry+18 skips allocatorCE503..CE653;
+  entry+20 is NOT a write bound. Reserve authored_count*46, not resolved_count
+  inferred from a shortened fixture. Both row20 IKflags+2C/+2D are zero.
+- Root parent=-1 is not a reason to replace the prefix with identity. Both
+  parent matrices at matrixBase-48 are read/inverted before CF7C5 branches to
+  CF937 and discards both results. Preserve the full raw bytes. Other370
+  matrix checks have determinant magnitudes .99999949..1.00000041; source
+  translation retains the global-indexed CF58B behavior, not compressed index.
+- InvertRigid14023ABB0 is call-free. Quaternion_FromOrthonormalBasis142177E50
+  and largest-axis helpers1421787A0/88B0/89B0 need real sqrtf via1424ED268,
+  IAT1425D6F60. The mapper resolves only this import to retained System32 UCRT.
+- BoneScale atCFF3E uses source-length epsilon about1e-5; earlier squared
+  length masking uses FLT_MIN. Zero source length produces scale0. The pinned
+  row20 maximum conservative length ratio is1.10384004; all half outputs are
+  subsequently checked rather than relying only on this scalar bound.
+- GenerateSegmentMapping1417D0890 dereferences manager1437E98C8+D8. An owned
+  zero0xE0 manager admits its no-allocator return; a null manager is unsafe.
+  Both additional dependency writes are narrowly allowlisted. Inherited
+  MappedImage initialization also copies32bytes142BF0700->146C71CE0 and
+  142BF0740->146C71D00. No code bytes, entrypoint or startup callbacks patched.
+- Full .pdata RVA6DB3000/size16BEA0 is registered and removed before image
+  release. Builder/tail use __GSHandlerCheck_EH1424EBE80 and can reach unresolved
+  __CxxFrameHandler3; this is NOT exception recovery. Unexpected faults end
+  the child. CPU/OS AVX/F16C/AVX2/OSXSAVE/XMM/YMM admission is mandatory.
+
+New script scripts/p99_native_retarget_audit.py defaults to static preflight.
+Explicit --numeric-row20 starts the bounded child with read-only owned inputs,
+page guards and output canaries. New scanner test DLL tll_p99_native_math_bridge
+is not linked into or injected as the runtime. It uses production record guard
+and semantic metadata, but its first-stage loop/row validator are audit-local;
+it must NOT be described as the complete shared production materializer.
+ALL93 native records pass finite18-half/nonzero-two-quaternion checks;
+modes0:17,1:66,2:6,3:4 are valid builder output. Only the selected21 (20mode1,
+1mode3) enter downstream math. Native record/source/reference copies and the
+right blend blob are compared after calls; aligned internal buffers have
+their own canaries, not just outer Python guards. Output is published only
+after the whole stage succeeds.
+
+Review rejected an overstrict fixture check: left[48:96] is NOT untouched
+padding. Dispatcher142188D1D..D24 pads SIMD indices to{0,48,48,48}; mode2 helper
+142191AE0 writes full rows at left+0 and left+48. The latter is a discarded
+sentinel and need not be finite. Guards cover all112bytes; right112 is
+read-only; left masks+96/+104 remain{MSB,0}. Initial reviewed child refused
+row0 after1retarget/1blend because of that erroneous padding expectation,
+not a crash or detected engine overrun. Corrected against the static write
+domain, then rerun successfully; real buffers were not expanded to hide it.
+
+ISOLATED_NATIVE results (not game CONFIRMED): two reviewed child runs, each
+with MXCSR1F80 and9FC0, return identical93 records and21 base/composite pairs.
+Sticky flags differ after builder (1FB3 versus9FF1); byte equality is not an
+assertion that no FP exceptions were raised. Exception masks remain enabled.
+Three unused records, readonly inputs and outer/inner canaries are unchanged.
+Build-pinned executable SHA256 remains
+`ed1371a4b47961abc160e92aa0b9bdfd787638fa1a39ba2403b423ab45c210be`.
+
+- 93x46=4278 record bytes SHA256
+  `796290ec7f74c487bfd108022a5d9e50dfba4cc808bb8568d1f4f56ff6811934`.
+- 21x96=2016 first-stage output bytes SHA256
+  `1fc8a73302352ecfcc3605df1ca040fd412374ec771f864df435a81ba8050e86`.
+- Reviewed helper DLL SHA256
+  `3411227fefb3750b7e2f219c75a801d212001c92ee961a909f0a1ea0c0225e54`.
+- Host UCRT SHA256
+  `185b56b4f32ee97a308471bf0e4a7615f861958b2d1231386d7ef07193db9808`.
+
+Artifacts are reports/p99-row20-native-agx-final.{json,records.bin,outputs.bin}.
+Expected numerical hashes are now regression baselines; a mismatch requires
+review, not automatic acceptance. Parent timeout45s terminates its own child;
+no automatic retry or game process handle exists in this path.
+
+**Row157 profile producer narrowed, still HYPOTHESIS at live lookup.** Optional
+scripts/p99_native_source_audit.py --profile-inventory scans the exact actor77
+filename closure anim-* or *-base.pak:226entries,210PAKs+16txt manifests,
+957864654 uncompressed bytes. Sole FC34096C occurrence is Elena's already
+pinned registration536F8, descriptor51DE0 database46622D19, not targetED25C708.
+No 8-byte pointer-fixup range overlaps descriptor+40: pointer rebasing alone
+cannot change this numeric database. Manifest SHA256:
+`984fd97ac8de7e63cfe0765b9d85e3da8e8a14fc21fd6368e3e6b7d18c04916d`.
+This is NOT a complete game-archive scan or proof of missing native profile.
+
+Static registration graph now closes both sides of the indirect call:
+GameLoading_Initialize141CC4940 writes callback141CC0BF0 into config+38 at
+141CC4E50..57; PackageMgr_Init141625910 copies it to manager+38 at1416259E7.
+PackageMgr_UpdateLoginPackage141627F60 case0B calls1419C4D50; that dispatcher
+forms the resource from loaded page+authored offset at1419C4E72..4F07, then
+calls manager+38 at1419C4F1E. GameLoading_PackageLoginResItem case42 calls
+LoginArtGroup at141CC2934 using resource+40; no local numeric database rewrite.
+Default RTTI AnimTableObserver vtable1428D5CA8/COL142C722D8/type14374A140 has
+slot0 OnLoginArt1406D7FD0, slot1 Before1406D8030 and slot2 After1406D8060;
+debug validation1406D85E0. Slot0 writes Art+48, not database+40; registration
+already gates exact database at1417C91EB. Additional observers, other archives
+and numeric-field producers BEFORE state0B remain open. Row157 bind-pose
+preflight71records/282matrices is explicitly conditional, never executed here.
+
+Validation: full Release build without warnings, CTest19/19, Python30/30;
+bridge admission suite10603checks0fail uses deliberately invalid image1 and
+mutations across ALL21 rows to prove refusal before any native call. These
+guard tests use synthetic records, not a claim about live source preparation.
+Profile-inventory generation/check and original authored hashes pass unchanged.
+Sole IDB saved1861functions/73data/1type; reports/ida_apply_agx_status.txt says
+save_database returned True. MCP restarted for label readback.
+
+Readback resolves GameLoading_PackageLoginResItem, doing-login dispatcher and
+largest-X helper. Caller xrefs141628173 and142178004 resolve to the renamed
+PackageMgr_UpdateLoginPackage and Quaternion_FromOrthonormalBasis; observer
+slot0 data xref resolves at1428D5CA8.
+
+No runtime source change was needed; the full build relinked the AGW-safe DLL
+and PDB. Do not confuse their new link hashes with frozen AGW-reviewed artifacts
+or deploy this as a new grip fix. The original reviewed AGW freeze remains the
+known rollback package. All new audit artifacts are local/ignored.
+The relinked DLL/PDB and numerical helper/report/binaries are frozen separately
+in reports/agx-offline-20260918-final. Relinked runtime SHA256
+`C8CF84C64E96CDC2539619C7E4B5E3FFA8A57DC9FCAA31A4AF64BD56E328124B`, PDB
+`D78EB806D1E1F10D054CA0D55D4AF806FAE45AEEDAF329DB9D5645AA7E6BF89C`;
+sizes819712/5984256. These were not injected.
+
+**Next bounded step:** trace resource numeric-field producers before package
+state0B (141627F60 ->1419C4D50 boundary), and other plausible profile registration
+sources; keep both row157 branches open until evidence distinguishes them.
+Then build justified row157 operands and run all42 records/21 final Nadine rows
+and masks through the actual shared production materializer in isolation.
+No game exam earned;1ms budget, AGR exception-PC uncertainty and visible grip
+remain unchanged. User-owned untracked tmp/ is preserved.

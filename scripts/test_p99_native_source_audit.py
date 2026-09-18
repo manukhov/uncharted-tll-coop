@@ -119,5 +119,67 @@ class BytesTests(unittest.TestCase):
         self.assertEqual(audit.source.PLAYER_TO_CHLOE.profile, 0)
 
 
+class InventoryTests(unittest.TestCase):
+    class Archive:
+        def __init__(self, blobs):
+            self.blobs = blobs
+            self.names = list(blobs)
+            self.extracted = []
+
+        def extract(self, name):
+            self.extracted.append(name)
+            return self.blobs[name]
+
+        def entry_size(self, name):
+            return len(self.blobs[name])
+
+    def test_filename_closure_does_not_claim_registration_or_live_absence(self):
+        needle = struct.pack("<I", audit.PROFILE_ID)
+        archive = self.Archive({"anim-a.pak": b"x" + needle,
+                                "other-base.pak": b"none",
+                                "other.pak": needle,
+                                "ignore.txt": needle,
+                                "anim-manifest.txt": b"txt",
+                                "UPPER-base.PAK": needle})
+        inventory = audit.profile_inventory(archive)
+        self.assertEqual(archive.extracted, ["anim-a.pak", "anim-manifest.txt", "other-base.pak"])
+        self.assertEqual(inventory["scope"]["selected_entry_count"], 3)
+        self.assertEqual(inventory["scope"]["selected_pak_count"], 2)
+        self.assertEqual(inventory["scope"]["selected_uncompressed_bytes"], 12)
+        self.assertTrue(inventory["scope"]["all_selected_entries_scanned"])
+        self.assertFalse(inventory["scope"]["all_archive_entries_scanned"])
+        self.assertFalse(inventory["scope"]["all_game_archives_scanned"])
+        self.assertFalse(inventory["scope"]["all_registration_producers_proven"])
+        self.assertEqual(inventory["byte_occurrence_count"], 1)
+        self.assertEqual(inventory["entries"][0]["profile_id_byte_offsets"], [1])
+        self.assertEqual(inventory["known_registration_count"], 0)
+        self.assertEqual(inventory["native_profile_lookup_result"], "unresolved")
+        self.assertFalse(inventory["native_no_profile_branch_proven"])
+        self.assertFalse(inventory["live_residency_proven"])
+        self.assertEqual(inventory["tll_function_calls"], 0)
+
+    def test_manifest_is_sorted_and_byte_pinned(self):
+        left = audit.profile_inventory(self.Archive({"z-base.pak": b"z", "anim-a.pak": b"a"}))
+        right = audit.profile_inventory(self.Archive({"anim-a.pak": b"a", "z-base.pak": b"z"}))
+        changed = audit.profile_inventory(self.Archive({"anim-a.pak": b"b", "z-base.pak": b"z"}))
+        self.assertEqual(left["entries_manifest_sha256"], right["entries_manifest_sha256"])
+        self.assertNotEqual(left["entries_manifest_sha256"], changed["entries_manifest_sha256"])
+        self.assertTrue(left["scope"]["all_archive_entries_scanned"])
+        self.assertFalse(left["scope"]["all_game_archives_scanned"])
+
+    def test_known_registration_requires_full_pinned_graph(self):
+        archive = self.Archive({audit.PROFILE_ENTRY: struct.pack("<I", audit.PROFILE_ID)})
+        with self.assertRaises(ValueError):
+            audit.profile_inventory(archive)
+
+    def test_bad_extent_or_duplicate_name_is_rejected(self):
+        archive = self.Archive({"anim-a.pak": b"a"})
+        with patch.object(archive, "entry_size", return_value=2), self.assertRaises(ValueError):
+            audit.profile_inventory(archive)
+        archive.names.append("anim-a.pak")
+        with self.assertRaises(ValueError):
+            audit.profile_inventory(archive)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

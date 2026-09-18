@@ -15,6 +15,9 @@ is little-endian <HHHHB for runtime offsets +24/+26/+28/+2A/+2C; unowned padding
 
 All shipped inputs are build-pinned. Asset decompression uses the existing Oodle
 reader; no MappedImage, tll launch, process attach, or game function is invoked.
+An optional .profile-inventory.json inventories every anim-* / *-base.pak entry
+in the specified actor archive. This filename-defined closure is NOT a claim
+that all game archives or all possible clip-registration producers were scanned.
 """
 
 from __future__ import annotations
@@ -205,6 +208,81 @@ def profile_provenance(data: bytes) -> dict:
     }
 
 
+def profile_inventory(actor) -> dict:
+    """Bounded disk inventory, not an assertion about the live exact lookup.
+
+    A four-byte match is reported as a byte occurrence only. The independently
+    build-pinned Elena graph is the sole registration we know how to validate.
+    ArtItemAnim+40 rebinding and registration from other archives remain outside
+    this filename-selected inventory, so neither a miss nor a database mismatch
+    may be upgraded to a proof that row157 uses the no-profile builder branch.
+    """
+    # anim-* also includes sixteen small .txt dependency manifests in actor77;
+    # retain those so the stated filename closure is exact, not silently PAK-only.
+    names = sorted(name for name in actor.names
+                   if name.startswith("anim-") or name.endswith("-base.pak"))
+    if len(names) != len(set(names)):
+        raise ValueError("duplicate profile-inventory archive entry")
+    entries = []
+    proven = []
+    needle = struct.pack("<I", PROFILE_ID)
+    for name in names:
+        data = actor.extract(name)
+        if len(data) != actor.entry_size(name):
+            raise ValueError(f"profile-inventory extracted length mismatch: {name}")
+        occurrences = source.find_all(data, needle)
+        entries.append({"entry": name, "bytes": len(data), "sha256": source.sha256(data),
+                        "profile_id_byte_offsets": list(occurrences)})
+        if name == PROFILE_ENTRY:
+            registration = profile_provenance(data)
+            pak = source.PagedPak(data)
+            desc_page, desc_local = PROFILE_DESCRIPTOR
+            overlaps = [local for (page, local) in pak.fixups
+                        if page == desc_page and local < desc_local + 0x44
+                        and local + 8 > desc_local + 0x40]
+            if overlaps:
+                raise ValueError("profile numeric database overlaps a pointer fixup")
+            registration["descriptor_database_overlapping_pointer_fixups"] = overlaps
+            registration["unchanged_descriptor_can_match_target_database"] = False
+            proven.append(registration)
+    manifest = json.dumps(entries, sort_keys=True, separators=(",", ":")).encode()
+    return {
+        "schema": 1,
+        "profile_id": f"{PROFILE_ID:08X}",
+        "target_database": f"{source.NADINE_DATABASE_ID:08X}",
+        "scope": {
+            "selection": "case-sensitive names starting anim- or ending -base.pak (including anim-*.txt)",
+            "selected_entry_count": len(entries),
+            "selected_pak_count": sum(item["entry"].endswith(".pak") for item in entries),
+            "selected_uncompressed_bytes": sum(item["bytes"] for item in entries),
+            "archive_name_count": len(actor.names),
+            "all_selected_entries_scanned": True,
+            "all_archive_entries_scanned": len(entries) == len(actor.names),
+            "all_game_archives_scanned": False,
+            "all_registration_producers_proven": False,
+        },
+        "entries_manifest_sha256": source.sha256(manifest),
+        "byte_occurrence_count": sum(len(item["profile_id_byte_offsets"]) for item in entries),
+        "known_registration_count": len(proven),
+        "known_registrations": proven,
+        "entries": entries,
+        "native_profile_lookup_result": "unresolved",
+        "native_no_profile_branch_proven": False,
+        "live_residency_proven": False,
+        "tll_function_calls": 0,
+        "producer_audit": {
+            "exact_lookup": "1417C8BA0 checks registry key then descriptor+40 at1417C8C6A; no inheritance fallback",
+            "builder_call": "1417CDF35 calls exact lookup with target skeleton Art+24 database",
+            "callback_install": "GameLoading::Initialize141CC4940 installs141CC0BF0 at config+38 (141CC4E50..57); PackageMgr::Init141625910 copies to manager+38 at1416259E7",
+            "callback_dispatch": "PackageMgr::UpdateLoginPackage141627F60 case0B calls1419C4D50;1419C4F1E invokes manager+38 with resource from loaded page plus disk login-item offset, without rewriting resource database",
+            "registration": "PackageLoginResItem141CC0BF0 case42 calls LoginArtGroup1417C9070 at141CC2934 with resource+40",
+            "registration_callback_gate": "1417C91EB checks Art+40 before observer slot0; registry insert does not rewrite Art+40",
+            "default_observer": "RTTI AnimTableObserver vtable1428D5CA8/COL142C722D8/type14374A140; slot0 1406D7FD0 writes Art+48, not+40, and calls1412F9F00 which reads/gates+40; slot2/debug validation has no+40 store",
+            "unresolved": "Other archive registrations, observer installations, and resource numeric-field producers before PackageMgr doing-login state0B are not exhaustively excluded.",
+        },
+    }
+
+
 def generate(animation_data: bytes, skeleton_data: dict[str, bytes],
              retarget_data: bytes, profile_data: bytes) -> tuple[dict, bytes, bytes]:
     source.require_blob(source.ANIMATION_ENTRY_NAME, animation_data,
@@ -335,6 +413,8 @@ def main() -> None:
     parser.add_argument("--exe", type=Path, default=source.native.DEFAULT_GAME / "tll.exe")
     parser.add_argument("--output-prefix", type=Path, default=DEFAULT_PREFIX)
     parser.add_argument("--check", action="store_true", help="verify existing artifacts without writes")
+    parser.add_argument("--profile-inventory", action="store_true",
+                        help="also inventory all anim-* / *-base.pak entries; not a live absence proof")
     args = parser.parse_args()
     with args.exe.open("rb") as executable:
         exe_digest = hashlib.file_digest(executable, "sha256").hexdigest()
@@ -352,6 +432,13 @@ def main() -> None:
         args.output_prefix.with_suffix(".references.bin"): references,
         args.output_prefix.with_suffix(".record-tails.bin"): tails,
     }
+    inventory = None
+    if args.profile_inventory:
+        inventory = profile_inventory(actor)
+        inventory["archive"] = str(args.archive.resolve())
+        inventory["executable_sha256"] = exe_digest
+        products[args.output_prefix.with_suffix(".profile-inventory.json")] = (
+            json.dumps(inventory, indent=2, sort_keys=True) + "\n").encode()
     for path, blob in products.items():
         if args.check:
             if not path.is_file() or path.read_bytes() != blob:
@@ -361,6 +448,8 @@ def main() -> None:
             path.write_bytes(blob)
     print(json.dumps({"artifacts": metadata["artifacts"], "transfers": len(metadata["transfers"]),
                       "mode_counts": metadata["mode_counts"], "native_bridge_ready": False,
+                      "profile_inventory_entries": None if inventory is None else inventory["scope"]["selected_entry_count"],
+                      "profile_inventory_byte_occurrences": None if inventory is None else inventory["byte_occurrence_count"],
                       "tll_function_calls": 0, "check": args.check}, indent=2))
 
 

@@ -3987,6 +3987,64 @@ FUNCTIONS = {
         "resolved 0x2E-record pointer/count after unresolved authored names were "
         "discarded by BuildRetargetEntry.",
     ),
+    0x141CC4940: (
+        "GameLoading_Initialize",
+        "STATIC AGX: installs GameLoading_PackageLoginResItem (0x141CC0BF0) "
+        "at config+0x38 at 0x141CC4E50..4E57 before PackageMgr_Init. This "
+        "closes the producer of the package-login callback, not all producers "
+        "of loaded resource numeric fields before the doing-login state.",
+    ),
+    0x141625910: (
+        "PackageMgr_Init",
+        "STATIC AGX: copies login callback config+0x38 to manager+0x38 "
+        "at 0x1416259E7. GameLoading_Initialize installs 0x141CC0BF0; "
+        "UpdatePackage_Status_DoingLogin invokes this exact manager slot.",
+    ),
+    0x141627F60: (
+        "PackageMgr_UpdateLoginPackage",
+        "STATIC AGX: package login state machine; case0x0B calls "
+        "PackageMgr_UpdatePackage_Status_DoingLogin (0x1419C4D50). "
+        "Earlier states/resource producers are not exhaustively closed.",
+    ),
+    0x1419C4D50: (
+        "PackageMgr_UpdatePackage_Status_DoingLogin",
+        "STATIC AGX: resource pointer formed from loaded page handle plus "
+        "authored login-item offset at 0x1419C4E72..4F07; dispatches manager "
+        "+0x38 at 0x1419C4F1E. Resolved installed callback is "
+        "GameLoading_PackageLoginResItem. This path does not rewrite the "
+        "resource numeric database; earlier state producers remain open.",
+    ),
+    0x141CC0BF0: (
+        "GameLoading_PackageLoginResItem",
+        "STATIC AGX: registered by GameLoading_Initialize through "
+        "PackageMgr_Init and invoked by doing-login manager slot+0x38. "
+        "Case0x42 iterates ARTGROUP_DATA LOD tables and calls "
+        "AnimMasterTable_LoginArtGroup at 0x141CC2934 with resource+0x40 "
+        "as database; no local animation descriptor database rebinding.",
+    ),
+    0x1406D7FD0: (
+        "AnimTableObserver_OnLoginArt",
+        "STATIC AGX: slot0 of RTTI AnimTableObserver vtable0x1428D5CA8 "
+        "(COL0x142C722D8/type0x14374A140). Validates/clears Art+0x48 and "
+        "calls 0x1412F9F00. Does not rewrite numeric Art+0x40. LoginArtGroup "
+        "already gates exact Art+0x40 database at 0x1417C91EB before slot0.",
+    ),
+    0x1406D8030: (
+        "AnimTableObserver_BeforeLoginArtGroup",
+        "STATIC AGX: slot1 of RTTI AnimTableObserver vtable0x1428D5CA8. "
+        "Clears observer+0x18; not an animation database rebinding path.",
+    ),
+    0x1406D8060: (
+        "AnimTableObserver_AfterLoginArtGroup",
+        "STATIC AGX: slot2 of RTTI AnimTableObserver vtable0x1428D5CA8. "
+        "Post-login validation path; no store to animation Art+0x40.",
+    ),
+    0x1406D85E0: (
+        "AnimTableObserver_ExecuteDebugValidation",
+        "STATIC AGX: validation reached by AnimTableObserver post-login "
+        "callback. Does not rewrite the animation descriptor database+0x40; "
+        "other installed observers are not exhaustively excluded.",
+    ),
     0x1417D0890: (
         "SkelTable_GenerateSegmentMapping",
         "Exact skel-table.cpp:954 GenerateSegmentMapping(RetargetEntry*, "
@@ -3998,7 +4056,11 @@ FUNCTIONS = {
         "accepted. Ordinary nonnull path uses LevelMemAllocator and may "
         "allocate the mapping. Offline BuildRetargetEntry cannot be called "
         "without auditing/providing this manager dependency; this is not "
-        "part of DoJointRetarget's numerical leaf call graph.",
+        "part of DoJointRetarget's numerical leaf call graph. AGX isolated "
+        "row20 builder uses owned zero0xE0 manager, +0xD8 null, preserving "
+        "the original no-allocation return. Its __GSHandlerCheck_EH unwind "
+        "can reach unresolved __CxxFrameHandler3; .pdata registration alone "
+        "does not establish exception recovery in an isolated mapper.",
     ),
     0x1417CDDC0: (
         "SkelTable_BuildRetargetEntries",
@@ -4040,7 +4102,17 @@ FUNCTIONS = {
         "an offline fixture must preserve the full raw asset extent, not "
         "silently substitute source parameter index or truncate to local "
         "reference rows. Metadata-only authored joins do not "
-        "establish the full 46-byte runtime operand values.",
+        "establish the full 46-byte runtime operand values. STATIC AGX: "
+        "actual ABI reads seven pointers; args8/9 in assertion signature "
+        "are unused. Nonnull entry+0x18 bypasses allocation but entry+0x20 "
+        "does NOT bound writes; reserve authored_count*46 before resolving. "
+        "Both parent matrices are read/inverted BEFORE source-parent<0 "
+        "branch 0x1417CF7C5 selects identity correction at CF937. Root "
+        "(-1,-1) requires readable matrixBase-48 bytes, not identity there; "
+        "both inverse results are discarded. BoneScale source-length "
+        "epsilon at CFF3E is about1e-5; prior squared-length mask uses "
+        "FLT_MIN. Zero length yields scale0. AGX isolated profile0 row20 "
+        "built93 records in owned96-record capacity; no live Nadine claim.",
     ),
     0x141936490: (
         "RetargetPlugin_AddJointRetargetCommands",
@@ -4215,7 +4287,12 @@ FUNCTIONS = {
         "STATIC AGW: fourth argument is float in XMM3 (caller vmovss at "
         "0x1421942DE), not the decompiler's double. An isolated mapped "
         "native caller must register the entire PE exception directory; "
-        "this function's unwind at0x142F86298 uses __GSHandlerCheck.",
+        "this function's unwind at0x142F86298 uses __GSHandlerCheck. "
+        "STATIC AGX: dispatcher D1D..D24 pads to four indices {0,48,48,48}. "
+        "Mode2 writes full left[0:96], including the discarded sentinel "
+        "row at+48; it is NOT untouched padding or required finite output. "
+        "Right112 stays read-only. Outer DFB stores masks at left+96/+104, "
+        "still {MSB,0} for the one-row isolated fixture.",
     ),
     0x142191AE0: (
         "AnimJointParams_BlendMode2FourLane",
@@ -8845,7 +8922,25 @@ FUNCTIONS = {
         "+0x00/+0x04/+0x08, +0x10/+0x14/+0x18 and +0x20/+0x24/+0x28. "
         "Computes sqrt(trace+1), half-scale and the three antisymmetric "
         "differences. The GunMove strafe-IK locator stores its result as the "
-        "output Locator quaternion.",
+        "output Locator quaternion. STATIC AGX: all four branches use "
+        "sqrtf via 0x1424ED268 -> IAT0x1425D6F60 (api-ms-win-crt-math "
+        "sqrtf). The isolated builder must resolve this real host UCRT "
+        "dependency; copying raw constants alone is insufficient.",
+    ),
+    0x1421787A0: (
+        "Quaternion_FromOrthonormalBasis_LargestX",
+        "STATIC AGX: largest-X matrix-to-quaternion branch called from "
+        "Quaternion_FromOrthonormalBasis; uses sqrtf through IAT1425D6F60.",
+    ),
+    0x1421788B0: (
+        "Quaternion_FromOrthonormalBasis_LargestY",
+        "STATIC AGX: largest-Y matrix-to-quaternion branch called from "
+        "Quaternion_FromOrthonormalBasis; uses sqrtf through IAT1425D6F60.",
+    ),
+    0x1421789B0: (
+        "Quaternion_FromOrthonormalBasis_LargestZ",
+        "STATIC AGX: largest-Z matrix-to-quaternion branch called from "
+        "Quaternion_FromOrthonormalBasis; uses sqrtf through IAT1425D6F60.",
     ),
     0x141BE20C0: (
         "DispatchPhaseTransitionInstructionListToActorState",
