@@ -8,6 +8,34 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-09-18 AGW: bounded native-frame identity, not no-yield claims ---
+    0x141BBDF20: (
+        "NdGameObject_WaitUpdateCounter",
+        "STATIC AGW: Player RTTI vtable0x142A4BFE8 slot131/+0x418. "
+        "Loads owner+0x210; when nonnull calls Ndjob_WaitForCounter at "
+        "0x141BBDF41, releases the counter and writes owner+0x210=0. "
+        "Reached from AsyncObjectUpdateJointBlendJob after its group "
+        "Process calls/palette publication. This is a real yielding owner "
+        "callback; do not infer whole-job thread affinity from the two "
+        "Process callsites or from the stock prologue.",
+    ),
+    0x141BBE3B0: (
+        "NdGameObject_UpdateCompositeBodyCloth",
+        "STATIC AGW: Player RTTI vtable0x142A4BFE8 slot132/+0x420. "
+        "Loads owner+0x238 and, if nonnull, tailcalls "
+        "CompositeBody_UpdateCloth at0x141E5AA20. Reached by the "
+        "post-Process owner callback block of AsyncObjectUpdateJointBlendJob. "
+        "Not evidence that arbitrary virtual callback recursion is absent.",
+    ),
+    0x141E5AA20: (
+        "CompositeBody_UpdateCloth",
+        "Exact composite-body.cpp CompositeBody::UpdateCloth assertions "
+        "at lines2313/2340/2341 reference cloth-skinning bone matrix labels. "
+        "STATIC AGW: reached by NdGameObject owner+0x238 wrapper in Player "
+        "vslot+0x420 after AsyncObjectUpdateJointBlendJob Process/palette "
+        "work. Naming identifies this consumer only, not a closed "
+        "no-wait/no-reentrancy proof for its transitive call graph.",
+    ),
     # --- 2026-08-27: native NPC pistol composition, not a Player donor ---
     0x1405AAC40: (
         "AiWeaponController_RefreshWeaponLayersAndHands",
@@ -105,6 +133,32 @@ FUNCTIONS = {
         "a filtered graph need not be retained in a mod-owned cache.",
     ),
     # --- 2026-08-27: retarget compatibility and resident-asset lifetime ---
+    0x1417C8BA0: (
+        "AnimMasterTable_FindExactDatabaseClip",
+        "STATIC AGW: reverse-searches registered art groups at 0x143840200 "
+        "(count 0x1438401C8), selecting the requested database id in each "
+        "0x10-byte record. Probes that group's animation hash table at +0x20 "
+        "(count +0x1C), dereferences the matched slot, and returns only if "
+        "ArtItemAnim+0x40 equals the requested database (0x1417C8C6A). "
+        "No calls, allocation, or retarget-inheritance fallback in this body. "
+        "AnimationDatabase_ResolveClip adds optional fallback outside this "
+        "function; BuildRetargetEntries calls this exact lookup directly at "
+        "0x1417CDF35 for raw-row+0x24 and target skeleton+0x24. A profile id "
+        "found in another package/database is not proof this lookup succeeds.",
+    ),
+    0x1418AB8F0: (
+        "AnimUtil_AnimateObject",
+        "Exact nd-anim-util.cpp:871 AnimateObject assertion gives root "
+        "Transform, ArtItemSkeleton, ArtItemAnim, float time, world Transform "
+        "output, JointParams output, scalar inputs/outputs and AnimateFlags. "
+        "STATIC AGW: BuildRetargetEntries calls with time0/flags2 at "
+        "0x1417CE068 only after a nonnull exact-database profile lookup, then "
+        "inverts sampled world matrices for packed retarget construction. "
+        "This is NOT an isolated leaf: it acquires global 0x146905400, uses "
+        "Memory_AllocateFromCurrentAllocator, and dispatches "
+        "ProcessAnimCmdListSegment. Do not call it through an uninitialized "
+        "MappedImage merely because selected joint-math leaves are map-safe.",
+    ),
     0x1417C9070: (
         "AnimMasterTable_LoginArtGroup",
         "Exact AnimMasterTable::LoginArtGroup assertion. Registers a unique "
@@ -3933,12 +3987,35 @@ FUNCTIONS = {
         "resolved 0x2E-record pointer/count after unresolved authored names were "
         "discarded by BuildRetargetEntry.",
     ),
+    0x1417D0890: (
+        "SkelTable_GenerateSegmentMapping",
+        "Exact skel-table.cpp:954 GenerateSegmentMapping(RetargetEntry*, "
+        "ArtItemSkeleton*, ArtItemSkeleton*) assertion. Uses resolved "
+        "0x2E records' global joints+0x24/+0x28 to map source group bits "
+        "into target-group bitsets at entry+0x28 (0x1417D0A7D..D0AF1). "
+        "At 0x1417D08FA dereferences manager global0x1437E98C8+0xD8; "
+        "a null allocator there skips mapping, but a null manager is NOT "
+        "accepted. Ordinary nonnull path uses LevelMemAllocator and may "
+        "allocate the mapping. Offline BuildRetargetEntry cannot be called "
+        "without auditing/providing this manager dependency; this is not "
+        "part of DoJointRetarget's numerical leaf call graph.",
+    ),
     0x1417CDDC0: (
         "SkelTable_BuildRetargetEntries",
         "Exact SkelTable::BuildRetargetEntries source assertion at skel-table.cpp:482. "
         "Resolves every authored raw source/target skeleton pair, samples the "
         "optional reference-pose animation id from raw field 9, then constructs the "
-        "fixed-stride runtime retarget entry consumed by case-6 animation commands.",
+        "fixed-stride runtime retarget entry consumed by case-6 animation commands. "
+        "STATIC AGW: raw-row+0x24 profile is resolved by exact-database "
+        "0x1417C8BA0, not AnimationDatabase_ResolveClip's optional fallback. "
+        "Zero id or null lookup preserves target raw+0x20 local references "
+        "and raw+0x28 inverse global Mat34 arrays. A nonnull clip is sampled "
+        "by AnimateObject at time0/flags2; false stops the outer entry loop "
+        "at 0x1417CE06F, it does not fall back to bind pose. Success replaces "
+        "target local references and inverse world matrices before the "
+        "0x1417CE198 builder call. Disk profile FC34096C in elena-base has "
+        "Art+0x40=46622D19, not Nadine ED25C708; rebinding/residency remains "
+        "unproven, so neither profile-present nor null may be assumed live.",
     ),
     0x1417CE210: (
         "SkelTable_BuildRetargetEntry",
@@ -3953,7 +4030,17 @@ FUNCTIONS = {
         "fixed-up authored-row and map pointers directly, so on-disk DC offsets "
         "cannot be reconstructed as a live contiguity invariant. These indices are "
         "not skeleton-global joints: Nadine group 1 maps global 104..141 to "
-        "reference rows 66..103 (for example 105 -> 67).",
+        "reference rows 66..103 (for example 105 -> 67). STATIC AGW: numeric "
+        "record +0..+23 is constructed, not copied from a local reference. "
+        "Parent inverse-global Mat34 inputs feed locator+0xE at "
+        "0x1417CF634..CFA6C; joint inverse-global inputs feed locator+0 at "
+        "0x1417CFA70..CFE78. Remaining halves hold source local translation "
+        "and the bone-length ratio. Translation+1C..20 at CF58B..CF5FF "
+        "uses a4+48*SOURCE_GLOBAL, unlike later compressed-index boneScale; "
+        "an offline fixture must preserve the full raw asset extent, not "
+        "silently substitute source parameter index or truncate to local "
+        "reference rows. Metadata-only authored joins do not "
+        "establish the full 46-byte runtime operand values.",
     ),
     0x141936490: (
         "RetargetPlugin_AddJointRetargetCommands",
@@ -4124,7 +4211,11 @@ FUNCTIONS = {
         "the outer track fold. STATIC AGV: fixed encoding0x0108 selects "
         "mode2 table 0x142BDD940[2]=0x142191AE0; count1/masks{MSB,0} "
         "produce offsets0/48/48/48 within the owned112-byte blend blob. "
-        "No per-joint weight or one-sided-copy branch under that contract.",
+        "No per-joint weight or one-sided-copy branch under that contract. "
+        "STATIC AGW: fourth argument is float in XMM3 (caller vmovss at "
+        "0x1421942DE), not the decompiler's double. An isolated mapped "
+        "native caller must register the entire PE exception directory; "
+        "this function's unwind at0x142F86298 uses __GSHandlerCheck.",
     ),
     0x142191AE0: (
         "AnimJointParams_BlendMode2FourLane",
@@ -4132,7 +4223,11 @@ FUNCTIONS = {
         "through table0x142BDD940+0x10. Fixed P99 encoding0108 reaches "
         "this path. Ordinary helpers 0x14217FB70/0x1421803E0 are SIMD "
         "leaves without assertion/callback edges; security-cookie failure "
-        "is an exceptional corruption path, not a numeric assertion.",
+        "is an exceptional corruption path, not a numeric assertion. "
+        "STATIC AGW: initial unwind0x142F86E24 uses __GSHandlerCheck; "
+        "split .pdata entries chain to it. Raw-backed constants/cookie "
+        "suffice for ordinary P99 math, but assertion/cookie-failure "
+        "reporters use uninitialized imports/global writes in MappedImage.",
     ),
     0x14217E7C0: (
         "AnimBitset_Popcount64",
@@ -5098,7 +5193,15 @@ FUNCTIONS = {
         "flags3 EHANDLER|UHANDLER, prologue0x3D. Moving first0x2B bytes to "
         "anonymous memory without unwind metadata is REJECTED: it moves "
         "RSP allocation and nonvolatile saves outside the registered range. "
-        "This packaging defect is not proven as the AGR crash PC.",
+        "This packaging defect is not proven as the AGR crash PC. STATIC "
+        "AGW: unchanged prologue pushes5 registers and subtracts0x5D0, "
+        "total0x5F8 below the incoming return slot. Process0 context LEA "
+        "0x141A92E64 is RSP+0x110; Process1 at0x141A932E4 is RSP+0x160. "
+        "Therefore context+0x4E8/+0x498 identifies this invocation's native "
+        "return slot. A nested old callback can share Fg/job values but "
+        "cannot share the active return-slot address. Owner callbacks "
+        "+0x410/+0x418/+0x420 run after Process/palette work; +0x418 "
+        "141BBDF20 really waits, so whole-job no-yield is false.",
     ),
     0x141A8F9D0: (
         "AnimManager_DispatchRetainedOwnerPhase",

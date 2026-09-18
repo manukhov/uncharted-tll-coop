@@ -32796,3 +32796,165 @@ complete21 native outputs/masks through the shared production bridge. This
 must remain an isolated helper, not a game run or a claim from scalar fixtures.
 Then settle same-fiber old-ingress limitation and native preparation cost
 without increasing1ms budget. Game exam still not earned; current tll count0.
+
+### 2026-09-18 STATIC / implemented-disabled (`agw` authored operands and native frame)
+
+User said "Продолжай". No game launch, injection, attachment or game input;
+no mapped TLL math was executed in this unit. Visible P99 grip and AGR crash
+cause remain unresolved. Both grip writer flags and crash VEH remain false;
+the unconditional group-shadow static_assert still prevents re-enable.
+AGC back/hip placements, other weapons and rifle timing are unchanged.
+
+**Authored operands: distinguish metadata from actual numeric records.**
+Competitors were local-reference copies, builder-produced bind-pose correction,
+or builder-produced sampled-profile correction. The first is REJECTED as an
+offline reconstruction method, not as a newly observed game failure:
+
+- `SkelTable_BuildRetargetEntries 1417CDDC0` obtains raw local references at
+  raw+u32(raw+20) and inverse-global Mat34 arrays at raw+u32(raw+28).
+  Nonzero authored row+24 is looked up by target skeleton+24 through direct
+  `AnimMasterTable_FindExactDatabaseClip 1417C8BA0` at1417CDF35.
+- That leaf searches registered art groups and requires returned Art+40 to
+  equal the requested database at1417C8C6A. The independently traced caller
+  `AnimationDatabase_ResolveClip 1417C8E20` implements optional retarget fallback
+  OUTSIDE that leaf; BuildRetargetEntries does not use this wrapper.
+- Zero profile/null lookup keeps the original target arrays. Nonnull lookup
+  calls `AnimUtil_AnimateObject 1418AB8F0` at1417CE068 with time0/flags2,
+  replaces target local references and inverts sampled world matrices before
+  BuildRetargetEntry1417CE198. A false sampler return atCE06F exits the outer
+  loop, not fallback to bind pose. AnimateObject has an exact source signature,
+  takes global146905400, allocates and dispatches ProcessAnimCmdListSegment;
+  it is NOT a map-safe numerical leaf.
+- `SkelTable_BuildRetargetEntry 1417CE210` constructs record locators from parent
+  inverse-global matrices atCF634..CFA6C and joint matrices atCFA70..CFE78.
+  Metadata is stored separately: globalsCF494/499, compressedCF4FF/564,
+  byte modeCF577. Tail+2D remains padding; the previous AGK byte-mode fix is
+  still present, not a new defect.
+
+The build-pinned profile FC34096C is in elena-base.pak (409616bytes SHA256
+`d77161503375df9a06ffc81646a88692dc437947274cf172ac7481be8d9b26f2`), file
+registration536F8 -> page0 slot51A98 -> descriptor51DE0 -> raw41F00/file43AA0.
+Raw source skeleton8592680F and descriptor database46622D19 differ from
+Nadine target databaseED25C708. No FC34096C bytes occur in the checked Chloe/
+Nadine base packages. This bounds the observed disk graph; it does NOT prove
+absence of another registered/rebound copy. Both live branches remain open.
+Row20's authored profile is zero, making it the narrower next numeric target.
+
+New reproducible static-only `scripts/p99_native_source_audit.py` derives the
+21 D350/B8 sparse joins from opcode maps and confirms the committed semantic
+policy hash without reading the generated C++ table as its oracle. It checks
+all1329 compressed reference rows, matrix finiteness and parent index extents.
+`--check` reproduces ignored `reports/p99-native-source-inputs.*` exactly:
+
+- 21 Chloe/Nadine reference pairs,2016bytes, SHA256
+  `f2ccf3e0d0f2a770b35e3ab7af3906699a8175c8177f85ed59c4f7d4141b4dde`.
+- 42 exact9-byte tails(+24..+2C),378bytes, SHA256
+  `c1bc2ccd31af96dde325c5e068a04382937bca266b324da50a59875f52b8b29a`.
+
+These are NOT complete46-byte records or the future3948-byte bridge input.
+JSON explicitly records native_record_payload_complete=false and
+native_bridge_ready=false. The13 pure Python regressions cover compressed/global
+index distinctions, exact tails/padding, modes, source-T offsets, numeric and
+extent refusal and build/profile identities. They are not native equivalence.
+
+An additional builder constraint is recorded rather than silently corrected:
+CF58B..CF5FF reads T from a4+48*SOURCE_GLOBAL+20 for packed+1C/+1E/+20, whereas
+boneScale atCFE85..CFEF uses compressed+26/+2A. Player globals640..676 extend
+beyond473 compressed reference rows into later raw data. Future owned fixtures
+must preserve that full raw extent, not substitute parameter436..472 or pass
+a shortened reference buffer. Current audit records exact disk read extents,
+not finiteness of all42 constructed packed records.
+
+**Native math mapping boundary, still not executed.** Exact executable SHA256
+remains `ed1371a4b47961abc160e92aa0b9bdfd787638fa1a39ba2403b423ab45c210be`.
+For admitted DoJoint modes1/3,a4=false the ordinary calls are decoder141AE1F10
+and mode1 Compose1401998F0; fixedBlend0108 uses142191AE0 with mathematical
+leaves14217FB70/1421803E0. These paths read raw-backed constants; no additional
+CRT initialization beyond the existing opcode decoder setup was found.
+Blend argument4 is FLOAT/XMM3 (vmovss caller1421942DE), not IDA's double.
+Raw security cookie142FF4B78=00002B992DDFA232 satisfies the ordinary check.
+For any future SEH bridge register the entire mapped exception directory
+RVA6DB3000/size16BEA0/124216 entries, preserving chained rows, and deregister
+before freeing. Blend xdata142F86298 and mode2 xdata142F86E24 use the existing
+named __GSHandlerCheck1424EBDB4 -> __GSHandlerCheckCommon1424EBDD4.
+Assertion1422053E0 and cookie-failure reporting use unresolved imports/global
+writes: mapping is not universal fault recovery. CPU/OS AVX/F16C/OSXSAVE and
+enabled XMM/YMM are required; opcode28 additionally needs its AVX2 setup.
+
+For the narrower future row20 full-builder fixture, exact preallocated
+entry+18/count+20 can bypass CE503..CE653 allocation, and both authored IKflags
+are zero. Still audit full Art/raw/name/parent extents, InvertRigid14023ABB0,
+Quaternion_FromOrthonormalBasis142177E50, stack probe and assertion paths.
+Tail `SkelTable_GenerateSegmentMapping 1417D0890` (source signature) reads
+manager1437E98C8+ D8 before its null-allocator skip; a null manager is NOT safe.
+No global environment was patched or assumed initialized in this unit.
+
+**Same-fiber old callback scope: reject by exact native invocation.**
+Competitors: FLS alone, Fg/job pointer matching, proving no transitive yield/
+recursion, or exact native-frame identity. FLS separates fibers but not old
+unwrapped recursion on the same fiber; even identical Fg/job arguments do not
+identify the invocation. Player RTTI vtable142A4BFE8 slots130/131/132 resolve to
+Player_Update1410EC230, NdGameObject_WaitUpdateCounter141BBDF20 and
+NdGameObject_UpdateCompositeBodyCloth141BBE3B0. They occur after Process/palette
+publication; slot131 waits on owner+210 at141BBDF41, releases/zeros it; slot132
+tailcalls CompositeBody_UpdateCloth141E5AA20 through owner+238. Player_Update
+also waits at1410EC881. Whole-job no-yield is therefore REJECTED; no claim of
+complete virtual call-graph non-reentrancy is needed for the new guard.
+
+The unchanged native prologue has5 pushes+sub5D0 =5F8 below its incoming return
+slot. Process context LEAs141A92E64/141A932E4 are RSP+110/+160, respectively.
+Therefore context+4E8/+498 is the exact native return-slot address. New
+unwind-described MASM call bridge publishes its imminent native CALL slot in
+the private FLS frame, calls stock once, clears on normal return; compiled
+finally also clears during exception unwind. Process admission compares exact
+slot identity before publishing its scope; a foreign recursive frame hides
+the outer Process scope for the entire stock call and conservatively refuses
+the outer job. Cmd16 also checks the identity before and after its stock call.
+No return-address memory is read, no stack scan, and no original prologue is
+moved. Installer pins the native43-byte prologue AND both8-byte context LEAs.
+Separate FLS isolation and existing owner/program/value checks remain required.
+
+Review caught and removed an initial group<=1 condition from the ownership
+decision: Nadine has8 groups, and native loop141A932FD..141A9330A continues on
+the same context for groups2..7. Those groups are stock-only, NOT foreign.
+Shared pure admission now separates exact-frame ownership from overlay-group
+eligibility; matching later groups do not charge the overlay budget, mark
+reentry or refuse the completed job. Both callsites x groups0..7/UINT32_MAX
+x matching/foreign frames and an ordinary0..7 sequence have regressions.
+
+Native-frame suite2610checks0fail, repeated20 times after review. It uses the
+actual compiled bridge with RtlLookupFunctionEntry/RtlVirtualUnwind, checks
+restored RSP/returnPC, normal token expiry and real single/nested SEH unwind,
+same-job/same-native-function old recursion, wrapped recursion and Windows
+fiber A->B old-stock->A. Fixture Process routing mirrors the thin runtime
+adapter and uses the shared admission helper; it does not execute retail
+ProcessAnimCmdListSegment or establish source preparation performance.
+Release and full CTest18/18 pass; Python13/13 and authored artifact --check
+pass. No game exam is earned by these offline results.
+
+Sole IDB saved1849functions/73data/1type, save_database returned True in
+reports/ida_apply_agw_status.txt. MCP restarted; exact lookup, AnimateObject,
+owner-counter and their caller/xref names resolve on readback. Final safe
+build tag2026-09-18agw-safe:
+
+- DLL819712bytes SHA256
+  `7E65F493E7E5FF12A7C7ACF6687E3E64B16250A5E344EEB0575725FBE8DF43A1`.
+- PDB5984256bytes SHA256
+  `B138201495B29B522851B0BF15BB6B45729D8C7530A4AEB1DA64EEF77A7D80A9`.
+- Unchanged watcher89600bytes SHA256
+  `CEF3F9462C666684ACA35C831A48BAC80E77BCE7F1FB414493EE7E57C9E29857`.
+
+Frozen copies are in ignored reports/agw-safe-20260918-reviewed. The earlier
+pre-review reports/agw-safe-20260918-final was retained, not overwritten; use
+the reviewed directory/hashes above. Final rebuild passes CTest18/18 again;
+tll process count0. User-owned untracked tmp/ was preserved.
+
+**Next bounded step:** complete the narrower row20 actual numeric builder
+fixture with the stated full-raw/manager/unwind prerequisites. Independently
+resolve row157's exact-database profile registration before choosing sampled
+or bind-pose operands. Then preflight all42 constructed records and run the
+complete21 native rows/masks through the shared production materializer in
+an isolated helper. Current artifacts deliberately cannot masquerade as those
+operands. Same-fiber old Async scope is now separated by exact invocation;
+do not reopen a universal owner-callback no-yield search. Preparation cost
+is still unmeasured,1ms budget unchanged, actual AGR crash PC still unknown.

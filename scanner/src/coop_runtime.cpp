@@ -41,6 +41,7 @@
 #include "nadine_p99_group_budget.h"
 #include "nadine_p99_group_ingress.h"
 #include "nadine_p99_group_fiber.h"
+#include "nadine_p99_group_native_frame.h"
 #include "nadine_pistol_grip_policy.h"
 
 // ============================================================================
@@ -61644,12 +61645,13 @@ std::atomic<bool> g_p99_chloe_transfer_ready{false};
 // the rejected persistent JointCache writer below.
 // AGR rejected: user-reported crash after source COST-STOP with no publication.
 // Exclude the entire package, not just overlay writes. The moved-prologue
-// installer has been removed. Fiber scope and exact owned-source reads have
-// offline tests, but full native source cost/assertions and fault capture remain
-// unresolved. These tests are NOT permission for a new game exam.
+// installer has been removed. Fiber/native-frame scope and exact owned-source
+// reads have offline tests, but actual authored numeric operands, full native
+// output/cost and fresh game fault attribution remain unresolved. Isolated
+// crash-capture fixtures and scope tests do NOT earn a new game exam.
 constexpr bool kEnableP99GroupShadow = false;
 static_assert(!kEnableP99GroupShadow,
-    "P99 remains blocked: validate authored numeric admission/native cost, full output and remaining ingress before re-enabling");
+    "P99 remains blocked: validate authored numeric operands, native output/cost and fresh fault attribution before re-enabling");
 static_assert(!kEnableP99GroupShadow || !kEnableLegacyNadineP99ChloeGripTransfer,
     "Expanded group shadows must never coexist with the rejected persistent writer");
 std::atomic<bool> g_p99_group_shadow_ready{false};
@@ -79991,7 +79993,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-18agv-safe "
+        "TLL co-op runtime init 2026-09-18agw-safe "
         "(all P99 group-shadow hooks disabled after AGR crash; legacy persistent grip writer disabled; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(

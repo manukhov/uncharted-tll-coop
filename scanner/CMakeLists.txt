@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.24)
 project(TLLCoopTools LANGUAGES CXX)
 
+enable_language(ASM_MASM)
+add_library(tll_p99_native_frame_bridge OBJECT src/nadine_p99_group_native_frame.asm)
+
 add_executable(tll_object_scanner src/object_scanner.cpp)
 add_executable(tll_player_nudge src/player_position_nudge.cpp)
 add_executable(tll_dll_injector src/dll_injector.cpp)
@@ -13,7 +16,8 @@ add_executable(tll_dword_writer src/dword_writer.cpp)
 add_executable(tll_dword_scanner src/dword_scanner.cpp)
 add_executable(tll_input_slot_dump src/input_slot_dump.cpp)
 add_executable(tll_crash_watch src/crash_watch.cpp)
-add_library(tll_coop_runtime SHARED src/coop_runtime.cpp)
+add_library(tll_coop_runtime SHARED src/coop_runtime.cpp
+    $<TARGET_OBJECTS:tll_p99_native_frame_bridge>)
 
 foreach(
     target
@@ -155,15 +159,21 @@ if(BUILD_TESTING)
         target_compile_options(tll_nadine_p99_group_shadow_tests PRIVATE -Wall -Wextra -Wpedantic)
     endif()
     add_test(NAME nadine_p99_group_shadow COMMAND tll_nadine_p99_group_shadow_tests)
-    foreach(policy group_program_manifest group_admission group_scope group_readability group_memory group_entry group_budget group_ingress group_fiber source_read source_materialize)
+    foreach(policy group_program_manifest group_admission group_scope group_readability group_memory group_entry group_budget group_ingress group_fiber group_native_frame source_read source_materialize)
         add_executable(tll_nadine_p99_${policy}_tests tests/nadine_p99_${policy}_tests.cpp)
         target_include_directories(tll_nadine_p99_${policy}_tests PRIVATE src)
         target_compile_features(tll_nadine_p99_${policy}_tests PRIVATE cxx_std_20)
-        if(policy STREQUAL "group_memory" OR policy STREQUAL "group_fiber" OR policy STREQUAL "source_read")
+        if(policy STREQUAL "group_memory" OR policy STREQUAL "group_fiber" OR policy STREQUAL "group_native_frame" OR policy STREQUAL "source_read")
             target_compile_definitions(tll_nadine_p99_${policy}_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
         endif()
+        if(policy STREQUAL "group_native_frame")
+            target_sources(tll_nadine_p99_${policy}_tests PRIVATE
+                $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
+                tests/nadine_p99_group_native_frame_fixture.asm)
+        endif()
         if(MSVC)
-            target_compile_options(tll_nadine_p99_${policy}_tests PRIVATE /W4 /permissive- /EHsc)
+            target_compile_options(tll_nadine_p99_${policy}_tests PRIVATE
+                "$<$<COMPILE_LANGUAGE:CXX>:/W4;/permissive-;/EHsc>")
         else()
             target_compile_options(tll_nadine_p99_${policy}_tests PRIVATE -Wall -Wextra -Wpedantic)
         endif()

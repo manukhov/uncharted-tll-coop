@@ -22,6 +22,7 @@ struct P99GroupProcess {
 struct P99FiberFrame : coop::p99_group_fiber::Binding {
     P99GroupJob* job = nullptr;
     P99GroupProcess* process = nullptr;
+    std::uintptr_t native_return_slot = 0;
     coop::p99_group_entry::Active entry{};
 };
 coop::p99_group_fiber::Slot<P99FiberFrame> g_p99_group_fiber;
@@ -201,8 +202,10 @@ __declspec(noinline) void p99_group_candidate_async(void* job, P99FiberFrame& fr
     const bool within_cost = p99_group_cost_finish(current, begin, "source");
     if (prepared && within_cost && g_p99_group_fiber.owns(frame) && !frame.entry.reentered &&
         !g_p99_group_failed.load(std::memory_order_acquire)) frame.job = &current;
-    __try { g_p99_group_async(job); }
+    __try { coop::p99_group_native_frame::p99_group_invoke_native(
+        job, g_p99_group_async, &frame.native_return_slot); }
     __finally {
+        frame.native_return_slot = 0;
         frame.job = nullptr;
         if (current.incomplete()) p99_group_partial(current, "job-ended-without-both-groups");
     }
@@ -231,9 +234,11 @@ void __fastcall hooked_p99_group_async(void* job) {
             [&](coop::p99_group_entry::Observations& seen) { return seh_p99_group_entry_observations(job, &seen); },
             [] { return true; });
         if (candidate) p99_group_candidate_async(job, frame);
-        else g_p99_group_async(job);
+        else coop::p99_group_native_frame::p99_group_invoke_native(
+            job, g_p99_group_async, &frame.native_return_slot);
     }
     __finally {
+        frame.native_return_slot = 0;
         if (!g_p99_group_fiber.leave(frame, previous))
             g_p99_group_failed.store(true, std::memory_order_release);
     }
@@ -260,7 +265,16 @@ std::uint32_t p99_group_process_call(bool first_site,
     std::uint32_t result = 0;
     __try {
       frame->process = nullptr;
-      if (job != nullptr && !job->refused && group <= 1) {
+      const auto native_scope = coop::p99_group_native_frame::admit(first_site,
+          reinterpret_cast<std::uintptr_t>(context), frame->native_return_slot, group);
+      if (!native_scope.same_invocation) {
+        // An old/unwrapped recursive native call can have the SAME Fg and job
+        // pointer. Hide its Process scope for the complete stock invocation,
+        // then restore under finally; it must not inherit the parent's cmd16.
+        frame->entry.reentered = true;
+        if (job != nullptr) p99_group_partial(*job, "foreign-native-frame");
+      }
+      if (native_scope.may_consider_overlay && job != nullptr && !job->refused) {
         const auto begin = p99_group_cost_start();
         const bool prepared = begin.valid && previous == nullptr && job->can_start(group,first_site) &&
             !g_p99_group_failed.load(std::memory_order_relaxed) &&
@@ -309,6 +323,8 @@ std::uint32_t* __fastcall hooked_p99_group_cmd16(std::uint32_t* status, const vo
     p99_shadow::Shadow shadow{}; // Final stable address, never moved below.
     alignas(16) p99_shadow::Context copied{};
     const bool prepared = begin.valid && !process->consumed && job.can_start(process->group,process->group==0) &&
+        coop::p99_group_native_frame::owns(process->group==0,
+            reinterpret_cast<std::uintptr_t>(process->parent), frame->native_return_slot) &&
         !g_p99_group_failed.load(std::memory_order_acquire) &&
         seh_prepare_p99_group_shadow(context, process, &shadow, &copied);
     const bool within_cost = p99_group_cost_finish(job, begin, process->group == 0 ? "cmd16-0" : "cmd16-1");
@@ -325,7 +341,9 @@ std::uint32_t* __fastcall hooked_p99_group_cmd16(std::uint32_t* status, const vo
     }
     process->consumed = true;
     auto* result = stock(status, copied.data()); // Exactly once; no retry.
-    if (!job.finish_after_native(process->group, g_p99_group_fiber.owns(*frame),
+    if (!job.finish_after_native(process->group, g_p99_group_fiber.owns(*frame) &&
+            coop::p99_group_native_frame::owns(process->group==0,
+                reinterpret_cast<std::uintptr_t>(process->parent), frame->native_return_slot),
             g_p99_group_failed.load(std::memory_order_acquire))) {
         p99_group_partial(job, "cmd16-scope-lost-after-native");
         return result;
@@ -494,11 +512,6 @@ bool install_p99_group_shadow() {
         kEnableLegacyNadineActiveWeaponGripOverlayRepair) return false;
     if (!g_p99_group_fiber.initialize()) return false;
     // Verification only. Never copy or overwrite this unwind-described code.
-    constexpr std::array<std::uint8_t,43> prologue{
-        0x48,0x8B,0xC4,0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57,
-        0x48,0x81,0xEC,0xD0,0x05,0,0,0x48,0xC7,0x80,0x48,0xFB,0xFF,
-        0xFF,0xFE,0xFF,0xFF,0xFF,0x48,0x89,0x58,0x10,0x48,0x89,0x70,
-        0x18,0xC5,0xF8,0x29,0x70,0xC8};
     constexpr std::array<std::uint8_t,12> process_prologue{
         0x40,0x55,0x56,0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57};
     struct Site {
@@ -515,7 +528,12 @@ bool install_p99_group_shadow() {
     const auto stock_process = [&]() {
         return std::memcmp(reinterpret_cast<const void*>(g_module + kProcessAnimCmdListSegmentRva),
             process_prologue.data(), process_prologue.size()) == 0 &&
-            std::memcmp(native_async, prologue.data(), prologue.size()) == 0;
+            coop::p99_group_native_frame::layout_matches(
+                {native_async, coop::p99_group_native_frame::kNativePrologue.size()},
+                {reinterpret_cast<const std::uint8_t*>(g_module +
+                    coop::p99_group_native_frame::kContextLeaRvas[0]), 8},
+                {reinterpret_cast<const std::uint8_t*>(g_module +
+                    coop::p99_group_native_frame::kContextLeaRvas[1]), 8});
     };
     const auto free_allocations = [&]() {
         for (auto& s : sites) if (s.allocation != nullptr) VirtualFree(s.allocation,0,MEM_RELEASE);
@@ -551,8 +569,8 @@ bool install_p99_group_shadow() {
         std::memcpy(s.before.data(),s.address,5);
         s.after=s.before; s.after[0]=0xE8; std::memcpy(s.after.data()+1,&displacement,4);
     }
-    // The compiled wrapper CALLs the complete native function. No anonymous
-    // stack-changing trampoline, no original-prologue detour or jump-back.
+    // The unwind-described call bridge CALLs the complete native function and
+    // publishes its exact return slot. No moved prologue or jump-back.
     g_p99_group_async = reinterpret_cast<AnimManagerAsyncObjectUpdateJointBlendJobFunction>(
         g_module + kAnimManagerAsyncObjectUpdateJointBlendJobRva);
     const auto all_match = [&](bool patched) {

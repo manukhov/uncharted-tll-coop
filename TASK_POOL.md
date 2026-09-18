@@ -11,7 +11,37 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-18, AGV-safe): AGR PID11444 is REJECTED after the user
+Current handoff (2026-09-18, AGW-safe): no new game launch/injection/input.
+Full native21-row comparison is NOT complete. New static-only
+scripts/p99_native_source_audit.py independently reconstructs21 semantic joins,
+42 nine-byte record tails and42 exact local reference rows from pinned assets;
+all1329 compressed references validate. Artifacts are2016+378 bytes, NOT the
+future3948-byte complete native-operand fixture. Thirteen pure Python tests pass.
+The missing36 numerical bytes per record are built from joint/parent inverse
+global matrices, optional target-profile sampling and boneScale, not local-pose
+copies. Row20 profile=0; row157 FC34096C is found in elena-base with database
+46622D19, not target ED25C708. Exact lookup1417C8BA0 has no inheritance fallback;
+another registered/rebound copy is not excluded. Do not assume profile-present
+or absent. Builder source-T at1417CF58B uses source-GLOBAL index, unlike later
+compressed boneScale; Player fingers exceed473 reference rows, so preserve the
+entire owned raw asset when reconstructing native inputs.
+AGW also adds an unwind-described call bridge and exact native return-slot
+admission for Process/cmd16: same-fiber unwrapped recursive calls cannot inherit
+the outer job merely by sharing Fg/job pointers. Retail prologue and both LEAs
+are pinned; original instructions are never moved. Isolated verification and
+artifact details are in the final AGW COOP_STATUS entry:2610 native-frame checks,
+CTest18/18 and Python13/13 pass. Normal groups2..7 stay stock without false
+foreign/reentry refusal. Flags remain false and
+the unconditional static_assert still blocks re-enable. FLS remains necessary:
+Player vslot+418 at141BBDF20 really waits after Process/palette publication.
+Next close row20 numeric construction offline (full raw extents, preallocated
+entry, audited manager/allocator dependency); resolve row157 exact profile
+registration separately. Then compare all42 real native operands/21 output
+rows via the shared production loop. Do not substitute identity records or
+claim scalar/native equality. Preparation cost and AGR crash PC remain unknown;
+keep1ms budget and external fault-capture plan. Grip is still visually unfixed.
+
+Prior AGV handoff: AGR PID11444 is REJECTED after the user
 reported a crash. Log shows source COST-STOP18.1726ms, entered/completed0,
 publicationNONE; no EXECUTED/REFUSED/PARTIAL. The budget stopped overlay work,
 not the installed detours. Do not blame published rows or increase the budget.

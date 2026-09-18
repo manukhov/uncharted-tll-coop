@@ -58,10 +58,11 @@ struct Patch {
 
 // Value-only planner. A caller must still suspend/check thread RIPs, compare
 // ALL sites again and publish/rollback as one transaction. No queued native
-// callback is rewritten: jobs already holding the old address bypass the TLS
+// callback is rewritten: jobs already holding the old address bypass the FLS
 // wrapper. Empty-scope dispatch stays stock; ndjob switches Windows fibers,
 // so thread_local alone cannot isolate suspended jobs. Fiber-bound scope is
-// a separate mandatory blocker. This does not claim exactly-once scheduling.
+// mandatory, and exact native return-slot admission separates old recursive
+// calls on the SAME fiber. This does not claim exactly-once scheduling.
 inline std::optional<Patch> plan(std::size_t index, std::uintptr_t module,
     std::span<const std::uint8_t> observed, std::uintptr_t relay, std::uintptr_t hook) {
     static_assert(sizeof(std::uintptr_t) == 8);
