@@ -19,9 +19,12 @@ struct P99GroupProcess {
     std::uint32_t group = UINT32_MAX;
     bool consumed = false;
 };
-thread_local P99GroupJob* g_p99_group_job = nullptr;
-thread_local P99GroupProcess* g_p99_group_process = nullptr;
-thread_local coop::p99_group_entry::Active* g_p99_group_entry = nullptr;
+struct P99FiberFrame : coop::p99_group_fiber::Binding {
+    P99GroupJob* job = nullptr;
+    P99GroupProcess* process = nullptr;
+    coop::p99_group_entry::Active entry{};
+};
+coop::p99_group_fiber::Slot<P99FiberFrame> g_p99_group_fiber;
 AnimManagerAsyncObjectUpdateJointBlendJobFunction g_p99_group_async = nullptr;
 std::atomic<bool> g_p99_group_failed{false};
 std::atomic<unsigned> g_p99_group_reject_logs{0};
@@ -189,58 +192,57 @@ bool seh_p99_group_entry_observations(void* job, coop::p99_group_entry::Observat
 }
 
 // No large source/job values are initialized for foreign animation objects.
-// Keep this separate from the outer native-entry/TLS wrapper.
-__declspec(noinline) void p99_group_candidate_async(void* job, const coop::p99_group_entry::Active& entry) {
+// Keep this separate from the outer native-entry/fiber wrapper.
+__declspec(noinline) void p99_group_candidate_async(void* job, P99FiberFrame& frame) {
     const auto begin = p99_group_cost_start();
     P99GroupJob current{};
     current.cost.limit = g_p99_group_cost_limit;
     const bool prepared = begin.valid && prepare_p99_group_values(job, &current);
     const bool within_cost = p99_group_cost_finish(current, begin, "source");
-    if (prepared && within_cost && !entry.reentered && !g_p99_group_failed.load(std::memory_order_acquire))
-        g_p99_group_job = &current;
+    if (prepared && within_cost && g_p99_group_fiber.owns(frame) && !frame.entry.reentered &&
+        !g_p99_group_failed.load(std::memory_order_acquire)) frame.job = &current;
     __try { g_p99_group_async(job); }
     __finally {
+        frame.job = nullptr;
         if (current.incomplete()) p99_group_partial(current, "job-ended-without-both-groups");
-        g_p99_group_job = nullptr;
     }
 }
 
 void __fastcall hooked_p99_group_async(void* job) {
-    auto* previous_job = g_p99_group_job;
-    auto* previous_process = g_p99_group_process;
-    auto* previous_entry = g_p99_group_entry;
-    coop::p99_group_entry::Active entry{};
-    coop::p99_group_entry::mark_parent(previous_entry);
-    g_p99_group_entry = &entry;
-    g_p99_group_job = nullptr;
-    g_p99_group_process = nullptr;
-    if (previous_job != nullptr) {
-        p99_group_partial(*previous_job, "nested-async");
+    P99FiberFrame frame{};
+    P99FiberFrame* previous = nullptr;
+    if (!g_p99_group_fiber.enter(frame, previous)) {
+        g_p99_group_failed.store(true, std::memory_order_release);
+        g_p99_group_async(job);
+        return;
     }
     // No exception handler retries stock. The finally block expires all scope
     // identities even when native execution unwinds exceptionally.
     __try {
-        const bool eligible = previous_entry == nullptr && previous_job == nullptr && previous_process == nullptr &&
+        if (previous != nullptr) {
+            coop::p99_group_entry::mark_parent(&previous->entry);
+            if (previous->job != nullptr) p99_group_partial(*previous->job, "nested-async");
+        }
+        const bool eligible = previous == nullptr &&
             job != nullptr && g_module != 0 && g_state_net.enabled && g_net_role_b &&
             g_p99_group_shadow_ready.load(std::memory_order_acquire) &&
             !g_p99_group_failed.load(std::memory_order_relaxed);
         const bool candidate = coop::p99_group_entry::admit(eligible,
             [&](coop::p99_group_entry::Observations& seen) { return seh_p99_group_entry_observations(job, &seen); },
             [] { return true; });
-        if (candidate) p99_group_candidate_async(job, entry);
+        if (candidate) p99_group_candidate_async(job, frame);
         else g_p99_group_async(job);
     }
     __finally {
-        g_p99_group_process = previous_process;
-        g_p99_group_job = previous_job;
-        g_p99_group_entry = previous_entry;
+        if (!g_p99_group_fiber.leave(frame, previous))
+            g_p99_group_failed.store(true, std::memory_order_release);
     }
 }
 
 // Admission/glue is defined below; all pointer reads are isolated from native
 // execution so a validation fault can refuse before, never retry after, cmd16.
 bool seh_prepare_p99_group_process(const std::uint32_t*, std::uint32_t,
-    const void*, std::uint32_t, const void*, P99GroupProcess*);
+    const void*, std::uint32_t, const void*, P99GroupJob&);
 bool seh_prepare_p99_group_shadow(const void*, P99GroupProcess*,
     p99_shadow::Shadow*, p99_shadow::Context*);
 
@@ -249,32 +251,39 @@ std::uint32_t p99_group_process_call(bool first_site,
     std::uint32_t group, const void* a5, const void* a6, const void* a7) {
     const auto stock = reinterpret_cast<ProcessAnimCmdListSegmentFunction>(
         g_module + kProcessAnimCmdListSegmentRva);
-    auto* previous = g_p99_group_process;
+    auto* frame = g_p99_group_fiber.current();
+    if (frame == nullptr || g_p99_group_failed.load(std::memory_order_acquire))
+        return stock(commands, words, context, group, a5, a6, a7);
+    auto* previous = frame->process;
     P99GroupProcess process{};
-    auto* job = g_p99_group_job;
-    g_p99_group_process = nullptr;
-    if (job != nullptr && !job->refused && group <= 1) {
+    auto* job = frame->job;
+    std::uint32_t result = 0;
+    __try {
+      frame->process = nullptr;
+      if (job != nullptr && !job->refused && group <= 1) {
         const auto begin = p99_group_cost_start();
         const bool prepared = begin.valid && previous == nullptr && job->can_start(group,first_site) &&
             !g_p99_group_failed.load(std::memory_order_relaxed) &&
-            seh_prepare_p99_group_process(commands, words, context, group, a6, &process);
+            seh_prepare_p99_group_process(commands, words, context, group, a6, *job);
         const bool within_cost = p99_group_cost_finish(*job, begin, group == 0 ? "process0" : "process1");
-        if (!prepared || !within_cost || g_p99_group_failed.load(std::memory_order_acquire)) {
+        if (!prepared || !within_cost || job->refused || frame->entry.reentered ||
+            !g_p99_group_fiber.owns(*frame) ||
+            g_p99_group_failed.load(std::memory_order_acquire)) {
             p99_group_partial(*job, "process-admission");
             p99_group_reject("process-admission");
         } else {
             process.job = job;
             process.parent = context;
             process.group = group;
-            g_p99_group_process = &process;
+            frame->process = &process;
         }
+      }
+      result = stock(commands, words, context, group, a5, a6, a7);
     }
-    std::uint32_t result = 0;
-    __try { result = stock(commands, words, context, group, a5, a6, a7); }
     __finally {
+        frame->process = previous;
         if (process.job != nullptr && !process.consumed)
             p99_group_partial(*process.job, "process-missed-cmd16");
-        g_p99_group_process = previous;
     }
     return result;
 }
@@ -291,7 +300,9 @@ std::uint32_t __fastcall hooked_p99_group_process1(
 std::uint32_t* __fastcall hooked_p99_group_cmd16(std::uint32_t* status, const void* context) {
     const auto stock = reinterpret_cast<AnimCmdExecuteJointProgramsFunction>(
         g_module + kAnimCmdExecuteJointProgramsRva);
-    auto* process = g_p99_group_process;
+    auto* frame = g_p99_group_fiber.current();
+    if (frame == nullptr || g_p99_group_failed.load(std::memory_order_acquire)) return stock(status, context);
+    auto* process = frame->process;
     if (process == nullptr || process->job == nullptr) return stock(status, context);
     auto& job = *process->job;
     const auto begin = p99_group_cost_start();
@@ -301,15 +312,24 @@ std::uint32_t* __fastcall hooked_p99_group_cmd16(std::uint32_t* status, const vo
         !g_p99_group_failed.load(std::memory_order_acquire) &&
         seh_prepare_p99_group_shadow(context, process, &shadow, &copied);
     const bool within_cost = p99_group_cost_finish(job, begin, process->group == 0 ? "cmd16-0" : "cmd16-1");
-    if (!prepared || !within_cost || g_p99_group_failed.load(std::memory_order_acquire)) {
+    if (!prepared || !within_cost || job.refused || frame->entry.reentered ||
+        !g_p99_group_fiber.owns(*frame) ||
+        g_p99_group_failed.load(std::memory_order_acquire)) {
         p99_group_partial(job, "cmd16-admission");
         p99_group_reject("cmd16-admission");
         return stock(status, context);
     }
+    if (!job.enter(process->group)) {
+        p99_group_partial(job, "cmd16-sequence-changed");
+        return stock(status, context);
+    }
     process->consumed = true;
-    (void)job.enter(process->group); // can_start proved above; TLS not shared.
     auto* result = stock(status, copied.data()); // Exactly once; no retry.
-    job.finish(process->group);
+    if (!job.finish_after_native(process->group, g_p99_group_fiber.owns(*frame),
+            g_p99_group_failed.load(std::memory_order_acquire))) {
+        p99_group_partial(job, "cmd16-scope-lost-after-native");
+        return result;
+    }
     if (job.completed == 3 && g_p99_group_apply_logs.fetch_add(1) < 8) {
         char line[192]{};
         std::snprintf(line, sizeof(line),
@@ -332,10 +352,9 @@ bool p99_group_identity_exact(P99ReadBatch& pages, const P99GroupJob& job) {
 }
 
 bool seh_prepare_p99_group_process(const std::uint32_t* commands, std::uint32_t words,
-    const void* context, std::uint32_t group, const void* callback, P99GroupProcess*) {
+    const void* context, std::uint32_t group, const void* callback, P99GroupJob& job) {
     P99ReadBatch pages; // Never reused by cmd16 or the other group's Process.
     __try {
-        auto& job=*g_p99_group_job;
         if (group>1 || words==0 || words>p99_admit::kMaxCommandWords ||
             !p99_group_identity_exact(pages,job) ||
             !p99_group_readable(pages,reinterpret_cast<std::uintptr_t>(context),0x28) ||
@@ -473,6 +492,7 @@ bool install_p99_group_shadow() {
         kEnableLegacyNadineMazurDrawEndpointRepair ||
         kEnableLegacyNadinePistolPoseGripRepair ||
         kEnableLegacyNadineActiveWeaponGripOverlayRepair) return false;
+    if (!g_p99_group_fiber.initialize()) return false;
     // Verification only. Never copy or overwrite this unwind-described code.
     constexpr std::array<std::uint8_t,43> prologue{
         0x48,0x8B,0xC4,0x57,0x41,0x54,0x41,0x55,0x41,0x56,0x41,0x57,

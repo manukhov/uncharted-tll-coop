@@ -21,7 +21,7 @@ struct Active {
     bool reentered = false;
 };
 // Track entry itself, not just the later publication of an admitted job. Source
-// preparation is inside this boundary too. The runtime restores the TLS pointer
+// preparation is inside this boundary too. The runtime restores the FLS pointer
 // under __finally, including foreign/native exception exits.
 inline void mark_parent(Active* parent) noexcept {
     if (parent) parent->reentered = true;

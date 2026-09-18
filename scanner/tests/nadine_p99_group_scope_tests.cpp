@@ -28,6 +28,19 @@ int main() {
     check(!partial.enter(1)); check(partial.incomplete());
     State exception{}; check(exception.enter(0)); check(exception.incomplete());
     State next_job{}; check(next_job.enter(0)); // No cross-job ticket reuse.
+    for (unsigned group=0;group<2;++group)
+        for (unsigned owned=0;owned<2;++owned)
+            for (unsigned poisoned=0;poisoned<2;++poisoned) {
+                State output{};
+                if(group==1) { check(output.enter(0)); output.finish(0); }
+                check(output.enter(group));
+                unsigned stock_calls=0, executed_logs=0;
+                ++stock_calls; // Native may switch fibers or fail nested restoration.
+                const bool finished=output.finish_after_native(group,owned!=0,poisoned!=0);
+                if(finished&&output.completed==3)++executed_logs;
+                check(stock_calls==1); check(finished==(owned!=0&&poisoned==0));
+                if(!finished) { check(output.incomplete()); check(executed_logs==0); }
+            }
     std::cout<<checks<<" checks, "<<failed<<" failures\n";
     return failed?1:0;
 }

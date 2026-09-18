@@ -34,9 +34,11 @@
 #include "nadine_p99_group_admission.h"
 #include "nadine_p99_group_scope.h"
 #include "nadine_p99_group_memory.h"
+#include "nadine_p99_source_read.h"
 #include "nadine_p99_group_entry.h"
 #include "nadine_p99_group_budget.h"
 #include "nadine_p99_group_ingress.h"
+#include "nadine_p99_group_fiber.h"
 #include "nadine_pistol_grip_policy.h"
 
 // ============================================================================
@@ -61640,15 +61642,101 @@ std::atomic<bool> g_p99_chloe_transfer_ready{false};
 // the rejected persistent JointCache writer below.
 // AGR rejected: user-reported crash after source COST-STOP with no publication.
 // Exclude the entire package, not just overlay writes. The moved-prologue
-// installer has been removed, but source purity/cost and fault capture remain
-// unresolved. Offline ingress tests are NOT permission for a new game exam.
+// installer has been removed. Fiber scope and exact owned-source reads have
+// offline tests, but full native source cost/assertions and fault capture remain
+// unresolved. These tests are NOT permission for a new game exam.
 constexpr bool kEnableP99GroupShadow = false;
 static_assert(!kEnableP99GroupShadow,
-    "P99 remains blocked: prove fiber-local scope, read-only bounded source preparation and fault capture before re-enabling");
+    "P99 remains blocked: close native source assertions/cost, full output regression and fault capture before re-enabling");
 static_assert(!kEnableP99GroupShadow || !kEnableLegacyNadineP99ChloeGripTransfer,
     "Expanded group shadows must never coexist with the rejected persistent writer");
 std::atomic<bool> g_p99_group_shadow_ready{false};
 enum class P99SourcePurpose { kPersistentJointCache, kOwnedGroupValues };
+
+namespace p99_source = coop::p99_source_read;
+static_assert(kPlayerFgAnimDataOffset == 0x1A8 && kPlayerQuatOffset == 0x140 &&
+    kPlayerWeaponControllerOffset == 0x1D88 && kPlayerFastGrenadeControllerOffset == 0x1E50,
+    "Re-audit the owned P99 source layout when the shared Player offsets change");
+// Exact copied payload only, after Reader range admission. Volatile byte loads
+// make the before/after identity observations real reads, not an atomic lease.
+bool p99_source_copy(std::uintptr_t address, void* output, std::size_t count) noexcept {
+    __try {
+        const auto* source = reinterpret_cast<const volatile std::byte*>(address);
+        auto* target = static_cast<std::byte*>(output);
+        for (std::size_t i = 0; i < count; ++i) target[i] = source[i];
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+using P99SourceReader = p99_source::Reader<
+    decltype(&coop::p99_group_memory::query_region), decltype(&p99_source_copy)>;
+
+bool p99_source_range(P99SourcePurpose purpose, const void* pointer, std::size_t bytes) {
+    if (purpose == P99SourcePurpose::kPersistentJointCache)
+        return readable_bytes(pointer) >= bytes;
+    // Intentionally fresh for every registry/helper span. No certificate crosses
+    // native lookup/math/logging/unlock. Full 0x40000 registry spans are split.
+    P99SourceReader reader(&coop::p99_group_memory::query_region, &p99_source_copy);
+    return reader.range(reinterpret_cast<std::uintptr_t>(pointer), bytes);
+}
+
+void* p99_source_find_entry(P99SourcePurpose purpose, std::uint32_t source, std::uint32_t target) {
+    // All callers hold the existing SkelTable lock. Native lookup scans the
+    // complete fixed table, so re-admit it immediately before EACH native call.
+    if (purpose == P99SourcePurpose::kOwnedGroupValues) {
+        const auto count = *reinterpret_cast<const std::uint32_t*>(
+            g_module + kSkelTableRetargetEntryCountRva);
+        if (count == 0 || count > 4096 || !p99_source_range(purpose,
+            reinterpret_cast<const void*>(g_module + kSkelTableRetargetEntriesRva),
+            static_cast<std::size_t>(count) * 0x40)) return nullptr;
+    }
+    return reinterpret_cast<P99ChloeTransferFindEntryFunction>(
+        g_module + kSkelTableFindRetargetEntryRva)(source, target);
+}
+
+void* p99_source_retained_player(P99SourcePurpose purpose) {
+    if (purpose == P99SourcePurpose::kPersistentJointCache) return retained_player_object(0);
+    if (g_module == 0) return nullptr;
+    P99SourceReader reader(&coop::p99_group_memory::query_region, &p99_source_copy);
+    std::uintptr_t player = 0;
+    return p99_source::retained_player(reader, g_module + kRetainedSlotTableRva, player)
+        ? reinterpret_cast<void*>(player) : nullptr;
+}
+
+bool seh_resolve_p99_source_owner_scope(void* player, IdleArmPoseOwnerScope* output,
+    P99SourcePurpose purpose, p99_source::Owner* captured_out = nullptr) {
+    if (output == nullptr) return false;
+    if (captured_out != nullptr) *captured_out = {};
+    if (purpose == P99SourcePurpose::kPersistentJointCache)
+        return seh_resolve_idle_arm_pose_owner_scope(player, 0, output);
+    *output = {};
+    if (g_module == 0 || !g_state_net.enabled || player == nullptr) return false;
+    const p99_source::Contract contract{
+        g_module + kRetainedSlotTableRva, g_module + kPlayerVtableRva,
+        g_module + kPlayerWeaponControllerVtableRva, g_module + kFastGrenadeControllerVtableRva,
+        g_module + kProcessWeaponVtableRva, kLegacyNadineAttachTargetLookId,
+        kLegacyNadineTargetSkeletonArtId, kLegacyNadineUnderlyingSkeletonId, p99_order::kP99ArtId};
+    P99SourceReader reader(&coop::p99_group_memory::query_region, &p99_source_copy);
+    p99_source::Owner captured{};
+    if (!p99_source::owner(reader, contract, reinterpret_cast<std::uintptr_t>(player), captured) ||
+        !valid_network_position(captured.position.data()) ||
+        !valid_network_orientation(captured.orientation.data())) return false;
+    output->player = reinterpret_cast<void*>(captured.player);
+    output->fg_anim_data = reinterpret_cast<std::byte*>(captured.fg);
+    output->local_pose = reinterpret_cast<std::byte*>(captured.local_pose);
+    output->weapon = reinterpret_cast<void*>(captured.weapon);
+    output->weapon_art_id = p99_order::kP99ArtId;
+    output->weapon_slot = captured.slot;
+    output->controller_slot = captured.slot;
+    output->controller_state = captured.state;
+    std::memcpy(output->position, captured.position.data(), sizeof(output->position));
+    std::memcpy(output->orientation, captured.orientation.data(), sizeof(output->orientation));
+    std::memcpy(output->move_stick, captured.move_stick.data(), sizeof(output->move_stick));
+    std::memcpy(output->move_world, captured.move_world.data(), sizeof(output->move_world));
+    output->move_magnitude = captured.move_magnitude;
+    output->valid = true;
+    if (captured_out != nullptr) *captured_out = captured;
+    return true;
+}
 
 struct P99ChloeTransferArtSkeleton {
     bool valid = false;
@@ -61929,14 +62017,15 @@ bool seh_capture_p99_chloe_transfer_art_skeleton(
     std::uint32_t expected_skeleton_id, std::uint16_t expected_joint_count,
     std::uint16_t expected_parameter_count,
     std::uint8_t expected_group_count,
-    P99ChloeTransferArtSkeleton* output) {
+    P99ChloeTransferArtSkeleton* output,
+    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
     if (output == nullptr) {
         return false;
     }
     *output = {};
     __try {
         auto* const art = static_cast<std::byte*>(art_skeleton);
-        if (art == nullptr || readable_bytes(art) < 0x48 ||
+        if (art == nullptr || !p99_source_range(purpose, art, 0x48) ||
             *reinterpret_cast<const std::uint32_t*>(art + 0x24) !=
                 expected_database_id ||
             *reinterpret_cast<const std::uint32_t*>(art + 0x28) !=
@@ -61945,7 +62034,7 @@ bool seh_capture_p99_chloe_transfer_art_skeleton(
         }
         auto* const underlying =
             *reinterpret_cast<std::byte* const*>(art + 0x40);
-        if (underlying == nullptr || readable_bytes(underlying) < 0x24 ||
+        if (underlying == nullptr || !p99_source_range(purpose, underlying, 0x24) ||
             *reinterpret_cast<const std::uint32_t*>(underlying + 0x04) !=
                 expected_skeleton_id ||
             *reinterpret_cast<const std::uint16_t*>(underlying + 0x10) !=
@@ -61956,11 +62045,14 @@ bool seh_capture_p99_chloe_transfer_art_skeleton(
         }
         const std::uint32_t reference_offset =
             *reinterpret_cast<const std::uint32_t*>(underlying + 0x20);
-        auto* const reference_pose = underlying + reference_offset;
-        if (reference_offset < 0x24 || reference_pose < underlying ||
-            readable_bytes(reference_pose) <
+        std::uintptr_t reference_address = 0;
+        if (reference_offset < 0x24 ||
+            !p99_source::add(reinterpret_cast<std::uintptr_t>(underlying), reference_offset, reference_address))
+            return false;
+        auto* const reference_pose = reinterpret_cast<std::byte*>(reference_address);
+        if (!p99_source_range(purpose, reference_pose,
                 static_cast<std::size_t>(expected_parameter_count) *
-                    kP99ChloeTransferRowBytes) {
+                    kP99ChloeTransferRowBytes)) {
             return false;
         }
         output->valid = true;
@@ -61995,7 +62087,8 @@ void p99_chloe_transfer_unlock_skel_table() {
 }
 
 bool seh_p99_chloe_transfer_locked_registry_shape(
-    std::uint32_t* epoch_out) {
+    std::uint32_t* epoch_out,
+    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
     if (epoch_out == nullptr) {
         return false;
     }
@@ -62018,10 +62111,10 @@ bool seh_p99_chloe_transfer_locked_registry_shape(
             *reinterpret_cast<const std::uint32_t*>(
                 g_module + kSkelTableRegistryEpochRva);
         if (buckets == nullptr || sentinel == nullptr || epoch == 0 ||
-            readable_bytes(buckets) <
+            !p99_source_range(purpose, buckets,
                 (static_cast<std::size_t>(
                      kSkelTableRegistryExpectedBucketCount) + 1) *
-                    sizeof(void*) ||
+                    sizeof(void*)) ||
             buckets[kSkelTableRegistryExpectedBucketCount] != sentinel) {
             return false;
         }
@@ -62039,7 +62132,8 @@ bool seh_capture_p99_chloe_transfer_entry(
     const P99ChloeTransferArtSkeleton& source,
     const P99ChloeTransferArtSkeleton& target,
     P99ChloeTransferEntry* output, void** entry_out,
-    const std::byte** native_records_out) {
+    const std::byte** native_records_out,
+    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
     if (output == nullptr || entry_out == nullptr ||
         native_records_out == nullptr) {
         return false;
@@ -62066,17 +62160,16 @@ bool seh_capture_p99_chloe_transfer_entry(
         auto* const table = reinterpret_cast<std::byte*>(
             g_module + kSkelTableRetargetEntriesRva);
         if (entry_count <= index || entry_count > 4096 ||
-            readable_bytes(table) <
-                static_cast<std::size_t>(entry_count) * 0x40 ||
+            !p99_source_range(purpose, table,
+                static_cast<std::size_t>(entry_count) * 0x40) ||
             entry_count != *count_ptr) {
             return false;
         }
         auto* const entry = table + static_cast<std::size_t>(index) * 0x40;
-        const auto find_entry =
-            reinterpret_cast<P99ChloeTransferFindEntryFunction>(
-                g_module + kSkelTableFindRetargetEntryRva);
-        if (find_entry(expected.source_database_id,
-                       expected.target_database_id) != entry) {
+        if (p99_source_find_entry(purpose, expected.source_database_id,
+                       expected.target_database_id) != entry ||
+            (purpose == P99SourcePurpose::kOwnedGroupValues &&
+             !p99_source_range(purpose, entry, 0x40))) {
             return false;
         }
         auto* const authored =
@@ -62096,11 +62189,11 @@ bool seh_capture_p99_chloe_transfer_entry(
         void* const leg_ik =
             *reinterpret_cast<void* const*>(entry + 0x38);
         if (authored == nullptr || records == nullptr ||
-            readable_bytes(authored) < 0x2E ||
+            !p99_source_range(purpose, authored, 0x2E) ||
             runtime_count != expected.runtime_record_count ||
-            readable_bytes(records) <
+            !p99_source_range(purpose, records,
                 static_cast<std::size_t>(runtime_count) *
-                    p99_order::kRuntimeRetargetRecordStride ||
+                    p99_order::kRuntimeRetargetRecordStride) ||
             *reinterpret_cast<const std::uint32_t*>(entry + 0x08) !=
                 expected.source_database_id ||
             *reinterpret_cast<const std::uint32_t*>(entry + 0x0C) !=
@@ -62138,7 +62231,7 @@ bool seh_capture_p99_chloe_transfer_entry(
         // their in-memory contiguity an admission condition would reject a
         // valid relocated resource.
         if (authored_map == nullptr ||
-            readable_bytes(authored_map) < authored_map_bytes) {
+            !p99_source_range(purpose, authored_map, authored_map_bytes)) {
             return false;
         }
         for (const auto& transfer : p99_order::kExpectedTransfers) {
@@ -62234,7 +62327,8 @@ bool seh_capture_p99_chloe_transfer_entry(
     }
 }
 
-bool seh_validate_p99_chloe_transfer_row124(void** entry_out) {
+bool seh_validate_p99_chloe_transfer_row124(void** entry_out,
+    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
     if (entry_out == nullptr) {
         return false;
     }
@@ -62247,21 +62341,20 @@ bool seh_validate_p99_chloe_transfer_row124(void** entry_out) {
         auto* const table = reinterpret_cast<std::byte*>(
             g_module + kSkelTableRetargetEntriesRva);
         if (count <= kIndex || count > 4096 ||
-            readable_bytes(table) < static_cast<std::size_t>(count) * 0x40) {
+            !p99_source_range(purpose, table, static_cast<std::size_t>(count) * 0x40)) {
             return false;
         }
         auto* const entry = table + static_cast<std::size_t>(kIndex) * 0x40;
-        const auto find_entry =
-            reinterpret_cast<P99ChloeTransferFindEntryFunction>(
-                g_module + kSkelTableFindRetargetEntryRva);
         auto* const authored =
             *reinterpret_cast<std::byte* const*>(entry + 0x00);
         auto* const records =
             *reinterpret_cast<std::byte* const*>(entry + 0x18);
-        if (find_entry(p99_order::kPlayerDatabaseId,
+        if (p99_source_find_entry(purpose, p99_order::kPlayerDatabaseId,
                        p99_order::kNadineDatabaseId) != entry ||
-            authored == nullptr || readable_bytes(authored) < 0x2E ||
-            records == nullptr || readable_bytes(records) < 71 * 0x2E ||
+            (purpose == P99SourcePurpose::kOwnedGroupValues &&
+             !p99_source_range(purpose, entry, 0x40)) ||
+            authored == nullptr || !p99_source_range(purpose, authored, 0x2E) ||
+            records == nullptr || !p99_source_range(purpose, records, 71 * 0x2E) ||
             *reinterpret_cast<const std::uint32_t*>(entry + 0x08) !=
                 p99_order::kPlayerDatabaseId ||
             *reinterpret_cast<const std::uint32_t*>(entry + 0x0C) !=
@@ -62321,7 +62414,8 @@ int p99_chloe_transfer_native_record_index(
 }
 
 bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
-    void* target_skeleton, P99ChloeTransferLockedOperands* output) {
+    void* target_skeleton, P99ChloeTransferLockedOperands* output,
+    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
     if (output == nullptr) {
         return false;
     }
@@ -62330,7 +62424,7 @@ bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
     __try {
         std::uint32_t epoch = 0;
         if (target_skeleton == nullptr ||
-            !seh_p99_chloe_transfer_locked_registry_shape(&epoch)) {
+            !seh_p99_chloe_transfer_locked_registry_shape(&epoch, purpose)) {
             return false;
         }
         const auto resolve =
@@ -62348,17 +62442,17 @@ bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
                 player_art, p99_order::kPlayerDatabaseId,
                 p99_order::kPlayerSkeletonId, 702,
                 p99_order::parameter_pose_count(p99_order::kPlayerGroups),
-                9, &player) ||
+                9, &player, purpose) ||
             !seh_capture_p99_chloe_transfer_art_skeleton(
                 chloe_art, p99_order::kChloeDatabaseId,
                 p99_order::kChloeSkeletonId, 651,
                 p99_order::parameter_pose_count(p99_order::kChloeGroups),
-                8, &chloe) ||
+                8, &chloe, purpose) ||
             !seh_capture_p99_chloe_transfer_art_skeleton(
                 nadine_art, p99_order::kNadineDatabaseId,
                 p99_order::kNadineSkeletonId, 580,
                 p99_order::parameter_pose_count(p99_order::kNadineGroups),
-                8, &nadine)) {
+                8, &nadine, purpose)) {
             return false;
         }
 
@@ -62369,11 +62463,11 @@ bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
         const std::byte* row157_native = nullptr;
         if (!seh_capture_p99_chloe_transfer_entry(
                 20, p99_order::kExpectedRow20, player, chloe,
-                &captured.row20, &row20_entry, &row20_native) ||
+                &captured.row20, &row20_entry, &row20_native, purpose) ||
             !seh_capture_p99_chloe_transfer_entry(
                 157, p99_order::kExpectedRow157, chloe, nadine,
-                &captured.row157, &row157_entry, &row157_native) ||
-            !seh_validate_p99_chloe_transfer_row124(&row124_entry)) {
+                &captured.row157, &row157_entry, &row157_native, purpose) ||
+            !seh_validate_p99_chloe_transfer_row124(&row124_entry, purpose)) {
             return false;
         }
         const std::uint32_t entry_count =
@@ -62387,6 +62481,21 @@ bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
             row157_entry != table + 157 * 0x40) {
             return false;
         }
+        // Previous entry validation invoked native lookups. Re-admit every
+        // complete borrowed source allocation before the callback-free copy
+        // phase; do not reuse their earlier page certificates across calls.
+        if (purpose == P99SourcePurpose::kOwnedGroupValues &&
+            (!p99_source_range(purpose, row20_native,
+                static_cast<std::size_t>(captured.row20.metadata.runtime_record_count) *
+                    p99_order::kRuntimeRetargetRecordStride) ||
+             !p99_source_range(purpose, row157_native,
+                static_cast<std::size_t>(captured.row157.metadata.runtime_record_count) *
+                    p99_order::kRuntimeRetargetRecordStride) ||
+             !p99_source_range(purpose, chloe.reference_pose,
+                static_cast<std::size_t>(chloe.parameter_count) * kP99ChloeTransferRowBytes) ||
+             !p99_source_range(purpose, nadine.reference_pose,
+                static_cast<std::size_t>(nadine.parameter_count) * kP99ChloeTransferRowBytes)))
+            return false;
 
         for (std::size_t index = 0;
              index < p99_order::kExpectedTransfers.size(); ++index) {
@@ -62473,19 +62582,16 @@ bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
         }
 
         std::uint32_t epoch_after = 0;
-        const auto find_entry =
-            reinterpret_cast<P99ChloeTransferFindEntryFunction>(
-                g_module + kSkelTableFindRetargetEntryRva);
-        if (!seh_p99_chloe_transfer_locked_registry_shape(&epoch_after) ||
+        if (!seh_p99_chloe_transfer_locked_registry_shape(&epoch_after, purpose) ||
             epoch_after != epoch ||
             resolve(p99_order::kPlayerDatabaseId) != player_art ||
             resolve(p99_order::kChloeDatabaseId) != chloe_art ||
             resolve(p99_order::kNadineDatabaseId) != nadine_art ||
-            find_entry(p99_order::kPlayerDatabaseId,
+            p99_source_find_entry(purpose, p99_order::kPlayerDatabaseId,
                        p99_order::kChloeDatabaseId) != row20_entry ||
-            find_entry(p99_order::kPlayerDatabaseId,
+            p99_source_find_entry(purpose, p99_order::kPlayerDatabaseId,
                        p99_order::kNadineDatabaseId) != row124_entry ||
-            find_entry(p99_order::kChloeDatabaseId,
+            p99_source_find_entry(purpose, p99_order::kChloeDatabaseId,
                        p99_order::kNadineDatabaseId) != row157_entry) {
             return false;
         }
@@ -62506,7 +62612,8 @@ bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
 }
 
 bool capture_p99_chloe_transfer_locked_operands(
-    void* target_skeleton, P99ChloeTransferLockedOperands* output) {
+    void* target_skeleton, P99ChloeTransferLockedOperands* output,
+    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
     if (output == nullptr) {
         return false;
     }
@@ -62518,7 +62625,7 @@ bool capture_p99_chloe_transfer_locked_operands(
     __try {
         captured =
             seh_capture_p99_chloe_transfer_locked_operands_while_locked(
-                target_skeleton, output);
+                target_skeleton, output, purpose);
     } __finally {
         p99_chloe_transfer_unlock_skel_table();
     }
@@ -62534,7 +62641,8 @@ bool seh_p99_chloe_transfer_registry_identity_while_locked(
     std::uintptr_t expected_player_art,
     std::uintptr_t expected_chloe_art,
     std::uintptr_t expected_nadine_art,
-    void* target_skeleton) {
+    void* target_skeleton,
+    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
     __try {
         std::uint32_t skel_epoch = 0;
         if (expected_anim_epoch == 0 || expected_skel_epoch == 0 ||
@@ -62543,7 +62651,7 @@ bool seh_p99_chloe_transfer_registry_identity_while_locked(
             *reinterpret_cast<const std::uint32_t*>(
                 g_module + kAnimMasterTableArtGroupRegistryEpochRva) !=
                 expected_anim_epoch ||
-            !seh_p99_chloe_transfer_locked_registry_shape(&skel_epoch) ||
+            !seh_p99_chloe_transfer_locked_registry_shape(&skel_epoch, purpose) ||
             skel_epoch != expected_skel_epoch) {
             return false;
         }
@@ -62558,9 +62666,6 @@ bool seh_p99_chloe_transfer_registry_identity_while_locked(
                 g_module + kSkelTableRetargetEntryCountRva);
         auto* const table = reinterpret_cast<std::byte*>(
             g_module + kSkelTableRetargetEntriesRva);
-        const auto find_entry =
-            reinterpret_cast<P99ChloeTransferFindEntryFunction>(
-                g_module + kSkelTableFindRetargetEntryRva);
         return reinterpret_cast<std::uintptr_t>(player_art) ==
                 expected_player_art &&
             reinterpret_cast<std::uintptr_t>(chloe_art) ==
@@ -62568,11 +62673,13 @@ bool seh_p99_chloe_transfer_registry_identity_while_locked(
             reinterpret_cast<std::uintptr_t>(nadine_art) ==
                 expected_nadine_art &&
             nadine_art == target_skeleton && count > 157 && count <= 4096 &&
-            find_entry(p99_order::kPlayerDatabaseId,
+            (purpose != P99SourcePurpose::kOwnedGroupValues ||
+             p99_source_range(purpose, table, static_cast<std::size_t>(count) * 0x40)) &&
+            p99_source_find_entry(purpose, p99_order::kPlayerDatabaseId,
                        p99_order::kChloeDatabaseId) == table + 20 * 0x40 &&
-            find_entry(p99_order::kPlayerDatabaseId,
+            p99_source_find_entry(purpose, p99_order::kPlayerDatabaseId,
                        p99_order::kNadineDatabaseId) == table + 124 * 0x40 &&
-            find_entry(p99_order::kChloeDatabaseId,
+            p99_source_find_entry(purpose, p99_order::kChloeDatabaseId,
                        p99_order::kNadineDatabaseId) == table + 157 * 0x40 &&
             *reinterpret_cast<const std::uint32_t*>(
                 g_module + kSkelTableRegistryEpochRva) ==
@@ -62591,7 +62698,8 @@ bool p99_chloe_transfer_registry_identity_exact(
     std::uintptr_t expected_player_art,
     std::uintptr_t expected_chloe_art,
     std::uintptr_t expected_nadine_art,
-    void* target_skeleton) {
+    void* target_skeleton,
+    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
     if (!p99_chloe_transfer_try_lock_skel_table()) {
         return false;
     }
@@ -62599,7 +62707,7 @@ bool p99_chloe_transfer_registry_identity_exact(
     __try {
         exact = seh_p99_chloe_transfer_registry_identity_while_locked(
             expected_anim_epoch, expected_skel_epoch, expected_player_art,
-            expected_chloe_art, expected_nadine_art, target_skeleton);
+            expected_chloe_art, expected_nadine_art, target_skeleton, purpose);
     } __finally {
         p99_chloe_transfer_unlock_skel_table();
     }
@@ -62849,17 +62957,18 @@ bool seh_select_p99_chloe_transfer_epoch(
                 g_p99_chloe_transfer_ready.load(std::memory_order_acquire);
         if (!enabled ||
             !g_state_net.enabled || !g_net_role_b || g_module == 0 ||
-            job == nullptr || readable_bytes(job) < 0x10) {
+            job == nullptr || !p99_source_range(purpose, job, 0x10)) {
             return false;
         }
         auto* const fg = *reinterpret_cast<std::byte* const*>(
             static_cast<const std::byte*>(job) + 0x08);
-        void* const player = retained_player_object(0);
+        void* const player = p99_source_retained_player(purpose);
         IdleArmPoseOwnerScope owner{};
-        if (fg == nullptr || readable_bytes(fg) <
-                kFgAnimDataSkeletonOffset + sizeof(void*) ||
+        p99_source::Owner captured_owner{};
+        if (fg == nullptr || !p99_source_range(purpose, fg,
+                kFgAnimDataSkeletonOffset + sizeof(void*)) ||
             *reinterpret_cast<const std::uint8_t*>(fg + 0x06) != 2 ||
-            !seh_resolve_idle_arm_pose_owner_scope(player, 0, &owner) ||
+            !seh_resolve_p99_source_owner_scope(player, &owner, purpose, &captured_owner) ||
             !owner.valid || owner.player != player ||
             owner.fg_anim_data != fg || owner.controller_state !=
                 p99_order::kWeaponOutState ||
@@ -62867,9 +62976,9 @@ bool seh_select_p99_chloe_transfer_epoch(
             owner.weapon == nullptr) {
             return false;
         }
-        auto* const target_skeleton =
-            *reinterpret_cast<void* const*>(
-                fg + kFgAnimDataSkeletonOffset);
+        void* const target_skeleton = purpose == P99SourcePurpose::kOwnedGroupValues
+            ? reinterpret_cast<void*>(captured_owner.art)
+            : *reinterpret_cast<void* const*>(fg + kFgAnimDataSkeletonOffset);
         if (target_skeleton == nullptr) {
             return false;
         }
@@ -62898,12 +63007,12 @@ bool seh_select_p99_chloe_transfer_epoch(
         output->local_pose = nullptr;
         output->target_skeleton = target_skeleton;
         output->weapon = owner.weapon;
-        output->player_runtime_id =
-            *reinterpret_cast<const std::uint32_t*>(
+        output->player_runtime_id = purpose == P99SourcePurpose::kOwnedGroupValues
+            ? captured_owner.player_id : *reinterpret_cast<const std::uint32_t*>(
                 static_cast<const std::byte*>(player) +
                 kGameObjectRuntimeIdOffset);
-        output->weapon_runtime_id =
-            *reinterpret_cast<const std::uint32_t*>(
+        output->weapon_runtime_id = purpose == P99SourcePurpose::kOwnedGroupValues
+            ? captured_owner.weapon_id : *reinterpret_cast<const std::uint32_t*>(
                 static_cast<const std::byte*>(owner.weapon) +
                 kGameObjectRuntimeIdOffset);
         output->anim_registry_epoch = anim_registry_epoch;
@@ -62936,12 +63045,13 @@ bool seh_p99_chloe_transfer_epoch_owner_still_exact(
     P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
     __try {
         IdleArmPoseOwnerScope owner{};
+        p99_source::Owner captured_owner{};
         if ((purpose == P99SourcePurpose::kPersistentJointCache &&
              !seh_p99_chloe_joint_cache_plan_fits(epoch.target_skeleton)) ||
             !epoch.active || !epoch.valid || epoch.ambiguous ||
-            epoch.depth != 1 || retained_player_object(0) != epoch.player ||
-            !seh_resolve_idle_arm_pose_owner_scope(
-                epoch.player, 0, &owner) ||
+            epoch.depth != 1 || p99_source_retained_player(purpose) != epoch.player ||
+            !seh_resolve_p99_source_owner_scope(
+                epoch.player, &owner, purpose, &captured_owner) ||
             !owner.valid || owner.player != epoch.player ||
             owner.fg_anim_data != epoch.fg_anim_data ||
             owner.weapon != epoch.weapon ||
@@ -62950,10 +63060,23 @@ bool seh_p99_chloe_transfer_epoch_owner_still_exact(
             owner.local_pose == nullptr ||
             (epoch.local_pose != nullptr &&
              owner.local_pose != epoch.local_pose) ||
-            readable_bytes(owner.local_pose) <
+            (purpose == P99SourcePurpose::kPersistentJointCache &&
+             !p99_source_range(purpose, owner.local_pose,
                 static_cast<std::size_t>(p99_order::kNadineGroups[0].parameter_count) *
-                    kP99ChloeTransferRowBytes ||
-            *reinterpret_cast<void* const*>(
+                    kP99ChloeTransferRowBytes))) {
+            return false;
+        }
+        if (purpose == P99SourcePurpose::kOwnedGroupValues) {
+            // All object identities/IDs are owned values from the fresh checked
+            // snapshot, not additional unchecked dereferences after it returned.
+            return captured_owner.art == reinterpret_cast<std::uintptr_t>(epoch.target_skeleton) &&
+                captured_owner.player_id == epoch.player_runtime_id &&
+                captured_owner.weapon_id == epoch.weapon_runtime_id &&
+                epoch.anim_registry_epoch != 0 &&
+                *reinterpret_cast<const std::uint32_t*>(
+                    g_module + kAnimMasterTableArtGroupRegistryEpochRva) == epoch.anim_registry_epoch;
+        }
+        if (*reinterpret_cast<void* const*>(
                 static_cast<const std::byte*>(epoch.player) +
                 kPlayerFgAnimDataOffset) != epoch.fg_anim_data ||
             *reinterpret_cast<void* const*>(
@@ -62996,8 +63119,8 @@ P99ChloeTransferMaterializeResult seh_materialize_p99_chloe_embedded_epoch(
             return P99ChloeTransferMaterializeResult::kOwnerBefore;
         }
         IdleArmPoseOwnerScope post_perform_owner{};
-        if (!seh_resolve_idle_arm_pose_owner_scope(
-                prepared.player, 0, &post_perform_owner) ||
+        if (!seh_resolve_p99_source_owner_scope(
+                prepared.player, &post_perform_owner, purpose) ||
             !post_perform_owner.valid ||
             post_perform_owner.player != prepared.player ||
             post_perform_owner.fg_anim_data != prepared.fg_anim_data ||
@@ -63006,16 +63129,17 @@ P99ChloeTransferMaterializeResult seh_materialize_p99_chloe_embedded_epoch(
             post_perform_owner.controller_state !=
                 p99_order::kWeaponOutState ||
             post_perform_owner.local_pose == nullptr ||
-            readable_bytes(post_perform_owner.local_pose) <
+            (purpose == P99SourcePurpose::kPersistentJointCache &&
+             !p99_source_range(purpose, post_perform_owner.local_pose,
                 static_cast<std::size_t>(p99_order::kNadineGroups[0].parameter_count) *
-                    kP99ChloeTransferRowBytes) {
+                    kP99ChloeTransferRowBytes))) {
             return P99ChloeTransferMaterializeResult::kPostPerformOwner;
         }
         prepared.local_pose = post_perform_owner.local_pose;
 
         P99ChloeTransferLockedOperands operands{};
         if (!capture_p99_chloe_transfer_locked_operands(
-                prepared.target_skeleton, &operands)) {
+                prepared.target_skeleton, &operands, purpose)) {
             return P99ChloeTransferMaterializeResult::kLockedOperands;
         }
 
@@ -63061,7 +63185,7 @@ P99ChloeTransferMaterializeResult seh_materialize_p99_chloe_embedded_epoch(
                 prepared.player_art_identity,
                 prepared.chloe_art_identity,
                 prepared.nadine_art_identity,
-                prepared.target_skeleton)) {
+                prepared.target_skeleton, purpose)) {
             return P99ChloeTransferMaterializeResult::kOwnerAfter;
         }
         *epoch = prepared;
@@ -63091,7 +63215,7 @@ bool seal_p99_chloe_transfer_ticket(
     if (!p99_chloe_transfer_registry_identity_exact(
             epoch.anim_registry_epoch, epoch.skel_table_epoch,
             epoch.player_art_identity, epoch.chloe_art_identity,
-            epoch.nadine_art_identity, epoch.target_skeleton)) {
+            epoch.nadine_art_identity, epoch.target_skeleton, purpose)) {
         return false;
     }
 
@@ -63136,7 +63260,7 @@ bool seal_p99_chloe_transfer_ticket(
     p99_order::TransferEvidence evidence{};
     evidence.scope.is_role_b = g_net_role_b;
     evidence.scope.is_retained_local_owner =
-        retained_player_object(0) == epoch.player;
+        p99_source_retained_player(purpose) == epoch.player;
     evidence.scope.is_legacy_nadine = true;
     evidence.scope.owner_index = 0;
     evidence.scope.art_id = p99_order::kP99ArtId;
@@ -80067,7 +80191,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-17agt-safe "
+        "TLL co-op runtime init 2026-09-18agu-safe "
         "(all P99 group-shadow hooks disabled after AGR crash; legacy persistent grip writer disabled; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(

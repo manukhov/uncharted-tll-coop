@@ -2,7 +2,7 @@
 #include <cstdint>
 
 namespace coop::p99_group_scope {
-// Per-native-job values only. The Windows wrapper owns TLS lifetime, prevents
+// Per-native-job values only. The Windows wrapper owns fiber-local lifetime, prevents
 // nested exposure and expires this state under __finally. No identity here is
 // a lease for another job; partial publication is never presented as rollback.
 struct State {
@@ -25,6 +25,15 @@ struct State {
             return;
         }
         completed=entered;
+    }
+    [[nodiscard]] constexpr bool finish_after_native(std::uint32_t group,
+        bool owns_execution, bool globally_failed) noexcept {
+        if (!owns_execution || globally_failed || refused) {
+            refused = true;
+            return false; // Already published: no retry/rollback or EXECUTED.
+        }
+        finish(group);
+        return !refused;
     }
     [[nodiscard]] constexpr bool incomplete() const noexcept {
         return entered != 0 && completed != 3;

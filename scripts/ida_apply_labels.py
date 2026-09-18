@@ -9735,6 +9735,50 @@ FUNCTIONS = {
         "Called by ndjob cooperative worker wait at 0x1415D1E43; preserves "
         "OS thread while changing execution stack/fiber-local storage.",
     ),
+    0x142204DB0: (
+        "Platform_CreateFiber",
+        "STATIC: ndsys::CreateFiber in thread-win.cpp. Calls CreateFiberEx "
+        "at 0x142204E2B with 0x2000 commit, caller reserve/entry/parameter. "
+        "Ndjob init supplies entry 0x1415B1DF0 at 0x1415B2C42/0x1415B2CBE "
+        "and calls here at 0x1415B2C50/0x1415B2CCC. Actual Windows fibers, "
+        "not merely an engine name for OS threads.",
+    ),
+    0x1422054C0: (
+        "Platform_StartFiberExecution",
+        "STATIC: source-identified ndsys::StartFiberExecution. Converts "
+        "worker thread with ConvertThreadToFiber at 0x142205585, retains "
+        "return fiber in TLS+0x80, switches at 0x1422055E6 and calls "
+        "ConvertFiberToThread after return. Ndjob worker calls at 0x1415B1DBD.",
+    ),
+    0x1415B1D30: (
+        "Ndjob_WorkerThreadEntry",
+        "STATIC: OS worker thread entry initializes COM/platform thread, "
+        "acquires fiber via 0x1415D0330 at 0x1415B1DB5, enters it through "
+        "Platform_StartFiberExecution at 0x1415B1DBD, then cleans up and "
+        "ends the OS thread. Distinct from worker fiber entry 0x1415B1DF0.",
+    ),
+    0x1415B1DF0: (
+        "Ndjob_WorkerFiberEntryInitializeJobLocalStorage",
+        "STATIC: source string InitializeJobLocalStorageAtFiberStart, "
+        "job-system.cpp. Allocates 0x260 at 0x1415B1E3B and sets engine "
+        "FLS at 0x1415B1E96 before WorkerFiberLoop at 0x1415B1F44. "
+        "Installed as CreateFiberEx callback by two init callsites. Mod "
+        "overlay scope must use its own FLS indices, never engine FLS.",
+    ),
+    0x1415B3E00: (
+        "Ndjob_ShutdownWorkersFibersAndJobLocalStorage",
+        "STATIC: marks stop at 0x1415B3E1D, signals/joins worker threads "
+        "before ReleaseFiber calls 0x1415B3E9A/0x1415B3ECA, clears "
+        "scheduler global, then FlsFree at 0x1415B3F9B. Does not establish "
+        "arbitrary live-fiber deletion safety or DLL unload permission.",
+    ),
+    0x1422051E0: (
+        "Platform_ReleaseFiber",
+        "STATIC: source-identified ndsys::ReleaseFiber. Checks *arg1, "
+        "calls DeleteFiber at 0x142205237 then clears handle. Ndjob "
+        "shutdown calls only after its worker join phase. Borrowed "
+        "stack overlay FLS pointers must not have a cleanup callback.",
+    ),
     0x1415B47C0: (
         "NdjobFinalizeAndSubmitBatch",
         "Finalizes the ndjob batch and tails into enqueue 0x1415B4560. Callback "

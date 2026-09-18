@@ -32566,3 +32566,112 @@ Build tag2026-09-17agt-safe; DLL819712bytes SHA256
 Final rebuild after the fiber-scope guardrail still passes914checks and
 CTest13/13. Sole IDB saved1835functions/73data/1type with
 `save_database returned True` in reports/ida_apply_agt_status.txt; MCP restarted.
+
+### 2026-09-18 STATIC / implemented-disabled (`agu` fiber scope and owned reads)
+
+User said "Продолжай". No game launch, injection or game input. This is a
+bounded offline safety unit; AGR crash cause and visible P99 grip remain
+unresolved. Both group-shadow and persistent-writer flags stay false, and
+the unconditional static_assert blocks re-enable. AGC back/hip attachments,
+other weapons and rifle draw/holster timing are untouched.
+
+**Scope competitors:** thread_local, a thread-ID keyed map, private FLS, or
+proving all transitive waits impossible. The first two share the suspended
+job's scope with another fiber on the same thread; the last has no exclusion
+proof and conflicts with the known scheduler wait. Implemented private FLS,
+not an engine FLS overwrite or a global worker hook.
+
+Independent static evidence: (1) graph: ndjob init1415B1FA0 supplies
+callback1415B1DF0 at1415B2C42/2CBE to142204DB0 at1415B2C50/2CCC;
+worker1415B1D30 obtains a fiber1415B1DB5 and starts it1415B1DBD;
+(2) exact API/data operations:142204DB0 calls CreateFiberEx142204E2B,
+1422054C0 converts thread142205585 and switches1422055E6; fiber entry
+allocates0x2601415B1E3B and FlsSetValue1415B1E96 before WorkerFiberLoop;
+(3) source strings independently identify ndsys::CreateFiber,
+StartFiberExecution and ndjob::InitializeJobLocalStorageAtFiberStart;
+(4) known cooperative wait1415D1BE0->142205850 is a second switch path.
+Shutdown1415B3E00 signals/joins workers before ReleaseFiber1415B3E9A/3ECA
+and engine FlsFree1415B3F9B. ReleaseFiber1422051E0 calls DeleteFiber142205237.
+These are STATIC findings, not a runtime crash diagnosis.
+
+`nadine_p99_group_fiber.h` reserves frame and bootstrap FLS indices before
+any hook publication. Stack frame owns job/process/entry; each consumer reads
+its current FLS frame and checks identity. Identity uses fiber address (permits
+migration), or thread ID for nonfiber sync. Enter/leave/read/write failure
+poisons permanently; current checks poison BEFORE reading a possibly stale
+stack pointer. Borrowed stack pointers have no cleanup callback, and published
+indices are never freed/reused while callbacks can reach the DLL. Windows may
+allocate its own per-fiber FLS array on first use; this is not an allocation-free
+claim. No live-unload permission is inferred.
+
+Real fixture exposed fresh-fiber NULL/ERROR_INVALID_PARAMETER on FlsGetValue.
+Do not treat87 as "empty" or overwrite an unknown frame: initialize only the
+separate reserved bootstrap slot and strictly reread the frame slot. Failure
+still poisons. Preserve GetLastError across mod API use. Nested wrapped jobs
+hide parent data and refuse it on reentry; finally restores previous scope.
+Process preparation is inside its finally region, and pointers restore before
+diagnostic logging. Recheck refusal/reentry/ownership before cmd16; checked
+enter must succeed. Recheck scope after native before recording completion.
+Stock is called at most once per intercepted invocation; no exception retry.
+If publication already occurred, later refusal is not rollback.
+
+Windows fixture: A->B->A leaves B's old-stock path empty, independently scopes
+B's wrapper and restores A; same-fiber nested SEH restores parent; ordinary
+thread works; deleted/recreated fiber has empty scope; migrated fiber retains
+its scope on another thread. Fake failure tests cover allocation/read/publish/
+restore errors, stale poisoned slot,1000 switch cycles and bootstrap matrix.
+Final2228checks0fail. Scope state suite1084checks includes post-native refusal
+without duplicate stock or false EXECUTED. These are isolated executables,
+not production hook transaction fault injection or game verification. Ordinary
+old queued callbacks on other fibers/sequential empty scopes are covered;
+arbitrary direct recursive old callbacks on the SAME active fiber have no
+identified ingress edge and are not made distinguishable solely by FLS.
+
+**Source competitors:** retain shared getter (writes weapon+72), enable
+raw_inventory_only (wrong rifle policy), loosen admission (unsafe), or a
+dedicated checked current-slot read adapter. Implemented last option only
+for P99SourcePurpose::kOwnedGroupValues. Shared attachment helpers and legacy
+branch are unchanged. `nadine_p99_source_read.h` follows the previously
+documented1410A1F90 weak resolution without calling it: controller current
+slot0..17 -> record+148+10*slot handle64/generation32 -> handle+8 weapon ->
+weapon+BC equality. Preserve exact Player/controller/grenade/weapon vtables,
+retained/Fg generations, screen/look, mode2, C39 Art/raw, state2/grenade idle,
+P99 art/parent and transform checks. Before/after reads detect observed
+turnover, NOT arbitrary ABA, concurrent destruction or a new lifetime lease.
+
+Owner snapshot reuses at most64 exact page certificates without native calls;
+volatile checked copies perform fresh payload reads. Known broad readability
+calls in selector/owner/local-pose/Art/registry/retarget paths now route through
+fresh exact-range readers. Retained resolver is checked even at seal outside
+SEH. Native FindEntry gets a fresh full-table admission before EVERY call;
+4096*40=40000 spans split safely at20000, not a three-row prefix check. Native
+lookup results are re-admitted, and full record/reference arrays are rechecked
+after intervening lookups before callback-free copies. No page certificate
+crosses native math/lookup/logging/unlock. Accessibility remains distinct from
+allocator authority/native normal-job lifetime.
+
+Source137checks0fail include all input bytes unchanged including weapon72,
+entire fixture PAGE_READONLY, bad slot/generation/owner/Art/parent/state,
+observed turnover, guarded handles/weapon/adjacent pages without consuming
+guard, changed protection with fresh reader, overflow and second-half guard
+in40000 table. Lexical runtime wiring tests check purpose propagation and
+forbidden shared calls; these are tripwires, NOT an independent C++ callgraph
+proof. Existing policy/shadow tests pass and row math/masks are unchanged,
+but complete native21-row output equality through the new source adapter
+is NOT yet tested. Do not equate137 tests with that missing regression.
+
+**Remaining work / no runtime GO:** close DoJoint assertion callbacks via
+qword146B17C08 using operand preconditions and full21-row/mask regression;
+retain the bounded same-fiber old-callback limitation above; secure fresh
+fault-capture coverage. Actual native preparation cost is unmeasured after
+this change;1ms budget is unchanged. No claim of fixed lag, crash or grip.
+Only after these conditions and a distinguishing written prediction should
+the disabled package be considered for a one-copy user-driven exam.
+
+Release and CTest15/15 pass. Build2026-09-18agu-safe,819712bytes SHA256
+`0B08A0D92C034EA0857355F69EF217DB4BAB5CF0CA19D0929449A5BBC296C844`.
+Six new fiber lifecycle names applied to sole ida/tll.i64;1841functions,
+73data/1type, reports/ida_apply_agu_status.txt: save_database returned True.
+MCP restarted; readback resolves fiber entry/create names and ReleaseFiber
+xrefs to the two shutdown calls. Fiber/source/scope suites also pass20
+consecutive runs each. No tll.exe process is running at handoff.
