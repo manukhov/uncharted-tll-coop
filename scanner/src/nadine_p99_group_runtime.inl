@@ -60,6 +60,11 @@ bool p99_group_cost_finish(P99GroupJob& job, P99CostStamp begin, const char* sta
 }
 
 void p99_group_reject(const char* reason) {
+#if defined(TLL_P99_PREPARATION_AUDIT)
+    (void)reason;
+    if (g_p99_preparation_audit.stats) ++g_p99_preparation_audit.stats->rejected_calls;
+    return;
+#endif
     if (g_p99_group_reject_logs.fetch_add(1, std::memory_order_relaxed) < 24) {
         char line[192]{};
         std::snprintf(line, sizeof(line), "P99-GROUP REFUSED reason=%s", reason);
@@ -90,7 +95,7 @@ bool p99_group_readable(P99ReadBatch& pages, std::uintptr_t address, std::size_t
     // The shared fast readable_bytes helper is capped around0xB000 and can
     // NEVER admit the native0x20000 arena. Walk precisely the requested pages
     // here; do not widen that unrelated hot-path probe or skip allocator checks.
-    return pages.readable(address, bytes, coop::p99_group_memory::query_region);
+    return pages.readable(address, bytes, P99_SOURCE_QUERY_FUNCTION);
 }
 
 bool p99_group_program_exact(P99ReadBatch& pages, std::uintptr_t raw, std::uintptr_t custom, std::uint16_t count) {
@@ -145,11 +150,18 @@ bool seh_p99_group_normal_job(void* job, P99GroupJob* output) {
 }
 
 bool prepare_p99_group_values(void* job, P99GroupJob* output) {
+#if defined(TLL_P99_PREPARATION_AUDIT)
+    if (!g_p99_preparation_audit.stats || g_p99_preparation_audit.image != g_module ||
+        g_p99_preparation_audit.job != job) return false;
+    g_p99_preparation_audit.stats->failed_stage = static_cast<std::uint32_t>(p99_prep_audit::Stage::kNormalJob);
+#endif
     if (!seh_p99_group_normal_job(job, output)) return false;
     P99ChloeTransferEpoch epoch{};
     P99ChloeTransferTicket ticket{};
     constexpr auto purpose = P99SourcePurpose::kOwnedGroupValues;
+    P99_PREP_AUDIT_BEGIN(select, kSelect);
     if (!seh_select_p99_chloe_transfer_epoch(job, &epoch, purpose)) return false;
+    P99_PREP_AUDIT_END(select);
     if (reinterpret_cast<std::uintptr_t>(epoch.fg_anim_data) != output->fg ||
         reinterpret_cast<std::uintptr_t>(epoch.target_skeleton) != output->art) return false;
     const auto result = seh_materialize_p99_chloe_embedded_epoch(&epoch, purpose);
@@ -157,10 +169,12 @@ bool prepare_p99_group_values(void* job, P99GroupJob* output) {
         p99_group_reject(p99_chloe_transfer_materialize_reject(result));
         return false;
     }
+    P99_PREP_AUDIT_BEGIN(seal, kSeal);
     if (!seal_p99_chloe_transfer_ticket(epoch, &ticket, purpose)) {
         p99_group_reject("owned-source-policy");
         return false;
     }
+    P99_PREP_AUDIT_END(seal);
     output->rows = ticket.rows;
     output->nonce = ticket.nonce;
     // No owner, weapon, source/registry or local-pose pointer survives this

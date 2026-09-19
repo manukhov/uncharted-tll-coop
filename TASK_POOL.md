@@ -11,7 +11,28 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-18, AHA offline): no game launch/attach/injection/input.
+Current handoff (2026-09-19, AHB offline): no game launch/attach/injection/input.
+Complete production prepare_p99_group_values now runs in an inert separate
+full-TU helper on owned registries/resources, original native lookups/math.
+Full normaljob/select/owner/capture/identity/math/postcheck/seal output matches
+AGZ1008bytes in two independent runs,175/4096table slots,MXCSR1F80/9FC0.
+Each success12Resolve/12Find/42DoJoint/21Blend/123VirtualQuery, no mock math.
+1024warm samples ALL exceed1ms: medians3.88275..3.94240ms; final page-query
+adapter medians3.83105..3.84690ms (~98%), math0.008..0.010ms. Original AGR
+18.1726ms/crash is NOT attributed by this owned-layout test. Live1ms admission
+REJECTED; writerflagsfalse/static_assert/1ms cap stay. Do not launch/inject.
+Each child20reversible mutation cases:16refuse beforemath;4padding-only pass
+with exact output. Guards/readonlyvalues/lockzero intact. Release clean,
+CTest21/21,Python77/77. SingleIDB saved/restarted; artifacts under
+reports/ahb-offline-20260919-final; original reviewedAGW stays rollback.
+Next audit scoped query sharing, distinguishing fixed-image table extents from
+mutable borrowed resources; preserve PAGE_GUARD refusal/fresh payload+owner
+checks/unlock boundaries. Benchmark actual complete path with
+scripts/p99_preparation_audit.py --execute --samples 128 --output reports/<unique>.json.
+No unsafe cross-call/global/TLS page cache or raised budget. Live operand
+acceptance, AGR faultPC and visible grip remain unresolved.
+
+Prior AHA handoff (2026-09-18): no game launch/attach/injection/input.
 Owned preparation now has a3906-byte exact-value gate against the pinned AGZ
 conditional input (all42record prefixes45bytes/all42refs48bytes; ignore only
 unwritten record+2D). Compare completed owned arrays EVERY preparation, before

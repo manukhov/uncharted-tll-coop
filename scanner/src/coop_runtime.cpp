@@ -44,6 +44,9 @@
 #include "nadine_p99_group_fiber.h"
 #include "nadine_p99_group_native_frame.h"
 #include "nadine_pistol_grip_policy.h"
+#if defined(TLL_P99_PREPARATION_AUDIT)
+#include "../tests/p99_preparation_audit.h"
+#endif
 
 // ============================================================================
 //  FILE MAP (search "=====  <TITLE>" to jump). Sections in source order:
@@ -69,6 +72,44 @@
 // ============================================================================
 
 namespace {
+
+#if defined(TLL_P99_PREPARATION_AUDIT)
+namespace p99_prep_audit = coop::p99_preparation_audit;
+struct P99PreparationAuditBinding {
+    std::uintptr_t image = 0;
+    void* job = nullptr;
+    p99_prep_audit::Stats* stats = nullptr;
+    bool clock_failed = false;
+};
+P99PreparationAuditBinding g_p99_preparation_audit{};
+std::uint64_t p99_preparation_audit_begin(p99_prep_audit::Stage stage) {
+    LARGE_INTEGER stamp{};
+    if (g_p99_preparation_audit.stats)
+        g_p99_preparation_audit.stats->failed_stage = static_cast<std::uint32_t>(stage);
+    if (!QueryPerformanceCounter(&stamp) || stamp.QuadPart < 0) {
+        g_p99_preparation_audit.clock_failed = true;
+        return 0;
+    }
+    return static_cast<std::uint64_t>(stamp.QuadPart);
+}
+void p99_preparation_audit_end(std::uint64_t begin, std::uint64_t& total) {
+    LARGE_INTEGER stamp{};
+    if (!QueryPerformanceCounter(&stamp) || stamp.QuadPart < 0 ||
+        static_cast<std::uint64_t>(stamp.QuadPart) < begin ||
+        static_cast<std::uint64_t>(stamp.QuadPart) - begin > UINT64_MAX - total) {
+        g_p99_preparation_audit.clock_failed = true;
+        return;
+    }
+    total += static_cast<std::uint64_t>(stamp.QuadPart) - begin;
+}
+#define P99_PREP_AUDIT_BEGIN(name, stage) const auto p99_prep_begin_##name = \
+    p99_preparation_audit_begin(p99_prep_audit::Stage::stage)
+#define P99_PREP_AUDIT_END(name) do { if (g_p99_preparation_audit.stats) \
+    p99_preparation_audit_end(p99_prep_begin_##name, g_p99_preparation_audit.stats->name##_ticks); } while (false)
+#else
+#define P99_PREP_AUDIT_BEGIN(name, stage) ((void)0)
+#define P99_PREP_AUDIT_END(name) ((void)0)
+#endif
 
 // ============================================================================
 // =====  HOOK TYPEDEFS, ORIGINAL-FUNCTION POINTERS & CORE STATE GLOBALS
@@ -61640,6 +61681,43 @@ using P99ChloeTransferDoJointFunction = bool(__fastcall*)(
 using P99ChloeTransferBlendFunction = void(__fastcall*)(
     std::uint16_t, void*, void*, float, std::uint16_t, void*);
 
+#if defined(TLL_P99_PREPARATION_AUDIT)
+bool p99_preparation_audit_query(std::uintptr_t address,
+    coop::p99_group_readability::Region& region) noexcept {
+    LARGE_INTEGER begin{}, end{};
+    const bool started = QueryPerformanceCounter(&begin) != FALSE && begin.QuadPart >= 0;
+    if (g_p99_preparation_audit.stats) ++g_p99_preparation_audit.stats->virtual_queries;
+    const bool result = coop::p99_group_memory::query_region(address, region);
+    if (!started || !QueryPerformanceCounter(&end) || end.QuadPart < begin.QuadPart) {
+        g_p99_preparation_audit.clock_failed = true;
+    } else if (g_p99_preparation_audit.stats) {
+        g_p99_preparation_audit.stats->virtual_query_ticks +=
+            static_cast<std::uint64_t>(end.QuadPart - begin.QuadPart);
+    }
+    return result;
+}
+void* __fastcall p99_preparation_audit_resolve(std::uint32_t database) {
+    if (g_p99_preparation_audit.stats) ++g_p99_preparation_audit.stats->resolve_calls;
+    return reinterpret_cast<P99ChloeTransferResolveSkeletonFunction>(
+        g_module + kSkelTableResolveArtItemSkeletonRva)(database);
+}
+bool __fastcall p99_preparation_audit_retarget(const void* record, const void* source,
+    const void* reference, bool flag, void* output) {
+    if (g_p99_preparation_audit.stats) ++g_p99_preparation_audit.stats->retarget_calls;
+    return reinterpret_cast<P99ChloeTransferDoJointFunction>(
+        g_module + kRetargetPluginDoJointRetargetRva)(record, source, reference, flag, output);
+}
+void __fastcall p99_preparation_audit_blend(std::uint16_t encoding, void* left,
+    void* right, float weight, std::uint16_t field, void* scratch) {
+    if (g_p99_preparation_audit.stats) ++g_p99_preparation_audit.stats->blend_calls;
+    reinterpret_cast<P99ChloeTransferBlendFunction>(
+        g_module + kAnimJointParamsBlendTransformsByValidBitsRva)(encoding, left, right, weight, field, scratch);
+}
+#define P99_SOURCE_QUERY_FUNCTION p99_preparation_audit_query
+#else
+#define P99_SOURCE_QUERY_FUNCTION coop::p99_group_memory::query_region
+#endif
+
 P99ChloeTransferPerformFunction g_original_p99_chloe_transfer_perform = nullptr;
 std::atomic<bool> g_p99_chloe_transfer_ready{false};
 // Independent admission for cmd16-owned expanded storage. Never authorizes
@@ -61673,7 +61751,7 @@ bool p99_source_copy(std::uintptr_t address, void* output, std::size_t count) no
     } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
 using P99SourceReader = p99_source::Reader<
-    decltype(&coop::p99_group_memory::query_region), decltype(&p99_source_copy)>;
+    decltype(&P99_SOURCE_QUERY_FUNCTION), decltype(&p99_source_copy)>;
 
 // One callback-free admission phase only. Never retain this batch across a
 // native lookup/math call, logging, callback or unlock. Legacy behavior stays
@@ -61681,7 +61759,7 @@ using P99SourceReader = p99_source::Reader<
 class P99SourceRangeBatch {
 public:
     explicit P99SourceRangeBatch(P99SourcePurpose purpose) : purpose_(purpose),
-        reader_(&coop::p99_group_memory::query_region, &p99_source_copy) {}
+        reader_(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy) {}
     bool range(const void* pointer, std::size_t bytes) {
         if (purpose_ == P99SourcePurpose::kPersistentJointCache)
             return readable_bytes(pointer) >= bytes;
@@ -61697,7 +61775,7 @@ bool p99_source_range(P99SourcePurpose purpose, const void* pointer, std::size_t
         return readable_bytes(pointer) >= bytes;
     // Intentionally fresh for every registry/helper span. No certificate crosses
     // native lookup/math/logging/unlock. Full 0x40000 registry spans are split.
-    P99SourceReader reader(&coop::p99_group_memory::query_region, &p99_source_copy);
+    P99SourceReader reader(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
     return reader.range(reinterpret_cast<std::uintptr_t>(pointer), bytes);
 }
 
@@ -61711,6 +61789,9 @@ void* p99_source_find_entry(P99SourcePurpose purpose, std::uint32_t source, std:
             reinterpret_cast<const void*>(g_module + kSkelTableRetargetEntriesRva),
             static_cast<std::size_t>(count) * 0x40)) return nullptr;
     }
+#if defined(TLL_P99_PREPARATION_AUDIT)
+    if (g_p99_preparation_audit.stats) ++g_p99_preparation_audit.stats->find_calls;
+#endif
     return reinterpret_cast<P99ChloeTransferFindEntryFunction>(
         g_module + kSkelTableFindRetargetEntryRva)(source, target);
 }
@@ -61718,7 +61799,7 @@ void* p99_source_find_entry(P99SourcePurpose purpose, std::uint32_t source, std:
 void* p99_source_retained_player(P99SourcePurpose purpose) {
     if (purpose == P99SourcePurpose::kPersistentJointCache) return retained_player_object(0);
     if (g_module == 0) return nullptr;
-    P99SourceReader reader(&coop::p99_group_memory::query_region, &p99_source_copy);
+    P99SourceReader reader(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
     std::uintptr_t player = 0;
     return p99_source::retained_player(reader, g_module + kRetainedSlotTableRva, player)
         ? reinterpret_cast<void*>(player) : nullptr;
@@ -61730,6 +61811,7 @@ bool seh_resolve_p99_source_owner_scope(void* player, IdleArmPoseOwnerScope* out
     if (captured_out != nullptr) *captured_out = {};
     if (purpose == P99SourcePurpose::kPersistentJointCache)
         return seh_resolve_idle_arm_pose_owner_scope(player, 0, output);
+    P99_PREP_AUDIT_BEGIN(owner, kOwner);
     *output = {};
     if (g_module == 0 || !g_state_net.enabled || player == nullptr) return false;
     const p99_source::Contract contract{
@@ -61737,7 +61819,7 @@ bool seh_resolve_p99_source_owner_scope(void* player, IdleArmPoseOwnerScope* out
         g_module + kPlayerWeaponControllerVtableRva, g_module + kFastGrenadeControllerVtableRva,
         g_module + kProcessWeaponVtableRva, kLegacyNadineAttachTargetLookId,
         kLegacyNadineTargetSkeletonArtId, kLegacyNadineUnderlyingSkeletonId, p99_order::kP99ArtId};
-    P99SourceReader reader(&coop::p99_group_memory::query_region, &p99_source_copy);
+    P99SourceReader reader(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
     p99_source::Owner captured{};
     if (!p99_source::owner(reader, contract, reinterpret_cast<std::uintptr_t>(player), captured) ||
         !valid_network_position(captured.position.data()) ||
@@ -61757,6 +61839,7 @@ bool seh_resolve_p99_source_owner_scope(void* player, IdleArmPoseOwnerScope* out
     output->move_magnitude = captured.move_magnitude;
     output->valid = true;
     if (captured_out != nullptr) *captured_out = captured;
+    P99_PREP_AUDIT_END(owner);
     return true;
 }
 
@@ -61983,6 +62066,11 @@ static_assert(
     "generated P99 source rows must match the semantic retarget join");
 
 void log_p99_chloe_transfer_reject(const char* reason) {
+#if defined(TLL_P99_PREPARATION_AUDIT)
+    (void)reason;
+    if (g_p99_preparation_audit.stats) ++g_p99_preparation_audit.stats->rejected_calls;
+    return; // Offline refusals never open runtime log files.
+#endif
     static std::atomic<std::uint32_t> count{0};
     static std::atomic<bool> saturated{false};
     const std::uint32_t row = count.fetch_add(1, std::memory_order_relaxed);
@@ -62442,9 +62530,13 @@ bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
             !seh_p99_chloe_transfer_locked_registry_shape(&epoch, purpose)) {
             return false;
         }
+#if defined(TLL_P99_PREPARATION_AUDIT)
+        const auto resolve = &p99_preparation_audit_resolve;
+#else
         const auto resolve =
             reinterpret_cast<P99ChloeTransferResolveSkeletonFunction>(
                 g_module + kSkelTableResolveArtItemSkeletonRva);
+#endif
         void* const player_art = resolve(p99_order::kPlayerDatabaseId);
         void* const chloe_art = resolve(p99_order::kChloeDatabaseId);
         void* const nadine_art = resolve(p99_order::kNadineDatabaseId);
@@ -62672,9 +62764,13 @@ bool seh_p99_chloe_transfer_registry_identity_while_locked(
             skel_epoch != expected_skel_epoch) {
             return false;
         }
+#if defined(TLL_P99_PREPARATION_AUDIT)
+        const auto resolve = &p99_preparation_audit_resolve;
+#else
         const auto resolve =
             reinterpret_cast<P99ChloeTransferResolveSkeletonFunction>(
                 g_module + kSkelTableResolveArtItemSkeletonRva);
+#endif
         void* const player_art = resolve(p99_order::kPlayerDatabaseId);
         void* const chloe_art = resolve(p99_order::kChloeDatabaseId);
         void* const nadine_art = resolve(p99_order::kNadineDatabaseId);
@@ -62750,8 +62846,12 @@ bool seh_evaluate_p99_chloe_transfer_joint(
             row20_record, row157_record, transfer, player_base, chloe_additive,
             chloe_reference, nadine_reference, output, p99_chloe_transfer_row_valid,
             coop::p99_source_native_guard::record_valid,
+#if defined(TLL_P99_PREPARATION_AUDIT)
+            &p99_preparation_audit_retarget, &p99_preparation_audit_blend);
+#else
             reinterpret_cast<P99ChloeTransferDoJointFunction>(g_module + kRetargetPluginDoJointRetargetRva),
             reinterpret_cast<P99ChloeTransferBlendFunction>(g_module + kAnimJointParamsBlendTransformsByValidBitsRva));
+#endif
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *output = {};
         return false;
@@ -62786,7 +62886,13 @@ bool seh_select_p99_chloe_transfer_epoch(
     *output = {};
     __try {
         const bool enabled = purpose == P99SourcePurpose::kOwnedGroupValues
+#if defined(TLL_P99_PREPARATION_AUDIT)
+            ? g_p99_preparation_audit.stats != nullptr &&
+                g_p99_preparation_audit.image == g_module &&
+                g_p99_preparation_audit.job == job
+#else
             ? kEnableP99GroupShadow && g_p99_group_shadow_ready.load(std::memory_order_acquire)
+#endif
             : kEnableLegacyNadineP99ChloeGripTransfer &&
                 g_p99_chloe_transfer_ready.load(std::memory_order_acquire);
         if (!enabled ||
@@ -62972,10 +63078,12 @@ P99ChloeTransferMaterializeResult seh_materialize_p99_chloe_embedded_epoch(
         prepared.local_pose = post_perform_owner.local_pose;
 
         P99ChloeTransferLockedOperands operands{};
+        P99_PREP_AUDIT_BEGIN(capture, kCapture);
         if (!capture_p99_chloe_transfer_locked_operands(
                 prepared.target_skeleton, &operands, purpose)) {
             return P99ChloeTransferMaterializeResult::kLockedOperands;
         }
+        P99_PREP_AUDIT_END(capture);
 
         // Compare ONLY the completed owned copies on EVERY preparation. The
         // SkelTable lock/epochs do not exclude in-place package-callback builds.
@@ -62983,9 +63091,14 @@ P99ChloeTransferMaterializeResult seh_materialize_p99_chloe_embedded_epoch(
         // exam, not live profile absence. Never replace live inputs with it.
         if (purpose == P99SourcePurpose::kOwnedGroupValues &&
             !coop::p99_operand_identity::compare(operands).admitted()) {
+#if defined(TLL_P99_PREPARATION_AUDIT)
+            if (g_p99_preparation_audit.stats) g_p99_preparation_audit.stats->failed_stage =
+                static_cast<std::uint32_t>(p99_prep_audit::Stage::kOperandIdentity);
+#endif
             return P99ChloeTransferMaterializeResult::kOperandIdentity;
         }
 
+        P99_PREP_AUDIT_BEGIN(math, kMath);
         std::array<P99ChloeTransferGroupResult, 2> groups{};
         for (std::uint32_t target_group = 0; target_group < 2;
              ++target_group) {
@@ -63011,6 +63124,7 @@ P99ChloeTransferMaterializeResult seh_materialize_p99_chloe_embedded_epoch(
                     : P99ChloeTransferMaterializeResult::kEvaluateGroup1;
             }
         }
+        P99_PREP_AUDIT_END(math);
 
         prepared.skel_table_epoch = operands.skel_table_epoch;
         prepared.player_art_identity = operands.player_art_identity;
@@ -63021,6 +63135,7 @@ P99ChloeTransferMaterializeResult seh_materialize_p99_chloe_embedded_epoch(
         prepared.entries_captured = true;
         prepared.groups = groups;
         prepared.source_group_mask = 0x03u;
+        P99_PREP_AUDIT_BEGIN(postcheck, kPostcheck);
         if (!seh_p99_chloe_transfer_epoch_owner_still_exact(prepared, purpose) ||
             !p99_chloe_transfer_registry_identity_exact(
                 prepared.anim_registry_epoch,
@@ -63031,6 +63146,7 @@ P99ChloeTransferMaterializeResult seh_materialize_p99_chloe_embedded_epoch(
                 prepared.target_skeleton, purpose)) {
             return P99ChloeTransferMaterializeResult::kOwnerAfter;
         }
+        P99_PREP_AUDIT_END(postcheck);
         *epoch = prepared;
         return P99ChloeTransferMaterializeResult::kSuccess;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -80795,6 +80911,7 @@ DWORD WINAPI install_hook(void*) {
 
 }  // namespace
 
+#if !defined(TLL_P99_PREPARATION_AUDIT)
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void*) {
     if (reason == DLL_PROCESS_ATTACH) {
         g_self_module = reinterpret_cast<std::uintptr_t>(instance);
@@ -80813,3 +80930,4 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void*) {
     }
     return TRUE;
 }
+#endif

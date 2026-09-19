@@ -69,6 +69,24 @@ target_link_options(tll_coop_runtime PRIVATE /DEBUG:FULL /OPT:REF /OPT:ICF)
 
 include(CTest)
 if(BUILD_TESTING)
+    # Complete production preparation in an inert, explicitly bound offline DLL.
+    # Its private macro cannot change the separately compiled runtime target.
+    add_library(tll_p99_preparation_bridge SHARED tests/p99_preparation_bridge.cpp
+        $<TARGET_OBJECTS:tll_p99_native_frame_bridge>)
+    target_include_directories(tll_p99_preparation_bridge PRIVATE src tests)
+    target_compile_features(tll_p99_preparation_bridge PRIVATE cxx_std_20)
+    target_compile_definitions(tll_p99_preparation_bridge PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(tll_p99_preparation_bridge PRIVATE /W4 /permissive- /EHsc /Zi)
+    target_link_options(tll_p99_preparation_bridge PRIVATE /DEBUG:FULL /OPT:REF /OPT:ICF)
+    target_link_libraries(tll_p99_preparation_bridge PRIVATE ws2_32)
+    set_target_properties(tll_p99_preparation_bridge PROPERTIES PREFIX "")
+    add_executable(tll_p99_preparation_bridge_tests tests/p99_preparation_bridge_tests.cpp)
+    target_include_directories(tll_p99_preparation_bridge_tests PRIVATE tests)
+    target_compile_features(tll_p99_preparation_bridge_tests PRIVATE cxx_std_20)
+    target_compile_options(tll_p99_preparation_bridge_tests PRIVATE /W4 /permissive- /EHsc)
+    target_link_libraries(tll_p99_preparation_bridge_tests PRIVATE tll_p99_preparation_bridge)
+    add_test(NAME p99_preparation_bridge COMMAND tll_p99_preparation_bridge_tests)
+    set_tests_properties(p99_preparation_bridge PROPERTIES TIMEOUT 30)
     # Isolated numerical audit helper, not a deployable/injected runtime DLL.
     add_library(tll_p99_native_math_bridge SHARED tests/p99_native_math_bridge.cpp)
     target_include_directories(tll_p99_native_math_bridge PRIVATE src)

@@ -1,6 +1,15 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
-## Current user priority (2026-08-27)
+## Current user priority / handoff (2026-09-19)
+
+Continue the local Nadine P99 grip repair, including the reported lag/crash.
+AHB now measures the complete owned preparation without launching the game:
+about3.9ms, with123 page queries taking about98% on this owned layout. This
+exceeds the unchanged1ms limit; both writers remain disabled. Full21-row output
+matches AGZ, but visible grip and AGR crashPC are still unresolved. See the
+final AHB entry and TASK_POOL for the exact next optimization boundary.
+
+## Historical priority snapshot (2026-08-27)
 
 Correct the holstered positions of all other weapons on local legacy Nadine's
 back so they do not sink into her body. Preserve the user-confirmed Mazur back
@@ -33524,3 +33533,118 @@ only after static admission of the native read-only lookups. Live operand
 acceptance, complete preparation cost, AGR faultPC and visible grip remain open.
 No new game exam earned; any future exam must keep external PID/image-bound
 crash capture and a written behavior prediction distinct from cost measurements.
+
+## 2026-09-19 AHB: full owned preparation cost exam
+
+Pre-execution STATIC admission and falsifiable prediction (no game exam):
+competing explanations are (A)63 native math calls dominate the old source cost,
+(B)owner/page/registry/copy/policy preparation dominates, (C)the isolated layout
+does not reproduce the historical AGR18.1726ms cause. Do not infer A/B from the
+previous AGZ math-only bridge; C remains possible whatever this fixture reports.
+
+Three evidence kinds admit the isolated lookup closure: (1)MCP callgraph:
+Resolve1417CD100 -> sole callee1417D1170, Find1417D0BD0 call-free; native consumer
+ProcessAnimCmdListSegment uses them at141AB9EF5/141AB9ECC/141ABAFD5; (2)concrete
+loads/stores: four-byte FNV1a registry key, nodes next+0/key+10/value+18, return
+value[0], caller iterator16 only; retarget count1438401D8/table143864A00 and
+source+08/target+0C scan by40; no allocation/import/callback/resource write;
+(3)structural agreement with authored pinned assets, existing SkelTable
+login/logout lock contract and AGZ3948-byte numerical identity. Native hash
+walker has NO cycle bound; own exactly three acyclic chains in385 buckets,
+count384, sentinel at384, bucket indices227/89/358. The runtime adapter retains
+its real owned CAS/XCHG lock, epochs and every freshness boundary. This is not
+new authority to read arbitrary game memory.
+
+Prediction: the exact prepare_p99_group_values body, compiled into an inert
+offline-only full-TU DLL, completes normal-job/select/owner/capture/identity/
+math/postcheck/seal and yields the pinned1008 final bytes (SHAc3613114c77ed16949d7de7d374131e86a4ab5ce57a3695a8f0b9ba2bee122e7).
+Each successful preparation must count12Resolve/12Find/42DoJoint/21Blend,
+with real VirtualQuery calls and no rejection. Test175- and4096-entry owned
+table extents and MXCSR1F80/9FC0. A metadata/value/owner mismatch must refuse,
+not emit a substitute pose. No output, guard or immutable source mutation is
+allowed. A child fault/refusal/hash drift terminates the run, never retries
+inside a damaged image. Parent timeout60s; no tll process, injection or input.
+
+Timings start before P99GroupJob initialization through prepare return and
+include instrumentation. Phase times overlap; do not sum. Exclude fixture
+construction, Python, hook ingress/FLS, original animation job, budget charge,
+overlay publication and logs. Owned page placement/uncontended registries are
+NOT a live worst-case model. Row124 receives only a readable3266-byte unused
+zero span: its real validation never reads payload metadata/numerics; authored
+header/map/identity/scale stay exact. Other unused table slots are zero, not a
+claimed historical live snapshot. Any sub1ms result cannot admit the live cap.
+
+Both writer flags/static_assert/1ms cap remain unchanged. The offline macro
+exists only in the helper TU; its DllMain performs no action. Native code runs
+only against the build-pinned private mapped image; full.pdata stays registered.
+Preflight/unit construction uses a zeroed nonexecuting data allocation, not
+retail functions. Results and next step will follow below.
+
+### CONFIRMED in isolated execution only; live cost admission REJECTED
+
+The predicted complete path and exact21-row output pass. Two independent final
+children each ran4configurations x129 timed preparations (175/4096 table slots,
+MXCSR1F80/9FC0). Every successful call has12Resolve/12Find/42DoJoint/21Blend,
+123VirtualQuery adapters, zero refusals and the unchanged AGZ1008-byte digest.
+This is the actual runtime normal-job/select/materialize/seal implementation,
+not a second simplified C++ copy or mocked native callback timings.
+
+Final run medians (ms;128 warm samples per configuration):
+
+| Table / MXCSR | Complete preparation | Page-query adapter | Math / source rows |
+| --- | ---: | ---: | ---: |
+|175 /1F80|3.89770|3.84135|0.00830|
+|175 /9FC0|3.89935|3.84690|0.00810|
+|4096 /1F80|3.89515|3.83960|0.00800|
+|4096 /9FC0|3.88275|3.83105|0.00810|
+
+Repeat medians3.91930..3.94240ms. All1024 warm samples across the two final
+children exceed1ms; maxima6.7127ms/7.3650ms. The first, less-instrumented run
+also costs3.94535..4.02200ms median, so the extra query timing did not create
+the observed multi-ms result. Phase/QPC overhead is still included; no claim
+of an exact uninstrumented/live lower bound. Query adapter share in final run
+is96.94..98.79% per sample (mostly98%); all63native math operations plus source
+row building take only about0.008..0.010ms median. A is REJECTED for THIS fixture;
+B is measured here. C remains open for the historical AGR18.1726ms/crash.
+No scalar search-loop optimization or removal of numerical guards is justified
+by this profile. No live1ms admission and no game launch are earned.
+
+Each final child also runs20 reversible mutation cases outside timing: weapon
+generation, pending Fg raw buffer, null local pose, look, selected row20 numeric,
+selected row157 first/last numeric and busy lock all refuse before any math
+(16refusals across2table sizes). Numeric drift hits exact identity stage8;
+all refusal output is zero. Four selected record+2D padding changes still
+complete42+21math calls with identical output. Owned buffer canaries, complete
+immutable inputs and all touched mapped-image pages remain unchanged after
+restoration, including lockzero. Only the owned lock data page is temporarily
+RW; original protection/data slots are restored before freeing targets.
+
+Reproduce: `py -3.12 scripts/p99_preparation_audit.py --execute --samples 128 --output reports/<unique>.json`.
+Without --execute it only checks binary/fixture hashes, makes no native call.
+Local evidence: reports/p99-preparation-ahb-first.json, -final.json, -repeat.json.
+Runner pins executableSHAed1371a4b47961abc160e92aa0b9bdfd787638fa1a39ba2403b423ab45c210be
+through the existing native audit, not the older README executable hash.
+HelperSHA3caae694b535d7db5ec512969df6c78a72abc0417e2418f21ceab3283e807bc6;
+helperPDB63a25af332b9e1ec723388336de0877dead5596510dd75c74a2226609794ceea.
+CPU/MXCSR helper remains682a33710ad156bec66cb41eb3225bf155372ff55093b17df35e75ddc0ef4653.
+
+Release build clean; CTest21/21; Python77/77; bridge rejection smoke9checks0fail.
+Audit-only counters/timestamps, selector binding and inert DllMain compile out
+of the separately built runtime. Runtimeflags/static_assert unchanged; runtime
+DLL8384894c3a9b503980e5cc266e24abe280e3095311d1c027200b4d54eeb5a53d,
+PDBbc141f1d2f14ec1f05feb572dc16e42d65da1e8426600b3b4125bd1b9885feaf.
+No DLL injected, no attachments/back/rifle logic changed. Artifacts frozen in
+reports/ahb-offline-20260919-final; prior reviewedAGW remains rollback.
+Single IDB updated1878functions/73data/1type and saved: reports/ida_apply_ahb_status.txt
+contains save_database returned True. MCP restarted; lookup names read back.
+
+Next concrete step: audit which page-admission queries can be shared within
+statically proven callback-free phases, especially repeated fixed-image
+retarget-table admissions versus truly mutable external resource pointers.
+Measure changes using THIS complete producer and repeat negative/identity tests.
+Do not remove fresh owner/payload checks, consume PAGE_GUARD, create TLS/global
+page caches, carry borrowed resource authority across unlock/callbacks, or raise
+the1ms cap. Existing AHA fresh-native-call boundaries stay until a specific
+replacement is statically justified. Live operand acceptance, AGR faultPC and
+visible grip remain open; any eventual one-game exam still needs a written
+behavior prediction plus external PID/image-bound crash capture.

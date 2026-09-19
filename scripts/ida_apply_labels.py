@@ -3995,7 +3995,11 @@ FUNCTIONS = {
         "The live table is g_SkelTableRetargetEntries with 0x40-byte entries and "
         "g_SkelTableRetargetEntryCount elements; entry +0x18/+0x20 holds the "
         "resolved 0x2E-record pointer/count after unresolved authored names were "
-        "discarded by BuildRetargetEntry.",
+        "discarded by BuildRetargetEntry. STATIC AHB: call-free/read-only scan; "
+        "loads count once, compares entry+08/+0C, returns first match. No "
+        "allocation, lock, callback or retention. An owned isolated fixture "
+        "must exclude earlier duplicate pairs and bound the count; this says "
+        "nothing about live resource lifetime or uncontended performance.",
     ),
     0x141CC4940: (
         "GameLoading_Initialize",
@@ -4353,7 +4357,10 @@ FUNCTIONS = {
         "Resolves an ArtItemSkeleton from its StringId through the skeleton registry. "
         "This is a lock-free borrowed lookup: it calls the registry hash walker and "
         "returns node+0x18 value[0] without AddRef. Callers that cross a lifecycle "
-        "boundary must hold g_SkelTableRegistryLock while copying the value.",
+        "boundary must hold g_SkelTableRegistryLock while copying the value. "
+        "STATIC AHB: sole callee is 1417D1170; no imports/allocations/registry "
+        "writes. Registry lock protects node removal, not package-callback "
+        "in-place retarget payload rebuilds (see 1406FBB40).",
     ),
     0x1417CD4E0: (
         "SkelTable_LoginArtItemSkeleton",
@@ -4373,7 +4380,12 @@ FUNCTIONS = {
         "SkelTable_FindSkeletonRegistryNode",
         "Lock-free fixed-table hash walker used by ResolveArtItemSkeleton. It does "
         "not acquire the registry lock or retain the returned node; safe snapshots "
-        "must therefore enter through the owning SkelTable lock.",
+        "must therefore enter through the owning SkelTable lock. STATIC AHB: "
+        "FNV1a hashes the four little-endian ID bytes (811C9DC5/01000193), "
+        "bucket modulo count. Node next+00/key+10/value+18; null ends a chain; "
+        "buckets[count] is the miss sentinel. Only writes caller iterator16. "
+        "No chain-cycle bound: isolated replay requires nonzero count and "
+        "owned acyclic chains; it is not an arbitrary live-memory admission.",
     ),
     0x14193B2C0: (
         "RetargetAnimUsingBatchMgr",
