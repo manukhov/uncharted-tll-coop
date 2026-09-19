@@ -1,15 +1,15 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
-## Current user priority / handoff (2026-09-19)
+## Current user priority / handoff (2026-09-20)
 
 Continue the local Nadine P99 grip repair, including the reported lag/crash.
-AHD isolates the remaining synthetic cost:11 image queries consume~97.5% of
-query time because the private whole-image RX fixture exposes40..47MiB regions.
-A query-only before/split/restore control changes~113..132us to~1..2us and back;
-no retail code runs while split. The existing1.4ms fixture timing is NOT a live
-cost estimate. Complete80-query output still matches; both writers remain off,
-1ms unchanged. Visible grip/actual operands/AGR crashPC remain open. See finalAHD
-entry/TASK_POOL: one image-backed query-only control, then return to safety proof.
+ADF corrected the real retarget capacity to256 and traced ordinary package
+ownership. AFE prepares a one-shot source-only observation through two producer
+sites; Process/cmd16 and both pose writers remain disabled/stock.600 probes at
+100ms,120s window,one fullproducer,1ms post-call cap; original stock once.
+Release/CTest24/24/Python113/113 and owned producer regression pass. Prospective
+exam prediction and immutable artifacts are in the finalAFE entry. No grip fix
+or historical AGR crash-cause claim; do not resume synthetic cost campaigns.
 
 ## Historical priority snapshot (2026-08-27)
 
@@ -34321,3 +34321,81 @@ MCP restarted; all17 new names resolve at exact entry addresses. Allocator slot7
 allocation caller edges and neighboring draw-table xrefs were read back; corrected
 call sites141900357/422 are CALL instructions (35C/427 are result moves).
 Pre-existing untracked tmp/ preserved untouched; no ignored artifacts staged.
+
+## 2026-09-20 AFE: prospective one-shot source-only observation
+
+HYPOTHESIS for this exam, not a grip fix: ordinary retained-local Nadine state2
+P99 jobs at141A92A00 can run the existing complete owned producer once, either
+accepting its3906-byte operand gate or refusing with a bounded diagnostic,
+without supplying any resulting pose to native animation. Three alternatives:
+accepted same numerical domain; validly refused owner/operand identity; unsafe
+or too-costly execution. Do not interpret installation or absence of a crash
+as accepted operands, or successful preparation as a corrected visible grip.
+
+Pre-launch evidence quota:
+- AGS/AGW caller graph: async callback LEA1417815B7 and sync tail JMP141782B3A
+  reach complete native141A92A00. The existing pinned planner preserves opcode,
+  ABI and original job; no moved unwind prologue. Existing native-frame/FLS
+  fixtures check normal and exceptional stock-once dispatch and fiber isolation.
+- Native layout/dataflow: normaljob reads job+8/Fg, kind2, Art18==Art1A0,
+  raw Nadine identity+6480. Retained handle/generation slot-before/Fg/slot-after
+  rejects foreign jobs before borrowed owner reads; full selector repeats
+  owner/weapon/generation checks. Neither raw-mode nor arbitrary sampling job
+  is admitted as a normal state2 job.
+- ADF allocator RTTI slot7 and resource/fixup graph establish ordinary package
+  ownership; both registry-lock/finally and fresh page/identity gates remain.
+  Exact completed-owned operands precede native math; AGZ/AHB/ADF independent
+  owned executions retain42DoJoint/21Blend and exact1008-byte output.
+
+Implementation candidate: separate source-observation flag and ready gate;
+both writer flagsfalse and unconditional static_assert remain. Installer only
+patches the2 producer sites, verifies all3 Process/cmd16 calls remain stock,
+retains the original transactional/RIP/protection/rollback/relay-lifetime rules.
+No Process or cmd16 hook and no frame.job/pose-context publication. Rate-limit
+P99 owner preselection to100ms, maximum600 probes and120s from install. Exactly
+ONE selected full preparation, no retry on success/refusal/cost. Measure combined
+preselection+producer against the unchanged1ms post-call cap; no preemption or
+hard worst-frame guarantee. All stop paths keep reachable relays/DLL/FLS alive.
+
+Written prediction BEFORE the new build/exam: once the user loads the ordinary
+scene and draws P99 as Nadine, expect at most one P99-OBSERVE RESULT then STOP.
+prepared=1 means complete producer admission only; prepared=0 must name its
+stage/detail. Budget/clock/refusal means no second full attempt. Native stock
+receives the original job exactly once on ordinary return and refusal paths;
+no copied cmd16 context/overlay/APPLIED or persistent pose writes should occur.
+Nadine's grip should therefore look unchanged, unlike a mistakenly enabled
+shadow writer. One tll.exe only; no automated game input. No unload/rebind test.
+
+External watcher must be alive and READY for the same PID/creation/image before
+injection; freeze exact DLL/PDB/watcher/injector and imageSHA. A second-chance
+fault requires this session's dump/context, not old Crashpad files. Debugger
+timing is perturbed: even success within1ms here is not production-performance
+proof. Generic cross-Level Package+830 rebind remains outside this exam.
+
+Offline AFE checks: Release clean, CTest24/24, Python113/113. New policy tests
+5002checks include concurrent lease admission, clock/deadline boundaries and
+synthetic callback composition (12 ordinary paths,3 exceptional paths); the
+model is not Windows SEH proof. Existing real assembly/FLS tests remain. Fresh
+owned samples1 keeps80/12/12/42/21 and exact1008-byte AGZ output,26mutations and
+4fresh-guard cases; no new performance claim. Added source-wiring guards against
+writer re-enable, pose publication, downstream installation and stock retry.
+120s expiry also precedes FLS/foreign-identity admission; FLS failure emits STOP
+instead of silently going inert. An unexpected preparation exception propagates
+without a compensating stock call; stock exceptions are never retried.
+
+Injector safety fix (not a game finding): former code ignored WaitForSingleObject
+and could accept STILL_ACTIVE while freeing the remote DLL-path argument. New
+shared completion policy requires signaled wait and a valid completed nonzero/
+non259 result. Timeout/failed/unexpected wait is INJECTION_INCONCLUSIVE, nonzero
+exit, no remote-path free or thread termination; no blind retry.36purechecks.
+This is required for debugger-attached injection, not proof of the AGR cause.
+
+Frozen reports/afe-observe-20260920-final:
+runtimeSHA1da605e0961f2de050b25de10313ad8a794e3bc7c993cb1118280fcd8538d6fe;
+PDBSHAe6e418ab5ba97eaa7f90f67f4b5d73bbd9c4a0096b65587a01e558d5f9a9afd8;
+watcherSHAcef3f9462c666684aca35c831a48bac80e77bce7f1fb414493ee7e57c9e29857;
+injectorSHAc4a19fbb5a82ebca90bf19266519023f389b439435bb3c64809283efd865e440.
+Preparation helperSHAb673b422eebb1f3653274011036c1c923516c47f955295c5f5547c02b192f558.
+IDB three ingress/native comments updated and saved:1902functions/73data/1type,
+save_database returned True (reports/ida_apply_afe_status.txt). No new function
+names required. ReviewedAGW remains rollback. Runtime result is pending below.

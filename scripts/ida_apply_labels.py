@@ -2884,7 +2884,9 @@ FUNCTIONS = {
         "0x141781601 and the copied 0x80-byte third-category record at "
         "0x141781636. Generic worker invokes record+0 with RCX=record+8 "
         "at 0x1415D11B7. This callback-value boundary leaves native unwind "
-        "intact; already queued old callbacks are not rewritten.",
+        "intact; already queued old callbacks are not rewritten. AFE source-only "
+        "exam uses this ingress and sync141782B3A ONLY, with unchanged native "
+        "Process/cmd16 sites; one owned preparation never publishes pose rows.",
     ),
     0x141782AF0: (
         "AnimManager_AppendSyncUpdateJobAndStepParams",
@@ -5680,7 +5682,12 @@ FUNCTIONS = {
         "return slot. A nested old callback can share Fg/job values but "
         "cannot share the active return-slot address. Owner callbacks "
         "+0x410/+0x418/+0x420 run after Process/palette work; +0x418 "
-        "141BBDF20 really waits, so whole-job no-yield is false.",
+        "141BBDF20 really waits, so whole-job no-yield is false. AFE bounded "
+        "source-only observer keeps full native prologue and calls this original "
+        "job once after its read-only candidate stack expires. No Process/cmd16 "
+        "replacement, frame.job publication or grip claim; full producer once, "
+        "post-call1ms cap and terminal no-retry policy. Lifecycle guarantees "
+        "remain scoped to ADF ordinary package path, not arbitrary Level rebind.",
     ),
     0x141A8F9D0: (
         "AnimManager_DispatchRetainedOwnerPhase",
@@ -11426,7 +11433,9 @@ FUNCTIONS = {
         "AnimManager_AsyncObjectUpdateJointBlendJob 0x141A92A00. Exact "
         "tail JMP at 0x141782B3A is E9 C1 FE 30 00; changing its target "
         "preserves cursor advancement and dispatcher return address. "
-        "Independent ingress from queued callback LEA 0x1417815B7.",
+        "Independent ingress from queued callback LEA 0x1417815B7. AFE source-only "
+        "observer redirects these two producers without installing the three "
+        "pose-influencing Process/cmd16 hooks; writer flags remainfalse.",
     ),
     0x141783380: (
         "AnimMgr_VisitUnblockedReadyObjects",

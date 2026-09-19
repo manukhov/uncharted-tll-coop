@@ -44,6 +44,7 @@
 #include "nadine_p99_group_ingress.h"
 #include "nadine_p99_group_fiber.h"
 #include "nadine_p99_group_native_frame.h"
+#include "nadine_p99_source_observation.h"
 #include "nadine_pistol_grip_policy.h"
 #if defined(TLL_P99_PREPARATION_AUDIT)
 #include "../tests/p99_preparation_audit.h"
@@ -61773,6 +61774,12 @@ static_assert(!kEnableP99GroupShadow,
 static_assert(!kEnableP99GroupShadow || !kEnableLegacyNadineP99ChloeGripTransfer,
     "Expanded group shadows must never coexist with the rejected persistent writer");
 std::atomic<bool> g_p99_group_shadow_ready{false};
+// AFE: one bounded source-only exam. Never installs Process/cmd16 hooks or
+// authorizes either writer. The separate ready flag only admits owned reads.
+constexpr bool kEnableP99SourceObservation = true;
+static_assert(!kEnableP99GroupShadow && !kEnableLegacyNadineP99ChloeGripTransfer,
+    "Source observation requires both pose writers disabled");
+std::atomic<bool> g_p99_source_observation_ready{false};
 enum class P99SourcePurpose { kPersistentJointCache, kOwnedGroupValues };
 
 namespace p99_source = coop::p99_source_read;
@@ -62977,7 +62984,8 @@ bool seh_select_p99_chloe_transfer_epoch(
                 g_p99_preparation_audit.image == g_module &&
                 g_p99_preparation_audit.job == job
 #else
-            ? kEnableP99GroupShadow && g_p99_group_shadow_ready.load(std::memory_order_acquire)
+            ? ((kEnableP99GroupShadow && g_p99_group_shadow_ready.load(std::memory_order_acquire)) ||
+                (kEnableP99SourceObservation && g_p99_source_observation_ready.load(std::memory_order_acquire)))
 #endif
             : kEnableLegacyNadineP99ChloeGripTransfer &&
                 g_p99_chloe_transfer_ready.load(std::memory_order_acquire);
@@ -80249,8 +80257,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-19adf-safe "
-        "(all P99 group-shadow hooks disabled after AGR crash; legacy persistent grip writer disabled; AGC back profiles retained)");
+        "TLL co-op runtime init 2026-09-20afe-observe "
+        "(P99 source-only bounded observer; both pose writers disabled; Process/cmd16 stock; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "
@@ -80760,7 +80768,11 @@ DWORD WINAPI install_hook(void*) {
     log_line("local-player-1 -> Nadine bind hook ENABLED");
     log_line("one-shot split render activation ENABLED after login_state==3");
     const bool state_net_started = start_state_net();
-    if constexpr (kEnableP99GroupShadow && !kEnableRejectedNadineWeaponRuntimeProbes) {
+    if constexpr (kEnableP99SourceObservation && !kEnableRejectedNadineWeaponRuntimeProbes) {
+        const bool ready = state_net_started && install_p99_group_package(true);
+        boot_log_line(ready ? "P99-OBSERVE READY one source attempt; 120s deadline; 100ms probe gap; 1ms post-call cap; writes=0"
+                            : "P99-OBSERVE SKIPPED ingress package");
+    } else if constexpr (kEnableP99GroupShadow && !kEnableRejectedNadineWeaponRuntimeProbes) {
         const bool ready = state_net_started && install_p99_group_shadow();
         boot_log_line(ready ? "P99-GROUP READY state2; owned 21-row source; cmd16 shadows only; early-owner gate; validation budget 1ms"
                             : "P99-GROUP SKIPPED combined package");

@@ -1,5 +1,6 @@
 #include <Windows.h>
 #include <TlHelp32.h>
+#include "dll_injection_completion.h"
 
 #include <array>
 #include <filesystem>
@@ -143,11 +144,35 @@ int wmain(int argc, wchar_t** argv) {
         return 6;
     }
 
-    WaitForSingleObject(thread.value, 10000);
-    DWORD module = 0;
-    GetExitCodeThread(thread.value, &module);
-    VirtualFreeEx(process.value, remote_path, 0, MEM_RELEASE);
-    if (module == 0) {
+    const DWORD wait_result = WaitForSingleObject(thread.value, 10000);
+    const DWORD wait_error = wait_result == WAIT_FAILED ? GetLastError() : ERROR_SUCCESS;
+    DWORD exit_query_error = ERROR_SUCCESS;
+    const auto completion = coop::injection::finish_load_thread(wait_result,
+        [&](DWORD& module) {
+            if (GetExitCodeThread(thread.value, &module)) return true;
+            exit_query_error = GetLastError();
+            return false;
+        },
+        [&] { VirtualFreeEx(process.value, remote_path, 0, MEM_RELEASE); });
+    using Completion = coop::injection::Completion;
+    if (completion == Completion::kTimedOut || completion == Completion::kWaitFailed ||
+        completion == Completion::kUnexpectedWait) {
+        std::cerr << "INJECTION_INCONCLUSIVE wait=" << wait_result
+                  << " error=" << wait_error
+                  << "; remote DLL path retained because LoadLibrary may still use it. "
+                     "Target process/thread left running; do not retry injection blindly.\n";
+        return completion == Completion::kTimedOut ? 8 : 9;
+    }
+    if (completion == Completion::kExitQueryFailed) {
+        std::cerr << "INJECTION_INCONCLUSIVE: thread completed but GetExitCodeThread failed: "
+                  << exit_query_error << '\n';
+        return 10;
+    }
+    if (completion == Completion::kStillActive) {
+        std::cerr << "INJECTION_INCONCLUSIVE: completed thread reported STILL_ACTIVE\n";
+        return 11;
+    }
+    if (completion == Completion::kLoadFailed) {
         std::cerr << "LoadLibraryW failed in tll.exe\n";
         return 7;
     }

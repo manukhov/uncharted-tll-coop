@@ -148,7 +148,12 @@ bool seh_p99_group_normal_job(void* job, P99GroupJob* output, P99SourceReader& p
     } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
 }
 
-bool prepare_p99_group_values(void* job, P99GroupJob* output) {
+struct P99PreparationObservation {
+    const char* stage = "normal-job";
+    const char* reason = "not-selected";
+};
+bool prepare_p99_group_values(void* job, P99GroupJob* output,
+    P99PreparationObservation* observation = nullptr) {
 #if defined(TLL_P99_PREPARATION_AUDIT)
     if (!g_p99_preparation_audit.stats || g_p99_preparation_audit.image != g_module ||
         g_p99_preparation_audit.job != job) return false;
@@ -162,25 +167,31 @@ bool prepare_p99_group_values(void* job, P99GroupJob* output) {
         // this lexical phase. All normal-job and owner payload reads remain.
         P99SourceReader selection_pages(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
         if (!seh_p99_group_normal_job(job, output, selection_pages)) return false;
+        if (observation) observation->stage = "select";
         P99_PREP_AUDIT_BEGIN(select, kSelect);
         if (!seh_select_p99_chloe_transfer_epoch(job, &epoch, purpose, &selection_pages)) return false;
         P99_PREP_AUDIT_END(select);
         if (reinterpret_cast<std::uintptr_t>(epoch.fg_anim_data) != output->fg ||
             reinterpret_cast<std::uintptr_t>(epoch.target_skeleton) != output->art) return false;
     }
+    if (observation) observation->stage = "materialize";
     const auto result = seh_materialize_p99_chloe_embedded_epoch(&epoch, purpose);
     if (result != P99ChloeTransferMaterializeResult::kSuccess) {
-        p99_group_reject(p99_chloe_transfer_materialize_reject(result));
+        if (observation) observation->reason = p99_chloe_transfer_materialize_reject(result);
+        else p99_group_reject(p99_chloe_transfer_materialize_reject(result));
         return false;
     }
+    if (observation) observation->stage = "seal";
     P99_PREP_AUDIT_BEGIN(seal, kSeal);
     if (!seal_p99_chloe_transfer_ticket(epoch, &ticket, purpose)) {
-        p99_group_reject("owned-source-policy");
+        if (observation) observation->reason = "owned-source-policy";
+        else p99_group_reject("owned-source-policy");
         return false;
     }
     P99_PREP_AUDIT_END(seal);
     output->rows = ticket.rows;
     output->nonce = ticket.nonce;
+    if (observation) { observation->stage = "complete"; observation->reason = "accepted"; }
     // No owner, weapon, source/registry or local-pose pointer survives this
     // function. Fg/raw are opaque current-job identities, not a future lease.
     return true;
@@ -261,6 +272,8 @@ void __fastcall hooked_p99_group_async(void* job) {
             g_p99_group_failed.store(true, std::memory_order_release);
     }
 }
+
+#include "nadine_p99_source_observation_runtime.inl"
 
 // Admission/glue is defined below; all pointer reads are isolated from native
 // execution so a validation fault can refuse before, never retry after, cmd16.
@@ -515,14 +528,20 @@ bool seh_prepare_p99_group_shadow(const void* context, P99GroupProcess* process,
     } __except (EXCEPTION_EXECUTE_HANDLER) { return p99_group_gate_failed("cmd16-read-exception"); }
 }
 
-bool install_p99_group_shadow() {
+bool install_p99_group_package(bool observe_only) {
     if (!g_p99_group_install_gate.begin())
-        return g_p99_group_shadow_ready.load(std::memory_order_acquire);
+        return observe_only ? g_p99_source_observation_ready.load(std::memory_order_acquire)
+                            : g_p99_group_shadow_ready.load(std::memory_order_acquire);
     g_p99_group_shadow_ready.store(false, std::memory_order_release);
     LARGE_INTEGER frequency{};
     if (!QueryPerformanceFrequency(&frequency) || frequency.QuadPart < 1000) return false;
     g_p99_group_cost_limit = coop::p99_group_budget::one_millisecond(
         static_cast<std::uint64_t>(frequency.QuadPart));
+    if (observe_only) {
+        g_p99_source_observation_install_ms = GetTickCount64();
+        if (!g_p99_source_observation.arm(g_p99_source_observation_install_ms,
+                static_cast<std::uint64_t>(frequency.QuadPart))) return false;
+    }
     if (g_enable_aim_case6_probe || kEnableLegacyNadineP99ChloeGripTransfer ||
         kEnableLegacyNadineMazurSteadyHandsCommandCensus ||
         kEnableLegacyNadineMazurDrawEndpointRepair ||
@@ -538,12 +557,27 @@ bool install_p99_group_shadow() {
         std::size_t size = 0;
         std::array<std::uint8_t,7> before{}, after{};
     };
-    std::array<Site,5> sites{};
+    std::array<Site,5> storage{};
+    // Source-only observer patches exactly the two producer instructions.
+    // Never install the three downstream Process/cmd16 pose-influencing sites.
+    const std::span<Site> sites(storage.data(), observe_only ? 2 : 5);
     const auto* native_async = reinterpret_cast<const std::uint8_t*>(
         g_module + kAnimManagerAsyncObjectUpdateJointBlendJobRva);
     static_assert(kAnimManagerAsyncObjectUpdateJointBlendJobRva ==
         coop::p99_group_ingress::kNativeJobRva);
     const auto stock_process = [&]() {
+        if (observe_only) {
+            constexpr std::array<std::uintptr_t,3> untouched{
+                0x1A92E78,0x1A932F8,kAnimCmdExecuteJointProgramsCallsiteRva};
+            for (std::size_t i=0;i<untouched.size();++i) {
+                const auto* call = reinterpret_cast<const std::uint8_t*>(g_module+untouched[i]);
+                std::int32_t displacement=0;
+                std::memcpy(&displacement,call+1,4);
+                const auto target = static_cast<std::intptr_t>(g_module+untouched[i]+5)+displacement;
+                if (call[0]!=0xE8 || target!=static_cast<std::intptr_t>(g_module+
+                        (i==2?kAnimCmdExecuteJointProgramsRva:kProcessAnimCmdListSegmentRva))) return false;
+            }
+        }
         return std::memcmp(reinterpret_cast<const void*>(g_module + kProcessAnimCmdListSegmentRva),
             process_prologue.data(), process_prologue.size()) == 0 &&
             coop::p99_group_native_frame::layout_matches(
@@ -571,7 +605,8 @@ bool install_p99_group_shadow() {
             s.address,coop::p99_group_ingress::kRelayBytes));
         const auto patch=coop::p99_group_ingress::plan(i,g_module,
             {s.before.data(),s.size},reinterpret_cast<std::uintptr_t>(s.allocation),
-            reinterpret_cast<std::uintptr_t>(&hooked_p99_group_async));
+            observe_only ? reinterpret_cast<std::uintptr_t>(&hooked_p99_source_observation_async)
+                         : reinterpret_cast<std::uintptr_t>(&hooked_p99_group_async));
         if (!patch) { free_allocations(); return false; }
         s.after=patch->instruction;
         std::memcpy(s.allocation,patch->relay.data(),patch->relay.size());
@@ -580,7 +615,7 @@ bool install_p99_group_shadow() {
     constexpr std::array<std::uintptr_t,3> rvas{0x1A92E78,0x1A932F8,kAnimCmdExecuteJointProgramsCallsiteRva};
     const std::array<const void*,3> hooks{reinterpret_cast<const void*>(&hooked_p99_group_process0),
         reinterpret_cast<const void*>(&hooked_p99_group_process1),reinterpret_cast<const void*>(&hooked_p99_group_cmd16)};
-    for (std::size_t i=0;i<3;++i) {
+    for (std::size_t i=0;!observe_only && i<3;++i) {
         auto& s=sites[i+2]; std::int32_t displacement=0; s.size=5;
         if (!prepare_plain_callsite_relay(rvas[i],i==2?kAnimCmdExecuteJointProgramsRva:kProcessAnimCmdListSegmentRva,
             hooks[i],s.address,s.allocation,displacement)) { free_allocations(); return false; }
@@ -657,13 +692,19 @@ bool install_p99_group_shadow() {
     }
     const bool ready=installed&&restored&&all_match(true);
     const bool clean=!ready&&restored&&all_match(false);
-    if(ready) g_p99_group_shadow_ready.store(true,std::memory_order_release);
+    if(ready) {
+        if(observe_only) g_p99_source_observation_ready.store(true,std::memory_order_release);
+        else g_p99_group_shadow_ready.store(true,std::memory_order_release);
+    }
     resume_suspended_process_threads(suspended);
     // Partial installation must retain every potentially reachable leaf relay;
     // ready=false makes all reachable hooks stock-only.
     if(clean||(!wrote&&restored)) free_allocations();
-    boot_log_line(ready?"P99-GROUP INSTALLED five sites; native Async prologue intact; original buffers preserved":
+    boot_log_line(ready?(observe_only ? "P99-OBSERVE INSTALLED two producer sites; Process/cmd16 untouched; native Async prologue intact; writes=0" :
+        "P99-GROUP INSTALLED five sites; native Async prologue intact; original buffers preserved"):
         (clean||(!wrote&&restored))?"P99-GROUP SKIPPED stock/preflight or verified rollback":
             "P99-GROUP PARTIAL pass-through; allocations retained; inspect code protections");
     return ready;
 }
+
+bool install_p99_group_shadow() { return install_p99_group_package(false); }

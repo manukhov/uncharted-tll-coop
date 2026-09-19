@@ -11,7 +11,19 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-19, ADF): fixed six retarget-table admission gates to
+Current handoff (2026-09-20, AFE prepared): one-shot source-only observer built;
+two producer instructions only, three Process/cmd16 calls verified stock. Both
+writersfalse/static_assert/1ms stay. At most600preselects/100ms/120s and ONE full
+owned producer; no retry or frame.job publication. ExternalPID/image watcher
+required before frozenDLL injection; injector timeout/STILL_ACTIVE safety fixed.
+CTest24/24, Python113/113; policy5002checks, injector36. Complete owned result
+still80/12/12/42/21/exact1008bytes. Freeze reports/afe-observe-20260920-final;
+see finalAFE COOP_STATUS for hashes and written prediction. One-game exam next;
+load scene/drawP99 performed ONLY by user. No visual grip correction expected.
+Do not equate READY or missing RESULT with admitted operands. Runtime pending.
+Existing tmp/ preserved; reviewedAGW rollback. No synthetic cost campaign.
+
+Prior handoff (2026-09-19, ADF): fixed six retarget-table admission gates to
 the actual256-entry capacity, not4096. Native assertions1417CDAE0/1417CDCF0 and
 distinct adjacent draw table143868A00 establish the4000hex extent. Generic
 source-span40000hex stays. Pinned Art/raw/reference CONTENT provenance and
