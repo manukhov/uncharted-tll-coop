@@ -3,11 +3,13 @@
 ## Current user priority / handoff (2026-09-19)
 
 Continue the local Nadine P99 grip repair, including the reported lag/crash.
-AHC reduces complete owned preparation from123 to80 page queries without
-launching the game. Same-runner AHB control costs3.92..3.94ms versus finalAHC
-1.46..1.47ms; exact21-row output and fresh-lock guard refusals pass. The1ms
-limit is STILL exceeded; both writers remain disabled. Visible grip and AGR
-crashPC remain unresolved. See finalAHC entry/TASK_POOL for the next cost trace.
+AHD isolates the remaining synthetic cost:11 image queries consume~97.5% of
+query time because the private whole-image RX fixture exposes40..47MiB regions.
+A query-only before/split/restore control changes~113..132us to~1..2us and back;
+no retail code runs while split. The existing1.4ms fixture timing is NOT a live
+cost estimate. Complete80-query output still matches; both writers remain off,
+1ms unchanged. Visible grip/actual operands/AGR crashPC remain open. See finalAHD
+entry/TASK_POOL: one image-backed query-only control, then return to safety proof.
 
 ## Historical priority snapshot (2026-08-27)
 
@@ -33776,3 +33778,177 @@ and same lock scope. An index-only table check could preserve bounds and save
 Do not erase checks or share dynamic-source Readers. This small reduction does
 not promise1ms. No other broader page cache is earned. Live operand acceptance,
 AGR crash attribution and visible grip still need resolution before a game exam.
+
+## 2026-09-19 AHD: isolate per-query cost without changing preparation checks
+
+### HYPOTHESIS and pre-execution prediction
+
+AHC left80 queries and~1.44..1.47ms on the owned fixture, but the123->80 query
+reduction saved disproportionately more time than a uniform-cost model predicts.
+Competing explanations: A) roughly uniform syscall cost; B) a few large-image
+range queries dominate this synthetic layout; C) helper instrumentation/order
+or general scheduling drift. No live latency cause or AGR fault attribution
+is implied. The1ms limit and both disabled writers remain unchanged.
+
+Static evidence before the new trace executes:
+- The existing source adapter makes exactly one VirtualQuery then copies its
+  descriptor without touching payload. Audit QPC already brackets this same
+  adapter; trace can record address/descriptor and the SAME measured ticks
+  after the end stamp without adding a query or changing admission.
+- MappedImage constructs ONE private0x7047000-byte allocation and protects the
+  whole image RX, not with retail PE section protections. PreparationFixture
+  makes only lock pageRVA[66EC000,66ED000) RW; temporary patches restore RX.
+  Fixed tableRVA3864A00 and retained slot3EEBE80 occupy the broad preceding RX
+  region. Separate OwnedBuffers have small RO interiors with NOACCESS outer
+  pages; these are not PAGE_GUARD unless the explicit negative test arms one.
+- AHC count accounting predicts10 remaining image queries (6table/entry,
+  4retained-slot), versus70 queries into separate owned resources. AHB had29
+  image queries (17table+3entry+9retained). The named table/lookup addresses
+  and original closed native graph remain as documented in AHB/AHC.
+
+Bounded trace uses128 fixed40-byte samples in a caller-owned5144-byte output;
+no allocation/logging/native callback inside the producer, no pointer retention
+after return. Stats136 and Guard24 ABIs stay unchanged. Each successful sample
+must reconcile exactly with the existing aggregate query timer; overflow must
+return-8/zerooutput after the unchanged full preparation, not silently truncate.
+last_stage is an existing diagnostic marker, NOT a nesting-correct phase stack.
+Python classifies query cursors against the explicit fixture allocation map;
+unknown/ambiguous addresses or topology changes fail rather than disappear.
+
+Falsifiable prediction: complete output/hash and80/12/12/42/21 counts stay exact
+in both untraced and traced runs at175/4096 slots,MXCSR1F80/9FC0. Existing20
+mutations/4fresh-lock guards still pass. Capacity1 trace records1 and overflows79
+without overwriting, then refuses output; all80 queries/native operations still
+occur. Untraced-traced-untraced brackets on the SAME helper/layout distinguish
+instrumentation overhead/drift. Under B the10 image queries should consume most
+of~1.4ms query time, roughly0.13ms each versus much smaller owned-resource queries;
+if costs are comparable per call, reject B. This fit is a prediction, not data.
+Even if B passes, a direct query-only same-cursor before/split/restore control
+is needed to separate region breadth from unrelated address-associated effects.
+No game/attach/injection/input or production-readability changes are authorized
+by this offline cost experiment.
+
+### First trace result and paired-control prediction
+
+First AHD trace passes complete80/12/12/42/21/hash/guard/overflow predictions.
+The estimated10image/70other split is REJECTED: measured11image/69other queries.
+The missed11th query is final seal evidence.is_retained_local_owner, after the
+seal registry check UNLOCK; its fresh standalone Reader also checks handle and
+player generation. Do not merge it into the preceding owner/registry scope.
+Corrected static split is AHB30image/93other -> AHC11image/69other; still19 image
+queries saved. See seal_p99_chloe_transfer_ticket's final retained-owner evidence.
+
+Measured first-run medians:6table/entry queries total0.78815..0.79240ms;
+5retained-slot queries0.56520..0.56670ms; remaining39owner+26source+4bucket
+queries total about0.034..0.039ms (these category medians are not summed as an
+exact median). Observed table RegionSize48779264..48791552bytes, retained41947136;
+individual medians~0.1316/~0.1133ms. Untraced/traced/bracketing untraced medians
+stay~1.44..1.45ms. Uniform cost A is REJECTED for this layout; B is supported,
+but causal region-width isolation is still pending, not a Windows-internals claim.
+
+Next bounded control, written BEFORE executing it: only VirtualQuery calls on
+the same table/retained/weapon/skeleton0 cursors in before/split/restored order.
+Temporarily change only owned image pages[38A5000,38A6000) and[3EEC000,3EED000)
+from RX to RO. Original PE.data=[2FDD000,6DB3000), flagsC0000040, nonexecuting;
+both pages are beyond max table end38A4A00 and retained end3EEBE90, disjoint from
+all installed fixture slots and lock66EC000. Original retail code remains in
+.text; NONE is called while the two pages are split. No payload byte writes.
+Validate MEM_PRIVATE/AllocationBase, section bounds and original RX; restore
+every changed protection in finally, then compare page bytes and descriptors.
+
+Prediction under B: image cursor RegionSize falls to0x41000(table) and0x1000
+(retained); image query times drop sharply and return after restoration, while
+small owned-control descriptors/timings stay broadly similar. Otherwise reject
+region width as sufficient explanation. Python perf_counter_ns brackets FFI+
+VirtualQuery, so absolute numbers are NOT directly interchangeable with C++ QPC
+timings. No cache/protection change is proposed for production. Even a positive
+result proves a synthetic-layout cost, not that the real game meets1ms.
+
+### CONFIRMED isolated layout effect; no live budget or grip admission
+
+Two final children reproduce the bounded trace and paired controls. Full native
+producer still returns exact AGZ1008-byte hash,80queries/12Resolve/12Find/42DoJoint/
+21Blend, with every per-query tick sum exactly matching Stats.virtual_query_ticks.
+First/final/repeat topology agrees:39 borrowed-owner,26 borrowed-source,4bucket,
+6fixed-table,5retained-slot queries. Classification describes STORAGE, not a
+borrowed pointer's semantic lifetime. No unknown cursor or silent overflow.
+
+Final before/traced/after full-preparation medians (ms,128 warm samples):
+
+| Table / MXCSR | Untraced before | Traced | Untraced after | Image share of query time |
+| --- | ---: | ---: | ---: | ---: |
+|175 /1F80|1.45025|1.44740|1.45195|97.460%|
+|175 /9FC0|1.44540|1.44885|1.47645|97.455%|
+|4096 /1F80|1.45045|1.44120|1.43825|97.564%|
+|4096 /9FC0|1.45135|1.44950|1.43880|97.549%|
+
+Same-runner frozenAHC control1.43875..1.44380ms. Final-repeat full medians span
+1.43080..1.48475ms across all three modes. All3072 warm full preparations in the
+two final children exceed1ms on the ORIGINAL broad private layout. Tracing adds
+no query and does not explain the~1.4ms bottleneck; small instrumentation/order
+variance still exists, so do not claim zero overhead or a live timing bound.
+
+Query-only layout control medians in MICROSECONDS (not full preparation):
+
+| Layout / cursor | Before | Split | Restored | RegionSize before -> split |
+| --- | ---: | ---: | ---: | ---: |
+|175 / table|131.90|2.00|132.30|48791552 ->266240|
+|175 / retained|113.55|1.20|114.20|41947136 ->4096|
+|4096 / table|131.30|1.90|131.90|48791552 ->266240|
+|4096 / retained|113.05|1.20|113.25|41947136 ->4096|
+
+Separate final repeat:table131.7..132.3 ->2.0 ->131.9..132.65us;
+retained113.4..114.3 ->1.25..1.30 ->113.6..114.25us. Weapon control stays~1.2..1.5us,
+skeleton0~2.3..2.6us, unchanged descriptors (4096/425984bytes in the first final).
+Queried image pages remain RX; only the two later separator pages become RO.
+Every protection, separator-page descriptor/hash and fixture byte/canary restores.
+No preparation/native function executes while protections differ. Parent remains
+timeout-bounded; this test never launches/attaches to the game or writes its files.
+
+B is CONFIRMED for this private synthetic layout: a boundary-only intervention
+changes the expensive queries reversibly, without changing queried addresses or
+payload. Uniform per-call A is REJECTED here; broad-region cost is not just a
+measurement-order artifact. This does NOT establish Windows' internal algorithm,
+MEM_IMAGE cost, live actor lifetime, original AGR18.1726ms, or the crash cause.
+Never divide/subtract these Python/FFI query timings to claim a full sub1ms pose.
+No cache/removal of guards/production VirtualProtect is justified by this result.
+The earlier synthetic~1.4ms is not a trustworthy live estimate in EITHER direction.
+
+Every final child retains20mutation cases and4fresh-lock PAGE_GUARD refusals,
+plus4capacity1 overflow cases:count1/overflow79, all80queries and12/12/42/21 calls,
+zerooutput/completed0. Unrecorded trace tail stays zero. Pure query-probe tests
+cover malformed PE/ownership/protection and restore after second-protect/sample/
+control failures; a restoration failure still attempts the other page and stops.
+Public probe admits only the build-pinned owned RetargetImage, not a game module.
+
+Release succeeds; CTest22/22, Python95/95, helper smoke38checks0fail. Production
+runtime.text is byte-identical to frozenAHC:411953bytes, SHA
+cdae34b262ebd211740c62fcde05da869753e1e2e721910f020504c8ebb2adad.
+The instrumentation compiles only in the inert audit helper. Both writersfalse,
+unconditional static_assert,1ms cap, AHC buildtag and all attachment logic stay.
+No DLL deployed; reviewedAGW remains rollback.
+
+HelperSHAa83cf731ee0d98f2b14c9ced265052b21754bf5cce4063fb3351acef7eb66f3d,
+PDB29ecdfd378ae4e291837f1682f91c1f5a8579ceb4cd09fc437ea73da89b0573a.
+Rebuilt runtimeSHA26eb3376c1ee35807dc12108c9f90efddee73efdbc98a868ab58516226be010b,
+PDBb6c79eb8222385815679ecfef12070eab31310f31e51d63f43c6fbe86dbb518b.
+Reproduce final: `py -3.12 scripts/p99_preparation_audit.py --execute --samples 128 --expected-queries 80 --query-trace --query-layout-probe --output reports/<unique>.json`.
+Without --execute, no native calls. Raw local evidence:p99-preparation-ahd-
+{trace-first,trace-repeat,ahc-control,final,final-repeat}.json. Final artifacts:
+reports/ahd-offline-20260919-final. IDB comments at143864A00/143EEBE80 now preserve
+the cost caveat and missed final-owner check; save proof reports/ida_apply_ahd_status.txt.
+Headless reports1878functions/73data/1type, save_database returned True. MCP
+restarted on the single IDB; both global names and their xrefs read back.
+
+Next bounded step: one separate query-only read-only image-backed view of the
+hash-pinned executable via SEC_IMAGE_NO_EXECUTE, never LoadLibrary/imports/TLS/
+DllMain/relocations/native calls or payload patching. Record actual MEM_IMAGE
+descriptors and compare table/retained query costs. Do not move the current full
+native harness onto that view. Geometry/protection/backing change together, so
+different RegionSize cannot prove backing type alone caused a difference; a
+matched-region private control may be required. Local SDK already declares the
+flag; existing crash_watch file/mapping cleanup is a reusable lifetime pattern.
+Even this cannot admit live1ms. Then return to actual-operand acceptance/lifetime
+and a fresh PID/image-bound AGR fault capture plan, rather than chasing ever
+smaller synthetic costs. The narrow80->77 hypothesis is still unimplemented and
+is not a reason to weaken the final post-unlock retained-owner check.

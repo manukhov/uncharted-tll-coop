@@ -13482,7 +13482,12 @@ DATA_NAMES = {
         "one existing locked invocation; reload count and request its full "
         "extent every time. Fresh scope after unlock. Package callbacks can "
         "still rebuild numerical payloads in place; epoch equality is NOT a "
-        "value/lifetime certificate. Exact owned-value admission remains.",
+        "value/lifetime certificate. Exact owned-value admission remains. "
+        "ISOLATED AHD cost caveat: the offline whole-image RX MEM_PRIVATE "
+        "mapping reports ~48.8 MB query regions here; query-only separator "
+        "page control changes ~132us to ~2us then restores it. This is a "
+        "fixture-layout effect, NOT FindRetargetEntry CPU or live1ms evidence. "
+        "Do not weaken checks or alter production protections based on it.",
     ),
     0x1466EC3E0: (
         "g_SkelTableRegistryBuckets",
@@ -13851,7 +13856,12 @@ DATA_NAMES = {
         "generation32+8, padding+0xC. Slot0 also serves the legacy HUD global "
         "handle name. Spawn writers copy Process+A8/BC, identical to the Fg "
         "owner pair at +1A8/1B0; ContainsRetainedIdentity compares exactly "
-        "12 identity bytes, not the padding. A raw tuple is NOT a lifetime lease.",
+        "12 identity bytes, not the padding. A raw tuple is NOT a lifetime lease. "
+        "ISOLATED AHD: owned P99 preparation queries this slot five times, "
+        "including final ticket evidence AFTER the seal registry unlock. "
+        "That last read must remain fresh. Offline RX MEM_PRIVATE query "
+        "latency here is dominated by its broad mapped region; it is not "
+        "proof of live owner-read cost or permission to cache across unlock.",
     ),
     0x143EF1E30: (
         "g_PerScreenPlayerHudState",

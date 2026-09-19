@@ -30,9 +30,31 @@ struct GuardMutation {
     std::uint32_t old_protection = 0, observed_protection = 0, error = 0;
 };
 static_assert(sizeof(GuardMutation) == 24);
+inline constexpr std::uint32_t kQueryTraceCapacity = 128;
+enum QueryFlags : std::uint32_t {
+    kQueryResult = 1, kQueryCommitted = 2, kQueryReadable = 4, kQueryGuarded = 8
+};
+// Raw diagnostics only. last_stage is the most recent nested stage stamp,
+// not an exclusive phase attribution. No payload is read for a sample.
+struct QuerySample {
+    std::uint64_t address = 0, region_base = 0, region_bytes = 0, ticks = 0;
+    std::uint32_t last_stage = 0, flags = 0;
+};
+static_assert(sizeof(QuerySample) == 40);
+struct QueryTrace {
+    std::uint32_t size = sizeof(QueryTrace), version = kVersion;
+    std::uint32_t capacity = kQueryTraceCapacity, count = 0, overflow = 0, reserved = 0;
+    QuerySample entries[kQueryTraceCapacity]{};
+};
+static_assert(sizeof(QueryTrace) == 5144);
+static_assert(offsetof(QueryTrace, entries) == 24);
 // Returns0 success; -1 invalid stats; -2 arguments/bounds; -3 busy;
 // -4 image/owned-buffer admission; -5 preparation refusal; -6 clock failure;
-// -7 unexpected structured exception. A refused iteration is never retried.
+// -7 unexpected structured exception; -8 query trace overflow after preparation.
+// A refused iteration is never retried. Trace mode always prepares one iteration;
+// overflow does not stop preparation, but refuses output and completion credit.
 using Prepare = int(__cdecl*)(std::uintptr_t, void*, std::uint32_t,
     std::byte*, std::uint32_t, Stats*);
+using PrepareTrace = int(__cdecl*)(std::uintptr_t, void*, std::byte*,
+    std::uint32_t, Stats*, QueryTrace*);
 } // namespace coop::p99_preparation_audit

@@ -19,6 +19,7 @@ import subprocess
 import sys
 
 import p99_native_retarget_audit as native
+import p99_preparation_query_trace as query_trace
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_ROWS_SHA256 = "c3613114c77ed16949d7de7d374131e86a4ab5ce57a3695a8f0b9ba2bee122e7"
@@ -87,6 +88,10 @@ def bind_bridge(path: Path):
         bridge.P99PrepareAuditGuardAtStage.argtypes = [ctypes.c_uint64, ctypes.c_void_p,
             ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(Stats), ctypes.POINTER(GuardMutation)]
         bridge.P99PrepareAuditGuardAtStage.restype = ctypes.c_int
+    if hasattr(bridge, "P99PrepareAuditTrace"):
+        bridge.P99PrepareAuditTrace.argtypes = [ctypes.c_uint64, ctypes.c_void_p,
+            ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(Stats), ctypes.POINTER(query_trace.QueryTrace)]
+        bridge.P99PrepareAuditTrace.restype = ctypes.c_int
     return bridge
 
 
@@ -146,6 +151,59 @@ def check_fresh_scope_guards(bridge, image, fixture, output):
     return {"supported": True, "cases": cases}
 
 
+def measure_query_trace(bridge, image, fixture, output, samples, expected_queries):
+    if not hasattr(bridge, "P99PrepareAuditTrace"):
+        raise ValueError("explicit --query-trace requires the bounded trace export")
+    ranges = query_trace.fixture_ranges(image, fixture)
+    traces, timings, after = [], [], []
+    frequency = None
+    for _ in range(samples + 1):
+        trace = query_trace.new_trace()
+        stats = Stats(size=ctypes.sizeof(Stats), version=1)
+        result = bridge.P99PrepareAuditTrace(image.address, fixture.job,
+            output.address, output.size, ctypes.byref(stats), ctypes.byref(trace))
+        if result:
+            raise RuntimeError(f"trace preparation refused: result={result} count={trace.count} overflow={trace.overflow}")
+        timings.append(validate_stats(stats, output.read()))
+        if stats.virtual_queries != expected_queries:
+            raise ValueError("tracing changed the number of page queries")
+        if frequency is not None and frequency != stats.qpc_frequency:
+            raise ValueError("trace frequency changed")
+        frequency = stats.qpc_frequency
+        traces.append(query_trace.validate_trace(trace, stats, ranges))
+        output.verify()
+    # Bracket traced samples by untraced calls on the SAME helper and allocation
+    # layout. Trace parsing/aggregation and fixture verification are outside QPC.
+    for _ in range(samples):
+        stats = Stats(size=ctypes.sizeof(Stats), version=1)
+        result = bridge.P99PrepareAudit(image.address, fixture.job, 1,
+            output.address, output.size, ctypes.byref(stats))
+        if result or stats.virtual_queries != expected_queries:
+            raise ValueError("post-trace untraced control differs")
+        after.append(validate_stats(stats, output.read()))
+        output.verify()
+    # Bounded recording must fail closed, not overwrite or silently truncate.
+    trace = query_trace.new_trace(capacity=1)
+    stats = Stats(size=ctypes.sizeof(Stats), version=1)
+    result = bridge.P99PrepareAuditTrace(image.address, fixture.job,
+        output.address, output.size, ctypes.byref(stats), ctypes.byref(trace))
+    if (result != -8 or trace.count != 1 or trace.overflow != expected_queries - 1 or
+            stats.completed_iterations or stats.virtual_queries != expected_queries or
+            (stats.resolve_calls, stats.find_calls, stats.retarget_calls, stats.blend_calls) != (12, 12, 42, 21) or
+            output.read() != bytes(output.size) or
+            any(any(bytes(trace.entries[index])) for index in range(1, query_trace.CAPACITY))):
+        raise ValueError("trace overflow did not fail closed after the unchanged full preparation")
+    fixture.verify()
+    output.verify()
+    return {**query_trace.summarize(traces, frequency, distribution),
+        "first_sample": timings[0],
+        "warm_total": distribution([item["total_ms"] for item in timings[1:]]),
+        "warm_virtual_query": distribution([item["virtual_query_ms"] for item in timings[1:]]),
+        "untraced_after_total": distribution([item["total_ms"] for item in after]),
+        "overflow_negative": {"capacity": 1, "count": trace.count, "overflow": trace.overflow,
+                              "result": result, "output_zero": True, "native_counts_unchanged": True}}
+
+
 def run_worker(args) -> dict:
     from p99_preparation_fixture import PreparationFixture
     if digest(args.bridge) != args.bridge_sha256:
@@ -200,10 +258,16 @@ def run_worker(args) -> dict:
                                 "counters_per_preparation": samples[0]["counters"],
                                 "samples": samples,
                                 "fixture": fixture.metadata})
+                            if args.query_trace:
+                                runs[-1]["query_trace"] = measure_query_trace(bridge, image, fixture, output,
+                                    args.samples, samples[0]["counters"]["virtual_queries"])
                         finally:
                             cpu.P99AuditMxcsr(old_mode)
                     runs[-1]["negative_cases"] = check_negative_cases(bridge, image, fixture, output)
                     runs[-1]["fresh_scope_guards"] = check_fresh_scope_guards(bridge, image, fixture, output)
+                    if args.query_layout_probe:
+                        from p99_query_layout_probe import measure
+                        runs[-1]["query_layout_probe"] = measure(image, fixture, args.samples, distribution)
                 finally:
                     output.close()
         manager.verify()
@@ -236,6 +300,9 @@ def main():
     parser.add_argument("--output", type=Path, default=ROOT / "reports/p99-preparation-ahb.json")
     parser.add_argument("--samples", type=int, default=128)
     parser.add_argument("--expected-queries", type=int, help="optional falsifiable page-query count")
+    parser.add_argument("--query-trace", action="store_true", help="bounded audit-only per-query timings with bracketing controls")
+    parser.add_argument("--query-layout-probe", action="store_true",
+        help="query-only owned-image before/split/restore control; never retail execution while split")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--bridge-sha256", help=argparse.SUPPRESS)
@@ -267,6 +334,10 @@ def main():
         command.extend(["--" + option.replace("_", "-"), str(getattr(args, option))])
     if args.expected_queries is not None:
         command.extend(["--expected-queries", str(args.expected_queries)])
+    if args.query_trace:
+        command.append("--query-trace")
+    if args.query_layout_probe:
+        command.append("--query-layout-probe")
     completed = subprocess.run(command, capture_output=True, text=True, timeout=60,
                                creationflags=subprocess.CREATE_NO_WINDOW)
     if completed.returncode:

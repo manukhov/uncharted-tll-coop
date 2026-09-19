@@ -11,7 +11,30 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-19, AHC offline): no game launch/attach/injection/input.
+Current handoff (2026-09-19, AHD offline): no game launch/attach/injection/input.
+Bounded trace confirms11image queries consume~97.5% of query time on the broad
+MEM_PRIVATE RX fixture. Corrected count:6table+5retained, not predicted10image;
+extra retained read is final seal evidence AFTER registry unlock, MUST stay fresh.
+39owner+26source+4bucket queries take~0.03..0.04ms total. Query-only paired
+before/split/restore control:table~132->2->132us,retained~113->1.2->113us,
+with byte-identical payload and queried pages stillRX. Only owned separator
+pages38A5000/3EEC000 brieflyRO; no retail code runs while split; full restoration
+checked. This proves a synthetic-layout cost, NOT the cause of game lag/crash.
+Full original-layout producer still80/12/12/42/21 and exact1008-byte output;
+two final children3072warm calls ALL>1ms, but this is NOT a live budget estimate.
+20mutations/4fresh-lock guards/4bounded-trace-overflows perchild pass. Release,
+CTest22/22/Python95/95; runtime.text byte-identical toAHC. Both writersfalse,
+static_assert/1ms/attachments unchanged. Artifacts reports/ahd-offline-20260919-final;
+singleIDB comments saved, source registry updated, reviewedAGW remains rollback.
+Next one query-only SEC_IMAGE_NO_EXECUTE read-only mapped-image control (pinned
+hash, no loader initialization/relocation/native calls/payload patch). Capture
+MEM_IMAGE descriptors; compare RegionSize/protection too, not just backing type.
+Then return to actual source acceptance/lifetime and AGR faultPC proof. Do not
+optimize synthetic timings indefinitely, change production page protections,
+remove guards or merge the final retained-owner read across unlock. Visible grip
+and live1ms admission remain unresolved; game exam is not yet earned.
+
+Prior handoff (2026-09-19, AHC offline): no game launch/attach/injection/input.
 Scoped owner phases plus fixed-image table-only admission reduce123->80 actual
 VirtualQuery calls in the COMPLETE owned producer. All owner/value rereads and
 17full-table requests remain. Table page observations expire before unlock;

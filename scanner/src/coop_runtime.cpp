@@ -82,6 +82,7 @@ struct P99PreparationAuditBinding {
     p99_prep_audit::Stats* stats = nullptr;
     bool clock_failed = false;
     p99_prep_audit::GuardMutation* guard_mutation = nullptr;
+    p99_prep_audit::QueryTrace* query_trace = nullptr;
 };
 P99PreparationAuditBinding g_p99_preparation_audit{};
 std::uint64_t p99_preparation_audit_begin(p99_prep_audit::Stage stage) {
@@ -61704,11 +61705,33 @@ bool p99_preparation_audit_query(std::uintptr_t address,
     const bool started = QueryPerformanceCounter(&begin) != FALSE && begin.QuadPart >= 0;
     if (g_p99_preparation_audit.stats) ++g_p99_preparation_audit.stats->virtual_queries;
     const bool result = coop::p99_group_memory::query_region(address, region);
-    if (!started || !QueryPerformanceCounter(&end) || end.QuadPart < begin.QuadPart) {
+    const bool ended = QueryPerformanceCounter(&end) != FALSE;
+    std::uint64_t ticks = 0;
+    if (!started || !ended || end.QuadPart < begin.QuadPart) {
         g_p99_preparation_audit.clock_failed = true;
-    } else if (g_p99_preparation_audit.stats) {
-        g_p99_preparation_audit.stats->virtual_query_ticks +=
-            static_cast<std::uint64_t>(end.QuadPart - begin.QuadPart);
+    } else {
+        ticks = static_cast<std::uint64_t>(end.QuadPart - begin.QuadPart);
+        if (g_p99_preparation_audit.stats)
+            g_p99_preparation_audit.stats->virtual_query_ticks += ticks;
+    }
+    // Store only after the measured query interval. This adds no page query,
+    // payload access, allocation, logging, or authority to the production reader.
+    if (auto* const trace = g_p99_preparation_audit.query_trace) {
+        if (trace->count < trace->capacity && trace->count < p99_prep_audit::kQueryTraceCapacity) {
+            auto& sample = trace->entries[trace->count++];
+            sample.address = static_cast<std::uint64_t>(address);
+            sample.region_base = result ? static_cast<std::uint64_t>(region.base) : 0;
+            sample.region_bytes = result ? static_cast<std::uint64_t>(region.bytes) : 0;
+            sample.ticks = ticks;
+            sample.last_stage = g_p99_preparation_audit.stats ?
+                g_p99_preparation_audit.stats->failed_stage : 0;
+            sample.flags = result ? p99_prep_audit::kQueryResult |
+                (region.committed ? p99_prep_audit::kQueryCommitted : 0u) |
+                (region.readable ? p99_prep_audit::kQueryReadable : 0u) |
+                (region.guarded ? p99_prep_audit::kQueryGuarded : 0u) : 0u;
+        } else {
+            ++trace->overflow;
+        }
     }
     return result;
 }
