@@ -4011,13 +4011,81 @@ FUNCTIONS = {
         "STATIC AGX: installs GameLoading_PackageLoginResItem (0x141CC0BF0) "
         "at config+0x38 at 0x141CC4E50..4E57 before PackageMgr_Init. This "
         "closes the producer of the package-login callback, not all producers "
-        "of loaded resource numeric fields before the doing-login state.",
+        "of loaded resource numeric fields before the doing-login state. "
+        "STATIC ADE: also installs logout-resource callback 141CC2EB0 at "
+        "config+40 (141CC4E62) and PreparePackageForLogout 141CC4690 at "
+        "config+50 (141CC4E78); config base is the PackageMgr_Init argument.",
     ),
     0x141625910: (
         "PackageMgr_Init",
         "STATIC AGX: copies login callback config+0x38 to manager+0x38 "
         "at 0x1416259E7. GameLoading_Initialize installs 0x141CC0BF0; "
-        "UpdatePackage_Status_DoingLogin invokes this exact manager slot.",
+        "UpdatePackage_Status_DoingLogin invokes this exact manager slot. "
+        "STATIC ADE: config+40 is copied to manager+40 at 1416259EF; "
+        "config+50 to manager+50 at 1416259FF. These are concrete callback "
+        "fields, not unresolved virtual slots.",
+    ),
+    0x141CC2EB0: (
+        "GameLoading_PackageLogoutResItem",
+        "STATIC ADE: resource-logout dispatcher installed in PackageMgr+40 "
+        "by GameLoading_Initialize/PackageMgr_Init. Skeleton branch calls "
+        "SkelTable_LogoutArtItemSkeleton at 141CC3891 unless "
+        "(*(Package+830)+2)&20 is set. Predicate uses the shared context header, "
+        "NOT Package+2; login 141CC296B/2998 uses the same predicate. This "
+        "dispatcher alone does not prove raw/reference storage lifetime.",
+    ),
+    0x141CC4690: (
+        "GameLoading_PreparePackageForLogout",
+        "STATIC ADE: exact PreparePackageForLogout source assertion; callback "
+        "installed in PackageMgr+50 at config141CC4E78/init1416259FF. Runs "
+        "before per-resource +40 logout callbacks. Graphics/level teardown "
+        "preparation, not the ordinary package-page release loop. No direct "
+        "store to shared header+2 here; transitive alias stability not proven.",
+    ),
+    0x1416282B0: (
+        "PackageMgr_LogoutQueuedPackages",
+        "STATIC ADE: queued LogoutPackage path. For package state0B/0D, "
+        "sets0F, calls manager+50 at141628499, resolves LOGIN page/offset "
+        "items and synchronously invokes manager+40 at141628522. Only after "
+        "all callbacks return, enqueues at manager+4B0/index+4A4, count+4A8 "
+        "(1416285C8), then state10 at1416285EB. Direct page release at "
+        "141628437 is state9, not the registered0B/0D branch. This orders "
+        "ordinary callback completion before deferred page reclamation; it "
+        "does not prove the shared skip-bit or every resource alias stable.",
+    ),
+    0x14162B8C0: (
+        "PackageMgr_LogoutPackage",
+        "STATIC ADE: immediate LogoutPackage/refcount path, independent of "
+        "queued1416282B0. Registered states0B/0D synchronously dispatch "
+        "manager+40 at14162BAE1 before awaiting-unload enqueue14162BB7B "
+        "and state10 at14162BB93. Direct page-release14162B9D7 is state9. "
+        "Shared context-header skip-bit and raw/ref page ownership remain "
+        "separate lifetime proof obligations.",
+    ),
+    0x141628DD0: (
+        "PackageMgr_DrainPackagesAwaitingUnload",
+        "STATIC ADE: consumes manager awaiting-unload ring, readindex+4A0, "
+        "count+4A8, storage+4B0, capacity+4B8; frame/fence checks precede "
+        "PackageMgr_UnloadPackagePagesThenClear at141628F45. Dequeue updates "
+        "141628F54..F74 follow release. Both ordinary logout paths enqueue "
+        "only after synchronous resource callbacks. Follow disassembly at "
+        "F3F/F45; a decompiler break can obscure this actual release edge.",
+    ),
+    0x141628670: (
+        "PackageMgr_UnloadPackagePagesThenClear",
+        "STATIC ADE: ordinary package-content release. Invalidates page "
+        "handles at1416287A4 and page ownership at141628803, runs page "
+        "release paths141628824/14162895F/141628A1A, then ClearPackage. "
+        "Reached from deferred drain after logout callbacks; state9 direct "
+        "callers are a separate branch. Does not by itself establish that "
+        "every Art+40/raw+20 allocation belongs to these package pages.",
+    ),
+    0x141628A70: (
+        "PackageMgr_ClearPackage",
+        "STATIC ADE: exact PackageMgr::ClearPackage source assertion; "
+        "removes name/nickname lookup entries and resets package bookkeeping. "
+        "Called after ordinary content-page release by141628670; distinguish "
+        "this bookkeeping endpoint from resource logout and page ownership.",
     ),
     0x141627F60: (
         "PackageMgr_UpdateLoginPackage",
@@ -4382,7 +4450,11 @@ FUNCTIONS = {
         "Removes and frees one skeleton-registry node under the same 64-bit lock. "
         "Acquisition is LOCK CMPXCHG at 0x1417CD80C, release is XCHG zero at "
         "0x1417CD9B3, and removal increments g_SkelTableRegistryEpoch at "
-        "0x1417CD994..0x1417CD9A5. The record use-count does not pin the node.",
+        "0x1417CD994..0x1417CD9A5. The record use-count does not pin the node. "
+        "STATIC ADE: ordinary caller GameLoading_PackageLogoutResItem at "
+        "141CC3891 returns synchronously before package enters the deferred "
+        "page-unload ring. Conditional on stable level+2 bit20 and package "
+        "CONTENT-page provenance of raw/ref storage; not a universal lease.",
     ),
     0x1417D1170: (
         "SkelTable_FindSkeletonRegistryNode",
@@ -13487,7 +13559,11 @@ DATA_NAMES = {
         "mapping reports ~48.8 MB query regions here; query-only separator "
         "page control changes ~132us to ~2us then restores it. This is a "
         "fixture-layout effect, NOT FindRetargetEntry CPU or live1ms evidence. "
-        "Do not weaken checks or alter production protections based on it.",
+        "Do not weaken checks or alter production protections based on it. "
+        "ISOLATED ADE: nonexecuting file-backed MEM_IMAGE control gives "
+        "2.7..2.8us median despite RegionSize58601472 (PAGE_READONLY). "
+        "Backing/protection/geometry differ: not backing-only causality or "
+        "a measured complete/live preparation budget.",
     ),
     0x1466EC3E0: (
         "g_SkelTableRegistryBuckets",
@@ -13861,7 +13937,11 @@ DATA_NAMES = {
         "including final ticket evidence AFTER the seal registry unlock. "
         "That last read must remain fresh. Offline RX MEM_PRIVATE query "
         "latency here is dominated by its broad mapped region; it is not "
-        "proof of live owner-read cost or permission to cache across unlock.",
+        "proof of live owner-read cost or permission to cache across unlock. "
+        "ISOLATED ADE: SEC_IMAGE_NO_EXECUTE query-only control yields "
+        "2.7..2.8us median with MEM_IMAGE/RO/RegionSize51757056; no native "
+        "function or full preparation runs in that view. Different geometry "
+        "and protection prevent a backing-only causal claim; live1ms unknown.",
     ),
     0x143EF1E30: (
         "g_PerScreenPlayerHudState",

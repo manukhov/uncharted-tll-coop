@@ -11,7 +11,34 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-19, AHD offline): no game launch/attach/injection/input.
+Current handoff (2026-09-19, ADE offline): no game launch/attach/injection/input,
+no retail/native math invocation, runtime source/DLL/attachments unchanged.
+STATIC ordinary lifetime link closed: GameLoading installs logout141CC2EB0 in
+PackageMgr+40. Queued1416282B0 and immediate14162B8C0 synchronously complete all
+resource callbacks before enqueue; drain141628DD0 calls page release141628670
+afterward. Skel logout1417CD7C0 acquires the same registry lock before returning.
+Do not overclaim: the skip predicate is (*(Package+830)+2)&20, NOT Package+2.
+Login and logout test the same level/context bit; its writers are not yet traced.
+Second open condition: Art+40/raw+20/reference allocation provenance must remain
+inside this package's CONTENT handle set. Different CONTENT pages are allowed.
+Next bounded static step: trace Package+830/level+2 bit20 writers, then connect
+signed fixups141635760 + LOGIN producer1419C4D50 to raw/reference ownership.
+Existing3906-byte completed-owned gate already closes the tested numerical
+domain; do NOT require live profile absence or immutable record values again.
+After ordinary lifetime closes, consider a fresh writer-disabled bounded
+accept/refuse exam with external PID/image-bound crash capture. Unknown old AGR
+PC alone is not a permanent blocker. Both writersfalse/static_assert/1ms stay.
+Query-only SEC_IMAGE_NO_EXECUTE cost control is separate; see final ADE entry
+for measurements and the exact header metadata exception. Two fresh children:
+table/retained medians2.7..2.8us, MEM_IMAGE/RO, regions58.6/51.8MB (larger than
+AHD's private48.8/41.9MB). AHD113..132us is not a universal image-query cost;
+backing/protection/geometry still confounded. Stop cost microbenchmarks here.
+No synthetic result admits live1ms or justifies removing guards/altering
+production protections. Python107/107, CTest22/22; singleIDB saved and seven
+new function names verified after MCP restart. Artifacts reports/ade-offline-
+20260919-final; pre-existing untracked tmp/ is preserved.
+
+Prior handoff (2026-09-19, AHD offline): no game launch/attach/injection/input.
 Bounded trace confirms11image queries consume~97.5% of query time on the broad
 MEM_PRIVATE RX fixture. Corrected count:6table+5retained, not predicted10image;
 extra retained read is final seal evidence AFTER registry unlock, MUST stay fresh.

@@ -33952,3 +33952,198 @@ Even this cannot admit live1ms. Then return to actual-operand acceptance/lifetim
 and a fresh PID/image-bound AGR fault capture plan, rather than chasing ever
 smaller synthetic costs. The narrow80->77 hypothesis is still unimplemented and
 is not a reason to weaken the final post-unlock retained-owner check.
+
+## 2026-09-19 ADE: nonexecuting image-backed query control
+
+### STATIC admission and prediction before mapping the control
+
+This closes the ONE remaining cost-layout control requested by AHD. No game
+launch/attach/injection/input, no retail function invocation, no full preparation
+rerun or runtime change. The pending grip/safety proof remains the main task.
+
+Competing hypotheses: A) the roughly113..132us queries from AHD's large private
+RX image also occur in an actual image-backed view; B) they are sensitive to
+private backing/layout and image-backed queries are much cheaper; C) different
+RegionSize/protection geometry prevents attributing any difference to backing
+alone. AHD proved a private-layout effect but did NOT choose among these.
+
+Independent static preparation:
+- Local Windows SDK declares SEC_IMAGE_NO_EXECUTE=(SEC_IMAGE|SEC_NOCACHE),
+  CreateFileMappingW and MapViewOfFile; read-only mapping lifetime already has
+  a local example in crash_watch.cpp. This path does not call the PE entrypoint.
+- File PE metadata pins SizeOfImage7047000, SizeOfHeaders400, .data range
+  [2FDD000,6DB3000) containing targetRVAs3864A00 and3EEBE80. Mapped/disk header
+  comparison must cover declared400 bytes, not raw disk400..FFF section bytes.
+- The tested AHD MBI64 ABI and query-only timing pattern can be reused without
+  importing its RetargetImage constructor or any executable-memory dependency.
+
+New standalone tool defaults to STATIC_PREFLIGHT: read-only same-handle hash
+and header checks, no view. Explicit --execute starts one hidden60s-bounded
+child. Child opens GENERIC_READ/FILE_SHARE_READ (no write/delete sharing), hashes
+the SAME locked handle against the existing native audit pin ed1371a4...210be,
+then CreateFileMappingW(PAGE_READONLY|SEC_IMAGE_NO_EXECUTE)/MapViewOfFile(FILE_MAP_READ).
+No LoadLibrary, imports/TLS/DllMain, relocations, VirtualProtect, payload writes,
+function-pointer calls or existing process lookup. Cleanup attempts UnmapView,
+mapping CloseHandle and file CloseHandle independently, even after a failure.
+
+Prediction: mapping reports MEM_IMAGE, same AllocationBase for bounded header/
+target addresses, committed readable NON-executable unguarded target pages and
+unchanged declared PE headers. Repeated query descriptors remain exact; bytes
+are never altered. Time only VirtualQuery using perf_counter_ns, not mapping,
+hashing/verification. Record1first+128warm samples per cursor, then repeat in
+a fresh child. Under B expect image query medians below10us, versus the AHD
+private broad-region~100us scale; under A expect the same broad cost scale.
+Inspect RegionSize/Protect BEFORE making a type-only inference; C remains if
+geometry differs. Neither fast nor slow results grant live1ms/operand/lifetime
+admission, or justify moving the full native harness onto a nonexecuting view.
+After this bounded control, return to exact source acceptance/lifetime and AGR
+fault attribution, not more rounds of synthetic micro-optimization.
+
+### Header refusal and prospective narrow correction
+
+The first child refused at mapped PE admission before timed target queries.
+A second diagnostic-only child still refused; the only declared-header change
+was four bytes at0x1E2: raw00400100 ->mapped4f08f77f, inside the PE32+ ImageBase
+field. Raw ImageBase140000000 became7FF7084F0000; machine8664, magic20B and all
+eight section headers were unchanged. No game/retail execution or payload writes
+occurred. The original prediction of bit-identical mapped/disk headers is
+REJECTED for this Windows mapping. This is a view-admission failure, not a crash.
+
+Before the next control, revise ONLY header identity: raw headers remain pinned
+to the same locked-file hash and preferred base140000000; mapped ImageBase must
+equal the actual MapViewOfFile return value. Every other declared-header byte
+must match the pinned file. Validate geometry using an owned local header copy
+with only that field restored, never write the mapped view. Recheck ALL mapped
+declared-header bytes against the initial mapped snapshot after measurement.
+Record both bases and both declared-header hashes. A foreign base or any other
+byte difference still refuses. No manual relocation/import/TLS/entrypoint work;
+do not claim the OS left the mapped PE metadata untouched. All MEM_IMAGE,
+ownership, bounds, nonexecute/guard and query-descriptor conditions still apply.
+
+The revised equality also REFUSED before timed queries: mapped-header base
+7FF7084F0000 did NOT equal actual MapViewOfFile return3230000. That proposed
+equality is REJECTED, not explained away as a relocation mechanism. No reason
+for the OS's metadata choice is established by these observations.
+
+Prospective final policy follows the actual query-only dataflow, independently
+reviewed in source: header/code/target queries, header reads and unmap use ONLY
+the returned view pointer, never the optional-header ImageBase value. No pointer,
+RVA arithmetic, bound, relocation or call target derives from that field. Thus
+exactly those eight bytes may be opaque reported metadata for this NONEXECUTING
+control only. The raw preferred field remains hash-pinned, all other declared
+header bytes must match, full mapped page must remain unchanged. Actual
+AllocationBase==returned view and MEM_IMAGE/commit/nonexecute/guard/bounds checks
+remain the authority. Record actual view and metadata base separately without
+claiming equality or why they differ. This exception must NOT enter the native
+RetargetImage/preparation harness. Pure tests must demonstrate even unrelated
+metadata bases do not change any actual query address or admit a foreign region.
+
+### STATIC: ordinary package logout precedes content-page reclamation
+
+Competing lifetime explanations: A) ordinary resource logout is synchronous and
+precedes package-page release; B) ordinary release can reclaim a registered Art's
+storage before the SkelTable logout lock is acquired; C) storage survives but
+numeric records change in place. This pass closes the ordinary queue ordering
+in A, not global lifetime. C is already covered numerically by AHA's exact3906
+completed-owned gate, which runs before math; live profile absence is NOT a
+prerequisite for that existing equivalence gate. Do not reopen that rejected
+epoch/profile admission or require globally immutable record values.
+
+Independent evidence: installed callback dataflow, disassembly state/queue and
+release stores, source assertions, and the second immediate logout path:
+- GameLoading_Initialize141CC4940 installs logout dispatcher141CC2EB0 at
+  config+40 (141CC4E62), pre-logout141CC4690 at+50 (141CC4E78). Init141625910
+  copies these to manager+40/+50 at1416259EF/9FF. These are resolved callback
+  fields, not virtual calls needing a guessed RTTI identity.
+- Queued logout1416282B0 state0B/0D sets0F, calls manager+50 at141628499, then
+  calls manager+40 synchronously at141628522 for each admitted LOGIN item.
+  Only afterward it enqueues at1416285C8, then sets state10 at1416285EB.
+  Awaiting ring is manager read+4A0/write+4A4/count+4A8/data+4B0/capacity+4B8.
+- Immediate logout14162B8C0 independently calls manager+40 at14162BAE1 before
+  enqueue14162BB7B/state10 at14162BB93. In both functions the direct release
+  branch (628437/62B9D7) is state9, not registered0B/0D.
+- Drain141628DD0 calls page-release141628670 at141628F45 before dequeue.
+  The disassembly edge exists even where decompilation suggests a break.
+  Release invalidates package page handles6287A4 and pool ownership628803,
+  then reaches page-release calls628824/62895F/628A1A, and ClearPackage628A70.
+  CONTENT handle loop covers max(package+80C,package+A30), followed by eight
+  LOGIN handles+A4C. ClearPackage has an exact source assertion; it is not
+  interchangeable with resource logout or content-page ownership retirement.
+
+Resource dispatcher141CC2EB0 calls SkelTable_LogoutArtItemSkeleton1417CD7C0 at
+141CC3891. That function acquires registry lock atCD80C, clears affected
+retarget-entry identities/pointers, removes the node, and releases atCD9B3.
+Therefore an ordinary callback cannot return and enqueue its package while
+waiting on this lock. This narrows the borrowed-read lifetime question materially.
+
+Critical predicate correction: logout reads level/context=*(Package+830) at
+141CC2EF5 and skips on byte[level+2]&20 at141CC387D/3881. It is NOT Package+2.
+Login reads the same field at141CC0C46 and applies the same predicate at
+141CC296B/2970 before SkelTable login141CC2998. A package initially skipped here
+does not gain skeleton registration through this path. PreparePackageForLogout
+141CC4690 has an exact source assertion mentioning pLevel and a package vector
+count+48/data+50; do not invent the bit20 enum or call it an immutable disk flag.
+No direct store to level+2 or ordinary page-release call exists in this callback;
+that observation does not settle the flag's producer/lifetime.
+
+Remaining bounded proof, not arbitrary alias-absence:
+1. Trace writers of Package+830 and pointed level+2 bit20; establish whether a
+   registered package can take the skip branch at logout.
+2. Trace Art+40/raw+20/reference storage through existing signed fixups141635760
+   and LOGIN page/offset producer1419C4D50 to the package's CONTENT handle SET.
+   The Art and references may legitimately occupy different CONTENT pages; do
+   not demand one identical page. Exclude separate allocator substitution on
+   the admitted path. LOGIN table is resolved from package+A28/+A2C, signed
+   count+20 and {page,localOffset} int32 pairs at+28, stride8.
+
+No live lifetime admission, numeric acceptance,1ms cap compliance, visible grip
+or AGR crash-cause claim follows. A future writer-disabled bounded acceptance/
+refusal exam can be considered once this ordinary source safety chain closes,
+with a fresh PID/image-bound external crash capture plan. The unknown historical
+AGR PC is not itself an eternally unprovable launch prerequisite. Both writers,
+unconditional static_assert and1ms cap remain unchanged; no game launched here.
+
+### CONFIRMED isolated control: MEM_IMAGE queries are not the AHD broad-private cost
+
+Two fresh hidden children each completed1first+128warm queries at both cursors.
+Both used the same locked-file SHA ed1371a4...210be, SEC_IMAGE_NO_EXECUTE,
+FILE_MAP_READ; header/code/target probes report MEM_IMAGE/MEM_COMMIT/PAGE_READONLY,
+the actual returned AllocationBase, no guard or execute protection. Descriptors
+remain exact, full mapped header page unchanged, cleanup_complete true. No
+payload writes, VirtualProtect, retail calls, game launch/attach, or full native
+preparation occurred. The queried broad RO regions actually exceed AHD's sizes:
+
+|Cursor RVA|MEM_IMAGE RegionSize|Warm median first/repeat|P95 first/repeat|First query|
+|---|---:|---:|---:|---:|
+|3864A00 table|58601472|2.7/2.8us|2.8/2.9us|5.0us both|
+|3EEBE80 retained|51757056|2.7/2.8us|2.8/2.9us|3.2us both|
+
+AHD private RX regions were48791552/41947136 with~132/~113us medians. Hypothesis
+A (same broad cost scale in this image view) is REJECTED; B's sub10us prediction
+holds for this isolated control. C remains: backing, protection and geometry
+differ, so do NOT attribute the delta solely to backing type, infer the Windows
+algorithm, or subtract Python/FFI query time to manufacture a sub1ms full pose.
+These numbers do not establish actual game latency or explain AGR's old crash.
+No further cost microbenchmark is needed for the current handoff; return to the
+two ordinary lifetime conditions above. Keep all freshness/owner checks.
+
+Header ImageBase metadata7FF7084F0000 differs from both actual views and raw
+preferred140000000. Only four bytes inside the declared eight-byte field differ;
+all other declared400 bytes match. Raw headerSHA5f2cff50f1babebc4054ab5f94fe3d8fec0f476c0a05a538bcec0aa7bfaaca49,
+mapped headerSHA9f7b40cb4edf21111f7abf8fb13bd509c43d4c886716a7973b7f74134fb6df6e.
+The field remains metadata only; no assumption about OS relocation is required.
+
+New tool scripts/p99_image_query_audit.py defaults to locked-file STATIC_PREFLIGHT;
+explicit command: `py -3.12 scripts/p99_image_query_audit.py --execute --samples 128 --output reports/<new>.json`.
+Pure tests12/12 cover no-map default, flags, malformed/pinned headers, bounded
+diagnostics, opaque-base-independent addresses, foreign/executable/guard regions,
+full-header-page postcheck and cleanup after partial failures. All Python P99
+tests107/107 and existing CTest22/22 pass. No C++ source changed or DLL rebuilt:
+runtimeSHA26eb3376c1ee35807dc12108c9f90efddee73efdbc98a868ab58516226be010b,
+helperSHAa83cf731ee0d98f2b14c9ced265052b21754bf5cce4063fb3351acef7eb66f3d,
+both identical to frozenAHD. Artifacts: reports/ade-offline-20260919-final.
+Seven new STATIC function labels and existing callback/cost comments applied
+to the single ida/tll.i64:1885functions/73data/1type, save_database returned True
+(reports/ida_apply_ade_status.txt). MCP restarted; all seven names resolve and
+dispatcher-registration/page-release xrefs read back. ReviewedAGW remains
+rollback; nothing deployed. Pre-existing untracked tmp/ is preserved untouched.
