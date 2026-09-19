@@ -11,6 +11,17 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
+User hold / AFE appearance correction (2026-09-20): user saw Chloe, not Nadine.
+Role2/B banner is configuration, not a mesh/skeleton witness; AFE is NOT a
+validated Nadine/P99 exam. The one-shot budget/no-write result still holds but
+does not identify admitted actor/weapon. Local appearance override only accepts
+return141BB4AB9 inside NdGameObject_Init141BB4280; late injection cannot rebuild
+an already-created Chloe look. Late injection is plausible, not proven without
+Init timing; installer/caller/object gate alternatives remain. No further
+launch/injection/source change made in response to the user's pause. Next, first
+establish actual local appearance and init-time substitution; then resume the
+preselection cost work below. See finalAFE appearance correction in COOP_STATUS.
+
 Current handoff (2026-09-20, AFE result): one-game source-only exam stopped
 immediately at preselection budget:probes1/attempts0/writes0, noRESULT/APPLIED.
 Full producer/native retarget math never started. Game23348 exited0 with no

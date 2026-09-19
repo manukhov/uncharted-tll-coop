@@ -8,8 +8,11 @@ AFE source-only exam reached its first preselection budget stop: probes1,
 attempts0, writes0; fullproducer never entered. Game23348 later exited0 with
 no second-chance fault;4235 handled first-chance exceptions are not crash proof.
 Observer disabled again in default AFE-safe source/DLL; both writersfalse and
-1ms unchanged. Read finalAFE outcome before any new exam. Next attribute exact
-preselection cost and fresh handled exception site, not synthetic benchmarks.
+1ms unchanged. USER HOLD / correction: the user reports playing Chloe in AFE,
+not Nadine. Role B is configuration only; this was NOT a validated Nadine/P99
+exam. Read the appearance correction below before any further runtime work.
+First establish actual local look and initialization timing; do not blindly
+relaunch, reinject, rebuild the look live, or infer Nadine cost from this stop.
 
 ## Historical priority snapshot (2026-08-27)
 
@@ -34464,3 +34467,42 @@ in reports/afe-safe-20260920-final. AFE outcome comment saved in the singleIDB:
 1902functions/73data/1type, save_database returned True
 (reports/ida_apply_afe_final_status.txt). MCP restarted and native job name
 read back; no new retail function labels required. Existing tmp/ untouched.
+
+### AFE appearance correction: user saw Chloe, not Nadine
+
+CONFIRMED user observation (2026-09-20): user reports playing Chloe during this
+run. reports/coop_role.txt is2 and the fresh PID23348 log says roleB/localNadine,
+but that banner only reflects start_state_net configuration, not actual mesh,
+Art/raw skeleton or successful appearance override. REJECTED: treating this
+banner, the observer READY marker or the budget stop as a Nadine/P99 admission
+test. Preselection charges elapsed cost even when selection is false; attempts0
+and the missing stage/identity witnesses cannot identify which actor/weapon
+checks were reached. The observed one-shot stop/no-write containment still holds.
+
+STATIC: Player_GetAppearanceHash at140A1DCC0 is Player vtable[92] (+2E0).
+The local hooked_appearance override requires returnRVA1BB4AB9, nonnull output,
+role/force flag and a1==retained_player_object(0). Fresh IDA read locates that
+return inside the already named NdGameObject_Init at141BB4280: call[ r8+2E0 ]
+at141BB4AB2 returns4AB9; its result feeds look construction through slot+238
+at141BB4AE3, followed by object+170 publication at141BB4B03. The explicit
+ProcessSpawnInfo look pointer can bypass the appearance-built branch. Installing
+the vtable hook alone neither calls Init again nor rebuilds an existing look.
+The hook's broad per-frame-getter comment does not make this exact caller gate
+per-frame. Existing IDB labels for both functions are already present; no new
+retail-function name or database write is required for this diagnosis.
+
+HYPOTHESIS, not a timestamped runtime proof: injection after local Chloe Init
+missed the only admitted appearance callback. Launch00:40:19 and watcherREADY
+00:40:56 preceded injection, but current-actor Init timing was not captured.
+Alternatives remain hook installation failure/skipping or caller/object gate
+mismatch. Installer success/skip messages use disabled-by-default log_line;
+their absence is not proof of failure. The appearance path is a vtable hook,
+not the spawn-capture VEH/DR0 route. Watcher forwards noninitial exceptions and
+does not set debug registers; no evidence supports blaming it for suppressing
+this appearance hook. Its timing perturbation is a separate known limitation.
+
+User requested a pause/explanation. No runtime/source/config changes, new build,
+launch, injection or game input in this diagnosis. Both game/watcher are absent.
+Before any future grip exam, establish actual Nadine appearance and successful
+init-time substitution independently of the role banner. Only then revisit
+preselection stage/timing instrumentation. Do not force an unproven live rebuild.
