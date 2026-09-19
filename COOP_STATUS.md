@@ -34147,3 +34147,177 @@ to the single ida/tll.i64:1885functions/73data/1type, save_database returned Tru
 (reports/ida_apply_ade_status.txt). MCP restarted; all seven names resolve and
 dispatcher-registration/page-release xrefs read back. ReviewedAGW remains
 rollback; nothing deployed. Pre-existing untracked tmp/ is preserved untouched.
+
+## 2026-09-19 ADF: package-owned operands and the real retarget-table boundary
+
+No game exam is proposed by this unit. Continue ADE's ordinary source-lifetime
+proof, not the completed cost microbenchmarks. Both pose writers remain disabled;
+the unconditional static_assert and1ms cap must stay. No attachment changes.
+
+### STATIC capacity correction and prospective offline checks
+
+Competing bounds: A)4096 is the actual inline retarget capacity; B)4096 was only
+a generic source-span ceiling accidentally used as a table capacity; C)native
+256 assertion is merely a soft count while storage can legitimately hold4096.
+Evidence selects B and rejects A/C for the pinned build:
+- Both authored load1417CDAE0 and AddRetargetEntry1417CDCF0 check count<100hex
+  and source-assert m_numRetargetEntries<kMaxNumRetargetEntries, diagnostic256.
+- Both form entries at143864A00 + count*40hex and initialize their fields.
+- Next global143868A00 is a DIFFERENT 28hex-stride draw/ambient-occluder table,
+  independently traversed by source-named IDrawControl::MeshesUseAmbientOccluders
+  141755BE0 with its separate count1438401DC. Distance4000hex=256*40hex.
+
+Tighten only retarget-table admission to256 and share that constant across all
+six P99 count gates. Generic source-span40000hex, per-entry record counts and
+other registries are separate and must not be changed. Prior synthetic4096
+successes exercised oversized owned storage, NOT legitimate game capacity.
+Keep historical reports unchanged; positive fixture counts become175/256.
+
+Before checks:175 and256 should remain accepted with complete-table coverage;
+257/4096/UINT_MAX must refuse before a native Find can scan neighboring data.
+Pure table-range tests must refuse bad counts before even a page query; later
+bad counts poison an existing scope. Growth175->256 must still check newly
+covered guarded pages, and a fresh scope must re-query them. Add a full-producer
+invalid4096 mutation with zero completion/output and no Find/math; earlier
+resolver calls are not evidence of failure. After a clean release build, one
+bounded owned-harness regression (samples1, not a performance campaign) should
+retain80queries/12Resolve/12Find/42DoJoint/21Blend and exact1008-byte AGZ output
+for valid counts, plus existing negative/fresh-scope checks. No result admits
+live1ms or identifies the historical AGR crash cause.
+
+### STATIC: pinned Art/raw/reference data belongs to CONTENT pages
+
+Alternatives: exact LOGIN item pointing into CONTENT; a LOGIN-metadata pointer;
+or a later substituted allocation. The traced path selects the first for the
+three pinned source packages, not for arbitrary third-party resource pointers.
+
+- Caller graph: loaded-content handler1419C4120 prepares each resource header
+  via1416356A0 at1419C4340. Once Package+80C equals authored+A30, wrapper141635820
+  at1419C4373 receives header+A20, LOGIN handles+A4C and CONTENT handles at+0;
+  wrapper calls relocator141635760 at141635990 (corrects prior995 comment).
+  DoingLogin1419C4D50 uses this same CONTENT set: signed LOGIN page/offset pairs
+  at4EA8/4F07 resolve to the resource passed to callback manager+38 at4F1E.
+- Pointer identity: GameLoading_PackageLoginResItem preserves incoming Art
+  R8->R15 at141CC0C31, forwards the same pointer atCC2995, and Skel login stores
+  it at1417CD681. Art+40 is a signed CONTENT fixup; raw+20 is an INLINE relative
+  reference-pose offset. Resource-header preparation does not write these
+  fields. Complete fixup lists contain one Art+40 relocation and no writes
+  into raw+20 or the reference rows.
+- Independent fresh archive extraction matches the full SHA pins in
+  generate_p99_chloe_source_rows.py: proto.pak fd3e58ac...99d0,
+  chloe-base.pak13b24c60...5109, nadine-dlc-base.pak2bf66e61...0b06b.
+  Each has one CONTENT page and JOINT_HIERARCHY LOGIN item4. Hex offsets below
+  are page-local; counts are decimal. These are asset facts, not live addresses.
+
+| Package | CONTENT file offset/size | Art | raw | reference span/count |
+| --- | --- | --- | --- | --- |
+| proto.pak | 2000/559A0 | 220 | 1FE0 | 23B0..7C60 /473 |
+| chloe-base.pak | 2980/ACB30 | 55980 | 57800 | 57BA0..5CC40 /430 |
+| nadine-dlc-base.pak | 2660/A08A0 | 4FBC0 | 51980 | 51D10..56CF0 /426 |
+
+Known observer candidate1406FBAAA->142003B60 does not replace these pointers:
+142002320 reads Art+40/+58 at236C/239D;142003170 passes Art to142002820, whose
+Art reads are+38/+58. Its48-byte allocation is Havok propertyF0010000 at28A3/
+2934/299B, not a replacement skeleton/reference buffer. This eliminates that
+specific substitute-allocation explanation, not all hypothetical engine writes.
+
+### STATIC: retarget record allocation is package-owned too
+
+Competing owners: stack allocator; independent heap allocation; authored CONTENT;
+or dynamically appended package subpages. The last is selected for null entry+18
+on the traced ordinary login path; existing nonnull storage is reused atCE503.
+
+- BuildRetargetEntry1417CE210 captures PackageMgr+D8 atCE515, initializes a stack
+  LevelMemAllocator atCE5C5 and pushes it atCE5E5. The46*count allocation occurs
+  atCE630 and is stored atentry+18 atCE635. The allocator object is stack-local,
+  but its result is not. Initializer1418FFD30 sets manager+420/package+430 at
+  141900085/08C and clears its optional caches.
+- Resolved virtual edge: RTTI LevelMemAllocator type143771230, COL142CDEAA0,
+  vtable142B11FC8 slot7(+38) is source-named Allocate141900210. Allocation via
+  Memory_AllocateFromCurrentAllocator1415A0E90 reaches this slot, which passes
+  the stored manager/package to14162D080 at141900357 or422.
+- PackageMgr_AllocateLoginData14162D080 and subpage allocator14162CB20 allocate
+  type8 storage under lock14646ECF0. New handles are stored in Package[page]
+  atD1E0/D2B2 orD068, and current-page count+80C grows. Claim14162CA60 writes
+  owner Package+840 to subpage descriptor+12 atCAE1; remainder ownerFFFF.
+  ADE's ordinary release141628670 iterates max(+80C,+A30), invalidates handles
+  and retires that same owner at628803. Thus dynamically added record storage
+  is in the released package set, not an independent lifetime exception.
+- Owner correlation: UpdateLogin141627F60 dispatches the current manager+D8
+  package at6280FD and clears+D8 only after observers at628164. Skel observer
+  1406FBB40 enumerates that package's JOINT_HIERARCHY and calls BuildRetargetEntries
+  atFBC8B. Registered Art and package-name hash(+10) select the retarget entries.
+  Logout1417CD7C0 clears affected entry identities/+18 under the registry lock
+  before returning, ahead of the ordinary queued page release.
+
+Do not confuse authored CONTENT count+A30, dynamic type8 handles below+80C,
+and short-lived LOGIN metadata handles+A4C. This is the ordinary owner chain;
+it does not prove global package-context immutability or prohibit in-place
+record rebuilds. Completed3906-byte owned-value admission remains necessary.
+
+### STATIC: material-only flag contract and the residual rebind case
+
+Alternatives: bit20 changes in ordinary actor propagation; same-name merge;
+or a different Level sharing one package key. First two are excluded on the
+traced paths; the third remains a concrete caveat, not a demonstrated event.
+
+- Level_Load141EE0BC0 copies WantLoadInfo+1A to Level+2 atEE0C04. Exact source
+  diagnostics in SetWantFlags141EE66D0 name bit20 m_materialTableOnly.
+  EE66EA/66F0 detect change and EE674C asserts, but EE6789 still writes flags
+  if assertions are suppressed: do not describe this as unconditional refusal.
+- WantLoads_Add141B85D00 merges same-nameId requests and updates only bits1/8/10
+  atB85EB9..EE1, preserving20. GenerateTodoLists141B3A430 reuses Level by nameId
+  and calls SetWantFlags. Dependent-actor builder141B88360 starts flags09 and
+  inherits mask12 only atB88462/6A, NOT20. Actor package builder14204F4F0 emits
+  name-winfx/name/name-dict; normal actor requests do not inherit material-only.
+- RequestPackage14162B380 looks up manager/key WITHOUT Level atB405..B40A.
+  An existing package outside states0F/10 is reused, refcount++ atB4C2, and
+  B4CD unconditionally replaces Package+830. Callback manager+28 atB625 is
+  later; installed141CC4910 only appends a diagnostic list, not logout/relogin.
+  Preload14162B720 only zeros+830 on new creation; reset1416462B0 clears it
+  after teardown. These are not ordinary actor bit20 flips.
+- LevelDef_ReadTxtFile14204E5F0 accepts arbitrary package entries atE795/E8B5/
+  E8D0. A different-name material-only Level could therefore rebind a shared
+  key's context. A reachable instance for the three target packages has NOT
+  been shown. Asset ownership alone cannot certify requester provenance.
+
+### Offline outcome and next bounded exam
+
+Release build succeeds; CTest22/22 and Python108/108 pass. Added12 pure checks of
+the true+A00 table alignment:175 entries touch4pages,256 touches5; tailguard at
+RVA3868000 rejects growth, failedscope stays poisoned and freshscope requeries
+all5pages. Final relink briefly failed with mt.exe c101008d access-denied on a
+test EXE; no test/game process was present and unchanged retry passed. No code
+or checks were weakened. Isolated owned regression (samples1, repeated only to
+validate the final relink) accepts175/256 under MXCSR1F80/9FC0, each preserving
+80queries/12Resolve/12Find/42DoJoint/21Blend and exact1008-byte outputSHA
+c3613114c77ed16949d7de7d374131e86a4ab5ce57a3695a8f0b9ba2bee122e7.
+Total26 mutation cases across the two counts include257/4096/UINT_MAX refusal
+atstage4 with zero Find/math/completion/output. Four fresh-scope guarded-page
+cases refuse without consuming guards, restore protections and keep zero output.
+These are isolated-native checks, not CONFIRMED live grip or crash attribution.
+
+Next implementation: a separately bounded, writer-disabled source-preparation
+observation mode in an already-loaded scene. Preserve normal-job/stock-once
+ingress, page checks/SEH, try-lock/finally-unlock, fresh identities and complete
+owned-value gate before native math. Bound attempts and elapsed time; capture
+external PID/image-bound crash evidence. Write a prospective accept/refuse/cost
+prediction before deployment. Do not test load/unload/rebind or enable either
+pose writer. The generic cross-Level caveat does not demand universal proof
+before this scoped exam, but it must not be presented as solved by that exam.
+Current DLL does not arm that observation mode: no game launch/attach/injection/
+input this turn, no deployment, no attachment changes. ReviewedAGW remains rollback.
+Do not restart synthetic cost campaigns or require live profile absence again.
+
+Final runtime buildtag2026-09-19adf-safe, SHA256
+73020601e2951a0e675117b18fed4d2271a69250bff0f15471f8d4d100bf7de4;
+preparation helperSHAd0cfd4edbd3b75aa1b370bf71107e5aac7c34f5b20d2ae5a159b5221e1438a9b.
+DLL/PDB/helper/regression and save evidence frozen locally in
+reports/adf-safe-20260919-final; report p99-preparation-adf-final.json.
+Seventeen new STATIC function labels plus existing provenance/lifetime comments
+applied to the single ida/tll.i64:1902functions/73data/1type,
+save_database returned True (reports/ida_apply_adf_final_status.txt).
+MCP restarted; all17 new names resolve at exact entry addresses. Allocator slot7,
+allocation caller edges and neighboring draw-table xrefs were read back; corrected
+call sites141900357/422 are CALL instructions (35C/427 are result moves).
+Pre-existing untracked tmp/ preserved untouched; no ignored artifacts staged.

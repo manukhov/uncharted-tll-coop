@@ -61820,7 +61820,7 @@ public:
     bool range(std::uint32_t count) {
         if (purpose_ == P99SourcePurpose::kOwnedGroupValues)
             return admission_.range(g_module, count);
-        if (count == 0 || count > 4096) return false;
+        if (count == 0 || count > coop::p99_retarget_table_admission::kMaximumEntries) return false;
         return readable_bytes(reinterpret_cast<const void*>(
             g_module + kSkelTableRetargetEntriesRva)) >=
             static_cast<std::size_t>(count) * 0x40;
@@ -61839,7 +61839,7 @@ bool p99_source_range(P99SourcePurpose purpose, const void* pointer, std::size_t
         return readable_bytes(pointer) >= bytes;
     // An explicit caller phase is callback-free and lexically bounded. Without
     // it every span remains fresh. No page authority crosses native work,
-    // logging or unlock here. Full 0x40000 registry spans remain split.
+    // logging or unlock here. Generic spans up to 0x40000 remain split.
     if (phase != nullptr)
         return phase->range(reinterpret_cast<std::uintptr_t>(pointer), bytes);
     P99SourceReader reader(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
@@ -61854,7 +61854,7 @@ void* p99_source_find_entry(P99SourcePurpose purpose, std::uint32_t source, std:
     if (purpose == P99SourcePurpose::kOwnedGroupValues) {
         const auto count = *reinterpret_cast<const std::uint32_t*>(
             g_module + kSkelTableRetargetEntryCountRva);
-        if (count == 0 || count > 4096 ||
+        if (count == 0 || count > coop::p99_retarget_table_admission::kMaximumEntries ||
             !(table_admission != nullptr ? table_admission->range(count) :
                 p99_source_range(purpose, reinterpret_cast<const void*>(
                     g_module + kSkelTableRetargetEntriesRva),
@@ -62329,7 +62329,7 @@ bool seh_capture_p99_chloe_transfer_entry(
         const std::uint32_t entry_count = *count_ptr;
         auto* const table = reinterpret_cast<std::byte*>(
             g_module + kSkelTableRetargetEntriesRva);
-        if (entry_count <= index || entry_count > 4096 ||
+        if (entry_count <= index || entry_count > coop::p99_retarget_table_admission::kMaximumEntries ||
             !(table_admission != nullptr ? table_admission->range(entry_count) :
                 p99_source_range(purpose, table,
                     static_cast<std::size_t>(entry_count) * 0x40)) ||
@@ -62517,7 +62517,7 @@ bool seh_validate_p99_chloe_transfer_row124(void** entry_out,
         const std::uint32_t count = *count_ptr;
         auto* const table = reinterpret_cast<std::byte*>(
             g_module + kSkelTableRetargetEntriesRva);
-        if (count <= kIndex || count > 4096 ||
+        if (count <= kIndex || count > coop::p99_retarget_table_admission::kMaximumEntries ||
             !(table_admission != nullptr ? table_admission->range(count) :
                 p99_source_range(purpose, table, static_cast<std::size_t>(count) * 0x40))) {
             return false;
@@ -62662,7 +62662,7 @@ bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
                 g_module + kSkelTableRetargetEntryCountRva);
         auto* const table = reinterpret_cast<std::byte*>(
             g_module + kSkelTableRetargetEntriesRva);
-        if (entry_count <= 157 || entry_count > 4096 ||
+        if (entry_count <= 157 || entry_count > coop::p99_retarget_table_admission::kMaximumEntries ||
             row20_entry != table + 20 * 0x40 ||
             row124_entry != table + 124 * 0x40 ||
             row157_entry != table + 157 * 0x40) {
@@ -62866,7 +62866,8 @@ bool seh_p99_chloe_transfer_registry_identity_while_locked(
                 expected_chloe_art &&
             reinterpret_cast<std::uintptr_t>(nadine_art) ==
                 expected_nadine_art &&
-            nadine_art == target_skeleton && count > 157 && count <= 4096 &&
+            nadine_art == target_skeleton && count > 157 &&
+            count <= coop::p99_retarget_table_admission::kMaximumEntries &&
             (purpose != P99SourcePurpose::kOwnedGroupValues ||
              table_admission.range(count)) &&
             p99_source_find_entry(purpose, p99_order::kPlayerDatabaseId,
@@ -80248,7 +80249,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-19ahc-safe "
+        "TLL co-op runtime init 2026-09-19adf-safe "
         "(all P99 group-shadow hooks disabled after AGR crash; legacy persistent grip writer disabled; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(

@@ -434,7 +434,7 @@ int main(int argc,char** argv) {
         check(!reader.range(0x100000,0x40000)&&queries==2&&copies==0,"full table second-half guard rejected without touch");
         check(!reader.range(0x100000,1)&&queries==2,"failed reader does not retry");
         s::Reader fresh(query,copy);
-        check(fresh.range(0x100000,0x40000),"full4096-entry table accepted");
+        check(fresh.range(0x100000,0x40000),"generic maximum source span accepted independently of retarget capacity");
         check(!fresh.range(0x100000,0x40001),"source maximum bounded");
         s::Reader overflow(query,copy);std::uint32_t word=0;
         check(!overflow.read(UINTPTR_MAX-1,4,word)&&copies==0,"base plus offset overflow");

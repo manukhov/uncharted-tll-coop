@@ -38,10 +38,10 @@ class FixtureTests(unittest.TestCase):
     def test_owned_graph_restore_and_negative_mutations(self):
         image = DataImage()
         try:
-            for count in (175, 4096):
+            for count in (158, 175, 256):
                 with f.PreparationFixture(image, self.loaded, table_count=count) as fixture:
                     self.assertEqual(ctypes.c_uint64.from_address(fixture.job + 8).value, fixture.fg)
-                    for field in ("weapon_generation", "fg_raw_joint_buffer", "record20_numeric",
+                    for field in ("table_count", "weapon_generation", "fg_raw_joint_buffer", "record20_numeric",
                                   "record157_last_numeric", "record20_padding", "lock"):
                         address, size = fixture.fields[field]
                         before = ctypes.string_at(address, size)
@@ -64,7 +64,7 @@ class FixtureTests(unittest.TestCase):
             image.close()
 
     def test_table_count_refuses_before_any_image_access(self):
-        for count in (0, 157, 174, 4097):
+        for count in (0, 157, 174, 257, 4096, 0xFFFFFFFF):
             with self.assertRaises(ValueError):
                 f.PreparationFixture(None, {}, table_count=count)
 

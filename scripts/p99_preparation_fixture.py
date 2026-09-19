@@ -94,8 +94,8 @@ class PreparationFixture:
     """
     def __init__(self, image, loaded: dict, *, table_count: int = 175,
                  artifact_prefix: Path = DEFAULT_ARTIFACT_PREFIX):
-        if table_count not in (158, 175, 4096):
-            raise ValueError("fixture table count must be158,175 or4096")
+        if table_count not in (158, 175, 256):
+            raise ValueError("fixture table count must be 158, 175 or 256")
         self.image = image
         self.table_count = table_count
         self.buffers = {}
@@ -274,6 +274,7 @@ class PreparationFixture:
                 spec.runtime_count, spec.flags, spec.scale_bits, group_map.address, 0, 0)
         self._install_image(ENTRIES, bytes(table))
         self._install_image(ENTRY_COUNT, struct.pack("<I", self.table_count))
+        self.fields["table_count"] = (self.image.address + ENTRY_COUNT - BASE, 4)
         self.fields["lock"] = (self.image.address + LOCK - BASE, 8)
         for mapping, src, dst, field in ((loaded["maps"][0], p, c, "player_global"),
                                         (loaded["maps"][1], c, n, "chloe_global")):

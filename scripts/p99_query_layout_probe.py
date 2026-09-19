@@ -16,7 +16,8 @@ PREFERRED_BASE = 0x140000000
 PAGE_BYTES = 0x1000
 SPLIT_RVAS = (0x38A5000, 0x3EEC000)
 TABLE_RVA = 0x3864A00
-TABLE_MAX_END = TABLE_RVA + 4096 * 64
+TABLE_MAX_END = TABLE_RVA + 256 * 64
+assert TABLE_MAX_END == 0x3868A00
 RETAINED_RVA = 0x3EEBE80
 RX, RO, COMMIT, PRIVATE = 0x20, 0x02, 0x1000, 0x20000
 U64_MAX = (1 << 64) - 1
@@ -177,7 +178,7 @@ def _measure_owned(image, fixture, samples, distribution, ops):
     """Internal injectable orchestration for pure cleanup/admission tests."""
     if (type(samples) is not int or not 1 <= samples <= 512 or fixture.image is not image or
             fixture._closed or not 0 < image.address < image.address + image.size <= U64_MAX or
-            image.size != IMAGE_BYTES or fixture.table_count not in (158, 175, 4096)):
+            image.size != IMAGE_BYTES or fixture.table_count not in (158, 175, 256)):
         raise ValueError("unadmitted owned query-probe context")
     image_end = image.address + image.size
     validate_descriptor(ops.query(image.address), image.address, image.address, image_end, RX)

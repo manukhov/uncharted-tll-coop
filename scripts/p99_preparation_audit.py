@@ -123,6 +123,30 @@ def check_negative_cases(bridge, image, fixture, output):
             cases.append({"field": field, "result": result, "stage": stats.failed_stage,
                           "retarget_calls": stats.retarget_calls, "blend_calls": stats.blend_calls})
         fixture.verify()
+    cases.extend(check_invalid_table_counts(bridge, image, fixture, output))
+    return cases
+
+
+def check_invalid_table_counts(bridge, image, fixture, output):
+    """Mutate only the owned count; no out-of-capacity table is manufactured."""
+    cases = []
+    address, width = fixture.fields["table_count"]
+    if width != 4:
+        raise ValueError("unexpected retarget count width")
+    for count in (257, 4096, 0xFFFFFFFF):
+        with fixture.patch(address, count.to_bytes(width, "little")):
+            stats = Stats(size=ctypes.sizeof(Stats), version=1)
+            result = bridge.P99PrepareAudit(image.address, fixture.job, 1,
+                output.address, output.size, ctypes.byref(stats))
+            if (result != -5 or stats.completed_iterations != 0 or stats.find_calls != 0 or
+                    stats.retarget_calls != 0 or stats.blend_calls != 0 or
+                    output.read() != bytes(output.size)):
+                raise ValueError(f"invalid table count reached native Find or math: {count}")
+            output.verify()
+            cases.append({"field": "table_count", "value": count, "result": result,
+                          "stage": stats.failed_stage, "find_calls": stats.find_calls,
+                          "retarget_calls": stats.retarget_calls, "blend_calls": stats.blend_calls})
+        fixture.verify()
     return cases
 
 
@@ -225,7 +249,7 @@ def run_worker(args) -> dict:
     runs = []
     try:
         image = native.RetargetImage(args.exe, manager)
-        for count in (175, 4096):
+        for count in (175, 256):
             with PreparationFixture(image, loaded, table_count=count) as fixture:
                 output = native.OwnedBuffer(bytes(1008), False)
                 try:

@@ -11,7 +11,28 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-19, ADE offline): no game launch/attach/injection/input,
+Current handoff (2026-09-19, ADF): fixed six retarget-table admission gates to
+the actual256-entry capacity, not4096. Native assertions1417CDAE0/1417CDCF0 and
+distinct adjacent draw table143868A00 establish the4000hex extent. Generic
+source-span40000hex stays. Pinned Art/raw/reference CONTENT provenance and
+dynamic retarget-record type8 package-subpage ownership now traced. Ordinary
+actor flags09/mask12 do not inherit materialTableOnly20; same-name merge keeps20.
+Residual: RequestPackage14162B380 atB4CD can replace Package+830 with a different
+Level sharing the key; reachable material-only rebind of our3packages not shown.
+See finalADF COOP_STATUS entry for evidence/candidate exclusions and exact scope.
+Release/CTest22/22/Python108/108 pass; bounded owned samples1 keeps80/12/12/42/21
+and exact1008bytes for175/256.26mutations and4fresh-guard cases pass. Old4096
+positive fixtures were oversized synthetic storage, NOT valid game capacity.
+Next: implement bounded writer-disabled source-preparation observation in one
+already-loaded scene, normaljob/stockonce, fresh lock/identity/owned-value gates,
+external PID/image-bound crash capture. Write prediction then fresh build before
+launch. Test admission/cost, NOT global unload safety or visual grip. Current DLL
+does NOT arm this mode; no game/attach/injection/input/deployment this turn.
+Both writersfalse/unconditional static_assert/1ms/attachments unchanged. No more
+synthetic cost campaigns or live-profile-absence prerequisite. Frozen artifacts
+reports/adf-safe-20260919-final; reviewedAGW rollback; existing tmp/ untouched.
+
+Prior handoff (2026-09-19, ADE offline): no game launch/attach/injection/input,
 no retail/native math invocation, runtime source/DLL/attachments unchanged.
 STATIC ordinary lifetime link closed: GameLoading installs logout141CC2EB0 in
 PackageMgr+40. Queued1416282B0 and immediate14162B8C0 synchronously complete all

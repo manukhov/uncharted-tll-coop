@@ -35,8 +35,9 @@ public:
             failed_ = true;
             return false;
         }
-        // The source registry allows 4096 * 0x40 bytes. Keep the existing
-        // per-request 0x20000 bound without silently checking only its prefix.
+        // Generic source spans may reach 0x40000 bytes independently of the
+        // retarget table capacity. Keep the per-request 0x20000 bound without
+        // silently checking only the source prefix.
         while (bytes != 0) {
             const auto part = bytes > p99_group_readability::kMaximumSpan
                 ? p99_group_readability::kMaximumSpan : bytes;

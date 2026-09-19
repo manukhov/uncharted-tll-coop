@@ -3986,6 +3986,138 @@ FUNCTIONS = {
         "scalar copy over JointParams, FgAnimData+0x120 payload, group temp and the "
         "shared scratch. Command 0x17/decimal 23 is the separate plugin callback path.",
     ),
+    0x14162B380: (
+        "PackageMgr_RequestPackage",
+        "STATIC ADF: exact source assertion. FindExisting141629C70 receives "
+        "manager/key only atB405..B40A, not Level. Existing package outside "
+        "states0F/10 is reused; B4C2 increments refcount and B4CD unconditionally "
+        "replaces Package+830 with a4 Level. No old-context bit20 comparison. "
+        "Manager+28 callbackB625 follows overwrite; installed141CC4910 is only "
+        "a diagnostic-list append, not logout/relogin. Different-name Levels "
+        "sharing a package remain a materialTableOnly lifetime caveat.",
+    ),
+    0x141EE0BC0: (
+        "Level_Load",
+        "STATIC ADF: copies WantLoadInfo+1A flags to Level+2 at141EE0C04, "
+        "then requests its package list with this Level as context. Bit20 "
+        "is materialTableOnly, checked at both package resource login/logout. "
+        "Actor request provenance is distinct from asset content provenance.",
+    ),
+    0x141EE66D0: (
+        "Level_SetWantFlags",
+        "STATIC ADF: exact source assertion identifies bit20 as "
+        "m_materialTableOnly. EE66EA/66F0 test changes; EE674C asserts, "
+        "EE6789 writes the full new flag word. This is a contract, NOT an "
+        "unconditional refusal if assertions are suppressed.",
+    ),
+    0x141B85D00: (
+        "LoadRegistry_WantLoads_Add",
+        "STATIC ADF: same-nameId(+8) want-load requests are merged. "
+        "B85EB9..B85EE1 updates only bits1/8/10, preserving material-only "
+        "bit20 even if later incompatibility assertionB85EE8..B85F4D is "
+        "suppressed. Does not prevent distinct Levels sharing one Package key.",
+    ),
+    0x141B88360: (
+        "LoadRegistry_AddLevelDependentActors",
+        "STATIC ADF: dependent actors receive type2 atB88428 and flags09 "
+        "atB88430. Only mask12 propagates from the parent atB88462/B8846A; "
+        "materialTableOnly bit20 is NOT inherited by these actor requests.",
+    ),
+    0x14204F4F0: (
+        "LevelDef_BuildActorPackageList",
+        "STATIC ADF: actor Level package list contains name-winfx, name and "
+        "name-dict. Combined with dependent-actor flags09/mask12, ordinary "
+        "actor loading does not request materialTableOnly bit20. This does "
+        "not exclude a different text LevelDef listing the same package.",
+    ),
+    0x141B3A430: (
+        "LevelMgr_GenerateTodoLists",
+        "STATIC ADF: reuses an existing Level by nameId and updates flags "
+        "through Level_SetWantFlags141EE66D0. Same-name merge preserves bit20; "
+        "PackageMgr separately keys packages without Level identity.",
+    ),
+    0x14204E5F0: (
+        "LevelDef_ReadTxtFile",
+        "STATIC ADF: exact source name. Parses arbitrary package %128s "
+        "entries at14204E795/E8B5/E8D0. Thus actor-list construction alone "
+        "does not prove no other Level can request an identical package key. "
+        "Cross-Level material-only rebind for the three pinned skeleton "
+        "packages is not established as reachable.",
+    ),
+    0x1417CDAE0: (
+        "SkelTable_LoadAuthoredRetargetEntries",
+        "STATIC ADF: startup caller1401571A7 resolves *skel-retarget-tables* "
+        "and appends authored48-byte rows into runtime64-byte entries at "
+        "143864A00. Count check1417CDBED and AddRetargetEntry source assertion "
+        "limit capacity to256, not4096. Next array143868A00 is the separate "
+        "draw/ambient-occluder table. Initializes entry+18 to null; not a "
+        "record-array release path.",
+    ),
+    0x1417CDCF0: (
+        "SkelTable_AddRetargetEntry",
+        "STATIC ADF: exact SkelTable::AddRetargetEntry assertion. Checks "
+        "count<100hex at1417CDCF6; diagnostic limit256. Appends at "
+        "143864A00+count*40hex, stores authored pointer, clears identities "
+        "and entry+18, sets count/flags from authored+20. Physical next "
+        "table starts143868A00:256 entries, not a generic40000hex read span.",
+    ),
+    0x141755BE0: (
+        "IDrawControl_MeshesUseAmbientOccluders",
+        "STATIC ADF: exact source assertion IDrawControl::MeshesUseAmbientOccluders. "
+        "Walks meshes and separate array143868A00, stride28hex, count1438401DC, "
+        "matching geometry hash at entry+1C. This neighboring array is NOT "
+        "part of SkelTable retarget storage143864A00..143868A00.",
+    ),
+    0x1418FFD30: (
+        "LevelMemAllocator_InitializePackageState",
+        "STATIC ADF: initializes allocator caches, stores global PackageMgr "
+        "at allocator+420 and supplied package R9 at+430 (141900085/08C). "
+        "BuildRetargetEntry captures manager+D8 at1417CE515 and calls here "
+        "atCE5C5 before pushing its LevelMemAllocator. This state is stack "
+        "local; allocated records belong to package subpages, not its stack.",
+    ),
+    0x141900210: (
+        "LevelMemAllocator_Allocate",
+        "STATIC ADF: exact LevelMemAllocator::Allocate source assertions; "
+        "RTTI type143771230/COL142CDEAA0/vtable142B11FC8 slot7(+38) resolves "
+        "here from Memory_AllocateFromCurrentAllocator. Uses allocator+420 "
+        "manager and+430 package in PackageMgr_AllocateLoginData at141900357 "
+        "or141900422. Per-allocator cache optional; builder-created allocator "
+        "starts with cache mode zero. Not an independent per-record heap lease.",
+    ),
+    0x14162D080: (
+        "PackageMgr_AllocateLoginData",
+        "STATIC ADF: exact source assertion. Existing package type8 subpage "
+        "allocation first14162D12A; new path reserves/claims page then stores "
+        "handle at package+4*currentPage (D1E0/D2B2), increments currentPage "
+        "+80C atD2B5. Package state8 or0B..0D required; size bounded by "
+        "1437E9774. LevelMemAllocator record allocations therefore enter the "
+        "same package handle set released by141628670 max(+80C,+A30) loop.",
+    ),
+    0x14162CB20: (
+        "PackageMgr_AllocateFromPackageSubPages",
+        "STATIC ADF: exact source assertion. Scans package-owned handles "
+        "below+80C under lock14646ECF0, admits page type8, aligns and advances "
+        "used bytes without reclaiming existing allocations. Expansion claims "
+        "adjacent/free subpages; new handle is appended at14162D068. Called "
+        "by AllocateLoginData, not a retarget-record owner separate from Package.",
+    ),
+    0x14162CA60: (
+        "PackageMgr_ClaimLoginSubPageSpan",
+        "STATIC ADF: decodes package subpage handle (pool low4/page next12/"
+        "subpage high16), aligns address and assigns span size/used bytes. "
+        "Writes package+840 owner word to page-descriptor+12 at14162CAE1; "
+        "remaining span owner becomesFFFF. Both package login allocation "
+        "paths call this; unload141628803 retires the same owner field.",
+    ),
+    0x1419C4120: (
+        "PackageMgr_PrepareLoadedContentAndApplyFixups",
+        "STATIC ADF: loaded-content state handler calls resource-header prep "
+        "1416356A0 at1419C4340 for each CONTENT page. Once loaded count+80C "
+        "equals authored+A30, passes header Package+A20, LOGIN handles+A4C "
+        "and CONTENT handles Package+0 to resolver141635820 at1419C4373, "
+        "which calls relocator141635760. These are distinct handle arrays.",
+    ),
     0x1417D0BD0: (
         "SkelTable_FindRetargetEntry",
         "Looks up the fixed-stride SkelTable retarget entry for a source/target "
@@ -4004,7 +4136,9 @@ FUNCTIONS = {
         "P99 table-only page observations may span this leaf and Resolve's audited "
         "read-only closure within ONE existing registry lock scope; reread count "
         "and payload, discard observations before unlock/math/callback. No "
-        "borrowed-resource or concurrent-protection lifetime guarantee.",
+        "borrowed-resource or concurrent-protection lifetime guarantee. STATIC "
+        "ADF: actual inline table capacity is256 (AddRetargetEntry assertion "
+        "and next unrelated global143868A00), not prior synthetic4096.",
     ),
     0x141CC4940: (
         "GameLoading_Initialize",
@@ -4146,7 +4280,7 @@ FUNCTIONS = {
         "Package_ResolveAndApplyPointerRelocations",
         "STATIC AGY: resolves login-page and content-page handles into "
         "separate pointer arrays before calling Package_ApplyPointerRelocations "
-        "at0x141635995. Decompiled temporary names alias; machine operands "
+        "at0x141635990 (ADF correction: not995). Decompiled temporary names alias; machine operands "
         "RCX/RDX/R8 at5990 preserve distinct header/login/content arguments.",
     ),
     0x1416359C0: (
@@ -4346,7 +4480,12 @@ FUNCTIONS = {
         "records and shared full21-row materializer passes42DoJoint/21Blend "
         "with identical output under MXCSR1F80/9FC0. Not live-null or grip proof. "
         "STATIC AHA: existing nonnull entry+18 reused atCE503; only null "
-        "entry allocates/assigns atCE635. Explicit payload writes startCF490; "
+        "entry allocates/assigns atCE635. STATIC ADF: CE515 captures PackageMgr+D8, "
+        "CE5C5 initializes LevelMemAllocator, CE5E5 pushes it. Allocation via "
+        "vtable142B11FC8 slot7 reaches14162D080 and package-owned type8 subpages; "
+        "the stack allocator is NOT the record lifetime. Ordinary package "
+        "release141628670 includes dynamically appended handles below+80C. "
+        "Explicit payload writes startCF490; "
         "no record free or registry epoch write in builder. Package callback "
         "path does not acquire SkelTable registry lock. Compare completed "
         "owned operands on each preparation rather than cache epoch alone.",
@@ -4443,7 +4582,12 @@ FUNCTIONS = {
         "Registers one ArtItemSkeleton under the 64-bit SkelTable registry lock. "
         "Acquisition is LOCK CMPXCHG qword 0->-1 at 0x1417CD51E, release is XCHG "
         "qword zero at 0x1417CD7A0, and successful insertion increments the separate "
-        "g_SkelTableRegistryEpoch at 0x1417CD754..0x1417CD75F.",
+        "g_SkelTableRegistryEpoch at 0x1417CD754..0x1417CD75F. STATIC ADF: "
+        "CD681 stores the exact incoming Art pointer forwarded by141CC2995; "
+        "record+08/+10 stores package name/hash atCD6AE. Pinned proto, Chloe "
+        "and Nadine Art+40 fixups target their own CONTENT raw skeleton; "
+        "raw+20 is an inline reference-pose offset, not a separate allocation. "
+        "Source ownership does not prove Package+830 requester provenance.",
     ),
     0x1417CD7C0: (
         "SkelTable_LogoutArtItemSkeleton",
@@ -4454,7 +4598,10 @@ FUNCTIONS = {
         "STATIC ADE: ordinary caller GameLoading_PackageLogoutResItem at "
         "141CC3891 returns synchronously before package enters the deferred "
         "page-unload ring. Conditional on stable level+2 bit20 and package "
-        "CONTENT-page provenance of raw/ref storage; not a universal lease.",
+        "CONTENT-page provenance of raw/ref storage; not a universal lease. "
+        "STATIC ADF closes pinned source provenance and ordinary actor bit20 "
+        "path; RequestPackage14162B380 can still replace Package+830 across "
+        "different Levels sharing one key. No universal rebind guarantee.",
     ),
     0x1417D1170: (
         "SkelTable_FindSkeletonRegistryNode",
@@ -13544,6 +13691,8 @@ DATA_NAMES = {
     0x143864A00: (
         "g_SkelTableRetargetEntries",
         "Live fixed-capacity skeleton-retarget entry array, stride 0x40. "
+        "STATIC ADF:256 entries ending143868A00, where a distinct draw array "
+        "starts.4096 was a generic source-span limit, not legal table capacity. "
         "BuildRetargetEntries populates it from skel-retargets.bin; exact P99 "
         "Chloe-order evaluation uses rows 20 (Player to Chloe) and 157 "
         "(Chloe to legacy Nadine) only after FindRetargetEntry returns the same "

@@ -4,8 +4,13 @@
 namespace coop::p99_retarget_table_admission {
 inline constexpr std::uintptr_t kTableRva = 0x3864A00;
 inline constexpr std::size_t kEntryBytes = 0x40;
-inline constexpr std::uint32_t kMaximumEntries = 4096;
-static_assert(kMaximumEntries * kEntryBytes == p99_source_read::kMaximumSourceSpan);
+inline constexpr std::uint32_t kMaximumEntries = 256;
+inline constexpr std::uintptr_t kTableEndRva = 0x3868A00;
+// STATIC ADF: native initialization/Add both bound 256 stride-0x40 slots;
+// the following global is an unrelated draw/occluder table, not more entries.
+static_assert(kTableRva + kMaximumEntries * kEntryBytes == kTableEndRva);
+static_assert(kTableEndRva - kTableRva == 0x4000);
+static_assert(kMaximumEntries * kEntryBytes <= p99_source_read::kMaximumSourceSpan);
 
 // The sole source Reader exception across native execution: fixed image storage
 // only, within ONE existing SkelTable-locked capture/identity invocation. The

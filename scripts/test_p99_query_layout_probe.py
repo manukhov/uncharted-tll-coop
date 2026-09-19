@@ -99,6 +99,8 @@ class QueryLayoutTests(unittest.TestCase):
         self.assertEqual(p.MemoryBasicInformation64.Type.offset, 40)
 
     def test_exact_pe_layout(self):
+        self.assertEqual(p.TABLE_MAX_END, 0x3868A00)
+        self.assertEqual(p.SPLIT_RVAS, (0x38A5000, 0x3EEC000))
         self.assertEqual(p.validate_layout(pe_headers(), p.IMAGE_BYTES)["split_rvas"], list(p.SPLIT_RVAS))
         for offset, fmt, value in ((0x84, "H", 0x14C), (0x86, "H", 97), (0x94, "H", 0),
                 (0x98, "H", 0x10B), (0xB0, "Q", 0), (0xD0, "I", 0x8000000),
@@ -158,6 +160,13 @@ class QueryLayoutTests(unittest.TestCase):
         self.assertNotIn(fake.image.address + p.SPLIT_RVAS[0], fake.protections)
 
     def test_bad_context_and_overlap_never_protect(self):
+        for count in (257, 4096, 0xFFFFFFFF):
+            fake = Fake()
+            fake.fixture.table_count = count
+            fake.query = lambda _address: self.fail("invalid count reached VirtualQuery")
+            with self.subTest(count=count), self.assertRaises(ValueError):
+                fake.run()
+            self.assertEqual(fake.protect_calls, [])
         for samples in (0, 513, True):
             fake = Fake()
             with self.assertRaises(ValueError):

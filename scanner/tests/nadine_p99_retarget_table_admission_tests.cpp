@@ -18,12 +18,12 @@ void check(bool value, const char* description) {
 struct Fixture {
     static constexpr std::uintptr_t image = 0x140000000;
     static constexpr std::uintptr_t table = image + t::kTableRva;
-    std::size_t region_bytes = 0x40000;
+    std::size_t region_bytes = t::kTableEndRva - t::kTableRva;
     std::uintptr_t guard = 0;
     unsigned queries = 0, copies = 0, admitted_requests = 0;
     bool query(std::uintptr_t address, coop::p99_group_readability::Region& region) {
         ++queries;
-        if (address < table || address - table >= 0x40000) return false;
+        if (address < table || address - table >= t::kTableEndRva - t::kTableRva) return false;
         const auto base = table + ((address - table) / region_bytes) * region_bytes;
         region = {base, region_bytes, true, true, guard >= base && guard - base < region_bytes};
         return true;
@@ -56,30 +56,84 @@ void fixed_scope_reuse() {
 }
 
 void growth_and_poison() {
+    // Abstract regions are relative to the table, not OS page aligned.
     Fixture fixture;
-    fixture.region_bytes = 0x10000;
+    fixture.region_bytes = 0x1000;
     auto scope = fixture.admission();
-    check(scope.range(Fixture::image, 175) && fixture.queries == 1, "initial 175 entries checked");
-    check(scope.range(Fixture::image, 4096) && fixture.queries == 4,
-          "growth to 4096 covers the full 0x40000 bytes and newly exposed regions");
+    check(scope.range(Fixture::image, 175) && fixture.queries == 3, "initial 175 entries checked");
+    check(scope.range(Fixture::image, 256) && fixture.queries == 4,
+          "growth to native capacity 256 covers 0x4000 bytes and the newly exposed region");
     check(scope.range(Fixture::image, 175) && fixture.queries == 4, "shrinking count still admitted");
     check(!scope.range(Fixture::image, 0) && !scope.range(Fixture::image, 175) && fixture.queries == 4,
           "invalid later count poisons scope despite earlier page admission");
 
     Fixture tail;
-    tail.region_bytes = 0x10000;
-    tail.guard = Fixture::table + 0x30000;
+    tail.region_bytes = 0x1000;
+    tail.guard = Fixture::table + 0x3000;
     auto growing = tail.admission();
     check(growing.range(Fixture::image, 175), "guard outside current extent is not accessed");
-    check(!growing.range(Fixture::image, 4096) && tail.queries == 4 && tail.copies == 0,
+    check(!growing.range(Fixture::image, 256) && tail.queries == 4 && tail.copies == 0,
           "newly included final guarded region rejects complete larger request");
     tail.guard = 0;
     check(!growing.range(Fixture::image, 175) && tail.queries == 4,
           "failed expanded scope cannot resurrect an earlier safe prefix");
     {
         auto renewed = tail.admission();
-        check(renewed.range(Fixture::image, 4096) && tail.queries == 8,
+        check(renewed.range(Fixture::image, 256) && tail.queries == 8,
               "new scope re-queries all four regions after failed scope");
+    }
+}
+
+void aligned_page_topology() {
+    constexpr auto first_page = Fixture::table & ~std::uintptr_t{0xFFF};
+    constexpr auto last_page = Fixture::image + 0x3868000;
+    static_assert(Fixture::table - first_page == 0xA00);
+    static_assert(Fixture::image + t::kTableEndRva - last_page == 0xA00);
+    std::array<std::uintptr_t, 10> queried_pages{};
+    unsigned queries = 0, copies = 0;
+    std::uintptr_t guard_page = 0;
+    auto query = [&](std::uintptr_t address, coop::p99_group_readability::Region& region) {
+        const auto page = address & ~std::uintptr_t{0xFFF};
+        if (queries < queried_pages.size()) queried_pages[queries] = page;
+        ++queries;
+        if (address < Fixture::table || address >= Fixture::image + t::kTableEndRva)
+            return false;
+        region = {page, 0x1000, true, true, page == guard_page};
+        return true;
+    };
+    auto copy = [&](auto, auto*, auto) { ++copies; return false; };
+    {
+        t::Admission scope(Fixture::image, query, copy);
+        check(scope.range(Fixture::image, 175) && queries == 4,
+              "unaligned native table prefix covers four aligned 4KiB pages");
+        check(scope.range(Fixture::image, 256) && queries == 5 &&
+              queried_pages[4] == last_page,
+              "native capacity includes the fifth partial page at RVA3868000");
+        check(scope.range(Fixture::image, 175) && queries == 5 && copies == 0,
+              "aligned-page growth retains prefix admission without payload touches");
+    }
+    queries = 0;
+    queried_pages.fill(0);
+    guard_page = last_page;
+    {
+        t::Admission scope(Fixture::image, query, copy);
+        check(scope.range(Fixture::image, 175) && queries == 4,
+              "last native page guard lies outside the 175-entry prefix");
+        check(!scope.range(Fixture::image, 256) && queries == 5 &&
+              queried_pages[4] == last_page && guard_page == last_page && copies == 0,
+              "guarded fifth partial page rejects full capacity without consuming guard");
+        guard_page = 0;
+        check(!scope.range(Fixture::image, 175) && queries == 5,
+              "failed native-page scope remains poisoned after guard removal");
+    }
+    {
+        t::Admission fresh(Fixture::image, query, copy);
+        check(fresh.range(Fixture::image, 256) && queries == 10 && copies == 0,
+              "fresh scope re-queries all five aligned pages after guard removal");
+        for (unsigned i = 0; i < 5; ++i) {
+            check(queried_pages[5 + i] == first_page + i * 0x1000,
+                  "fresh aligned-page traversal includes both partial endpoints");
+        }
     }
 }
 
@@ -100,7 +154,7 @@ void fresh_scope_guard() {
 }
 
 void invalid_identity_and_bounds() {
-    for (const auto count : std::array<std::uint32_t, 3>{0, 4097, 0xFFFFFFFFu}) {
+    for (const auto count : std::array<std::uint32_t, 4>{0, 257, 4096, 0xFFFFFFFFu}) {
         Fixture fixture;
         auto scope = fixture.admission();
         check(!scope.range(Fixture::image, count) && fixture.queries == 0,
@@ -160,7 +214,10 @@ void wiring(const std::filesystem::path& source_path) {
               "table scope ends inside while_locked functions before unlock or native math");
     }
     const auto find = between(source, "void* p99_source_find_entry(", "void* p99_source_retained_player(");
-    check(find.find("count == 0 || count > 4096") != std::string::npos &&
+    const std::string maximum = "coop::p99_retarget_table_admission::kMaximumEntries";
+    check(occurrences(source, maximum) == 6,
+          "all six P99 retarget count gates use the native capacity constant");
+    check(find.find("count == 0 || count > " + maximum) != std::string::npos &&
           find.find("table_admission->range(count)") != std::string::npos &&
           find.find("kSkelTableRetargetEntryCountRva") != std::string::npos &&
           find.find("kSkelTableFindRetargetEntryRva)(source, target)") != std::string::npos,
@@ -171,6 +228,7 @@ void wiring(const std::filesystem::path& source_path) {
 int main(int argc, char** argv) {
     fixed_scope_reuse();
     growth_and_poison();
+    aligned_page_topology();
     fresh_scope_guard();
     invalid_identity_and_bounds();
     if (argc == 2) wiring(argv[1]);
