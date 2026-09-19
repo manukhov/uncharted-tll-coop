@@ -225,6 +225,65 @@ void range_batch_scopes() {
     }
 }
 
+void owner_phase_scopes() {
+    Fixture separate;
+    std::uintptr_t player = 0;
+    s::Owner first{}, second{};
+    {
+        s::Reader reader([&](auto a, auto& r) { return separate.query(a, r); },
+                         [&](auto a, auto* p, auto n) { return separate.copy(a, p, n); });
+        check(s::retained_player(reader, separate.slot, player), "separate retained phase");
+    }
+    check(separate.capture(first) && separate.capture(second), "separate complete owner snapshots");
+    const auto separate_queries = separate.queries;
+    const auto separate_copies = separate.copies;
+
+    Fixture shared;
+    const auto original = shared.data;
+    {
+        s::Reader reader([&](auto a, auto& r) { return shared.query(a, r); },
+                         [&](auto a, auto* p, auto n) { return shared.copy(a, p, n); });
+        check(s::retained_player(reader, shared.slot, player), "shared retained still reads full tuple");
+        check(s::owner(reader, shared.contract, player, first), "shared first owner snapshot");
+        const auto first_queries = shared.queries;
+        check(s::owner(reader, shared.contract, player, second), "shared second owner snapshot");
+        check(shared.queries == first_queries && shared.queries < separate_queries,
+              "callback-free owner snapshots reuse only page queries");
+        check(shared.copies == separate_copies && shared.data == original,
+              "all fresh payload observations preserved byte-for-byte");
+        shared.put(shared.weapon + 0xBC, std::uint32_t{999});
+        const auto before_copies = shared.copies;
+        check(!s::owner(reader, shared.contract, player, second) && second.player == 0 &&
+              shared.copies > before_copies && shared.queries == first_queries,
+              "cached page certificate cannot hide changed weapon generation");
+    }
+    for (const auto page : std::array<std::uintptr_t, 12>{0, 0x1000, 0x2000, 0x8000,
+            0x9000, 0xA000, 0xB000, 0xC000, 0xD000, 0xE000, 0xF000, 0x10000}) {
+        Fixture guarded;
+        guarded.guard = guarded.base + page;
+        s::Reader reader([&](auto a, auto& r) { return guarded.query(a, r); },
+                         [&](auto a, auto* p, auto n) { return guarded.copy(a, p, n); });
+        check(!(s::retained_player(reader, guarded.slot, player) &&
+                s::owner(reader, guarded.contract, player, first)),
+              "guard in each retained/owner dependency refuses the shared phase");
+    }
+    Fixture boundary;
+    {
+        s::Reader reader([&](auto a, auto& r) { return boundary.query(a, r); },
+                         [&](auto a, auto* p, auto n) { return boundary.copy(a, p, n); });
+        check(s::owner(reader, boundary.contract, boundary.player, first), "owner before lexical boundary");
+    }
+    boundary.guard = boundary.weapon;
+    const auto before_queries = boundary.queries;
+    {
+        s::Reader reader([&](auto a, auto& r) { return boundary.query(a, r); },
+                         [&](auto a, auto* p, auto n) { return boundary.copy(a, p, n); });
+        check(!s::owner(reader, boundary.contract, boundary.player, first) &&
+              boundary.queries > before_queries,
+              "next lexical owner phase re-queries and rejects new guard");
+    }
+}
+
 void wiring(const std::filesystem::path& runtime_path) {
     const auto source=read_file(runtime_path);
     check(!source.empty(),"runtime source available for wiring audit");
@@ -303,6 +362,7 @@ void wiring(const std::filesystem::path& runtime_path) {
 
 int main(int argc,char** argv) {
     range_batch_scopes();
+    owner_phase_scopes();
     Fixture valid;
     const auto untouched=valid.data;
     s::Owner out{};

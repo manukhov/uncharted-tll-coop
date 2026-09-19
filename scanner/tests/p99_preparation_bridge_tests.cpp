@@ -4,6 +4,9 @@
 
 extern "C" __declspec(dllimport) int P99PrepareAudit(std::uintptr_t, void*, std::uint32_t,
     std::byte*, std::uint32_t, coop::p99_preparation_audit::Stats*);
+extern "C" __declspec(dllimport) int P99PrepareAuditGuardAtStage(std::uintptr_t, void*,
+    std::byte*, std::uint32_t, coop::p99_preparation_audit::Stats*,
+    coop::p99_preparation_audit::GuardMutation*);
 
 int main() {
     namespace audit = coop::p99_preparation_audit;
@@ -32,6 +35,24 @@ int main() {
     check(P99PrepareAudit(1, output.data(), 1, output.data(), audit::kOutputBytes, &stats) == -4, "invalid image");
     check(stats.completed_iterations == 0 && stats.resolve_calls == 0 && stats.find_calls == 0 &&
           stats.retarget_calls == 0 && stats.blend_calls == 0, "no native call on admission failure");
+    stats = {};
+    check(P99PrepareAuditGuardAtStage(1, output.data(), output.data(), audit::kOutputBytes,
+        &stats, nullptr) == -2, "null guard request");
+    audit::GuardMutation guard{};
+    guard.size = 0;
+    check(P99PrepareAuditGuardAtStage(1, output.data(), output.data(), audit::kOutputBytes,
+        &stats, &guard) == -2, "guard size");
+    for (const auto stage : {0u, 1u, 5u, 8u, 0xFFFFFFFFu}) {
+        guard = {}; guard.stage = stage;
+        check(P99PrepareAuditGuardAtStage(1, output.data(), output.data(), audit::kOutputBytes,
+            &stats, &guard) == -2, "only fresh lock boundaries accept guard requests");
+    }
+    for (const auto stage : {6u, 7u}) {
+        guard = {}; guard.stage = stage;
+        check(P99PrepareAuditGuardAtStage(1, output.data(), output.data(), audit::kOutputBytes,
+            &stats, &guard) == -4 && guard.applied == 0,
+            "valid guard stage still refuses an invalid image without changing protection");
+    }
     std::cout << checks << " checks, " << failures << " failures\n";
     return failures ? 1 : 0;
 }

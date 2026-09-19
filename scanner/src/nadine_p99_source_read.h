@@ -19,7 +19,11 @@ inline constexpr std::size_t kMaximumSourceSpan = 0x40000;
 
 // Exact page checks, never a payload probe. One instance belongs to one
 // uninterrupted read-only snapshot; destroy it BEFORE any native call, logging,
-// callback or unlock. Accessibility is not allocator authority or a lifetime lease.
+// callback or unlock. The sole narrower native-call exception is the dedicated
+// p99_retarget_table_admission::Admission wrapper: fixed image+0x3864A00 extent
+// only, one held-lock scope, across audited read-only Find1417D0BD0 and
+// Resolve1417CD100->1417D1170. It never lends this authority to borrowed payloads.
+// Accessibility is not allocator authority or a lifetime lease.
 template<class Query, class Copy>
 class Reader {
 public:

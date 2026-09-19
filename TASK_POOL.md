@@ -11,7 +11,30 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-19, AHB offline): no game launch/attach/injection/input.
+Current handoff (2026-09-19, AHC offline): no game launch/attach/injection/input.
+Scoped owner phases plus fixed-image table-only admission reduce123->80 actual
+VirtualQuery calls in the COMPLETE owned producer. All owner/value rereads and
+17full-table requests remain. Table page observations expire before unlock;
+generic borrowed resources still expire before native calls. Native counts
+12Resolve/12Find/42DoJoint/21Blend and exact AGZ1008-byte output stay unchanged.
+Same-runner frozenAHB control medians3.91565..3.94435ms; finalAHC1.46365..1.47395,
+same-helper repeat1.44020..1.44235ms. Both final children:1024warm samples ALL>1ms.
+Live1ms admission STILL REJECTED, both writersfalse/static_assert/cap unchanged.
+Each child20mutation cases plus4fresh-lock guard cases: guards atpostcheck/seal
+refuse without consuming PAGE_GUARD, zero output, protections/canaries restored.
+Release/CTest22/22/Python77/77 pass; buildtag2026-09-19ahc-safe NOT deployed.
+FinalDLL/PDB/evidence frozen reports/ahc-offline-20260919-final; singleIDB saved
+and MCP restarted; reviewedAGW remains rollback. See finalAHC COOP_STATUS entry.
+Next: bounded per-query owned-harness trace(count,total/max ticks,RegionSize,
+source category), no logging/allocation/cache inside preparation. Distinguish
+uniform syscall overhead from a few costly fixed-image ranges; trace must keep
+80/12/12/42/21/hash and compare its own instrumentation overhead. Narrow later
+candidate: indexed checks for3post-Find entry64spans inside existing same-lock
+table admission could save80->77; requires bounds/growth/fresh-guard tests, not
+removal of checks or borrowed-resource scope expansion. Neither candidate earns
+1ms or game launch. Live operand acceptance/AGR faultPC/visible grip remain open.
+
+Prior handoff (2026-09-19, AHB offline): no game launch/attach/injection/input.
 Complete production prepare_p99_group_values now runs in an inert separate
 full-TU helper on owned registries/resources, original native lookups/math.
 Full normaljob/select/owner/capture/identity/math/postcheck/seal output matches

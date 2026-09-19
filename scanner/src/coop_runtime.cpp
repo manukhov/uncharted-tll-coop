@@ -35,6 +35,7 @@
 #include "nadine_p99_group_scope.h"
 #include "nadine_p99_group_memory.h"
 #include "nadine_p99_source_read.h"
+#include "nadine_p99_retarget_table_admission.h"
 #include "nadine_p99_source_materialize.h"
 #include "nadine_p99_source_native_guard.h"
 #include "nadine_p99_operand_identity.h"
@@ -80,10 +81,25 @@ struct P99PreparationAuditBinding {
     void* job = nullptr;
     p99_prep_audit::Stats* stats = nullptr;
     bool clock_failed = false;
+    p99_prep_audit::GuardMutation* guard_mutation = nullptr;
 };
 P99PreparationAuditBinding g_p99_preparation_audit{};
 std::uint64_t p99_preparation_audit_begin(p99_prep_audit::Stage stage) {
     LARGE_INTEGER stamp{};
+    auto* const guard = g_p99_preparation_audit.guard_mutation;
+    if (guard && !guard->applied && guard->stage == static_cast<std::uint32_t>(stage)) {
+        const auto table_page = (g_p99_preparation_audit.image + kSkelTableRetargetEntriesRva) &
+            ~std::uintptr_t{0xFFF};
+        DWORD previous = 0;
+        if (VirtualProtect(reinterpret_cast<void*>(table_page), 0x1000,
+                PAGE_READONLY | PAGE_GUARD, &previous)) {
+            guard->old_protection = previous;
+            guard->applied = 1;
+        } else {
+            guard->error = GetLastError();
+            g_p99_preparation_audit.clock_failed = true;
+        }
+    }
     if (g_p99_preparation_audit.stats)
         g_p99_preparation_audit.stats->failed_stage = static_cast<std::uint32_t>(stage);
     if (!QueryPerformanceCounter(&stamp) || stamp.QuadPart < 0) {
@@ -61770,24 +61786,56 @@ private:
     P99SourceReader reader_;
 };
 
-bool p99_source_range(P99SourcePurpose purpose, const void* pointer, std::size_t bytes) {
+// Fixed image table ONLY. Unlike borrowed-resource batches, this narrow scope
+// may cross the audited read-only Find/Resolve closure, never native math,
+// callbacks, logging or unlock. Instantiate only inside a while_locked function;
+// each later lock scope gets a fresh object and fresh page observations.
+class P99RetargetTableAdmission {
+public:
+    explicit P99RetargetTableAdmission(P99SourcePurpose purpose) : purpose_(purpose),
+        admission_(g_module, &P99_SOURCE_QUERY_FUNCTION, &p99_source_copy) {}
+    bool range(std::uint32_t count) {
+        if (purpose_ == P99SourcePurpose::kOwnedGroupValues)
+            return admission_.range(g_module, count);
+        if (count == 0 || count > 4096) return false;
+        return readable_bytes(reinterpret_cast<const void*>(
+            g_module + kSkelTableRetargetEntriesRva)) >=
+            static_cast<std::size_t>(count) * 0x40;
+    }
+private:
+    static_assert(kSkelTableRetargetEntriesRva ==
+        coop::p99_retarget_table_admission::kTableRva);
+    P99SourcePurpose purpose_;
+    coop::p99_retarget_table_admission::Admission<
+        decltype(&P99_SOURCE_QUERY_FUNCTION), decltype(&p99_source_copy)> admission_;
+};
+
+bool p99_source_range(P99SourcePurpose purpose, const void* pointer, std::size_t bytes,
+    P99SourceReader* phase = nullptr) {
     if (purpose == P99SourcePurpose::kPersistentJointCache)
         return readable_bytes(pointer) >= bytes;
-    // Intentionally fresh for every registry/helper span. No certificate crosses
-    // native lookup/math/logging/unlock. Full 0x40000 registry spans are split.
+    // An explicit caller phase is callback-free and lexically bounded. Without
+    // it every span remains fresh. No page authority crosses native work,
+    // logging or unlock here. Full 0x40000 registry spans remain split.
+    if (phase != nullptr)
+        return phase->range(reinterpret_cast<std::uintptr_t>(pointer), bytes);
     P99SourceReader reader(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
     return reader.range(reinterpret_cast<std::uintptr_t>(pointer), bytes);
 }
 
-void* p99_source_find_entry(P99SourcePurpose purpose, std::uint32_t source, std::uint32_t target) {
+void* p99_source_find_entry(P99SourcePurpose purpose, std::uint32_t source, std::uint32_t target,
+    P99RetargetTableAdmission* table_admission = nullptr) {
     // All callers hold the existing SkelTable lock. Native lookup scans the
-    // complete fixed table, so re-admit it immediately before EACH native call.
+    // complete fixed table. Reload/bound count and request its complete range
+    // before EACH call, optionally reusing only this lock scope's table pages.
     if (purpose == P99SourcePurpose::kOwnedGroupValues) {
         const auto count = *reinterpret_cast<const std::uint32_t*>(
             g_module + kSkelTableRetargetEntryCountRva);
-        if (count == 0 || count > 4096 || !p99_source_range(purpose,
-            reinterpret_cast<const void*>(g_module + kSkelTableRetargetEntriesRva),
-            static_cast<std::size_t>(count) * 0x40)) return nullptr;
+        if (count == 0 || count > 4096 ||
+            !(table_admission != nullptr ? table_admission->range(count) :
+                p99_source_range(purpose, reinterpret_cast<const void*>(
+                    g_module + kSkelTableRetargetEntriesRva),
+                    static_cast<std::size_t>(count) * 0x40))) return nullptr;
     }
 #if defined(TLL_P99_PREPARATION_AUDIT)
     if (g_p99_preparation_audit.stats) ++g_p99_preparation_audit.stats->find_calls;
@@ -61796,17 +61844,19 @@ void* p99_source_find_entry(P99SourcePurpose purpose, std::uint32_t source, std:
         g_module + kSkelTableFindRetargetEntryRva)(source, target);
 }
 
-void* p99_source_retained_player(P99SourcePurpose purpose) {
+void* p99_source_retained_player(P99SourcePurpose purpose, P99SourceReader* phase = nullptr) {
     if (purpose == P99SourcePurpose::kPersistentJointCache) return retained_player_object(0);
     if (g_module == 0) return nullptr;
     P99SourceReader reader(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
     std::uintptr_t player = 0;
-    return p99_source::retained_player(reader, g_module + kRetainedSlotTableRva, player)
+    return p99_source::retained_player(phase != nullptr ? *phase : reader,
+        g_module + kRetainedSlotTableRva, player)
         ? reinterpret_cast<void*>(player) : nullptr;
 }
 
 bool seh_resolve_p99_source_owner_scope(void* player, IdleArmPoseOwnerScope* output,
-    P99SourcePurpose purpose, p99_source::Owner* captured_out = nullptr) {
+    P99SourcePurpose purpose, p99_source::Owner* captured_out = nullptr,
+    P99SourceReader* phase = nullptr) {
     if (output == nullptr) return false;
     if (captured_out != nullptr) *captured_out = {};
     if (purpose == P99SourcePurpose::kPersistentJointCache)
@@ -61821,7 +61871,8 @@ bool seh_resolve_p99_source_owner_scope(void* player, IdleArmPoseOwnerScope* out
         kLegacyNadineTargetSkeletonArtId, kLegacyNadineUnderlyingSkeletonId, p99_order::kP99ArtId};
     P99SourceReader reader(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
     p99_source::Owner captured{};
-    if (!p99_source::owner(reader, contract, reinterpret_cast<std::uintptr_t>(player), captured) ||
+    if (!p99_source::owner(phase != nullptr ? *phase : reader,
+            contract, reinterpret_cast<std::uintptr_t>(player), captured) ||
         !valid_network_position(captured.position.data()) ||
         !valid_network_orientation(captured.orientation.data())) return false;
     output->player = reinterpret_cast<void*>(captured.player);
@@ -62228,7 +62279,8 @@ bool seh_capture_p99_chloe_transfer_entry(
     const P99ChloeTransferArtSkeleton& target,
     P99ChloeTransferEntry* output, void** entry_out,
     const std::byte** native_records_out,
-    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
+    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache,
+    P99RetargetTableAdmission* table_admission = nullptr) {
     if (output == nullptr || entry_out == nullptr ||
         native_records_out == nullptr) {
         return false;
@@ -62255,17 +62307,19 @@ bool seh_capture_p99_chloe_transfer_entry(
         auto* const table = reinterpret_cast<std::byte*>(
             g_module + kSkelTableRetargetEntriesRva);
         if (entry_count <= index || entry_count > 4096 ||
-            !p99_source_range(purpose, table,
-                static_cast<std::size_t>(entry_count) * 0x40) ||
+            !(table_admission != nullptr ? table_admission->range(entry_count) :
+                p99_source_range(purpose, table,
+                    static_cast<std::size_t>(entry_count) * 0x40)) ||
             entry_count != *count_ptr) {
             return false;
         }
         auto* const entry = table + static_cast<std::size_t>(index) * 0x40;
         if (p99_source_find_entry(purpose, expected.source_database_id,
-                       expected.target_database_id) != entry) {
+                       expected.target_database_id, table_admission) != entry) {
             return false;
         }
-        // The native lookup above ends the previous admission phase.
+        // The native lookup above ends the borrowed-resource admission phase;
+        // only the distinct fixed-image table scope survives that lookup.
         P99SourceRangeBatch pages(purpose);
         if (purpose == P99SourcePurpose::kOwnedGroupValues &&
             !pages.range(entry, 0x40)) {
@@ -62427,7 +62481,8 @@ bool seh_capture_p99_chloe_transfer_entry(
 }
 
 bool seh_validate_p99_chloe_transfer_row124(void** entry_out,
-    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
+    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache,
+    P99RetargetTableAdmission* table_admission = nullptr) {
     if (entry_out == nullptr) {
         return false;
     }
@@ -62440,7 +62495,8 @@ bool seh_validate_p99_chloe_transfer_row124(void** entry_out,
         auto* const table = reinterpret_cast<std::byte*>(
             g_module + kSkelTableRetargetEntriesRva);
         if (count <= kIndex || count > 4096 ||
-            !p99_source_range(purpose, table, static_cast<std::size_t>(count) * 0x40)) {
+            !(table_admission != nullptr ? table_admission->range(count) :
+                p99_source_range(purpose, table, static_cast<std::size_t>(count) * 0x40))) {
             return false;
         }
         auto* const entry = table + static_cast<std::size_t>(kIndex) * 0x40;
@@ -62449,7 +62505,7 @@ bool seh_validate_p99_chloe_transfer_row124(void** entry_out,
         auto* const records =
             *reinterpret_cast<std::byte* const*>(entry + 0x18);
         if (p99_source_find_entry(purpose, p99_order::kPlayerDatabaseId,
-                       p99_order::kNadineDatabaseId) != entry) {
+                       p99_order::kNadineDatabaseId, table_admission) != entry) {
             return false;
         }
         // Entry/authored/records checks share only this post-lookup phase.
@@ -62530,6 +62586,7 @@ bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
             !seh_p99_chloe_transfer_locked_registry_shape(&epoch, purpose)) {
             return false;
         }
+        P99RetargetTableAdmission table_admission(purpose);
 #if defined(TLL_P99_PREPARATION_AUDIT)
         const auto resolve = &p99_preparation_audit_resolve;
 #else
@@ -62570,11 +62627,11 @@ bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
         const std::byte* row157_native = nullptr;
         if (!seh_capture_p99_chloe_transfer_entry(
                 20, p99_order::kExpectedRow20, player, chloe,
-                &captured.row20, &row20_entry, &row20_native, purpose) ||
+                &captured.row20, &row20_entry, &row20_native, purpose, &table_admission) ||
             !seh_capture_p99_chloe_transfer_entry(
                 157, p99_order::kExpectedRow157, chloe, nadine,
-                &captured.row157, &row157_entry, &row157_native, purpose) ||
-            !seh_validate_p99_chloe_transfer_row124(&row124_entry, purpose)) {
+                &captured.row157, &row157_entry, &row157_native, purpose, &table_admission) ||
+            !seh_validate_p99_chloe_transfer_row124(&row124_entry, purpose, &table_admission)) {
             return false;
         }
         const std::uint32_t entry_count =
@@ -62697,11 +62754,11 @@ bool seh_capture_p99_chloe_transfer_locked_operands_while_locked(
             resolve(p99_order::kChloeDatabaseId) != chloe_art ||
             resolve(p99_order::kNadineDatabaseId) != nadine_art ||
             p99_source_find_entry(purpose, p99_order::kPlayerDatabaseId,
-                       p99_order::kChloeDatabaseId) != row20_entry ||
+                       p99_order::kChloeDatabaseId, &table_admission) != row20_entry ||
             p99_source_find_entry(purpose, p99_order::kPlayerDatabaseId,
-                       p99_order::kNadineDatabaseId) != row124_entry ||
+                       p99_order::kNadineDatabaseId, &table_admission) != row124_entry ||
             p99_source_find_entry(purpose, p99_order::kChloeDatabaseId,
-                       p99_order::kNadineDatabaseId) != row157_entry) {
+                       p99_order::kNadineDatabaseId, &table_admission) != row157_entry) {
             return false;
         }
         captured.skel_table_epoch = epoch;
@@ -62764,6 +62821,7 @@ bool seh_p99_chloe_transfer_registry_identity_while_locked(
             skel_epoch != expected_skel_epoch) {
             return false;
         }
+        P99RetargetTableAdmission table_admission(purpose);
 #if defined(TLL_P99_PREPARATION_AUDIT)
         const auto resolve = &p99_preparation_audit_resolve;
 #else
@@ -62787,13 +62845,13 @@ bool seh_p99_chloe_transfer_registry_identity_while_locked(
                 expected_nadine_art &&
             nadine_art == target_skeleton && count > 157 && count <= 4096 &&
             (purpose != P99SourcePurpose::kOwnedGroupValues ||
-             p99_source_range(purpose, table, static_cast<std::size_t>(count) * 0x40)) &&
+             table_admission.range(count)) &&
             p99_source_find_entry(purpose, p99_order::kPlayerDatabaseId,
-                       p99_order::kChloeDatabaseId) == table + 20 * 0x40 &&
+                       p99_order::kChloeDatabaseId, &table_admission) == table + 20 * 0x40 &&
             p99_source_find_entry(purpose, p99_order::kPlayerDatabaseId,
-                       p99_order::kNadineDatabaseId) == table + 124 * 0x40 &&
+                       p99_order::kNadineDatabaseId, &table_admission) == table + 124 * 0x40 &&
             p99_source_find_entry(purpose, p99_order::kChloeDatabaseId,
-                       p99_order::kNadineDatabaseId) == table + 157 * 0x40 &&
+                       p99_order::kNadineDatabaseId, &table_admission) == table + 157 * 0x40 &&
             *reinterpret_cast<const std::uint32_t*>(
                 g_module + kSkelTableRegistryEpochRva) ==
                 expected_skel_epoch &&
@@ -62879,12 +62937,16 @@ bool build_p99_chloe_embedded_source_rows(
 
 bool seh_select_p99_chloe_transfer_epoch(
     void* job, P99ChloeTransferEpoch* output,
-    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
+    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache,
+    P99SourceReader* caller_phase = nullptr) {
     if (output == nullptr) {
         return false;
     }
     *output = {};
     __try {
+        P99SourceReader local_phase(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
+        P99SourceReader* const phase = purpose == P99SourcePurpose::kOwnedGroupValues
+            ? (caller_phase != nullptr ? caller_phase : &local_phase) : nullptr;
         const bool enabled = purpose == P99SourcePurpose::kOwnedGroupValues
 #if defined(TLL_P99_PREPARATION_AUDIT)
             ? g_p99_preparation_audit.stats != nullptr &&
@@ -62897,18 +62959,18 @@ bool seh_select_p99_chloe_transfer_epoch(
                 g_p99_chloe_transfer_ready.load(std::memory_order_acquire);
         if (!enabled ||
             !g_state_net.enabled || !g_net_role_b || g_module == 0 ||
-            job == nullptr || !p99_source_range(purpose, job, 0x10)) {
+            job == nullptr || !p99_source_range(purpose, job, 0x10, phase)) {
             return false;
         }
         auto* const fg = *reinterpret_cast<std::byte* const*>(
             static_cast<const std::byte*>(job) + 0x08);
-        void* const player = p99_source_retained_player(purpose);
+        void* const player = p99_source_retained_player(purpose, phase);
         IdleArmPoseOwnerScope owner{};
         p99_source::Owner captured_owner{};
         if (fg == nullptr || !p99_source_range(purpose, fg,
-                kFgAnimDataSkeletonOffset + sizeof(void*)) ||
+                kFgAnimDataSkeletonOffset + sizeof(void*), phase) ||
             *reinterpret_cast<const std::uint8_t*>(fg + 0x06) != 2 ||
-            !seh_resolve_p99_source_owner_scope(player, &owner, purpose, &captured_owner) ||
+            !seh_resolve_p99_source_owner_scope(player, &owner, purpose, &captured_owner, phase) ||
             !owner.valid || owner.player != player ||
             owner.fg_anim_data != fg || owner.controller_state !=
                 p99_order::kWeaponOutState ||
@@ -62982,16 +63044,22 @@ bool seh_p99_chloe_joint_cache_plan_fits(const void* target_skeleton) {
 
 bool seh_p99_chloe_transfer_epoch_owner_still_exact(
     const P99ChloeTransferEpoch& epoch,
-    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache) {
+    P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache,
+    P99SourceReader* caller_phase = nullptr) {
     __try {
+        // Only page observations are shared between retained and owner reads;
+        // their complete before/after weak tuples and payloads are still read.
+        P99SourceReader local_phase(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
+        P99SourceReader* const phase = purpose == P99SourcePurpose::kOwnedGroupValues
+            ? (caller_phase != nullptr ? caller_phase : &local_phase) : nullptr;
         IdleArmPoseOwnerScope owner{};
         p99_source::Owner captured_owner{};
         if ((purpose == P99SourcePurpose::kPersistentJointCache &&
              !seh_p99_chloe_joint_cache_plan_fits(epoch.target_skeleton)) ||
             !epoch.active || !epoch.valid || epoch.ambiguous ||
-            epoch.depth != 1 || p99_source_retained_player(purpose) != epoch.player ||
+            epoch.depth != 1 || p99_source_retained_player(purpose, phase) != epoch.player ||
             !seh_resolve_p99_source_owner_scope(
-                epoch.player, &owner, purpose, &captured_owner) ||
+                epoch.player, &owner, purpose, &captured_owner, phase) ||
             !owner.valid || owner.player != epoch.player ||
             owner.fg_anim_data != epoch.fg_anim_data ||
             owner.weapon != epoch.weapon ||
@@ -63055,27 +63123,34 @@ P99ChloeTransferMaterializeResult seh_materialize_p99_chloe_embedded_epoch(
     }
     __try {
         P99ChloeTransferEpoch prepared = *epoch;
-        if (!seh_p99_chloe_transfer_epoch_owner_still_exact(prepared, purpose)) {
-            return P99ChloeTransferMaterializeResult::kOwnerBefore;
+        {
+            // Distinct from selection and from locked capture: both full owner
+            // observations stay, but this callback-free pair shares pages.
+            P99SourceReader owner_pages(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
+            P99SourceReader* const phase = purpose == P99SourcePurpose::kOwnedGroupValues
+                ? &owner_pages : nullptr;
+            if (!seh_p99_chloe_transfer_epoch_owner_still_exact(prepared, purpose, phase)) {
+                return P99ChloeTransferMaterializeResult::kOwnerBefore;
+            }
+            IdleArmPoseOwnerScope post_perform_owner{};
+            if (!seh_resolve_p99_source_owner_scope(
+                    prepared.player, &post_perform_owner, purpose, nullptr, phase) ||
+                !post_perform_owner.valid ||
+                post_perform_owner.player != prepared.player ||
+                post_perform_owner.fg_anim_data != prepared.fg_anim_data ||
+                post_perform_owner.weapon != prepared.weapon ||
+                post_perform_owner.weapon_art_id != p99_order::kP99ArtId ||
+                post_perform_owner.controller_state !=
+                    p99_order::kWeaponOutState ||
+                post_perform_owner.local_pose == nullptr ||
+                (purpose == P99SourcePurpose::kPersistentJointCache &&
+                 !p99_source_range(purpose, post_perform_owner.local_pose,
+                    static_cast<std::size_t>(p99_order::kNadineGroups[0].parameter_count) *
+                        kP99ChloeTransferRowBytes))) {
+                return P99ChloeTransferMaterializeResult::kPostPerformOwner;
+            }
+            prepared.local_pose = post_perform_owner.local_pose;
         }
-        IdleArmPoseOwnerScope post_perform_owner{};
-        if (!seh_resolve_p99_source_owner_scope(
-                prepared.player, &post_perform_owner, purpose) ||
-            !post_perform_owner.valid ||
-            post_perform_owner.player != prepared.player ||
-            post_perform_owner.fg_anim_data != prepared.fg_anim_data ||
-            post_perform_owner.weapon != prepared.weapon ||
-            post_perform_owner.weapon_art_id != p99_order::kP99ArtId ||
-            post_perform_owner.controller_state !=
-                p99_order::kWeaponOutState ||
-            post_perform_owner.local_pose == nullptr ||
-            (purpose == P99SourcePurpose::kPersistentJointCache &&
-             !p99_source_range(purpose, post_perform_owner.local_pose,
-                static_cast<std::size_t>(p99_order::kNadineGroups[0].parameter_count) *
-                    kP99ChloeTransferRowBytes))) {
-            return P99ChloeTransferMaterializeResult::kPostPerformOwner;
-        }
-        prepared.local_pose = post_perform_owner.local_pose;
 
         P99ChloeTransferLockedOperands operands{};
         P99_PREP_AUDIT_BEGIN(capture, kCapture);
@@ -80150,7 +80225,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-18aha-safe "
+        "TLL co-op runtime init 2026-09-19ahc-safe "
         "(all P99 group-shadow hooks disabled after AGR crash; legacy persistent grip writer disabled; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(

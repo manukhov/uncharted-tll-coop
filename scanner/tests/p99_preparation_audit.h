@@ -23,6 +23,13 @@ struct Stats {
     std::uint64_t virtual_query_ticks = 0;
 };
 static_assert(sizeof(Stats) == 136);
+// Offline negative test only: guard the fixed table's first page at a fresh
+// postcheck/seal boundary, observe the guard, then restore its protection.
+struct GuardMutation {
+    std::uint32_t size = sizeof(GuardMutation), stage = 0, applied = 0;
+    std::uint32_t old_protection = 0, observed_protection = 0, error = 0;
+};
+static_assert(sizeof(GuardMutation) == 24);
 // Returns0 success; -1 invalid stats; -2 arguments/bounds; -3 busy;
 // -4 image/owned-buffer admission; -5 preparation refusal; -6 clock failure;
 // -7 unexpected structured exception. A refused iteration is never retried.

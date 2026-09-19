@@ -35,6 +35,11 @@ class Stats(ctypes.Structure):
         ("qpc_frequency", "total_ticks") + PHASES + COUNTERS + ("virtual_query_ticks",)]
 
 
+class GuardMutation(ctypes.Structure):
+    _fields_ = [(name, ctypes.c_uint32) for name in
+        ("size", "stage", "applied", "old_protection", "observed_protection", "error")]
+
+
 def digest(path: Path) -> str:
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
@@ -78,6 +83,10 @@ def bind_bridge(path: Path):
     bridge.P99PrepareAudit.argtypes = [ctypes.c_uint64, ctypes.c_void_p, ctypes.c_uint32,
         ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(Stats)]
     bridge.P99PrepareAudit.restype = ctypes.c_int
+    if hasattr(bridge, "P99PrepareAuditGuardAtStage"):
+        bridge.P99PrepareAuditGuardAtStage.argtypes = [ctypes.c_uint64, ctypes.c_void_p,
+            ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(Stats), ctypes.POINTER(GuardMutation)]
+        bridge.P99PrepareAuditGuardAtStage.restype = ctypes.c_int
     return bridge
 
 
@@ -110,6 +119,31 @@ def check_negative_cases(bridge, image, fixture, output):
                           "retarget_calls": stats.retarget_calls, "blend_calls": stats.blend_calls})
         fixture.verify()
     return cases
+
+
+def check_fresh_scope_guards(bridge, image, fixture, output):
+    if not hasattr(bridge, "P99PrepareAuditGuardAtStage"):
+        return {"supported": False}  # Allows a same-runner comparison with frozen AHB.
+    cases = []
+    for stage, resolve_calls, find_calls in ((6, 9, 6), (7, 12, 9)):
+        mutation = GuardMutation(size=ctypes.sizeof(GuardMutation), stage=stage)
+        stats = Stats(size=ctypes.sizeof(Stats), version=1)
+        result = bridge.P99PrepareAuditGuardAtStage(image.address, fixture.job,
+            output.address, output.size, ctypes.byref(stats), ctypes.byref(mutation))
+        if (result != -5 or stats.completed_iterations != 0 or mutation.applied != 1 or
+                mutation.error or not mutation.observed_protection & 0x100 or
+                stats.resolve_calls != resolve_calls or stats.find_calls != find_calls or
+                (stats.retarget_calls, stats.blend_calls) != (42, 21) or
+                output.read() != bytes(output.size)):
+            raise ValueError(f"new lock scope reused stale table admission: stage={stage}, result={result}, "
+                f"find={stats.find_calls}, guard={mutation.observed_protection:#x}, error={mutation.error}")
+        fixture.verify()
+        output.verify()
+        cases.append({"mutation_stage": stage, "result": result, "resolve_calls": stats.resolve_calls,
+                      "find_calls": stats.find_calls,
+                      "retarget_calls": stats.retarget_calls, "blend_calls": stats.blend_calls,
+                      "guard_unconsumed": True, "protection_restored": True})
+    return {"supported": True, "cases": cases}
 
 
 def run_worker(args) -> dict:
@@ -149,6 +183,8 @@ def run_worker(args) -> dict:
                                     raise RuntimeError(f"prepare refused result={result} stage={stats.failed_stage} "
                                                        f"counts={[(name, getattr(stats, name)) for name in COUNTERS]}")
                                 samples.append(validate_stats(stats, output.read()))
+                                if args.expected_queries is not None and stats.virtual_queries != args.expected_queries:
+                                    raise ValueError(f"expected {args.expected_queries} page queries, got {stats.virtual_queries}")
                                 output.verify()
                             fixture.verify()
                             counter_set = {tuple(item["counters"].values()) for item in samples}
@@ -167,6 +203,7 @@ def run_worker(args) -> dict:
                         finally:
                             cpu.P99AuditMxcsr(old_mode)
                     runs[-1]["negative_cases"] = check_negative_cases(bridge, image, fixture, output)
+                    runs[-1]["fresh_scope_guards"] = check_fresh_scope_guards(bridge, image, fixture, output)
                 finally:
                     output.close()
         manager.verify()
@@ -198,6 +235,7 @@ def main():
     parser.add_argument("--math-bridge", type=Path, default=ROOT / "scanner/build/tll_p99_native_math_bridge.dll")
     parser.add_argument("--output", type=Path, default=ROOT / "reports/p99-preparation-ahb.json")
     parser.add_argument("--samples", type=int, default=128)
+    parser.add_argument("--expected-queries", type=int, help="optional falsifiable page-query count")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--bridge-sha256", help=argparse.SUPPRESS)
@@ -227,6 +265,8 @@ def main():
                "--bridge-sha256", digest(args.bridge), "--math-bridge-sha256", digest(args.math_bridge)]
     for option in ("archive", "dc_archive", "exe", "bridge", "math_bridge", "output", "samples"):
         command.extend(["--" + option.replace("_", "-"), str(getattr(args, option))])
+    if args.expected_queries is not None:
+        command.extend(["--expected-queries", str(args.expected_queries)])
     completed = subprocess.run(command, capture_output=True, text=True, timeout=60,
                                creationflags=subprocess.CREATE_NO_WINDOW)
     if completed.returncode:

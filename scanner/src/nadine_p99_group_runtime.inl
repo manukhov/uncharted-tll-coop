@@ -122,13 +122,12 @@ bool p99_group_program_exact(P99ReadBatch& pages, std::uintptr_t raw, std::uintp
     return p99_program::validate(regions,bindings).admitted();
 }
 
-bool seh_p99_group_normal_job(void* job, P99GroupJob* output) {
-    P99ReadBatch pages; // Expires before source/retarget work, not at job end.
+bool seh_p99_group_normal_job(void* job, P99GroupJob* output, P99SourceReader& pages) {
     __try {
-        if (!p99_group_readable(pages, reinterpret_cast<std::uintptr_t>(job), 0x38) ||
+        if (!pages.range(reinterpret_cast<std::uintptr_t>(job), 0x38) ||
             p99_group_load<std::uintptr_t>(job) == 0) return false;
         const auto fg = p99_group_load<std::uintptr_t>(job, 8);
-        if (!p99_group_readable(pages, fg, 0x2A8)) return false;
+        if (!pages.range(fg, 0x2A8)) return false;
         const auto* f = reinterpret_cast<const void*>(fg);
         const auto art = p99_group_load<std::uintptr_t>(f, 0x18);
         if (p99_group_load<std::uint8_t>(f, 6) != 2 ||
@@ -137,9 +136,9 @@ bool seh_p99_group_normal_job(void* job, P99GroupJob* output) {
             p99_group_load<std::uintptr_t>(f, 0x2A0) != 0 ||
             art == 0 || art != p99_group_load<std::uintptr_t>(f, 0x1A0) ||
             *reinterpret_cast<const std::uint8_t*>(g_module + 0x3682F4B) != 0 ||
-            !p99_group_readable(pages, art, 0x48)) return false;
+            !pages.range(art, 0x48)) return false;
         const auto raw = p99_group_load<std::uintptr_t>(reinterpret_cast<const void*>(art), 0x40);
-        if (!p99_group_readable(pages, raw, 0x40) ||
+        if (!pages.range(raw, 0x40) ||
             p99_group_load<std::uint32_t>(reinterpret_cast<const void*>(raw), 4) != p99_order::kNadineSkeletonId ||
             p99_group_load<std::uint16_t>(reinterpret_cast<const void*>(raw), 0x1A) != 6480) return false;
         output->fg = fg;
@@ -155,15 +154,20 @@ bool prepare_p99_group_values(void* job, P99GroupJob* output) {
         g_p99_preparation_audit.job != job) return false;
     g_p99_preparation_audit.stats->failed_stage = static_cast<std::uint32_t>(p99_prep_audit::Stage::kNormalJob);
 #endif
-    if (!seh_p99_group_normal_job(job, output)) return false;
     P99ChloeTransferEpoch epoch{};
     P99ChloeTransferTicket ticket{};
     constexpr auto purpose = P99SourcePurpose::kOwnedGroupValues;
-    P99_PREP_AUDIT_BEGIN(select, kSelect);
-    if (!seh_select_p99_chloe_transfer_epoch(job, &epoch, purpose)) return false;
-    P99_PREP_AUDIT_END(select);
-    if (reinterpret_cast<std::uintptr_t>(epoch.fg_anim_data) != output->fg ||
-        reinterpret_cast<std::uintptr_t>(epoch.target_skeleton) != output->art) return false;
+    {
+        // No native callback, logging, locking or source materialization in
+        // this lexical phase. All normal-job and owner payload reads remain.
+        P99SourceReader selection_pages(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
+        if (!seh_p99_group_normal_job(job, output, selection_pages)) return false;
+        P99_PREP_AUDIT_BEGIN(select, kSelect);
+        if (!seh_select_p99_chloe_transfer_epoch(job, &epoch, purpose, &selection_pages)) return false;
+        P99_PREP_AUDIT_END(select);
+        if (reinterpret_cast<std::uintptr_t>(epoch.fg_anim_data) != output->fg ||
+            reinterpret_cast<std::uintptr_t>(epoch.target_skeleton) != output->art) return false;
+    }
     const auto result = seh_materialize_p99_chloe_embedded_epoch(&epoch, purpose);
     if (result != P99ChloeTransferMaterializeResult::kSuccess) {
         p99_group_reject(p99_chloe_transfer_materialize_reject(result));

@@ -3999,7 +3999,12 @@ FUNCTIONS = {
         "loads count once, compares entry+08/+0C, returns first match. No "
         "allocation, lock, callback or retention. An owned isolated fixture "
         "must exclude earlier duplicate pairs and bound the count; this says "
-        "nothing about live resource lifetime or uncontended performance.",
+        "nothing about live resource lifetime or uncontended performance. STATIC "
+        "AHC: table is inline image storage (LEA 143864A0C), not a movable pointer. "
+        "P99 table-only page observations may span this leaf and Resolve's audited "
+        "read-only closure within ONE existing registry lock scope; reread count "
+        "and payload, discard observations before unlock/math/callback. No "
+        "borrowed-resource or concurrent-protection lifetime guarantee.",
     ),
     0x141CC4940: (
         "GameLoading_Initialize",
@@ -4360,7 +4365,10 @@ FUNCTIONS = {
         "boundary must hold g_SkelTableRegistryLock while copying the value. "
         "STATIC AHB: sole callee is 1417D1170; no imports/allocations/registry "
         "writes. Registry lock protects node removal, not package-callback "
-        "in-place retarget payload rebuilds (see 1406FBB40).",
+        "in-place retarget payload rebuilds (see 1406FBB40). STATIC AHC: together "
+        "with Find1417D0BD0 and walker1417D1170 this is the entire no-callback "
+        "allowlist for scoped FIXED-IMAGE TABLE page observations, not authority "
+        "to cache borrowed resources or survive unlock. Every payload reread stays.",
     ),
     0x1417CD4E0: (
         "SkelTable_LoginArtItemSkeleton",
@@ -4385,7 +4393,10 @@ FUNCTIONS = {
         "bucket modulo count. Node next+00/key+10/value+18; null ends a chain; "
         "buckets[count] is the miss sentinel. Only writes caller iterator16. "
         "No chain-cycle bound: isolated replay requires nonzero count and "
-        "owned acyclic chains; it is not an arbitrary live-memory admission.",
+        "owned acyclic chains; it is not an arbitrary live-memory admission. "
+        "STATIC AHC: no calls out or global writes; only caller iterator16 is "
+        "written. Narrow table-page reuse expires at the surrounding lock "
+        "scope, never retains registry-node or resource contents.",
     ),
     0x14193B2C0: (
         "RetargetAnimUsingBatchMgr",
@@ -13466,7 +13477,12 @@ DATA_NAMES = {
         "(Chloe to legacy Nadine) only after FindRetargetEntry returns the same "
         "array element. Borrowed record/reference snapshots are copied while "
         "g_SkelTableRegistryLock is held and are rejected if either registry epoch "
-        "or the three resolver identities changes.",
+        "or the three resolver identities changes. STATIC AHC: inline image "
+        "storage allows table-only page observations across Find/Resolve within "
+        "one existing locked invocation; reload count and request its full "
+        "extent every time. Fresh scope after unlock. Package callbacks can "
+        "still rebuild numerical payloads in place; epoch equality is NOT a "
+        "value/lifetime certificate. Exact owned-value admission remains.",
     ),
     0x1466EC3E0: (
         "g_SkelTableRegistryBuckets",

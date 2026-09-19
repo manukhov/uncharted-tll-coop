@@ -3,11 +3,11 @@
 ## Current user priority / handoff (2026-09-19)
 
 Continue the local Nadine P99 grip repair, including the reported lag/crash.
-AHB now measures the complete owned preparation without launching the game:
-about3.9ms, with123 page queries taking about98% on this owned layout. This
-exceeds the unchanged1ms limit; both writers remain disabled. Full21-row output
-matches AGZ, but visible grip and AGR crashPC are still unresolved. See the
-final AHB entry and TASK_POOL for the exact next optimization boundary.
+AHC reduces complete owned preparation from123 to80 page queries without
+launching the game. Same-runner AHB control costs3.92..3.94ms versus finalAHC
+1.46..1.47ms; exact21-row output and fresh-lock guard refusals pass. The1ms
+limit is STILL exceeded; both writers remain disabled. Visible grip and AGR
+crashPC remain unresolved. See finalAHC entry/TASK_POOL for the next cost trace.
 
 ## Historical priority snapshot (2026-08-27)
 
@@ -33648,3 +33648,131 @@ the1ms cap. Existing AHA fresh-native-call boundaries stay until a specific
 replacement is statically justified. Live operand acceptance, AGR faultPC and
 visible grip remain open; any eventual one-game exam still needs a written
 behavior prediction plus external PID/image-bound crash capture.
+
+## 2026-09-19 AHC: bound repeated page observations to owner/locked-table scopes
+
+### STATIC hypothesis, alternatives and pre-execution prediction
+
+AHB measured123 page queries (~98% of3.9ms) in the complete owned producer.
+Hypothesis: callback-free owner phases can share page observations while still
+rereading every owner value; a separate fixed-image-table-only admission can
+share observations across the audited lookup closure within ONE existing lock
+scope. Expected queries123->80 on the same separate-allocation fixture:
+owner scopes save29, table requests17->3 queries save14. This is layout-specific,
+not a universal query bound or a live latency claim. The1ms cap stays unchanged.
+
+Alternatives rejected: global/frame/TLS certificates or cached owner payloads
+can survive turnover; generic borrowed-resource authority across native calls
+or unlock is not justified. No such cache was added. Payload copies, owner and
+identity rereads,17 complete table range requests and count bounds remain.
+
+Independent static evidence for the narrow table exception:
+- Call graph: Resolve0x1417CD100 calls only0x1417D1170; Find0x1417D0BD0 is a leaf.
+- Disassembly/dataflow: the closure has no allocation/import/callback/log/global
+  write; walker writes only its caller's16-byte iterator. Find uses an inline
+  image table at0x143864A00, count0x1438401D8, stride0x40, key fields+08/+0C,
+  not a borrowed movable table pointer. Each count is still loaded anew.
+- Existing ownership evidence: AHB native owned fixture agrees with these
+  lookups; AHA package observer writes inplace record values outside this lock.
+  Therefore only page observations of fixed image storage are reused, NOT
+  numerical values or dynamic-resource lifetime. Fresh exact-value checks and
+  SEH remain mandatory; the lock is not a lease against concurrent VirtualProtect.
+
+Four owner phases have lexical Readers: normaljob+select; materializer's two
+adjacent owner validations; postmath retained+owner; seal retained+owner. They
+expire before native/lock/callback work. The separate table-only object exists
+only inside locked capture and each locked registry-identity invocation, and
+expires before unlock/math/any non-allowlisted call. No resource batch changes.
+
+Falsifiable offline prediction (written before executing AHC native helper):
+the actual complete producer must still make12Resolve/12Find/42DoJoint/21Blend,
+80 page queries, no rejects and exact AGZ1008-byte output SHA
+c3613114c77ed16949d7de7d374131e86a4ab5ce57a3695a8f0b9ba2bee122e7
+for175/4096 table slots and MXCSR1F80/9FC0. Repeat the same20 reversible mutation
+cases. New audit-only negative cases arm PAGE_GUARD on the first table page
+AFTER capture unlock (stage6) and AFTER postcheck unlock (stage7): fresh scopes
+must refuse with zero output, guard still armed, respectively9Resolve/6Find
+and12Resolve/9Find, each42+21 math calls. Cleanup must restore protection and
+verify all owned buffers/pages/lockzero. A stale cross-lock certificate would
+instead touch/consume the guard or proceed; either outcome fails the test.
+
+Run bounded isolated children using --expected-queries80 (123 for frozenAHB),
+with matching runner/fixture and128 warm samples per configuration. Do not
+parallelize timings. Rough2.5ms is an estimate, NOT a claimed result or1ms
+admission. Both writers/static_assert remain disabled; no game/injection/input.
+
+### CONFIRMED in isolated execution only; live1ms admission still REJECTED
+
+All predicted counts/hash/negative outcomes pass. Final helper includes the
+real normaljob/select/materialize/seal production body, not a simplified copy.
+Each complete preparation has80VirtualQuery,12Resolve,12Find,42DoJoint,21Blend,
+zero rejects and the unchanged AGZ1008-byte output hash above. The retained
+17 full-table range requests are NOT17 system calls: three lock-local page
+observations cover this particular fixture. No owner/payload read was omitted.
+
+Same-runner sequential comparison,128 warm samples per row (ms):
+
+| Table / MXCSR | Frozen AHB median | Final AHC median | AHC query adapter median |
+| --- | ---: | ---: | ---: |
+|175 /1F80|3.94435|1.47095|1.40990|
+|175 /9FC0|3.92900|1.46425|1.40385|
+|4096 /1F80|3.91565|1.47395|1.41030|
+|4096 /9FC0|3.92545|1.46365|1.40510|
+
+This is about62..63% less complete preparation time on the owned fixture, NOT
+a live FPS claim. Earlier same-code pre-buildtag runs gave1.438..1.460ms.
+Queries fell35%, so the time change cannot be explained by assuming a uniform
+cost per query. Remaining query adapter time is about95..96% of final medians.
+Final maximum2.6284ms; every one of512 final warm samples exceeds1ms. Separate
+final repeat uses the same final helper and preserves counts/hash/guards:
+medians1.44020..1.44235ms, maximum2.0414ms. All1024 warm samples across these
+two final children exceed1ms; the result does not meet the admission cap.
+Phase times remain inclusive/nested; never sum them. The AHB exclusions and
+conditional-authored-input limitations still apply, including unknown AGR PC.
+
+Each AHC child repeats the20 AHB mutations:16 pre-math refusals and4 padding-only
+successes. Each also runs4 fresh-boundary PAGE_GUARD cases across the2 layouts:
+postcheck9Resolve/6Find and seal12Resolve/9Find, each42+21math, return-5, zero
+output, guard unconsumed and protection restored. All complete source buffers,
+canaries, image pages and lockzero pass after restoration. This detects stale
+cross-UNLOCK certificates, not arbitrary protection races inside a lock scope.
+No guard or mutation overhead is included in the successful-path timings.
+
+New pure table admission tests cover17requests/3scope queries, count growth to
+4096, uncovered guard tail, image/extent overflow, poison and fresh scopes.
+Owner tests preserve payload-copy counts and reject generation turnover even
+with reused pages; new phases re-query guards. Runtime-source lexical tests
+check only two table scope constructor sites and every pointer forwarding.
+
+Release succeeds; CTest22/22; Python77/77; bridge18checks0fail, table53checks0fail,
+source reader297checks0fail. Runtime buildtag2026-09-19ahc-safe remains DISABLED:
+kEnableP99GroupShadow=false, persistent writer=false, unconditional static_assert
+and1ms budget unchanged. No deployed DLL or weapon/back/rifle attachment change.
+
+Final helperSHA65c06819697105abfa7d8c2b45525264db3259794b0bf5c5c58b815aad222d79,
+PDB6fe7b940909604bda8aa57950642465a0cc7d686241e710265323761b8d48a4d.
+RuntimeSHAa2f8ee41a9ffd68e279019b077983538a304695b9ebb7adf349c3235bbc3a419,
+PDB97be199d26a8addc353fc96f75b25ac9c424d04b20ed04950b1dd96dc6cde795.
+Evidence: reports/p99-preparation-ahc-{first,repeat,ahb-control,final,final-repeat}.json;
+final artifact directory reports/ahc-offline-20260919-final. Prior reviewedAGW
+remains rollback; AHB frozen helper remains the control, not a runtime fallback.
+Single IDB comments updated at1417CD100/1417D1170/1417D0BD0/143864A00;
+reports/ida_apply_ahc_status.txt confirms1878functions/73data/1type and
+save_database returned True. MCP restarted on the same IDB; lookup names and
+Find disassembly/xrefs read back.
+
+Next concrete investigation: bounded per-query cost trace in this owned helper,
+classifying fixed-table/retained-slot/borrowed-owner/borrowed-source/bucket ranges
+with query count, total/max ticks and observed RegionSize. Competing hypotheses:
+uniform per-query overhead versus a few disproportionately expensive fixed-image
+regions. No logging/allocation inside preparation, bounded trace storage; compare
+instrumented/uninstrumented helpers and keep80/12/12/42/21/hash unchanged. This
+chooses the next optimization without guessing or launching the game.
+
+Narrow follow-up HYPOTHESIS (not implemented): the three post-Find entry64
+checks in capture rows20/157/124 fall inside the already admitted fixed table
+and same lock scope. An index-only table check could preserve bounds and save
+3queries80->77; requires count-shrink/growth/index/overflow/fresh-guard tests.
+Do not erase checks or share dynamic-source Readers. This small reduction does
+not promise1ms. No other broader page cache is earned. Live operand acceptance,
+AGR crash attribution and visible grip still need resolution before a game exam.

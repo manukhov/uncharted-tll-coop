@@ -1,5 +1,5 @@
 // Offline-only full production-TU harness. Its DllMain NEVER installs hooks,
-// starts threads/networking, or discovers a game. The sole export explicitly
+// starts threads/networking, or discovers a game. The exports explicitly
 // binds a caller-owned mapped image/job for one serialized bounded invocation.
 #define TLL_P99_PREPARATION_AUDIT 1
 #include "../src/coop_runtime.cpp"
@@ -56,15 +56,23 @@ bool p99_prepare_owned_image(std::uintptr_t image) {
 }
 }
 
-extern "C" __declspec(dllexport) int P99PrepareAudit(std::uintptr_t image, void* job,
+static int p99_prepare_audit_impl(std::uintptr_t image, void* job,
     std::uint32_t iterations, std::byte* output, std::uint32_t output_bytes,
-    coop::p99_preparation_audit::Stats* stats) {
+    coop::p99_preparation_audit::Stats* stats,
+    coop::p99_preparation_audit::GuardMutation* guard) {
     using namespace coop::p99_preparation_audit;
     if (!p99_prepare_buffer(stats, sizeof(Stats), true)) return -1;
     __try {
         if (stats->size != sizeof(Stats) || stats->version != kVersion) return -1;
     } __except (EXCEPTION_EXECUTE_HANDLER) { return -1; }
     *stats = {};
+    if (guard) {
+        if (!p99_prepare_buffer(guard, sizeof(GuardMutation), true) ||
+            guard->size != sizeof(GuardMutation) || iterations != 1 ||
+            (guard->stage != static_cast<std::uint32_t>(Stage::kPostcheck) &&
+             guard->stage != static_cast<std::uint32_t>(Stage::kSeal))) return -2;
+        guard->applied = guard->old_protection = guard->observed_protection = guard->error = 0;
+    }
     if (!image || !job || !output || iterations == 0 || iterations > kMaximumIterations ||
         output_bytes != kOutputBytes || !p99_prepare_buffer(output, output_bytes, true)) return -2;
     std::memset(output, 0, output_bytes);
@@ -83,7 +91,7 @@ extern "C" __declspec(dllexport) int P99PrepareAudit(std::uintptr_t image, void*
             g_module = image;
             g_state_net.enabled = true;
             g_net_role_b = true;
-            g_p99_preparation_audit = {image, job, stats, false};
+            g_p99_preparation_audit = {image, job, stats, false, guard};
             result = 0;
             for (std::uint32_t iteration = 0; iteration < iterations; ++iteration) {
                 const auto begin = p99_preparation_audit_begin(Stage::kNormalJob);
@@ -108,6 +116,16 @@ extern "C" __declspec(dllexport) int P99PrepareAudit(std::uintptr_t image, void*
             }
         } __except (EXCEPTION_EXECUTE_HANDLER) { result = -7; }
     } __finally {
+        if (guard && guard->applied) {
+            const auto table_page = (image + kSkelTableRetargetEntriesRva) & ~std::uintptr_t{0xFFF};
+            MEMORY_BASIC_INFORMATION info{};
+            if (VirtualQuery(reinterpret_cast<void*>(table_page), &info, sizeof(info)) == sizeof(info))
+                guard->observed_protection = info.Protect;
+            else guard->error = GetLastError();
+            DWORD ignored = 0;
+            if (!VirtualProtect(reinterpret_cast<void*>(table_page), 0x1000,
+                    guard->old_protection, &ignored)) guard->error = GetLastError();
+        }
         g_p99_preparation_audit = {};
         g_module = 0;
         g_state_net.enabled = false;
@@ -116,6 +134,19 @@ extern "C" __declspec(dllexport) int P99PrepareAudit(std::uintptr_t image, void*
     }
     if (result != 0) std::memset(output, 0, output_bytes);
     return result;
+}
+
+extern "C" __declspec(dllexport) int P99PrepareAudit(std::uintptr_t image, void* job,
+    std::uint32_t iterations, std::byte* output, std::uint32_t output_bytes,
+    coop::p99_preparation_audit::Stats* stats) {
+    return p99_prepare_audit_impl(image, job, iterations, output, output_bytes, stats, nullptr);
+}
+
+extern "C" __declspec(dllexport) int P99PrepareAuditGuardAtStage(std::uintptr_t image, void* job,
+    std::byte* output, std::uint32_t output_bytes, coop::p99_preparation_audit::Stats* stats,
+    coop::p99_preparation_audit::GuardMutation* guard) {
+    if (!guard) return -2;
+    return p99_prepare_audit_impl(image, job, 1, output, output_bytes, stats, guard);
 }
 
 BOOL WINAPI DllMain(HINSTANCE, DWORD, void*) {

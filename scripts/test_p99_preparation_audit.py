@@ -21,6 +21,7 @@ class PreparationReportTests(unittest.TestCase):
         self.assertEqual(audit.Stats.qpc_frequency.offset, 16)
         self.assertEqual(audit.Stats.virtual_queries.offset, 80)
         self.assertEqual(audit.Stats.virtual_query_ticks.offset, 128)
+        self.assertEqual(ctypes.sizeof(audit.GuardMutation), 24)
 
     def test_success_is_full_path(self):
         result = audit.validate_stats(self.valid_stats(), self.rows)

@@ -37,6 +37,9 @@ template<class Query>
 
 // One uninterrupted read-only admission batch, never a job/frame cache.
 // Do not reuse across native execution, allocator/source work or callbacks.
+// Only p99_retarget_table_admission::Admission has a narrower, explicitly
+// audited exception for the fixed-image table across read-only native lookups;
+// no general borrowed-source batch inherits that exception.
 // VirtualQuery reports a snapshot, NOT a lease against concurrent protection
 // changes. The caller retains the same normal-job lifetime contract and SEH.
 class Batch {
