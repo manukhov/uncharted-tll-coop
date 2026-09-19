@@ -3,13 +3,13 @@
 ## Current user priority / handoff (2026-09-20)
 
 Continue the local Nadine P99 grip repair, including the reported lag/crash.
-ADF corrected the real retarget capacity to256 and traced ordinary package
-ownership. AFE prepares a one-shot source-only observation through two producer
-sites; Process/cmd16 and both pose writers remain disabled/stock.600 probes at
-100ms,120s window,one fullproducer,1ms post-call cap; original stock once.
-Release/CTest24/24/Python113/113 and owned producer regression pass. Prospective
-exam prediction and immutable artifacts are in the finalAFE entry. No grip fix
-or historical AGR crash-cause claim; do not resume synthetic cost campaigns.
+ADF corrected the real retarget capacity to256 and traced ordinary ownership.
+AFE source-only exam reached its first preselection budget stop: probes1,
+attempts0, writes0; fullproducer never entered. Game23348 later exited0 with
+no second-chance fault;4235 handled first-chance exceptions are not crash proof.
+Observer disabled again in default AFE-safe source/DLL; both writersfalse and
+1ms unchanged. Read finalAFE outcome before any new exam. Next attribute exact
+preselection cost and fresh handled exception site, not synthetic benchmarks.
 
 ## Historical priority snapshot (2026-08-27)
 
@@ -34399,3 +34399,68 @@ Preparation helperSHAb673b422eebb1f3653274011036c1c923516c47f955295c5f5547c02b19
 IDB three ingress/native comments updated and saved:1902functions/73data/1type,
 save_database returned True (reports/ida_apply_afe_status.txt). No new function
 names required. ReviewedAGW remains rollback. Runtime result is pending below.
+
+### AFE runtime result: early budget stop, no full preparation
+
+CONFIRMED limited containment: observer installed only two producer sites and
+emitted exactly one `P99-OBSERVE STOP reason=budget probes=1 attempts=0 writes=0`.
+No RESULT or P99-GROUP APPLIED exists in the fresh PID log slice. The1ms limit
+was exceeded by the first preselection (normaljob/owner/weapon checks), BEFORE
+full preparation or its native retarget/blend math. No expensive retry occurred.
+REJECTED for this debugger-attached admission exam: no source acceptance or
+numerical/visual grip result was obtained. The single unquantified overrun is
+NOT normal-production cost or the historical AGR lag/crash cause. The diagnostic
+currently lacks preselection tick/stage detail; do not invent those numbers.
+
+One tll.exe launched2026-09-20 00:40:19 Moscow, PID23348, creationFILETIME
+134343276198341210 (31279231:2009311834), exact retailSHAed1371a4...210be.
+Watcher13452 READY for this identity preceded frozenDLL injection; explicit
+injector returned0 and loaded-module path/base were independently read back:
+reports/afe-observe-20260920-final/tll_coop_runtime.dll at0x7ffea9c30000,
+size2121728. Code source4bc0c29 was pushed BEFORE launch. Log offset20741230,
+fresh5348bytes yielded0RESULT/1STOP/0APPLIED. No agent game input or second copy.
+
+Watcher finished at00:42:10: EXIT code0, second_chance0, no dump. It counted4235
+first-chance exceptions; last32 entries are handled AVs at0x7ffea9c85d1f,
+frozenDLL+55D1F, on multiple threads. These are handled-event addresses, NOT a
+second-chance crash PC. Whether the user closed the game is not established;
+asked asynchronously. Both game and watcher are now absent. Capture directory
+reports/afe-20260920-p23348; frozen observation build and matching PDB retained.
+
+Default observation flag resetfalse after this one-shot exam; currentbuildtag
+2026-09-20afe-safe, runtimeSHAdd8cdcf23d3cca1f663fe62c727c6845ad0bb17b6712f1cdeab26eedd14e3be0,
+PDBSHA6d539cb1290daba5c5f441762857eb188a75a64f56160f45d562ef1252dcf40e.
+This disabled build is not injected. Do not rerun the frozen observer blindly,
+increase1ms, enable either pose writer, or infer full-source failure from a
+preselection stop. Next bounded static step is exact frozen-symbol attribution
+of55D1F plus preselection-only terminal timing/stage instrumentation, preserving
+one-shot limits and external capture. No more synthetic cost campaigns.
+
+STATIC / exact frozen-symbol attribution completed: llvm-symbolizer against
+the FROZEN observation PE and its local PDB resolves DLL+55D1F to readable_bytes,
+coop_runtime.cpp:32827 (4bc0c29). PE.pdata function[55C60,55D4A), offsetBF;
+instruction0F B6 01 = movzx eax,byte ptr[rcx], the volatile page-byte probe inside
+__try, caught by __except at32831. PE RSDS and frozenPDB stream1 match GUID
+88188274-ad54-4e27-bbc4-92d119220b97/age21. Later safe PDB hasage22: never use it
+for this run even though GUID matches. Command used installed MSVC14.51.36231
+llvm-symbolizer.exe --obj=<frozenDLL> --relative-address --no-debuginfod
+--debug-file-directory=<freezeDir> --output-style=JSON 0x55d1f. No DLL execution.
+
+REJECTED attribution shortcut: this helper is NOT an ordinary callee of the
+new preselection chain. observer_selected explicitly passes kOwnedGroupValues;
+normaljob uses Reader-admitted payload reads; selector passes the same purpose
+and Reader phase to p99_source_range/retained_player/owner. readable_bytes and
+legacy retained_player_object/idle-owner resolver are in Persistent-only branches.
+Owned range -> Reader::range -> Batch::readable -> query_region -> VirtualQuery;
+retained/owner payload copies use p99_source_copy under SEH and numeric validators.
+This excludes legacy page-touch admission from that chain, not later payload
+races, unrelated hook callers or process-wide debugger timing interference.
+The32 retained PCs alone provide no caller stacks or phase timestamps. Next
+measure terminal preselection stage/tick data without per-frame logging; do not
+blame readable_bytes for this budget stop or globally replace it speculatively.
+
+Final disabled build also passes CTest24/24 and Python113/113; saved with PDB
+in reports/afe-safe-20260920-final. AFE outcome comment saved in the singleIDB:
+1902functions/73data/1type, save_database returned True
+(reports/ida_apply_afe_final_status.txt). MCP restarted and native job name
+read back; no new retail function labels required. Existing tmp/ untouched.

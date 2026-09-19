@@ -17,6 +17,7 @@ class ObservationWiringTests(unittest.TestCase):
             self.assertIn(f"constexpr bool {name} = false;", self.runtime)
         self.assertIn("static_assert(!kEnableP99GroupShadow,", self.runtime)
         self.assertIn("state_net_started && install_p99_group_package(true)", self.runtime)
+        self.assertIn("constexpr bool kEnableP99SourceObservation = false;", self.runtime)
 
     def test_installs_only_two_producers_and_verifies_pose_sites(self):
         self.assertIn("sites(storage.data(), observe_only ? 2 : 5)", self.group)

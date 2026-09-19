@@ -11,7 +11,24 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Current handoff (2026-09-20, AFE prepared): one-shot source-only observer built;
+Current handoff (2026-09-20, AFE result): one-game source-only exam stopped
+immediately at preselection budget:probes1/attempts0/writes0, noRESULT/APPLIED.
+Full producer/native retarget math never started. Game23348 exited0 with no
+second-chance dump; watcher13452 counted4235 handled exceptions, last32at
+frozenDLL+55D1F. User closure vs self-exit not established; asked asynchronously.
+No crash-cause or visible grip claim. Exactcapture reports/afe-20260920-p23348,
+frozen observer/PDB reports/afe-observe-20260920-final, source4bc0c29.
+Default observer flag nowfalse/tagafe-safe; both writersfalse/static_assert/1ms
+unchanged, no new deployment.55D1F now resolved using frozenPDB GUID/age21:
+readable_bytes volatile probe, source32827, NOT crashPC. Narrow owned preselect
+does NOT call that helper (Reader/VirtualQuery branches); caller/phase attribution
+is missing, so no causal shortcut/global helper replacement. Next: instrument
+ONLY terminal preselection timing/stages before another bounded exam. Do not
+raise cap, blindly relaunch/reinject or return to synthetic cost campaigns.
+No live game/watcher remains. See finalAFE COOP_STATUS outcome; existing tmp/
+preserved. User performs all game input; one-copy appearance constraint stays.
+
+Prior handoff (2026-09-20, AFE prepared): one-shot source-only observer built;
 two producer instructions only, three Process/cmd16 calls verified stock. Both
 writersfalse/static_assert/1ms stay. At most600preselects/100ms/120s and ONE full
 owned producer; no retry or frame.job publication. ExternalPID/image watcher

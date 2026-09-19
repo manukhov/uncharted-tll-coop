@@ -5687,7 +5687,10 @@ FUNCTIONS = {
         "job once after its read-only candidate stack expires. No Process/cmd16 "
         "replacement, frame.job publication or grip claim; full producer once, "
         "post-call1ms cap and terminal no-retry policy. Lifecycle guarantees "
-        "remain scoped to ADF ordinary package path, not arbitrary Level rebind.",
+        "remain scoped to ADF ordinary package path, not arbitrary Level rebind. "
+        "AFE runtime23348 stopped at first preselection budget (probes1,attempts0), "
+        "before full preparation. No operand/grip result; observer defaultfalse "
+        "again. EXIT0/no second-chance does not attribute historical AGR crash.",
     ),
     0x141A8F9D0: (
         "AnimManager_DispatchRetainedOwnerPhase",

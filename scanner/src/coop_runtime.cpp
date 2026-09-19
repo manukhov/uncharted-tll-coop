@@ -61776,7 +61776,9 @@ static_assert(!kEnableP99GroupShadow || !kEnableLegacyNadineP99ChloeGripTransfer
 std::atomic<bool> g_p99_group_shadow_ready{false};
 // AFE: one bounded source-only exam. Never installs Process/cmd16 hooks or
 // authorizes either writer. The separate ready flag only admits owned reads.
-constexpr bool kEnableP99SourceObservation = true;
+// AFE stopped on its first preselection budget; full producer was not reached.
+// Keep future ordinary launches inert until the exact cost/fault site is traced.
+constexpr bool kEnableP99SourceObservation = false;
 static_assert(!kEnableP99GroupShadow && !kEnableLegacyNadineP99ChloeGripTransfer,
     "Source observation requires both pose writers disabled");
 std::atomic<bool> g_p99_source_observation_ready{false};
@@ -80257,8 +80259,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-20afe-observe "
-        "(P99 source-only bounded observer; both pose writers disabled; Process/cmd16 stock; AGC back profiles retained)");
+        "TLL co-op runtime init 2026-09-20afe-safe "
+        "(P99 observation disabled after preselection budget stop; both pose writers disabled; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "
