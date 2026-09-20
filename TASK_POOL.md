@@ -32,6 +32,11 @@ WAITING/ARM-WAIT probes0 and appearanceREADY verified; noARMED/result yet. User
 asked load/draw/stand/replyready. ONLY on that reply verify exactliveprocess and
 activewatcher/noSTOP, send frozen tll_p99_observation_arm ONCE (full command at
 endCOOP_STATUS), require ARMED then terminalresult.300s waiter expires, no rearm.
+LATEST: PID18204 now exited0/no secondchance; watcher4032 finished11:54:34 with
+3213 handled events. No arm signal sent; zeroARMED/STOP/RESULT. The command above
+is STALE, do not execute it. Last32:27helperRVA5894F/5PC0 firstchance, not a crash
+attribution. User asked closedself vs exitedunexpectedly; answer pending. No new
+launch/input/code change while clarifying. Late-arm source exam remains unexecuted.
 
 Current scalar-preselect handoff (2026-09-20): previous2692 already absent,
 not terminated here. STATIC frozen1ca7e5d6 PE proves unused epoch initialization

@@ -35107,3 +35107,32 @@ reports/late-arm-20260920/tll_p99_observation_arm.exe --pid 18204
 Require runtime ARMED (tool exit0 alone is not it), then read fresh terminal
 source result. Never signal a stale PID/expired event or restart terminal policy.
 No agent game input, second copy, reinjection or arm signal performed this turn.
+
+### Late-arm PID18204 exited before arming (2026-09-20)
+
+On the next user "Продолжай", live process check found neither game18204 nor
+watcher4032. Capture events.txt finalized11:54:34 Moscow: EXIT code0,
+second_chance0,3213 handled first-chance events, no second-chance dump. No arm
+helper was executed. Fresh log from offset20855865 contains WAITING/ARM-WAIT,
+appearance Init hash-selected retained0, zero ARMED, zero STOP, zero RESULT.
+Thus the prepared post-Draw source exam has no result; do not present this as
+source admission, a1ms failure, or a repaired grip. With readyfalse the native
+wrapper uses its direct stock path, not candidate/owner/pose preparation.
+
+Existing attachment logs later show current/state0/2, but are not a scoped source
+owner witness or user-ready confirmation, and cannot arm the now-dead process.
+The old exact-PID command above is STALE: never signal18204 or reinject/rearm it.
+User was asked whether they closed the game or it exited on its own; answer
+pending. Exit0 alone does not decide between these. No relaunch/input/binary change.
+
+Frozen ad385ec0/3c741168 identities and matching PDB GUID133eb5ac...8b46 age4
+rechecked. Last32 events:27 at7ffea2ec894f (module7ffea2e70000 +RVA5894F),
+five atPC0, all first-chance. RVA5894F resolves readable_bytes byte probe,
+coop_runtime.cpp:32859,0FB601. No caller or PC0 attribution exists; neither this
+ring nor all3213 events establish crash/exit cause. Do not blame the waiting
+worker, source preparation or global helper based on temporal proximity alone.
+
+Exit handoff comment saved to singleIDB:1902functions/73data/1type,
+save_database returned True in reports/ida_apply_late_arm_exit_20260920_status.txt.
+MCP restarted; runtime binary unchanged. Await user clarification before another
+game launch; no stale command or policy retry authorized by this record.
