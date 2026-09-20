@@ -30689,6 +30689,13 @@ resource-lifetime gaps remain explicit.
 
 ### 2026-08-31 STATIC / IMPLEMENTED: reconstruct the P99 grip in Chloe space (`agf`; runtime pending)
 
+**2026-09-20 correction:** the additive-order rationale below is superseded by
+the static equivariance audit at the end of this file. Mode1 absolute/additive
+retargets commute with this unit-weight composition in the precise sense given
+there; mode3 is a copy. Direct row124 versus composed row20/157 BASE mapping is
+a separate, still unquantified difference. Do not treat this historical paragraph
+as proof that rebuilding in Chloe space necessarily changes the grip.
+
 The user clarified the desired repair: copy Chloe's P99 grip rather than tune
 guessed C39 rotations. The precise hypothesis is **H-Chloe-order**: the shipped
 P99 distal pose is constructed as Player `D350A452 p1h-fingers`, retargeted into
@@ -35149,3 +35156,114 @@ it does not yet repair the grip. Historical crash cases remain separate.
 Clarification comment saved to the single IDB (1902functions/73data/1type,
 save_database returned True, reports/ida_apply_late_arm_user_close_20260920_status.txt);
 MCP restarted. No runtime/source-observer binary changes.
+
+### 2026-09-20 STATIC / REJECTED rationale: additive order alone is not a P99 grip correction
+
+The user requested continuation after closing the unchanged game. No game was
+launched, attached, injected, armed or controlled. Both P99 pose writers remain
+disabled; the last late-arm diagnostic was never executed and is not a visual
+verdict on new pose values. This pass audits the proposed VALUE change rather
+than extending the diagnostic/timing chain again.
+
+**H-order-alone is STATIC REJECTED.** Re-reading
+`RetargetPlugin_DoJointRetarget 141AE2100` separates its mode1 absolute branch
+`141AE2717..2809` from its additive branch `141AE2635..2712`. Let U be the
+normalized decoded quaternion at record+6 and V the one at record+14h. In
+Hamilton xyzw notation, the absolute rotation is `conj(V)*Q*U`, while the
+additive rotation is `conj(U)*B*U`. Absolute S/T are target-reference values;
+additive S is identity and T is zero. Mode3 `141AE28F3..28FC` copies source
+S/Q/T for either flag. `ApplyJointRetargets 141AE2A50` passes its descriptor
+additive byte through R9 at `141AE2E70` to the same helper at `141AE2EBE`.
+
+For the admitted mode2, weight1 blend, rotation composition is `X*B`.
+Consequently `Rabs(X*B) = Rabs(X)*Radd(B)` for mode1 in exact arithmetic;
+ordinary floating-point normalization/rounding prevents a general bit-equality
+claim. This is equivariance across the SAME retarget, not quaternion
+commutativity and not a proof that two different retarget paths are identical.
+Thus the historical explanation that merely moving the Chloe additive before
+row157 creates a useful correction was incomplete. A distinct base-pose
+difference would have to come from `R124(D350)` versus `R157(R20(D350))`.
+Do not revive the already rejected coarse profile-primary or raw-ordinal fixes.
+
+**The weapon-to-palm invariant is stronger.** Independently resolved authored
+parents are Player prop32->palm30, Chloe prop41->palm39 and Nadine prop30->palm28.
+All three selected maps (row20, row124, row157) use mode3 for semantic
+`05FC3888`. Retargeting therefore does not change that local prop row before
+or after the same D350/B8 blend. The proposed sequence cannot by itself change
+the weapon-prop transform relative to its palm parent. The pinned AGZ final
+prop row equals its Chloe-composite input as all48 bytes. This is a bone-frame
+invariant, NOT proof of correct skinned hand/handle contact or of the live
+presentation owner. Finger chains and the rendered mesh remain separate.
+
+Independent evidence types are native field/branch disassembly, its caller's
+additive-flag flow, semantic asset maps and parent tables, and the archived
+build-pinned native numerical stages checked by an independent scalar oracle.
+Runtime acceptance is NOT earned by this result.
+
+**Reproducible independent value audit.** New
+`scripts/p99_grip_composition_audit.py --row124-map` reads the existing pinned
+AGZ input/stage/output artifacts and independently composes double-precision
+Hamilton quaternions; it never executes retail code or opens a game process.
+The separate disk map audit resolves all71 row124 records and all21 required
+semantics, including prop32->30/mode3/map69, preserving E51542CA/3F666666.
+The maximum meaningful-component errors against the saved native stages are
+row20 `2.65877e-7`, blend `5.38263e-8`, row157 `1.67864e-7`, and full chain
+`4.50230e-7`, below the declared `1e-5` tolerance. Reversing the quaternion
+product instead gives `0.211865`, independently distinguishing conventions.
+Same-map equivariance residual is `4.99600e-16`; the equivalent Nadine
+prop-relative frame calculation differs by at most `1.22769e-7`.
+
+Sign-equivalent quaternions are allowed without hiding norm differences;
+normalization is used only for the explicitly unit-scale rigid-frame diagnostic.
+The archived additive rows have S=1/T=0, so these native comparisons do NOT
+numerically validate arbitrary nonzero additive translations. Scalar generated
+property cases are algebra tests, not new native execution. Reported Chloe-vs-
+Nadine finger-frame differences are not automatically skin/contact defects.
+The conditional AGZ row157 fixture remains conditional, not live registry proof.
+
+**STATIC consumer topology closed, no routing bug found.** Extended
+`scripts/p99_group_program_audit.py` decodes the actual op40 consumers, not just
+potential writes. At `142189FB0`, local index k=16*(local+1) consumes
+JP+3*k-30h and writes matrix+4*k. C39 group0 operator ordinals46/48 consume
+palm28/prop30, with parent encodings6C9/749, and write matrices740/7C0.
+Operator49/op53 exports palm740..77F to shared scratchFD0..100F. All19 right
+finger rows are consumed in parent-before-child order in group1; its five
+roots1/9/17/25/33 use parentFDB. The parent matrix offset uses mask~F, not~3;
+bit8 suppresses inherited scale. The final two local37 descriptors are exact
+SIMD padding repetitions, not extra logical joints. Full base/32-bit destination
+auditing finds no later selected-matrix overwrite outside these exact repeats.
+This proves typed storage/consumer topology, not skinned output or useful values.
+
+**Exact remaining base operand.** Targeted artifact review found no built numeric
+row124 fixture: `p99_preparation_fixture.py` intentionally allocates71*46 zero
+UNUSED bytes for it. That was sufficient for the existing source preparation,
+but cannot be used as evidence for direct R124 output. The missing values are
+the completed locators (+06/+14 quaternions in each selected46-byte record),
+not the D350 source or StringId map. Fresh read of the pinned Nadine PAK resolves
+E51542CA at file93E98 -> slot93278 -> descriptorA21A0 -> ANIM2DA0;
+descriptor databaseED25C708 and raw skeletonC39CA709 match this target. It has
+seven groups and one frame. A conditional no-profile R124 is therefore not an
+acceptable substitute for the profile-present authored comparison, and disk
+registration alone still does not prove live residency.
+
+Next concrete STATIC/offline step: reconstruct all-group sampled target local
+references and inverse globals at the `1417CE198 -> 1417CE210` builder boundary,
+then compare direct R124 base with the already available composed R20/R157 base
+for all21 semantic rows. The old group0-only reference-pose comparison does not
+cover the right fingers. Do not call globally dependent AnimateObject1418AB8F0
+wholesale, weaken source admission, restart cost campaigns, or launch a writer
+until a distinct useful pose change is demonstrated. A rigid prop correction
+and finger/skin fit are separate hypotheses; the left support arm is outside
+these21 right-hand rows.
+
+Verification: 15 new composition tests (including1024 nontrivial algebra cases),
+13 group-program tests, complete Python suite156/156 and existing CTest27/27
+pass. The frozen-native comparison test ran, not skipped. Both fresh disk audits
+pass. No runtime source/DLL, appearance, attachment, or enable flag changed.
+
+Handoff: the single `ida/tll.i64` was saved with corrected retarget/blend,
+row124-profile, op40-consumer and op53-handoff comments (1902functions,
+73data names,1type; `save_database returned True` in
+`reports/ida_apply_p99_equivariance_20260920_status.txt`). Restarted read-only
+MCP resolves141AE2100 as RetargetPlugin_DoJointRetarget and retains its code
+xref141AE2EBE from ApplyJointRetargets. No parallel IDB or new game process.

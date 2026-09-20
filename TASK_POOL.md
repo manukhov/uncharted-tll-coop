@@ -11,6 +11,26 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
+Current value-audit direction (2026-09-20): NO repeat of the unchanged source
+exam by default. STATIC review rejects additive-order-alone as a correction:
+mode1 Rabs(X*B)=Rabs(X)*Radd(B), modulo floating point; mode3 copies source.
+Player/Chloe/Nadine prop is a direct child of the right palm and all three maps
+20/124/157 use prop mode3, so the proposed sequence cannot change that relative
+bone frame. This does not prove skin contact or direct/composed base equality.
+Quantify R124(D350) versus R157(R20(D350)) before promoting another writer exam;
+do not reopen coarse profile-primary/ordinal fixes or confuse a1008-byte stable
+calculation with a visible repair. See latest COOP_STATUS correction and tests.
+Both writers remain OFF; appearance and attachment fixes untouched.
+Value audit: scalar/native max4.503e-7, equivariance4.997e-16; prop all48bytes
+unchanged. Fresh row124 map71/selected21 preserved; all21 cmd16 consumers and
+parent order/padding/no-later-overwrite checks pass. Python156/CTest27 pass.
+No built numericR124 exists in prior preparation fixtures (71*46 zero UNUSED).
+Its E51542CA profile DOES have exacttargetED25C708/C39CA709 disk registration
+in Nadine PAK (93E98->93278->A21A0->2DA0),7groups/1frame, not live residency.
+NEXT: reconstruct full sampled local references/inverse globals before
+1417CE198->1417CE210, then quantify direct/composed base values. Group0-only
+decode/null-profile R124 or wholesale global AnimateObject are not substitutes.
+
 Current late-arm handoff (2026-09-20): PID9852 already absent, not terminated here.
 No existing no-read completed-P99 hook exists; CommitDrawn != state2, ApplyState
 has no state argument/installedhook, TakeTransitions rifle seed not applicable.

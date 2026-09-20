@@ -4,7 +4,9 @@
 This is a build-pinned STATIC contract, not runtime admission. Operator layouts
 come from their native handlers; see the 2026-09-17 COOP_STATUS entry. The audit
 checks complete opcode coverage, encoded base selection, writes to selected
-JointParams, and the group-0 palm -> shared scratch -> group-1 parent handoff.
+JointParams, selected-row consumption and matrix survival, and the group-0
+palm -> shared scratch -> group-1 parent handoff. These are storage/dataflow
+checks, not a numerical model or evidence that the selected pose improves grip.
 It does not establish live owner lifetime, bindings, or visual correctness.
 """
 
@@ -129,6 +131,86 @@ def writes(data: bytes, program: int, op: Operator) -> list[tuple[int, int]]:
     return out
 
 
+def propagation_records(data: bytes, program: int,
+                        op: Operator) -> tuple[tuple[int, int], ...]:
+    """Decode op40's local JP row and encoded parent, including SIMD padding.
+
+    142189FB0 consumes JP+3*k-0x30 and writes matrices+4*k, where authored
+    k=16*(local+1). The first matrix row is reserved; JP has no leading row.
+    The native loop handles records sequentially, not four simultaneous writes.
+    """
+    if (op.opcode != 40 or len(op.payload) != 3 or op.payload[1] != 3
+            or op.payload[2] & 3):
+        raise ValueError("unexpected propagation operator contract")
+    descriptor = program + op.payload[2]
+    result = []
+    for index in range(4 * op.payload[0]):
+        k, parent = struct.unpack_from("<HH", data, descriptor + 4 * index)
+        if k == 0 or k & 15:
+            raise ValueError("propagation row is not a positive 16-byte index")
+        result.append((k // 16 - 1, parent))
+    return tuple(result)
+
+
+def audit_selected_consumption(data: bytes, program: int,
+                               ops: tuple[Operator, ...], group: int) -> None:
+    """Prove the pinned selected rows reach surviving native matrix outputs.
+
+    This supplements the all-operator JP-write audit; it does not replace it.
+    A selected matrix must be generated once from its corresponding full JP
+    row, after its matrix parent, and remain untouched by later operators.
+    Group1's last two records repeat local37 solely to pad the four-wide
+    descriptor count: they are identical reads/writes, not two more joints.
+    """
+    if group not in (0, 1):
+        raise ValueError("unexpected target group")
+    parents = ({28: 0x6C9, 30: 0x749} if group == 0 else {
+        local: (0xFDB if local in (1, 9, 17, 25, 33)
+                else (64 * (local - 1)) | 9)
+        for local in range(1, 38, 2)
+    })
+    consumed: set[int] = set()
+    propagated: set[int] = set()
+    propagation_ops = 0
+    for op in ops:
+        if op.opcode != 40:
+            for encoded, width in writes(data, program, op):
+                if encoded & 3 != 1:
+                    continue
+                offset = encoded & (0xFFFFFFF0 if width >= 16 else 0xFFFFFFFC)
+                if any(offset < 64 * (local + 2)
+                       and offset + width > 64 * (local + 1)
+                       for local in consumed):
+                    raise ValueError("later operator overwrites a selected matrix")
+            continue
+
+        propagation_ops += 1
+        records = propagation_records(data, program, op)
+        if group == 1:
+            if (propagation_ops != 1 or len(records) != 40
+                    or {local for local, _ in records[:38]} != set(range(38))
+                    or records[37:] != ((37, 0x909),) * 3):
+                raise ValueError("group-1 logical rows or local37 padding changed")
+        for index, (local, parent) in enumerate(records):
+            if local >= (104 if group == 0 else 38):
+                raise ValueError("propagation row exceeds expanded group")
+            if group == 1 and index >= 38:
+                continue  # Identical trailing local37 padding, checked above.
+            if local in parents:
+                if local in consumed:
+                    raise ValueError("selected JP has duplicate logical consumption")
+                if parent != parents[local]:
+                    raise ValueError("selected JP has the wrong encoded parent")
+                if parent & 3 == 1:
+                    parent_local = (parent & 0xFFF0) // 64 - 1
+                    if parent_local not in propagated:
+                        raise ValueError("selected JP is consumed before its parent")
+                consumed.add(local)
+            propagated.add(local)
+    if consumed != set(parents):
+        raise ValueError("not every selected JP is consumed")
+
+
 def audit(path: Path) -> None:
     data = path.read_bytes()
     skeleton = source.load_skeleton(data, source.NADINE_SKELETON)
@@ -172,6 +254,7 @@ def audit(path: Path) -> None:
                     raise ValueError(f"operator {op.opcode} overwrites selected JP")
         if destination_count != (870, 100)[group_index]:
             raise ValueError("decoded destination coverage changed")
+        audit_selected_consumption(data, raw + relative, parsed, group_index)
 
         # Process cmd17 uses a separate base table: original JP, optional
         # scalar bank, auxiliary, scratch. It rounds its scalar pairs to four.
@@ -217,6 +300,8 @@ def audit(path: Path) -> None:
         raise ValueError(f"right-finger shared parents changed: {right_roots}")
     print("palm28 W+0x740..0x77F -> scratch+0xFD0..0x100F -> "
           "finger roots1/9/17/25/33; all53 operators covered")
+    print("selected_JP_consumers=2+19; parents_before_children=1; "
+          "later_selected_matrix_writes=0; group1_local37_padding=2")
     print("STATIC PASS; no native execution, runtime admission or visual claim")
 
 

@@ -223,7 +223,18 @@ FUNCTIONS = {
         "with a4=false are admitted only after expanded-row and BOTH packed "
         "reference-rotation checks. Mode1 copies target S/T at 272B/2730; "
         "mode3 copies source at 28F3..28FC. Conservative all18-half finiteness "
-        "is sufficient policy, not native necessity for every unused lane.",
+        "is sufficient policy, not native necessity for every unused lane. "
+        "STATIC 2026-09-20 grip-order correction: for normalized decoded "
+        "locator quaternions U=record+6 and V=record+14h, mode1 absolute "
+        "Qout=conj(V)*Qin*U, while additive Qout=conj(U)*Qin*U "
+        "(2635..2712); additive S=identity/T=zero, absolute S/T=target "
+        "reference. With mode2 unit-weight Qleft*Qright this is equivariant: "
+        "Rabs(X*B)=Rabs(X)*Radd(B), modulo floating point. Therefore "
+        "moving the additive across this SAME retarget is not independently "
+        "a grip correction; direct row124 vs composed row20/157 base mapping "
+        "is a separate question. Mode3 copies both absolute and additive "
+        "source values, so the P99 prop-local row is unchanged by that order "
+        "or those mode3 maps. This is not a claim of skin/contact equivalence.",
     ),
     # --- 2026-08-27: node-local pose overlays before clip caching ---
     0x1400EDBC0: (
@@ -4443,7 +4454,16 @@ FUNCTIONS = {
         "STATIC AHA: sole direct caller1406FBC8B is package observer "
         "1406FBB40 dispatched at package-login stateC, not protected by "
         "SkelTable registry lock1466EC4B0. Stable registry epochs alone "
-        "do not prove unchanged retarget record values or historical basis.",
+        "do not prove unchanged retarget record values or historical basis. "
+        "STATIC 2026-09-20: row124 profileE51542CA has an exact-target authored "
+        "registration in pinned nadine-dlc-base.pak: file93E98 -> slot93278 "
+        "-> descriptorA21A0 (databaseED25C708) -> ANIM2DA0 (C39CA709,7groups, "
+        "one frame). This is not live residency proof, but unlike the Elena "
+        "profile it cannot be dismissed as a database mismatch. Existing AHB "
+        "row124 fixture has zero UNUSED numeric bytes, not built locators. "
+        "For direct-base comparison reconstruct the complete sampled target "
+        "references/inverse globals beforeCE198; group0-only profile decode "
+        "and conditional-null row124 are not equivalent operands.",
     ),
     0x1417CE210: (
         "SkelTable_BuildRetargetEntry",
@@ -4703,7 +4723,11 @@ FUNCTIONS = {
         "Mode2 writes full left[0:96], including the discarded sentinel "
         "row at+48; it is NOT untouched padding or required finite output. "
         "Right112 stays read-only. Outer DFB stores masks at left+96/+104, "
-        "still {MSB,0} for the one-row isolated fixture.",
+        "still {MSB,0} for the one-row isolated fixture. STATIC 2026-09-20: "
+        "unit-weight quaternion composition is Qleft*Qright (Hamilton xyzw), "
+        "not reversed. Independent scalar composition is checked against "
+        "the pinned AGZ native stage artifacts; this validates the convention "
+        "within numerical tolerance, not a visible P99 repair.",
     ),
     0x142191AE0: (
         "AnimJointParams_BlendMode2FourLane",
@@ -5291,7 +5315,15 @@ FUNCTIONS = {
         "+940 and Nadine W+040/+3C0/+400/+440/+480/+4C0/+500/+540. An exhaustive "
         "destination audit finds no non-op40 overwrite of these active nodes. "
         "Therefore this worker is downstream of a mixed contamination and is not "
-        "a valid blanket substitution boundary.",
+        "a valid blanket substitution boundary. STATIC 2026-09-20 P99 "
+        "consumer audit: pinned C39 group0 op40 operators46/48 consume local "
+        "palm28/prop30 and write W+740/+7C0; prop parent749 resolves palm740. "
+        "Group1 consumes all19 selected right-finger odd locals1..37 in "
+        "parent-before-child order; five roots1/9/17/25/33 use scratchFDB, "
+        "other parents are the preceding same-finger matrix. Final records38/39 "
+        "repeat local37 as SIMD padding. No later program matrix writer "
+        "overlaps a selected output, excluding those exact padding repeats. "
+        "This closes consumer topology, not numerical/skin correctness.",
     ),
     0x142194680: (
         "AnimJointProgramOp41_ScatterVectorComponents",
@@ -5441,7 +5473,12 @@ FUNCTIONS = {
         "vectors directly. Exact group-0 streams export Chloe JointParams +0x670 "
         "and workspace +0x840/+0x940 into scratch +0x190/+0xD90/+0xE90; Nadine "
         "exports JointParams +0x400/+0x430 and workspace +0x500/+0x540 into "
-        "scratch +0x160/+0x190/+0xD90/+0xDD0.",
+        "scratch +0x160/+0x190/+0xD90/+0xDD0. STATIC 2026-09-20 P99: pinned "
+        "C39 group0 op53 ordinal49 exports completed palm matrix+740..77F "
+        "as four vectors into shared scratch+FD0..100F. Group1 right-finger "
+        "roots use parentFDB: selector3, matrix offsetFD0 (mask~F at14218A055), "
+        "flag8 disables parent-scale inheritance at14218A069. This is not "
+        "a generic encoded-vector offset masked with~3.",
     ),
     0x142194620: (
         "AnimJointProgramOp59_ConvertJointParamsToMatrices",
