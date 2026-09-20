@@ -8,11 +8,12 @@ AFE source-only exam reached its first preselection budget stop: probes1,
 attempts0, writes0; fullproducer never entered. Game23348 later exited0 with
 no second-chance fault;4235 handled first-chance exceptions are not crash proof.
 Observer disabled again in default AFE-safe source/DLL; both writersfalse and
-1ms unchanged. USER HOLD / correction: the user reports playing Chloe in AFE,
+1ms unchanged. Correction: the user reports playing Chloe in AFE,
 not Nadine. Role B is configuration only; this was NOT a validated Nadine/P99
-exam. Read the appearance correction below before any further runtime work.
-First establish actual local look and initialization timing; do not blindly
-relaunch, reinject, rebuild the look live, or infer Nadine cost from this stop.
+exam. User resumed work: init-only appearance witnesses are prepared and tested
+in 2026-09-20look-init. Read the final appearance test plan before runtime work.
+First establish actual local look after full hook READY and a user-loaded scene;
+do not rebuild the look live or infer Nadine cost from the previous budget stop.
 
 ## Historical priority snapshot (2026-08-27)
 
@@ -34506,3 +34507,66 @@ launch, injection or game input in this diagnosis. Both game/watcher are absent.
 Before any future grip exam, establish actual Nadine appearance and successful
 init-time substitution independently of the role banner. Only then revisit
 preselection stage/timing instrumentation. Do not force an unproven live rebuild.
+
+## 2026-09-20 local appearance: retention ordering and bounded Init witnesses
+
+User resumed after the Chloe report. STATIC / alternatives: (A) injection after
+existing Chloe Init, (B) hook installation failure/skip, (C) identity gate
+mismatch, (D) selected hash ignored by a prebuilt look or subsequent change.
+No claim that A caused AFE without its missing Init timestamps. REJECTED static
+shortcut: normal Player Init does NOT wait for outer spawn return to retain
+the local object. Do not weaken the retained0 identity or caller gate.
+
+Three independent evidence kinds for the prospective appearance-only exam:
+
+- Call graph: Process spawn invokes Player slot+58 at1417C400B; Player Init
+  1410DC160 calls140CBFF50 at1410DCAFF, then140CC017D ->141E994C0 and
+  141E9959F ->NdGameObject_Init141BB4280. Its exact appearance call141BB4AB2
+  returns141BB4AB9. Existing source assertion names NdGameObject::Init.
+- Data flow/order:1417C3CF7 stores node+8=Player,CFB stores Player+A8=node.
+  Player Init reads payload=ProcessSpawnInfo+28 at1410DC703, slot=payload+24
+  at1410DC7B7, then publishes its A8/BC tuple at1410DC868 into143EEBE80+slot*16,
+  BEFORE the above base Init chain. For ordinary slot0 this supplies the exact
+  object read by retained_player_object(0). Reentrant replacement is not ruled out.
+- Concrete Player vtable142A4BFE8: +58 memory resolves1410DC160; +2E0/index92
+  at142A4C2C8 resolves140A1DCC0. The latter returns Player+15A4. No unresolved
+  virtual target is being substituted for the claimed Player init/getter.
+
+Important discriminator: NdGameObject_Init checks ProcessSpawnInfo+98 at
+141BB4ACC/4ACF AFTER querying appearance at4AB2. A prebuilt look bypasses the
+hash-fed construction at4AE3, NOT the getter itself. A selected hash is not
+mesh proof; an absent callback is not explained by the prebuilt-look branch.
+
+Implementation 2026-09-20look-init changes diagnostics only, not appearance
+selection: same legacyD27C074F, exact caller, conditional single retained lookup,
+buddy/local/legacy/original ordering preserved. Logs INSTALL with target,
+protect/readback/restore outcome; role text now explicitly says requested look,
+actual appearance unverified. At the exact Init branch, at most ONE line per
+outcome (no-output/role-disabled/local-mismatch/hash-selected), four total per
+process using a lock-free atomic mask. No per-frame memory probing, native call,
+pose transfer or live-look rebuild was added. Final worker READY reports hook,
+state-net, requested look and hash; require hook=1/state-net=1/requested=Nadine,
+not the word READY alone. Every marker explicitly leaves visual=pending.
+
+Offline: Release build succeeded, CTest25/25 and Python121/121 passed. Atomic
+budget4029 checks include8-thread contention and invalid enum guards. Python
+wiring checks are lexical guards, not semantic/runtime proof. Both pose writers
+and P99 source observer remainfalse; existing attachment/holster fixes unchanged.
+Runtime SHA30c4624b558b9cac71c45dee6c72e45e08d9c9b63227fb0d8ef95bd9b1c1378f;
+matching PDBSHA4c731e8fe14ce5d03303034443ab230bacae03abed1b2dd83b9a4968985ebd11.
+Retail exe freshly matches ed1371a4...210be. Frozen directory:
+reports/local-appearance-20260920. Labels/comments saved to the single IDB,
+1902functions/73data/1type; save_database returned True in
+reports/ida_apply_local_appearance_20260920_status.txt; MCP restarted.
+
+Falsifiable one-game prediction, written before launch: keep the user at the
+main menu until full READY; then the USER loads their save. Normal slot0 Init
+should yield hash-selected at1BB4AB9 with player==retained0 andD27C074F, and
+the user should see Nadine. Unexpected INSTALL status excludes an adequate
+installation; local-mismatch points to identity/slot conditions (not normal
+late publication); absent Init after loading cannot prove a late callback;
+hash-selected with visible Chloe retains prebuilt/later-look alternatives.
+No grip correction is expected and no P99-observer/preparation result is sought.
+No agent game input, second game, repeated injection, force hotkey or live rebuild.
+Appearance is confirmed ONLY by the user's visual report together with these
+fresh per-PID markers; installer/role/hash-return markers alone are insufficient.

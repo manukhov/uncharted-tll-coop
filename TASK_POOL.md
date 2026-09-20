@@ -11,6 +11,18 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
+Current appearance continuation (2026-09-20look-init): user resumed. Prepared
+diagnostic-only build records INSTALL outcomes, at most4 exact Init decisions,
+and full worker READY with hook/state-net/requested look. Existing swap/hash/
+retained identity and attachment behavior unchanged; P99 observer/writersfalse.
+STATIC normal Player Init publishes retained tuple at1410DC868 BEFORE base Init
+and appearance141BB4AB2; do not weaken that gate. Prebuilt look+98 skips the
+hash-fed builder, NOT the appearance callback. Three evidence kinds/prediction
+are in finalCOOP_STATUS. Release/CTest25/25/Python121/121 pass; IDB savedTrue.
+For one-game appearance exam, user stays at menu until READY hook1/state-net1/
+requestedNadine, then loads scene. Require user visual Nadine plus fresh Init
+hash-selected witness before treating any future run as a Nadine grip exam.
+
 User hold / AFE appearance correction (2026-09-20): user saw Chloe, not Nadine.
 Role2/B banner is configuration, not a mesh/skeleton witness; AFE is NOT a
 validated Nadine/P99 exam. The one-shot budget/no-write result still holds but

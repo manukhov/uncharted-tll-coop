@@ -23,6 +23,7 @@
 
 #include "coop_protocol.h"
 #include "coop_runtime_offsets.h"
+#include "local_appearance_observation.h"
 #include "nadine_back_frame_policy.h"
 #include "nadine_back_clearance.h"
 #include "nadine_back_clearance_profiles.h"
@@ -10631,18 +10632,35 @@ void log_candidate_look_hashes() {
 // work). Also still supports the legacy clone-spawn-window swap.
 // Diagnostic: collect distinct caller RVAs of the appearance getter so we can tell
 // the LOOK/RENDER callers (mesh) apart from gameplay/ability gating callers (lasso).
-// Set true to gather; logged once per distinct caller. Default ON for one run.
+// Set true to gather; logged once per distinct caller. Default OFF.
 volatile bool g_log_appearance_callers = false;
-// RVA of the LOOK BUILDER's call to vtable[92] (PlayerUpperDrawControlLifecycle...
-// @0x1bb4280; the `call [r8+0x2e0]` at 0x1bb4ab2 returns here). This is the ONLY
-// caller that drives the rendered MESH. All other callers of the appearance getter
-// are gameplay/identity checks (e.g. lasso/rope ability gating) and MUST see the
-// real character (Chloe) so abilities stay intact. => caller-gated swap.
+// Exact INIT-time look-builder return inside NdGameObject_Init @0x1bb4280.
+// The call [r8+0x2e0] at 0x1bb4ab2 returns here. Later appearance reads do NOT
+// rebuild an existing look. Keep the swap scoped here so gameplay/identity
+// callers (e.g. lasso/rope gating) continue to see the real character (Chloe).
 constexpr std::uintptr_t kLookBuilderAppearCallRva = 0x1bb4ab9;
+coop::appearance::InitLogBudget g_local_appearance_init_log_budget;
+
+void report_local_appearance_init(coop::appearance::InitOutcome outcome,
+                                 void* player, void* retained,
+                                 bool requested, std::uint32_t hash) {
+    // At most four lines per process, only at the existing Init caller. No
+    // additional game-memory reads, native calls, retry or live-look rebuild.
+    if (!g_local_appearance_init_log_budget.claim(outcome)) return;
+    char line[384]{};
+    std::snprintf(line, sizeof(line),
+        "LOCAL-LOOK INIT decision=%s caller=1bb4ab9 player=%p retained0=%p "
+        "requested=%u hash=%08x visual=pending",
+        coop::appearance::outcome_name(outcome), player, retained,
+        requested ? 1u : 0u, hash);
+    boot_log_line(line);
+}
+
 std::uint32_t* __fastcall hooked_appearance(void* a1, std::uint32_t* a2) {
     // F5 edge-toggle: force the local player to render as Nadine in a single copy
     // (repro of the Nadine weapon bug without a peer). Runs here since the appearance
-    // getter is called every render frame.
+    // getter is called frequently. The mesh swap still requires a later Init;
+    // changing this flag does not rebuild a live character.
     {
         static bool prev_f5 = false;
         const bool f5 = (GetAsyncKeyState(VK_F5) & 0x8000) != 0;
@@ -10726,16 +10744,27 @@ std::uint32_t* __fastcall hooked_appearance(void* a1, std::uint32_t* a2) {
     if (a2 != nullptr && from_lookbuilder) {
         // Local-player Nadine swap (role B / player-2 machine): ONLY the local player
         // object, so the shared look builder doesn't recolor the buddy or other NPCs.
-        if ((g_local_make_nadine || g_force_local_nadine) &&
-            a1 == retained_player_object(0)) {
-            *a2 = g_nadine_swap_hash;  // tunable Nadine look (F4 cycles candidates)
+        const bool requested = g_local_make_nadine || g_force_local_nadine;
+        void* const local = requested ? retained_player_object(0) : nullptr;
+        if (requested && a1 == local) {
+            const std::uint32_t selected_hash = g_nadine_swap_hash;
+            *a2 = selected_hash;  // tunable Nadine look (F4 cycles candidates)
+            report_local_appearance_init(coop::appearance::InitOutcome::HashSelected,
+                                         a1, local, requested, selected_hash);
             return a2;
         }
+        report_local_appearance_init(requested
+                ? coop::appearance::InitOutcome::LocalMismatch
+                : coop::appearance::InitOutcome::RoleDisabled,
+            a1, local, requested, 0);
         // Legacy clone-spawn-window swap.
         if (g_appearance_swap_active && g_nadine_appearance_hash != 0) {
             *a2 = 0xd27c074fu;  // hash("nadine")
             return a2;
         }
+    } else if (from_lookbuilder) {
+        report_local_appearance_init(coop::appearance::InitOutcome::NoOutput,
+                                     a1, nullptr, false, 0);
     }
     if (g_original_appearance != nullptr) {
         return g_original_appearance(a1, a2);
@@ -15933,8 +15962,9 @@ bool start_state_net() {
         }
         g_local_make_nadine = g_net_role_b;  // player-2 machine renders local as Nadine
         std::ostringstream rl;
-        rl << "co-op role = " << (g_net_role_b ? "B (player 2, local Nadine)"
-                                               : "A (player 1, local Chloe)");
+        rl << "co-op role = " << (g_net_role_b ? "B (player 2)" : "A (player 1)")
+           << "; requested-local-look=" << (g_local_make_nadine ? "Nadine" : "Chloe")
+           << "; actual appearance unverified";
         boot_log_line(rl.str().c_str());
     }
     g_state_net.peer_addr.sin_family = AF_INET;
@@ -80240,6 +80270,7 @@ void arm_slot1_visual_seed_breakpoint_current_thread() {
 }
 
 DWORD WINAPI install_hook(void*) {
+    bool local_appearance_hook_ready = false;
     g_module = reinterpret_cast<std::uintptr_t>(
         GetModuleHandleW(L"tll.exe")
     );
@@ -80259,8 +80290,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-20afe-safe "
-        "(P99 observation disabled after preselection budget stop; both pose writers disabled; AGC back profiles retained)");
+        "TLL co-op runtime init 2026-09-20look-init "
+        "(bounded init-time appearance witnesses; P99 observer and both pose writers disabled; AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "
@@ -80689,22 +80720,41 @@ DWORD WINAPI install_hook(void*) {
         } else {
             log_line("Player vtable[87] unexpected; player hook skipped");
         }
-        // Hook Player vtable[92] = Player_GetAppearanceHash for the render-only
-        // Nadine look swap on the clone (gated by g_appearance_swap_active).
+        // Hook Player vtable[92] = Player_GetAppearanceHash for the INIT-only
+        // local look swap. Installation alone is not a mesh/skeleton witness.
         auto* aslot = &pvt[kAppearanceSlot];
-        if (*aslot == g_module + 0x0A1DCC0) {
-            g_original_appearance = reinterpret_cast<AppearanceFunction>(*aslot);
+        const auto before = *aslot;
+        const char* appearance_status = "unexpected-target";
+        DWORD appearance_error = 0;
+        bool appearance_protection_restored = false;
+        if (before == g_module + 0x0A1DCC0) {
+            g_original_appearance = reinterpret_cast<AppearanceFunction>(before);
             DWORD oldp = 0;
             if (VirtualProtect(aslot, sizeof(*aslot), PAGE_READWRITE, &oldp)) {
                 *aslot = reinterpret_cast<std::uintptr_t>(&hooked_appearance);
                 FlushInstructionCache(GetCurrentProcess(), aslot, sizeof(*aslot));
                 DWORD ign = 0;
-                VirtualProtect(aslot, sizeof(*aslot), oldp, &ign);
-                log_line("Player vtable[92] appearance hook installed (Nadine look swap)");
+                appearance_protection_restored =
+                    VirtualProtect(aslot, sizeof(*aslot), oldp, &ign) != FALSE;
+                if (!appearance_protection_restored) appearance_error = GetLastError();
+                const bool readback =
+                    *aslot == reinterpret_cast<std::uintptr_t>(&hooked_appearance);
+                local_appearance_hook_ready = readback && appearance_protection_restored;
+                appearance_status = !readback ? "readback-failed"
+                    : !appearance_protection_restored ? "restore-failed" : "installed";
+            } else {
+                appearance_error = GetLastError();
+                appearance_status = "protect-failed";
             }
-        } else {
-            log_line("Player vtable[92] unexpected; appearance hook skipped");
         }
+        char appearance_line[384]{};
+        std::snprintf(appearance_line, sizeof(appearance_line),
+            "LOCAL-LOOK INSTALL status=%s slot=92 before=%p expected=%p "
+            "protection-restored=%u error=%lu visual=pending",
+            appearance_status, reinterpret_cast<void*>(before),
+            reinterpret_cast<void*>(g_module + 0x0A1DCC0),
+            appearance_protection_restored ? 1u : 0u, appearance_error);
+        boot_log_line(appearance_line);
 
         // Guard the four native Player death-entry variants. A remote replica must
         // never author its own fall/death while the real peer still reports HP>0.
@@ -80767,7 +80817,7 @@ DWORD WINAPI install_hook(void*) {
     }
     submit_remote_input_packet(coop::InputPacket{});
     start_udp_receiver();
-    log_line("local-player-1 -> Nadine bind hook ENABLED");
+    log_line("local-player resolver installed; this is not local appearance confirmation");
     log_line("one-shot split render activation ENABLED after login_state==3");
     const bool state_net_started = start_state_net();
     if constexpr (kEnableP99SourceObservation && !kEnableRejectedNadineWeaponRuntimeProbes) {
@@ -81007,6 +81057,15 @@ DWORD WINAPI install_hook(void*) {
     // the original input RE; the clone drive writes FrameState directly without them.
     // Re-arm manually via the Numpad/PageUp hotkeys if input RE is needed again.
     boot_log_line("remote Player descriptor capture armed (required)");
+    {
+        char line[320]{};
+        std::snprintf(line, sizeof(line),
+            "LOCAL-LOOK READY hook=%u state-net=%u requested=%s hash=%08x "
+            "visual=pending; load-scene only after this marker; no live rebuild",
+            local_appearance_hook_ready ? 1u : 0u, state_net_started ? 1u : 0u,
+            g_local_make_nadine ? "Nadine" : "Chloe", g_nadine_swap_hash);
+        boot_log_line(line);
+    }
     log_line("input-capture breakpoints NOT auto-armed (they broke aiming); spawn only");
     log_line("velprobe disabled on load (press Insert to enable)");
     log_line("Press PageUp to capture the velocity-writer RIP (run, then read log)");

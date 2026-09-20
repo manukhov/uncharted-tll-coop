@@ -1105,8 +1105,11 @@ FUNCTIONS = {
         "Player_GetAppearanceHash",
         "Player vtable slot +0x2E0 (index 92). Returns Player+0x15A4 through "
         "the caller-provided StringId output. The legacy Nadine compatibility "
-        "hook overrides this return only inside the render look-builder caller; "
-        "it does not change Player+0x15A0 or animation knowledge.",
+        "hook overrides this return only at NdGameObject_Init return "
+        "0x141BB4AB9 (call 0x141BB4AB2), not at arbitrary per-frame reads. "
+        "It does not change Player+0x15A0 or animation knowledge, nor rebuild "
+        "an existing look. A selected hash alone is not rendered-mesh proof: "
+        "Init can use ProcessSpawnInfo+0x98 after querying this getter.",
     ),
     0x1410D6AD0: (
         "Player_ApplyLook2MeshKnowledge",
@@ -6391,7 +6394,12 @@ FUNCTIONS = {
         "Player ctor field. The returned object still looks more like a "
         "materialized runtime companion to the packet than the final "
         "Player-side external_state itself; the stronger direct shape match "
-        "for 0x1418C4840 remains the extended wrapper family at 0x1417C35A0.",
+        "for 0x1418C4840 remains the extended wrapper family at 0x1417C35A0. "
+        "STATIC Player-selector ordering: 0x1417C3CF7 publishes node+8=Player "
+        "and 0x1417C3CFB publishes Player+A8=node before calling the concrete "
+        "Player Init slot+58 at 0x1417C400B. This path does materialize the "
+        "concrete Player; the earlier generic-companion wording must not "
+        "exclude the Player selector case.",
     ),
     0x1415FC800: (
         "InsertOrRelinkRuntimeStateNodeBySpanIntoIndexedContainer",
@@ -9861,7 +9869,14 @@ FUNCTIONS = {
         "the owner-local +0x3BD0 runtime object through 0x1410DE520, invokes "
         "0x1410DD0FC -> 0x1410CA720 to assemble the mounted graph, and then "
         "continues higher-level finalize/setup work through +0x1DF0, +0x1A8, "
-        "+0x1B10, +0x3D98, and +0x3C20.",
+        "+0x1B10, +0x3D98, and +0x3C20. STATIC appearance ordering: reads "
+        "payload=ProcessSpawnInfo+28 at 0x1410DC703 and index=payload+24 at "
+        "0x1410DC7B7; publishes own A8/BC tuple into retained table "
+        "0x143EEBE80+index*16 at 0x1410DC868. This precedes base Init call "
+        "0x1410DCAFF -> 0x140CBFF50 -> 0x141E994C0 -> 0x141BB4280 and its "
+        "appearance callback 0x141BB4AB2. Normal slot0 initialization has "
+        "already retained this Player; do not remove the identity gate on "
+        "a claim that only outer post-return publishers populate the table.",
     ),
     0x1410DE520: (
         "InitializeOwnerLocalRuntimeObject3BD0_Size190",
@@ -11267,7 +11282,13 @@ FUNCTIONS = {
         "stores it at object+0x1A8, constructs IDrawControl at object+0x198, "
         "and then runs the derived initialization/finalization slots. Player "
         "uses the extended upper-state and ambient-occluder branches in this "
-        "generic lifecycle.",
+        "generic lifecycle. STATIC look selection: call 0x141BB4AB2 through "
+        "slot+2E0 returns 0x141BB4AB9, the exact legacy-Nadine override gate. "
+        "Only afterward 0x141BB4ACC/4ACF tests ProcessSpawnInfo+98. A null "
+        "prebuilt look uses the selected hash through slot+238 at "
+        "0x141BB4AE3 and publishes object+170 at 0x141BB4B03; a prebuilt "
+        "look bypasses that hash-fed construction, not the getter callback. "
+        "Installing a getter hook after Init cannot retroactively rebuild it.",
     ),
     0x141BCD340: (
         "ResolvePlayerAmbientOccluderSelectionAndRefreshDrawControlMeshes",
