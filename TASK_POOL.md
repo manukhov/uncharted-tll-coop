@@ -25,6 +25,13 @@ Full evidence/quota and before-launch prediction at endCOOP_STATUS. New scenario
 WAITING+appearanceREADY before userload; user drawsP99/stands/repliesready+Nadine;
 ONLY THEN signal once, exactprocess/watcher verified, and read ARMED+terminal result.
 Not a grip fix or proven17.5ms fix; no repeated old loading-time test.
+DEPLOYED after6605459 push: PID18204 creation134343679599776178,
+watcher4032 READY before injection,300s capture reports/late-arm-20260920-p18204.
+Frozen DLL7ffea2e70000,size2134016, injector0/readback verified, logoffset20855865.
+WAITING/ARM-WAIT probes0 and appearanceREADY verified; noARMED/result yet. User
+asked load/draw/stand/replyready. ONLY on that reply verify exactliveprocess and
+activewatcher/noSTOP, send frozen tll_p99_observation_arm ONCE (full command at
+endCOOP_STATUS), require ARMED then terminalresult.300s waiter expires, no rearm.
 
 Current scalar-preselect handoff (2026-09-20): previous2692 already absent,
 not terminated here. STATIC frozen1ca7e5d6 PE proves unused epoch initialization

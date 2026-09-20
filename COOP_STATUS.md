@@ -35084,3 +35084,26 @@ age4, image size209000. WorkerRVA19BD0, arm-wait setup72EC0, native wrapper2F8A0
 candidate4F8A0, selected50020. IDB existing native-job comment updated with late-arm
 scope;1902functions/73data/1type, save_database returned True in
 reports/ida_apply_late_arm_20260920_status.txt. MCP restarted; no new retail labels.
+
+### Late-arm exam deployed, WAITING (not yet ARMED)
+
+Source6605459 committed/pushed BEFORE launch. Single gamePID18204 started
+2026-09-20 11:52:39.9776178 Moscow, creationFILETIME134343679599776178
+(31279325:1683820978). Watcher4032 started11:53:00 with300s bound; exact
+PID/image/creation READY verified before the one injection. Frozen injector
+exit0; module readback at7ffea2e70000,size2134016, reports/late-arm-20260920 DLL.
+Capture reports/late-arm-20260920-p18204, locomotion_hook.log baseline20855865.
+Fresh lines confirm taglate-arm, installed appearance/protection-restored1/error0,
+roleB/requestNadine, source two-producer INSTALLED, ARM-WAIT exactPID/creation
+with probes0/writes0, WAITING stock-only, and LOCAL-LOOK READY hook1/state-net1/
+Nadine/D27C074F. No ARMED/STOP/RESULT at this checkpoint. User told to load,
+drawP99, stand3-5s and reply ready; do not expect visible grip change yet.
+
+NEXT on userready: verify same live image/creation/frozen module and active watcher,
+fresh appearance Init/absence of timeout or prior ARMED/STOP; then run ONCE:
+reports/late-arm-20260920/tll_p99_observation_arm.exe --pid 18204
+--creation 134343679599776178 --expected-image
+"C:\UNCHARTED Legacy of Thieves Collection (2016-2017-2022)\Uncharted Legacy of Thieves Collection\tll.exe".
+Require runtime ARMED (tool exit0 alone is not it), then read fresh terminal
+source result. Never signal a stale PID/expired event or restart terminal policy.
+No agent game input, second copy, reinjection or arm signal performed this turn.
