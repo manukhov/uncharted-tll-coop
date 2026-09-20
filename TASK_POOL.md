@@ -22,6 +22,13 @@ are in finalCOOP_STATUS. Release/CTest25/25/Python121/121 pass; IDB savedTrue.
 For one-game appearance exam, user stays at menu until READY hook1/state-net1/
 requestedNadine, then loads scene. Require user visual Nadine plus fresh Init
 hash-selected witness before treating any future run as a Nadine grip exam.
+Deployed once after sourcec03d4da push: game23264 FILETIME134343632316225263,
+frozenDLL30c4624b...1378f at0x7ffea1020000,size1994752. Watcher13724 READY before
+injection,300s bounded capture reports/local-look-20260920-p23264. Fresh INSTALL
+installed/protection-restored1,error0 and READY hook1/state-net1/Nadine/D27C074F
+verified; no Init yet. User was told to stay at menu until this point, then load
+save and report Nadine vs Chloe. Await user visual+freshPID23264 Init result.
+Do not reinject/start another copy or resume grip test on role banner alone.
 
 User hold / AFE appearance correction (2026-09-20): user saw Chloe, not Nadine.
 Role2/B banner is configuration, not a mesh/skeleton witness; AFE is NOT a

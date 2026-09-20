@@ -11,7 +11,9 @@ Observer disabled again in default AFE-safe source/DLL; both writersfalse and
 1ms unchanged. Correction: the user reports playing Chloe in AFE,
 not Nadine. Role B is configuration only; this was NOT a validated Nadine/P99
 exam. User resumed work: init-only appearance witnesses are prepared and tested
-in 2026-09-20look-init. Read the final appearance test plan before runtime work.
+in 2026-09-20look-init and deployed once to PID23264. INSTALL/READY are verified;
+user scene load and visual Nadine confirmation are pending. Do not reinject.
+Read the final appearance test plan before any further runtime work.
 First establish actual local look after full hook READY and a user-loaded scene;
 do not rebuild the look live or infer Nadine cost from the previous budget stop.
 
@@ -34570,3 +34572,29 @@ No grip correction is expected and no P99-observer/preparation result is sought.
 No agent game input, second game, repeated injection, force hotkey or live rebuild.
 Appearance is confirmed ONLY by the user's visual report together with these
 fresh per-PID markers; installer/role/hash-return markers alone are insufficient.
+
+### Appearance exam launched: installer ready, visual result pending
+
+Source c03d4da committed and pushed BEFORE launch. One game23264 started at
+2026-09-20 10:33:51 Moscow, creationFILETIME134343632316225263
+(31279314:1644910319). User was instructed to stay at the main menu until
+worker readiness; agent did not inspect/control the menu or send game input.
+Frozen external watcher13724 started with300s bound, exact PID/image/creation
+READY verified before injection; capture reports/local-look-20260920-p23264.
+Debugger can perturb timing: this is NOT a lag/performance test. On timeout the
+watcher detaches without terminating the game; do not force-kill the watcher.
+
+One explicit frozen DLL injection returned0. Module independently read back at
+0x7ffea1020000,size1994752, exact reports/local-appearance-20260920 DLL path.
+Preinjection log offset20746578. Fresh PID23264 markers:
+LOCAL-LOOK INSTALL status=installed slot92, expected/previous target both
+0x7ff65f8cdcc0, protection-restored1,error0; roleB requestedNadine explicitly
+unverified; P99-GROUP DISABLED; final LOCAL-LOOK READY hook1,state-net1,
+requestedNadine,hashD27C074F,visualpending. No Init witness yet at this checkpoint.
+
+User then instructed to press Continue/load their save and report only whether
+the visible character is Nadine or Chloe. Visual result and Init outcome pending;
+do not claim the appearance issue fixed or this a valid Nadine grip test yet.
+Keep this process (if alive), no second copy or repeat injection. Next action:
+read only fresh PID23264 Init markers plus user's visual report; classify using
+the above prediction. Both pose writers/P99 source observer remain disabled.
