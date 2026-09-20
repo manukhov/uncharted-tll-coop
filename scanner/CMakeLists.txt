@@ -18,6 +18,10 @@ add_executable(tll_input_slot_dump src/input_slot_dump.cpp)
 add_executable(tll_crash_watch src/crash_watch.cpp)
 add_library(tll_coop_runtime SHARED src/coop_runtime.cpp
     $<TARGET_OBJECTS:tll_p99_native_frame_bridge>)
+option(TLL_P99_SOURCE_OBSERVATION_EXAM "Enable one writer-disabled source observation in an explicit exam build" OFF)
+if(TLL_P99_SOURCE_OBSERVATION_EXAM)
+    target_compile_definitions(tll_coop_runtime PRIVATE TLL_P99_SOURCE_OBSERVATION_EXAM=1)
+endif()
 
 foreach(
     target
@@ -205,7 +209,7 @@ if(BUILD_TESTING)
         target_compile_options(tll_local_appearance_observation_tests PRIVATE -Wall -Wextra -Wpedantic)
     endif()
     add_test(NAME local_appearance_observation COMMAND tll_local_appearance_observation_tests)
-    foreach(policy group_program_manifest group_admission group_scope group_readability group_memory group_entry group_budget group_ingress group_fiber group_native_frame source_read source_materialize operand_identity retarget_table_admission source_observation)
+    foreach(policy group_program_manifest group_admission group_scope group_readability group_memory group_entry group_budget group_ingress group_fiber group_native_frame source_read source_materialize operand_identity retarget_table_admission source_observation preselection_trace)
         add_executable(tll_nadine_p99_${policy}_tests tests/nadine_p99_${policy}_tests.cpp)
         target_include_directories(tll_nadine_p99_${policy}_tests PRIVATE src)
         target_compile_features(tll_nadine_p99_${policy}_tests PRIVATE cxx_std_20)

@@ -5,14 +5,42 @@ p99_observe::Policy g_p99_source_observation;
 std::atomic<bool> g_p99_source_observation_reported{false};
 std::uint64_t g_p99_source_observation_install_ms = 0; // Published by ready release.
 
-void p99_source_observation_stop_report(const char* external_reason = nullptr) {
+void p99_source_observation_stop_report(const char* external_reason = nullptr,
+    const p99_preselect::Trace* trace = nullptr, std::uint64_t probe_ticks = 0) {
     const auto reason = g_p99_source_observation.reason();
     if (reason == p99_observe::Reason::kNone && external_reason == nullptr) return;
     g_p99_source_observation_ready.store(false, std::memory_order_release);
     if (g_p99_source_observation_reported.exchange(true)) return;
-    char line[256]{};
+    char line[1024]{};
+    if (trace) {
+        // The only publication is scalar diagnostic evidence, after the
+        // preselection Reader has expired. Never log each retry/probe or cache
+        // a trace containing authority to a live Player/weapon/skeleton.
+        const auto& e = trace->elapsed;
+        std::snprintf(line, sizeof(line),
+            "P99-OBSERVE STOP reason=%s probes=%u attempts=%u writes=0 "
+            "selected=%u normal=%u stage=%s detail=%s mask=%x clock=%u "
+            "probe_ticks=%llu limit=%llu queries=%llu raw_id=%08x params=%u "
+            "ticks_normal=%llu gate=%llu retained=%llu fg=%llu owner=%llu "
+            "target=%llu registry=%llu identity=%llu; future jobs stock-only",
+            external_reason ? external_reason : p99_observe::reason_name(reason),
+            g_p99_source_observation.probes(), g_p99_source_observation.attempts(),
+            trace->selected ? 1u : 0u, trace->normal_passed ? 1u : 0u,
+            p99_preselect::stage_name(trace->active), trace->detail,
+            trace->entered_mask, trace->clock_valid ? 1u : 0u,
+            static_cast<unsigned long long>(probe_ticks),
+            static_cast<unsigned long long>(g_p99_group_cost_limit),
+            static_cast<unsigned long long>(trace->queries), trace->skeleton_id,
+            static_cast<unsigned>(trace->parameter_count),
+            static_cast<unsigned long long>(e[0]), static_cast<unsigned long long>(e[1]),
+            static_cast<unsigned long long>(e[2]), static_cast<unsigned long long>(e[3]),
+            static_cast<unsigned long long>(e[4]), static_cast<unsigned long long>(e[5]),
+            static_cast<unsigned long long>(e[6]), static_cast<unsigned long long>(e[7]));
+        boot_log_line(line);
+        return;
+    }
     std::snprintf(line, sizeof(line),
-        "P99-OBSERVE STOP reason=%s probes=%u attempts=%u writes=0; future jobs stock-only",
+        "P99-OBSERVE STOP reason=%s probes=%u attempts=%u writes=0 trace=unavailable; future jobs stock-only",
         external_reason ? external_reason : p99_observe::reason_name(reason), g_p99_source_observation.probes(),
         g_p99_source_observation.attempts());
     boot_log_line(line);
@@ -20,15 +48,24 @@ void p99_source_observation_stop_report(const char* external_reason = nullptr) {
 
 // A rate-limited owner/pistol preselection, not source materialization. Its
 // pointers expire on return; the real producer repeats every owner/page check.
-bool p99_source_observation_selected(void* job) {
+bool p99_source_observation_selected(void* job, p99_preselect::Trace& trace) {
     P99GroupJob normal{};
     P99ChloeTransferEpoch selected{};
     P99SourceReader pages(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
-    return seh_p99_group_normal_job(job, &normal, pages) &&
-        seh_select_p99_chloe_transfer_epoch(job, &selected,
-            P99SourcePurpose::kOwnedGroupValues, &pages) &&
-        reinterpret_cast<std::uintptr_t>(selected.fg_anim_data) == normal.fg &&
-        reinterpret_cast<std::uintptr_t>(selected.target_skeleton) == normal.art;
+    bool admitted = false;
+    if (seh_p99_group_normal_job(job, &normal, pages, &trace)) {
+        p99_preselection_enter(&trace, p99_preselect::Stage::SelectGate, "select-gate");
+        if (seh_select_p99_chloe_transfer_epoch(job, &selected,
+                P99SourcePurpose::kOwnedGroupValues, &pages, &trace)) {
+            p99_preselection_enter(&trace, p99_preselect::Stage::Identity, "fg-art-match");
+            admitted = reinterpret_cast<std::uintptr_t>(selected.fg_anim_data) == normal.fg &&
+                reinterpret_cast<std::uintptr_t>(selected.target_skeleton) == normal.art;
+            if (admitted) trace.detail = "selected";
+        }
+    }
+    trace.queries = pages.query_count(); // Scalar counter, no additional page query.
+    trace.selected = admitted;
+    return admitted;
 }
 
 // Once admitted by policy, no lease/snapshot escapes this function. Native
@@ -42,27 +79,33 @@ __declspec(noinline) void p99_source_observation_candidate(void* job, P99FiberFr
     bool leased = true;
     __try {
         const auto begin = p99_group_cost_start();
-        const bool selected = begin.valid && p99_source_observation_selected(job);
+        p99_preselect::Trace trace{};
+        trace.start({static_cast<std::uint64_t>(begin.value.QuadPart), begin.valid});
+        const bool selected = begin.valid && p99_source_observation_selected(job, trace);
         const auto probe_end = p99_group_cost_start();
+        trace.finish({static_cast<std::uint64_t>(probe_end.value.QuadPart), probe_end.valid});
+        const auto probe_ticks = begin.valid && probe_end.valid &&
+            probe_end.value.QuadPart >= begin.value.QuadPart
+            ? static_cast<std::uint64_t>(probe_end.value.QuadPart - begin.value.QuadPart) : 0;
         coop::p99_group_budget::Budget budget{g_p99_group_cost_limit};
-        const bool clocks = begin.valid && probe_end.valid &&
+        const bool clocks = trace.clock_valid && begin.valid && probe_end.valid &&
             probe_end.value.QuadPart >= begin.value.QuadPart;
         if (!clocks || !budget.charge(static_cast<std::uint64_t>(begin.value.QuadPart),
                 static_cast<std::uint64_t>(probe_end.value.QuadPart))) {
             (void)g_p99_source_observation.abort(clocks ? p99_observe::Reason::kBudget : p99_observe::Reason::kClock);
             leased = false;
-            p99_source_observation_stop_report();
+            p99_source_observation_stop_report(nullptr, &trace, probe_ticks);
             return;
         }
         if (!g_p99_group_fiber.owns(frame) || frame.entry.reentered) {
             (void)g_p99_source_observation.abort(p99_observe::Reason::kProtocol);
             leased = false;
-            p99_source_observation_stop_report();
+            p99_source_observation_stop_report(nullptr, &trace, probe_ticks);
             return;
         }
         if (!g_p99_source_observation.finish_probe(GetTickCount64(), selected)) {
             leased = false;
-            p99_source_observation_stop_report();
+            p99_source_observation_stop_report(nullptr, &trace, probe_ticks);
             return;
         }
         P99GroupJob owned{};
@@ -86,7 +129,7 @@ __declspec(noinline) void p99_source_observation_candidate(void* job, P99FiberFr
             p99_observe::reason_name(stop), static_cast<unsigned long long>(ticks),
             static_cast<unsigned long long>(g_p99_group_cost_limit), prepared ? 1008u : 0u);
         boot_log_line(line); // Outside the measured read/math interval and registry lock.
-        p99_source_observation_stop_report();
+        p99_source_observation_stop_report(nullptr, &trace, probe_ticks);
     } __finally {
         if (leased) {
             g_p99_source_observation.abandon();

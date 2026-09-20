@@ -14,9 +14,11 @@ exam. User resumed work: init-only appearance witnesses are prepared and tested
 in 2026-09-20look-init and deployed once to PID23264. Appearance is now CONFIRMED
 for this run: exact Init hash-selected for retained0 plus the user's screenshot
 showing Nadine. Pistol grip is still visibly wrong; observer/writers remain off.
-Do not reinject. Next work returns to bounded preselection-stage attribution,
-not to changing the working appearance/weapon attachments. AFE's prior failure
-cause remains unproven; do not infer Nadine cost from its budget stop.
+Do not reinject any already loaded runtime. Preselection-stage trace is now
+prepared in an explicit exam build; default builds remain observer OFF.
+See final preselect-trace plan/result before launching. Working appearance and
+weapon attachments stay unchanged. AFE's prior failure cause remains unproven;
+do not infer Nadine cost from its budget stop.
 
 ## Historical priority snapshot (2026-08-27)
 
@@ -34636,3 +34638,85 @@ Player_GetAppearanceHash comment updated with this limited runtime result,
 single IDB savedTrue (1902functions/73data/1type) to log
 reports/ida_apply_local_appearance_confirmed_20260920_status.txt; MCP restarted
 and the updated comment read back. Runtime binaries unchanged; no rebuild needed.
+
+## 2026-09-20 preselect-trace: attribute source selection before pose work
+
+User resumed P99 grip work. Previous game23264 was already absent at the first
+process check; no game was terminated. Current implementation does not change
+appearance, holster/back corrections, selected weapon or pose output. It fixes
+an observability gap in the one-shot observer: AFE's generic budget STOP omitted
+which checks had run, whether normal Nadine geometry matched, or their cost.
+
+STATIC source chain / competing explanations: normal-job range/shape/raw-id
+refusal; retained tuple or Fg-kind refusal; owner snapshot/numeric/P99-state
+refusal; target/registry/id mismatch; cost/clock overrun at any reached stage.
+The same owned preselect does no retail lookup/retarget/blend call. Do not use
+its terminal stop to blame full math, persistent pose writes or readable_bytes.
+
+Implemented eight value-only timing bins: normal-job, select-gate, retained,
+fg-kind, owner, target, registry, identity. STOP carries selected/normal flags,
+last reached stage/detail, entered mask, clock validity, overall probe ticks,
+unchanged limit, actual Reader query_count, and raw-id/parameter values already
+read by the normal gate. No extra game-memory reads/copies/page queries, native
+game call, lock, cached pointer or live-source lifetime added. Reached stage is
+not passed stage; raw/parameter fields may remain0 when an earlier gate fails.
+The original begin/probe_end interval covers all preselect bins; full-preparation
+budget still spans original begin to final end. Intermediate QPC failure or
+backward stamp now also fails closed with kClock (intentional stricter timing
+validation). Diagnostics include clock overhead/scheduling/debugger delays;
+they are NOT uninstrumented cost measurements or a hard frame-time guarantee.
+
+Publication remains one terminal STOP only, after the selection Reader expires,
+plus at most one existing full-source RESULT. No per-probe logs and no new try/
+retry around stock animation. Outer finally/FLS/native-return bridge unchanged.
+Both pose writers remainfalse with unconditional assertion; no frame.job or
+Process/cmd16 handoff. Max600probes/100ms/120s and at most1full preparation stay.
+
+Safer deployment separation: new CMake option TLL_P99_SOURCE_OBSERVATION_EXAM
+defaults OFF and defines its macro only on tll_coop_runtime. Ordinary
+scanner/build cache is OFF; separate scanner/build/p99-source-exam is ON with
+BUILD_TESTING=OFF. The code's default branch remainsfalse. This explicit exam
+option never enables either writer; the inert owned-test bridge is unaffected.
+
+Fresh pre-launch evidence quota:
+1. MCP xrefs again resolve asyncLEA1417815B7 and syncJMP141782B3A to the same
+   named141A92A00. Existing package changes only these two ingress sites;
+   validates the three downstream native sites remain stock.
+2. Fresh native decompile reads Fg kind+6 at141A92A71, flags+8, job+14 at
+  141A92AFB and alternate Fg+2A0 at141A92B38. Existing normal/retained/owner
+   admission mirrors this normal job and confirmed data ownership, not a raw
+   sampling context. The trace preserves original short-circuit reads.
+3. Independent ADF allocator RTTI/slot7/resource-fixup ownership and AGW native
+   unwind/FLS analysis still bound the permitted ordinary package path. Fresh
+   owned regression samples1 retains80queries/12Resolve/12Find/42DoJoint/
+  21Blend and exact1008-byte SHA c3613114c77ed16949d7de7d374131e86a4ab5ce57a3695a8f0b9ba2bee122e7.
+   This is numerical regression only, not live timing/lifetime/grip evidence.
+
+Offline validation: Release default and explicit exam builds succeed; CTest26/26,
+Python127/127, trace88 pure checks pass (exact partition, every refusal boundary,
+invalid/backward/overflow clocks, invalid stage, terminal idempotence). Existing
+real FLS/assembly/one-shot and numerical tests retained. Reports:
+reports/p99-preselect-trace-owned-20260920.json; freeze reports/preselect-trace-20260920.
+Exam DLLSHA1ca7e5d658023315714e4fffb15d18f08197ef2a880b9b98ce78ef15bfdef6c5;
+PDBSHAa9a82086fb4e455837b2bced99f025c13b26a405457aa6b1fd8ba482c4f76478.
+Ordinary disabled DLLSHA141264347d66e81bbb1fd3c69c252d1fd2d3284a7d35f650c6582f47ca53e1aa.
+
+Written prediction BEFORE launch: one fresh game, external exactPID/image/creation
+watcher READY before injection, then full LOCAL-LOOK READY before the USER loads
+the save. User draws P99 as Nadine and stands briefly; no agent game input.
+Expect at most one terminal STOP. An overrun must now report reachedstage,
+detail, selected status, actual raw identity when read, queries and QPC bins.
+If all gates pass within budget, at most one full producer RESULT is permitted,
+then terminal STOP; success proves source admission only. No APPLIED or pose
+writes and no visible grip change are expected. If no eligible callback arrives
+by120s, STOP trace=unavailable/expired is not a source rejection; no blind rerun.
+Match each freshPID's appearance witness and user visual report, never role alone.
+Both full interval budget1ms and no-retry policy remain; do not raise the cap.
+
+Separate offline exception attribution for the PREVIOUS look-init build: exact
+PC7ffea1068e5f minus module7ffea1020000 is RVA48E5F (not68E5F). Frozen PE/PDB
+GUID88188274-ad54-4e27-bbc4-92d119220b97 age23 match. .pdata48DA0..48E8A, offsetBF,
+bytes0F B6 01 resolve readable_bytes source32857 (c03d4da), SEH page-byte probe.
+50967 is all handled first-chance events, only the retained last32 have this PC.
+Owned preselect does not call this helper, and was disabled in that build.
+No caller/crash/lag or budget attribution follows; do not globally replace it.

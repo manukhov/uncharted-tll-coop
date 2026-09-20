@@ -5697,7 +5697,15 @@ FUNCTIONS = {
         "remain scoped to ADF ordinary package path, not arbitrary Level rebind. "
         "AFE runtime23348 stopped at first preselection budget (probes1,attempts0), "
         "before full preparation. No operand/grip result; observer defaultfalse "
-        "again. EXIT0/no second-chance does not attribute historical AGR crash.",
+        "again. EXIT0/no second-chance does not attribute historical AGR crash. "
+        "AFE's actor was visually Chloe, so its preselection stop is not a "
+        "validated Nadine cost/result. 2026-09-20 preselect-trace keeps default "
+        "observer OFF with an explicit runtime-only exam build option. Eight "
+        "scalar terminal timing bins, actual raw-id/parameter reads and query "
+        "count distinguish normal-job/retained/owner/registry refusal from "
+        "full preparation; no extra game reads, pose writes or retry. Reader "
+        "authority expires before logging; intermediate clock errors fail closed. "
+        "The same combined1ms cap and original stock-once call remain.",
     ),
     0x141A8F9D0: (
         "AnimManager_DispatchRetainedOwnerPhase",

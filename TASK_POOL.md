@@ -11,6 +11,17 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
+Current preselect-trace handoff (2026-09-20): source-only observer now reports
+eight scalar QPC bins, stage/detail, selected/normal, actual raw-id/params and
+Reader queries on terminal STOP only. Original short-circuit game reads,1ms
+total cap, stock-once and no writers/retry preserved. Intermediate clock faults
+fail closed. Default observer OFF; explicit runtime-only CMake exam option ON
+in separate scanner/build/p99-source-exam. Release both builds/CTest26/Python127
+pass; trace88checks, fresh owned80/12/12/42/21/exact1008bytes. Freeze and written
+one-game prediction in finalCOOP_STATUS. Game23264 was absent before work; no
+termination. Preserve appearance-ready-before-user-load order, watcher identity
+capture, one instance only; don't equate terminal diagnostics with grip repair.
+
 Current appearance continuation (2026-09-20look-init): user resumed. Prepared
 diagnostic-only build records INSTALL outcomes, at most4 exact Init decisions,
 and full worker READY with hook/state-net/requested look. Existing swap/hash/

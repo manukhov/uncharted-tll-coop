@@ -46,6 +46,7 @@
 #include "nadine_p99_group_fiber.h"
 #include "nadine_p99_group_native_frame.h"
 #include "nadine_p99_source_observation.h"
+#include "nadine_p99_preselection_trace.h"
 #include "nadine_pistol_grip_policy.h"
 #if defined(TLL_P99_PREPARATION_AUDIT)
 #include "../tests/p99_preparation_audit.h"
@@ -61807,12 +61808,28 @@ std::atomic<bool> g_p99_group_shadow_ready{false};
 // AFE: one bounded source-only exam. Never installs Process/cmd16 hooks or
 // authorizes either writer. The separate ready flag only admits owned reads.
 // AFE stopped on its first preselection budget; full producer was not reached.
-// Keep future ordinary launches inert until the exact cost/fault site is traced.
+// Ordinary builds stay inert. A separate, explicit exam build can record the
+// terminal preselection trace; this does not change either pose writer gate.
+#if defined(TLL_P99_SOURCE_OBSERVATION_EXAM) && TLL_P99_SOURCE_OBSERVATION_EXAM
+constexpr bool kEnableP99SourceObservation = true;
+#else
 constexpr bool kEnableP99SourceObservation = false;
+#endif
 static_assert(!kEnableP99GroupShadow && !kEnableLegacyNadineP99ChloeGripTransfer,
     "Source observation requires both pose writers disabled");
 std::atomic<bool> g_p99_source_observation_ready{false};
 enum class P99SourcePurpose { kPersistentJointCache, kOwnedGroupValues };
+
+namespace p99_preselect = coop::p99_preselection_trace;
+p99_preselect::Stamp p99_preselection_stamp() noexcept {
+    LARGE_INTEGER value{};
+    const bool valid = QueryPerformanceCounter(&value) != FALSE && value.QuadPart >= 0;
+    return {valid ? static_cast<std::uint64_t>(value.QuadPart) : 0, valid};
+}
+void p99_preselection_enter(p99_preselect::Trace* trace,
+                          p99_preselect::Stage stage, const char* detail) noexcept {
+    if (trace) trace->enter(stage, p99_preselection_stamp(), detail);
+}
 
 namespace p99_source = coop::p99_source_read;
 static_assert(kPlayerFgAnimDataOffset == 0x1A8 && kPlayerQuatOffset == 0x140 &&
@@ -63001,7 +63018,8 @@ bool build_p99_chloe_embedded_source_rows(
 bool seh_select_p99_chloe_transfer_epoch(
     void* job, P99ChloeTransferEpoch* output,
     P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache,
-    P99SourceReader* caller_phase = nullptr) {
+    P99SourceReader* caller_phase = nullptr,
+    p99_preselect::Trace* trace = nullptr) {
     if (output == nullptr) {
         return false;
     }
@@ -63026,15 +63044,24 @@ bool seh_select_p99_chloe_transfer_epoch(
             job == nullptr || !p99_source_range(purpose, job, 0x10, phase)) {
             return false;
         }
+        p99_preselection_enter(trace, p99_preselect::Stage::Retained, "retained");
         auto* const fg = *reinterpret_cast<std::byte* const*>(
             static_cast<const std::byte*>(job) + 0x08);
         void* const player = p99_source_retained_player(purpose, phase);
         IdleArmPoseOwnerScope owner{};
         p99_source::Owner captured_owner{};
+        p99_preselection_enter(trace, p99_preselect::Stage::FgKind, "fg-range-kind");
         if (fg == nullptr || !p99_source_range(purpose, fg,
                 kFgAnimDataSkeletonOffset + sizeof(void*), phase) ||
-            *reinterpret_cast<const std::uint8_t*>(fg + 0x06) != 2 ||
-            !seh_resolve_p99_source_owner_scope(player, &owner, purpose, &captured_owner, phase) ||
+            *reinterpret_cast<const std::uint8_t*>(fg + 0x06) != 2) {
+            return false;
+        }
+        p99_preselection_enter(trace, p99_preselect::Stage::Owner, "owner-snapshot-or-numeric");
+        if (!seh_resolve_p99_source_owner_scope(player, &owner, purpose, &captured_owner, phase)) {
+            return false;
+        }
+        if (trace) trace->detail = "owner-fg-state-p99";
+        if (
             !owner.valid || owner.player != player ||
             owner.fg_anim_data != fg || owner.controller_state !=
                 p99_order::kWeaponOutState ||
@@ -63042,12 +63069,14 @@ bool seh_select_p99_chloe_transfer_epoch(
             owner.weapon == nullptr) {
             return false;
         }
+        p99_preselection_enter(trace, p99_preselect::Stage::Target, "target");
         void* const target_skeleton = purpose == P99SourcePurpose::kOwnedGroupValues
             ? reinterpret_cast<void*>(captured_owner.art)
             : *reinterpret_cast<void* const*>(fg + kFgAnimDataSkeletonOffset);
         if (target_skeleton == nullptr) {
             return false;
         }
+        p99_preselection_enter(trace, p99_preselect::Stage::Registry, "registry-epoch");
         // D350/B8 values come from the exact offline generator. AnimMaster
         // Login/Logout have no internal lock, so this counter is only a
         // fail-closed freshness witness; this path never dereferences a live
@@ -63082,9 +63111,10 @@ bool seh_select_p99_chloe_transfer_epoch(
                 static_cast<const std::byte*>(owner.weapon) +
                 kGameObjectRuntimeIdOffset);
         output->anim_registry_epoch = anim_registry_epoch;
-        return output->player_runtime_id != 0 &&
-            output->weapon_runtime_id != 0;
+        if (trace) trace->detail = "runtime-ids";
+        return output->player_runtime_id != 0 && output->weapon_runtime_id != 0;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
+        if (trace) trace->detail = "selector-seh";
         *output = {};
         return false;
     }
@@ -80290,8 +80320,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-20look-init "
-        "(bounded init-time appearance witnesses; P99 observer and both pose writers disabled; AGC back profiles retained)");
+        "TLL co-op runtime init 2026-09-20preselect-trace "
+        "(bounded preselection diagnostics; observer opt-in only; both pose writers disabled; appearance and AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "

@@ -122,14 +122,18 @@ bool p99_group_program_exact(P99ReadBatch& pages, std::uintptr_t raw, std::uintp
     return p99_program::validate(regions,bindings).admitted();
 }
 
-bool seh_p99_group_normal_job(void* job, P99GroupJob* output, P99SourceReader& pages) {
+bool seh_p99_group_normal_job(void* job, P99GroupJob* output, P99SourceReader& pages,
+    p99_preselect::Trace* trace = nullptr) {
     __try {
+        if (trace) trace->detail = "job-range-or-entry";
         if (!pages.range(reinterpret_cast<std::uintptr_t>(job), 0x38) ||
             p99_group_load<std::uintptr_t>(job) == 0) return false;
         const auto fg = p99_group_load<std::uintptr_t>(job, 8);
+        if (trace) trace->detail = "fg-range";
         if (!pages.range(fg, 0x2A8)) return false;
         const auto* f = reinterpret_cast<const void*>(fg);
         const auto art = p99_group_load<std::uintptr_t>(f, 0x18);
+        if (trace) trace->detail = "fg-shape-or-art-range";
         if (p99_group_load<std::uint8_t>(f, 6) != 2 ||
             (p99_group_load<std::uint8_t>(job, 0x14) != 0 &&
              (p99_group_load<std::uint8_t>(f, 8) & 8) == 0) ||
@@ -138,14 +142,23 @@ bool seh_p99_group_normal_job(void* job, P99GroupJob* output, P99SourceReader& p
             *reinterpret_cast<const std::uint8_t*>(g_module + 0x3682F4B) != 0 ||
             !pages.range(art, 0x48)) return false;
         const auto raw = p99_group_load<std::uintptr_t>(reinterpret_cast<const void*>(art), 0x40);
-        if (!pages.range(raw, 0x40) ||
-            p99_group_load<std::uint32_t>(reinterpret_cast<const void*>(raw), 4) != p99_order::kNadineSkeletonId ||
-            p99_group_load<std::uint16_t>(reinterpret_cast<const void*>(raw), 0x1A) != 6480) return false;
+        if (trace) trace->detail = "raw-range";
+        if (!pages.range(raw, 0x40)) return false;
+        const auto skeleton_id = p99_group_load<std::uint32_t>(reinterpret_cast<const void*>(raw), 4);
+        if (trace) { trace->detail = "raw-skeleton-id"; trace->skeleton_id = skeleton_id; }
+        if (skeleton_id != p99_order::kNadineSkeletonId) return false;
+        const auto parameter_count = p99_group_load<std::uint16_t>(reinterpret_cast<const void*>(raw), 0x1A);
+        if (trace) { trace->detail = "raw-parameter-count"; trace->parameter_count = parameter_count; }
+        if (parameter_count != 6480) return false;
         output->fg = fg;
         output->art = art;
         output->raw = raw;
+        if (trace) { trace->normal_passed = true; trace->detail = "normal-accepted"; }
         return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        if (trace) trace->detail = "normal-seh";
+        return false;
+    }
 }
 
 struct P99PreparationObservation {
