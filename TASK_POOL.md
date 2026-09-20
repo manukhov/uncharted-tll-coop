@@ -35,8 +35,10 @@ endCOOP_STATUS), require ARMED then terminalresult.300s waiter expires, no rearm
 LATEST: PID18204 now exited0/no secondchance; watcher4032 finished11:54:34 with
 3213 handled events. No arm signal sent; zeroARMED/STOP/RESULT. The command above
 is STALE, do not execute it. Last32:27helperRVA5894F/5PC0 firstchance, not a crash
-attribution. User asked closedself vs exitedunexpectedly; answer pending. No new
-launch/input/code change while clarifying. Late-arm source exam remains unexecuted.
+attribution. User now confirms "там без изменений, поэтому закрыл": self-closed
+because grip was unchanged, NOT a reported crash. Late-arm source exam remains
+unexecuted; both writersoff. No new launch/input/code change for this clarification.
+Repair still pending; do not repeat an unchanged diagnostic run by default.
 
 Current scalar-preselect handoff (2026-09-20): previous2692 already absent,
 not terminated here. STATIC frozen1ca7e5d6 PE proves unused epoch initialization

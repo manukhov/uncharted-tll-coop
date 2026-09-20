@@ -35122,8 +35122,10 @@ wrapper uses its direct stock path, not candidate/owner/pose preparation.
 Existing attachment logs later show current/state0/2, but are not a scoped source
 owner witness or user-ready confirmation, and cannot arm the now-dead process.
 The old exact-PID command above is STALE: never signal18204 or reinject/rearm it.
-User was asked whether they closed the game or it exited on its own; answer
-pending. Exit0 alone does not decide between these. No relaunch/input/binary change.
+User was asked whether they closed the game or it exited on its own. Subsequent
+reply "там без изменений, поэтому закрыл" confirms user-initiated closure, not a
+reported crash. Exit0 alone did not establish that; the user clarification does.
+No relaunch/input/binary change.
 
 Frozen ad385ec0/3c741168 identities and matching PDB GUID133eb5ac...8b46 age4
 rechecked. Last32 events:27 at7ffea2ec894f (module7ffea2e70000 +RVA5894F),
@@ -35134,5 +35136,16 @@ worker, source preparation or global helper based on temporal proximity alone.
 
 Exit handoff comment saved to singleIDB:1902functions/73data/1type,
 save_database returned True in reports/ida_apply_late_arm_exit_20260920_status.txt.
-MCP restarted; runtime binary unchanged. Await user clarification before another
-game launch; no stale command or policy retry authorized by this record.
+MCP restarted; runtime binary unchanged. No stale command or policy retry
+authorized by this record.
+
+User-closure clarification: CONFIRMED user saw no visible grip improvement and
+closed PID18204 for that reason. This is not a new crash or a failed post-Draw
+source calculation: the observer was never armed and both pose writers were off.
+The repair remains unfinished. Do not send the user into another unchanged
+diagnostic run in response to this clarification; no game launch requested here.
+Any later diagnostic request must clearly state what it can establish and that
+it does not yet repair the grip. Historical crash cases remain separate.
+Clarification comment saved to the single IDB (1902functions/73data/1type,
+save_database returned True, reports/ida_apply_late_arm_user_close_20260920_status.txt);
+MCP restarted. No runtime/source-observer binary changes.

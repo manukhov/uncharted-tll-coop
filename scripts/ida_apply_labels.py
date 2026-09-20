@@ -5731,8 +5731,9 @@ FUNCTIONS = {
         "Original owner gates/1ms/one-shot/writersfalse preserved. No live "
         "admission or timing fix claimed from offline arm tests. "
         "PID18204 late-arm run exited0/no second-chance before any ARMED/STOP/RESULT; "
-        "no arm signal sent, no source-exam result. Exit cause/user closure "
-        "unresolved; handled last-event PCs are not crash evidence.",
+        "no arm signal sent, no source-exam result. User subsequently confirms "
+        "self-closure because grip was unchanged, not a reported crash. "
+        "Handled last-event PCs are not crash evidence; repair remains pending.",
     ),
     0x141A8F9D0: (
         "AnimManager_DispatchRetainedOwnerPhase",
