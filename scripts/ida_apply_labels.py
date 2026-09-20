@@ -5705,7 +5705,13 @@ FUNCTIONS = {
         "count distinguish normal-job/retained/owner/registry refusal from "
         "full preparation; no extra game reads, pose writes or retry. Reader "
         "authority expires before logging; intermediate clock errors fail closed. "
-        "The same combined1ms cap and original stock-once call remain.",
+        "The same combined1ms cap and original stock-once call remain. "
+        "CONFIRMED limited preselect-trace PID2692: probes1 attempts0 writes0, "
+        "normal accepted rawC39CA709/params6480, owner snapshot/numeric refused. "
+        "Elapsed184816ticks vs limit10000; normal bin184671, owner54. "
+        "The slow initial bin includes stack/value initialization, reads, "
+        "queries and instrumentation/debugger delays; do not call owner the "
+        "slow stage or infer full-math/grip/P99-state2 acceptance from it.",
     ),
     0x141A8F9D0: (
         "AnimManager_DispatchRetainedOwnerPhase",

@@ -14,11 +14,13 @@ exam. User resumed work: init-only appearance witnesses are prepared and tested
 in 2026-09-20look-init and deployed once to PID23264. Appearance is now CONFIRMED
 for this run: exact Init hash-selected for retained0 plus the user's screenshot
 showing Nadine. Pistol grip is still visibly wrong; observer/writers remain off.
-Do not reinject any already loaded runtime. Preselection-stage trace is now
-prepared in an explicit exam build; default builds remain observer OFF.
-See final preselect-trace plan/result before launching. Working appearance and
-weapon attachments stay unchanged. AFE's prior failure cause remains unproven;
-do not infer Nadine cost from its budget stop.
+Do not reinject any already loaded runtime. PID2692 preselect trace completed:
+probes1/attempts0/writes0, normal Nadine gate accepted, owner snapshot refused;
+184671/184816ticks fell in the INITIAL normal bin, not the owner bin (54ticks).
+No full producer/math ran. See final result before more tests. Next separate
+work: statically inspect cold preselect initialization/normal-read boundaries
+and the early owner rejection; do not blame full pose math or widen the budget.
+Default builds remain observer OFF; working appearance/attachments unchanged.
 
 ## Historical priority snapshot (2026-08-27)
 
@@ -34746,3 +34748,64 @@ IDA comment updated for the trace and saved to the single database:
 1902functions/73data/1type, save_database returned True in
 reports/ida_apply_preselect_trace_20260920_status.txt; MCP restarted and native
 job name/comment read back. No new retail function names required this turn.
+
+### Preselect-trace result: initial bin dominates; owner refuses; no preparation
+
+User reported "готово" after the requested load/draw/stand scenario. CONFIRMED
+fresh PID2692 log103570: exact appearance caller1BB4AB9 selectsD27C074F with
+player==retained0=10E0A89600. Unlike AFE, the observer itself then verifies
+normal Nadine raw-idC39CA709/parameter-count6480. No new screenshot in this
+reply; do not fabricate a new visual or per-object screenshot witness.
+
+Exactly one STOP at103575, no RESULT/APPLIED:
+reason=budget probes=1 attempts=0 writes=0 selected=0 normal=1 stage=owner
+detail=owner-snapshot-or-numeric mask=1f clock=1 probe_ticks=184816 limit=10000
+queries=3 raw_id=c39ca709 params=6480 ticks_normal=184671 gate=37 retained=53
+fg=1 owner=54 target=0 registry=0 identity=0.
+
+CONFIRMED limited elapsed distribution: bins sum exactly184816; normal bin
+accounts for99.9215% (~18.47ms of~18.48ms with this10000-tick1ms limit).
+Owner bin is54ticks (~5.4us), NOT the slow stage. The policy checks the cost
+before finish_probe, so reasonbudget wins even when selection was false.
+The trace fulfilled its diagnostic prediction; full source admission is still
+unobtained and visible grip is unchanged by design. REJECTED interpretations:
+"owner-stage=slow owner", "native retarget math exceeded the cap", or
+"state2 P99 was admitted". attempts0 means the producer was never entered.
+
+STATIC scope of the initial bin: outer begin precedes Trace initialization and
+selected() entry; that entry initializes P99GroupJob, P99ChloeTransferEpoch
+(including two retarget-record arrays/group results) and Reader before running
+the normal-job range/shape/raw-id/count checks. The optimizer may eliminate or
+hoist unused initialization; surviving instructions require the frozen PE,
+not a source-only memzero cost claim. The bin ends on entry to SelectGate.
+Thus it aggregates local initialization, range/VirtualQuery work,
+payload loads and clock overhead, plus debugger/scheduling effects. Only three
+new Reader region queries occurred across the entire preselect; no per-query
+timing or CPU-time witness exists. Do not attribute18ms to any one constituent,
+or treat debugger-attached first-probe time as a steady-state production cost.
+
+Exact refusal scope: seh_resolve_p99_source_owner_scope returnedfalse BEFORE
+the following owner.valid/Fg/state/P99 crosschecks. This can mean null retained
+resolution, any owner snapshot/weak-generation/weapon/layout refusal, or
+position/orientation validation. A reached Retained stage does not prove a
+nonnull retained result: current selector still proceeds to Fg/owner if the
+retained resolver returnednull. No successful current P99 state2 admission.
+Adjacent earlier lines show position-invalid waiting and cold holster init
+current=-1/draw0; this is consistent with startup rather than the user's later
+drawn pose, but cross-thread log order alone does not timestamp the exact state.
+
+Safe next step is STATIC/frozen-code inspection of initial stack/value setup
+versus normal-page reads, plus a precise owner-refusal discriminator that does
+not add game reads or weaken gates. Do not raise1ms, skip cold cost, remove
+identity checks, enable pose writers, globally replace readable_bytes or repeat
+the same test. Observer is terminal/stock-only in PID2692; default build staysOFF.
+At this result read, game2692 and watcher21264 were alive; no terminal watcher
+result or second-chance dump yet. No relaunch/injection/game input/source-code
+change during this result-only turn. Capture remains per-PID, not old Crashpad.
+
+Final handoff refresh: watcher21264 finished its300s bound with DETACHED=1,
+timeout_or_stop1,66378 handled first-chance events; game2692 remains alive.
+No second-chance dump; event count is not attribution to the measured stage.
+Result comment saved to the single IDB,1902functions/73data/1type,
+save_database returned True (reports/ida_apply_preselect_result_20260920_status.txt).
+MCP restarted; existing native job label retained. No runtime binary changed.

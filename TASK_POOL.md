@@ -26,8 +26,18 @@ READY before injection, capture reports/preselect-trace-20260920-p2692. Frozen
 examDLL1ca7e5d6...def6c5 at7ffe9eb80000,size2125824; one injector exit0, module
 readback verified. ObserverREADY and LOCAL-LOOK READY hook1/state-net1/Nadine
 verified; user asked to load save/drawP99/stand3-5s and report ready+Nadine.
-Await freshPID2692 Init/terminaltrace and user result. No reinjection/rearm/new
-copy; default build staysOFF, both writersfalse. IDB savedTrue/read back.
+RESULT: user "готово"; fresh Init hash-selected retained0 and observer normal
+NadineC39CA709/6480 accepted. STOP budget probes1/attempts0/writes0,selected0;
+owner-snapshot-or-numeric refusal, but INITIAL normal bin184671 of184816ticks
+is99.9215% (~18.47ms), owner only54ticks. Three region queries total. No full
+producer or native math, no grip/source-acceptance result. Initial bin includes
+stack/value initialization and all normal reads plus clock/debugger overhead;
+exact slow constituent is not resolved. Owner-stage reached is not owner/P99
+state2 acceptance. Next STATIC: frozen initial setup/read boundaries and exact
+owner-refusal discriminator, preserving all gates/1ms/writersfalse. No repeat
+injection/rearm/game test; existing observer is terminal, ordinary build OFF.
+Watcher21264 has detached at300s (66378 handled first-chance events, no dump);
+game2692 remains alive. Result comment savedTrue in the single IDB; MCP restarted.
 
 Current appearance continuation (2026-09-20look-init): user resumed. Prepared
 diagnostic-only build records INSTALL outcomes, at most4 exact Init decisions,
