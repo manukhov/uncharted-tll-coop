@@ -136,7 +136,7 @@ class ObservationWiringTests(unittest.TestCase):
 
     def test_trace_stop_is_single_terminal_scalar_report(self):
         report = self.observer.split("void p99_source_observation_stop_report(", 1)[1].split(
-            "bool p99_source_observation_selected(", 1)[0]
+            "DWORD WINAPI await_p99_source_observation_arm(", 1)[0]
         self.assert_in_order(report,
             "if (reason == p99_observe::Reason::kNone && external_reason == nullptr) return;",
             "g_p99_source_observation_ready.store(false", "g_p99_source_observation_reported.exchange(true)",
@@ -147,6 +147,45 @@ class ObservationWiringTests(unittest.TestCase):
             self.assertIn(field, report)
         for forbidden in ("P99SourceReader", "reinterpret_cast", "readable_bytes(", "VirtualQuery("):
             self.assertNotIn(forbidden, report)
+
+    def test_installation_never_automatically_arms_source_observation(self):
+        installer = self.group.split("bool install_p99_group_package(", 1)[1]
+        self.assertNotIn("g_p99_source_observation.arm(", installer)
+        self.assertNotIn("g_p99_source_observation_ready.store(true", installer)
+        self.assertIn("g_p99_source_observation_installed.store(true", installer)
+        self.assert_in_order(self.runtime,
+            "const bool installed = state_net_started && install_p99_group_package(true);",
+            "const bool waiting = installed && start_p99_source_observation_arm_wait();")
+        self.assertIn("stock-only until ARMED", self.runtime)
+
+    def test_external_wake_is_one_shot_not_owner_authority(self):
+        worker = self.observer.split("DWORD WINAPI await_p99_source_observation_arm(", 1)[1].split(
+            "bool start_p99_source_observation_arm_wait(", 1)[0]
+        self.assert_in_order(worker,
+            "WaitForSingleObject(event, kP99SourceArmWaitMs)", "CloseHandle(event)",
+            "if (result != WAIT_OBJECT_0)", "const auto arm_ms = GetTickCount64();",
+            "g_p99_source_observation_installed.load", "g_p99_source_observation.arm(",
+            "g_p99_source_observation_arm_ms = arm_ms;", "P99-OBSERVE ARMED",
+            "g_p99_source_observation_ready.store(true, std::memory_order_release)")
+        self.assertEqual(self.observer.count("g_p99_source_observation.arm("), 1)
+        self.assertEqual(self.observer.count("g_p99_source_observation_ready.store(true"), 1)
+        for forbidden in ("P99SourceReader", "retained_player", "seh_resolve", "prepare_p99_group_values",
+                          "p99_group_invoke_native", "readable_bytes", "VirtualQuery", "Sleep("):
+            self.assertNotIn(forbidden, worker)
+        start = self.observer.split("bool start_p99_source_observation_arm_wait(", 1)[1].split(
+            "bool p99_source_observation_selected(", 1)[0]
+        self.assert_in_order(start,
+            "g_p99_source_observation_wait_started.exchange(true", "creation_stamp(",
+            "event_name(GetCurrentProcessId(), creation)", "CreateEventW(nullptr, FALSE, FALSE",
+            "error == ERROR_ALREADY_EXISTS", "CreateThread(", "CloseHandle(worker)", "ARM-WAIT")
+        self.assertIn("constexpr DWORD kP99SourceArmWaitMs = 300000;", self.observer)
+
+    def test_animation_wrapper_cannot_wait_or_open_arm_channel(self):
+        wrapper = self.observer.split("void __fastcall hooked_p99_source_observation_async", 1)[1]
+        for forbidden in ("WaitForSingleObject", "CreateEvent", "OpenEvent", "CreateThread", "Sleep("):
+            self.assertNotIn(forbidden, wrapper)
+        self.assertIn("now - g_p99_source_observation_arm_ms >= p99_observe::kLifetimeMs", wrapper)
+        self.assertIn("if (!g_p99_source_observation_ready.load", wrapper)
 
     def test_installs_only_two_producers_and_verifies_pose_sites(self):
         self.assertIn("sites(storage.data(), observe_only ? 2 : 5)", self.group)

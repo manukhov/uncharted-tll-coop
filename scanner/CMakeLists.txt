@@ -16,6 +16,7 @@ add_executable(tll_dword_writer src/dword_writer.cpp)
 add_executable(tll_dword_scanner src/dword_scanner.cpp)
 add_executable(tll_input_slot_dump src/input_slot_dump.cpp)
 add_executable(tll_crash_watch src/crash_watch.cpp)
+add_executable(tll_p99_observation_arm src/p99_observation_arm.cpp)
 add_library(tll_coop_runtime SHARED src/coop_runtime.cpp
     $<TARGET_OBJECTS:tll_p99_native_frame_bridge>)
 option(TLL_P99_SOURCE_OBSERVATION_EXAM "Enable one writer-disabled source observation in an explicit exam build" OFF)
@@ -37,6 +38,7 @@ foreach(
     tll_dword_scanner
     tll_input_slot_dump
     tll_crash_watch
+    tll_p99_observation_arm
     tll_coop_runtime
 )
     target_compile_features(${target} PRIVATE cxx_std_20)
@@ -107,6 +109,8 @@ if(BUILD_TESTING)
     add_test(NAME crash_watch COMMAND tll_crash_watch --self-test
         "${CMAKE_CURRENT_BINARY_DIR}/crash-watch-tests")
     set_tests_properties(crash_watch PROPERTIES TIMEOUT 90)
+    add_test(NAME p99_observation_arm COMMAND tll_p99_observation_arm --self-test)
+    set_tests_properties(p99_observation_arm PROPERTIES TIMEOUT 20)
     add_executable(
         tll_nadine_back_frame_policy_tests
         tests/nadine_back_frame_policy_tests.cpp

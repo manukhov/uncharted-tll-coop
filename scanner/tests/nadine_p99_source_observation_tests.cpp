@@ -30,6 +30,8 @@ void waiting_and_limits() {
     }
     check(policy.reason() == o::Reason::kProbeLimit, "600th nonselected probe permanently stops");
     check(policy.begin_probe(60000) == o::Probe::kStopped, "no 601st probe");
+    check(!policy.arm(300000, 10000000) && policy.reason() == o::Reason::kProbeLimit,
+          "late signal cannot restart a probe-limit terminal policy");
     policy.abandon();
     check(policy.reason() == o::Reason::kProbeLimit, "finally preserves original terminal reason");
 
@@ -43,6 +45,48 @@ void waiting_and_limits() {
     }
     check(last_selected.finish_preparation(0, 1, true, true) == o::Reason::kSuccess &&
         last_selected.attempts() == 1, "last probe success remains one-shot");
+}
+
+// Models only scalar policy publication after an external wait. No named event,
+// wall-clock wait, process, hook, native callback or game memory is involved.
+void late_arm_wait_does_not_consume_lifetime() {
+    constexpr std::uint64_t installed_at = 1000;
+    constexpr std::uint64_t armed_at = installed_at + 300000;
+    o::Policy policy;
+    for (const auto waiting_now : {installed_at, installed_at + o::kLifetimeMs,
+            armed_at, installed_at + 1}) {
+        check(policy.begin_probe(waiting_now) == o::Probe::kStopped,
+              "unarmed calls stay stock-only even beyond the observation lifetime");
+        check(policy.reason() == o::Reason::kNone && policy.probes() == 0 && policy.attempts() == 0,
+              "unarmed stopped result is not a terminal transition or consumed quota");
+    }
+    check(policy.arm(armed_at, 10000000), "first explicit arm succeeds after the full wait");
+    check(!policy.arm(armed_at + 1000000, 1000000000),
+          "second signal cannot replace the arm timestamp or frequency");
+    check(policy.begin_probe(armed_at) == o::Probe::kGranted &&
+          !policy.finish_probe(armed_at, false),
+          "first late-armed probe is immediately available with no inherited throttle");
+    check(policy.probes() == 1 && policy.attempts() == 0 && policy.reason() == o::Reason::kNone,
+          "waiting consumed neither probe nor preparation budget");
+    check(policy.begin_probe(armed_at + o::kLifetimeMs - 1) == o::Probe::kGranted &&
+          !policy.finish_probe(armed_at + o::kLifetimeMs - 1, false),
+          "full observation lifetime is measured from successful arm, not installation");
+    check(policy.begin_probe(armed_at + o::kLifetimeMs) == o::Probe::kStopped &&
+          policy.reason() == o::Reason::kExpired && policy.probes() == 2 && policy.attempts() == 0,
+          "exact arm-relative deadline stops before a third probe");
+    check(!policy.arm(armed_at + o::kLifetimeMs + 1, 10000000) &&
+          policy.reason() == o::Reason::kExpired,
+          "late signal cannot restart an expired observation");
+
+    o::Policy immutable_budget;
+    check(immutable_budget.arm(armed_at, 10000000) &&
+          !immutable_budget.arm(armed_at + 1, 1000000000),
+          "failed repeated arm cannot enlarge the original one-millisecond budget");
+    check(immutable_budget.begin_probe(armed_at) == o::Probe::kGranted &&
+          immutable_budget.finish_probe(armed_at, true), "late arm reserves only one preparation");
+    check(immutable_budget.finish_preparation(0, 10001, true, true) == o::Reason::kBudget &&
+          immutable_budget.attempts() == 1,
+          "late arm and rejected duplicate signal preserve the original 10000-tick limit");
 }
 
 void preparation_budget_and_one_shot() {
@@ -74,11 +118,15 @@ void deadline_clock_and_abort() {
         check(!policy.finish_probe(install + o::kLifetimeMs, true), "expiry blocks selected preparation");
         check(policy.reason() == o::Reason::kExpired && policy.attempts() == 0,
               "no overflow-prone deadline addition");
+        check(!policy.arm(install + o::kLifetimeMs, 10000000),
+              "expired selected probe cannot be armed by a later signal");
     }
     for (const auto bad_frequency : {0ull, 999ull}) {
         o::Policy policy;
         check(!policy.arm(100, bad_frequency) && policy.reason() == o::Reason::kClock,
               "invalid immutable budget cannot arm");
+        check(!policy.arm(300000, 10000000) && policy.reason() == o::Reason::kClock,
+              "failed first arm is terminal even when a later frequency is valid");
     }
     o::Policy backwards;
     check(backwards.arm(100, 10000000), "clock arm");
@@ -104,11 +152,43 @@ void deadline_clock_and_abort() {
         check(policy.abort(reason) == reason && policy.attempts() == 0,
               "failed/expensive preselect stops before materialization");
         check(policy.begin_probe(100) == o::Probe::kStopped, "aborted probe stays closed");
+        check(!policy.arm(300000, 10000000) && policy.reason() == reason &&
+              policy.probes() == 1 && policy.attempts() == 0,
+              "late signal cannot rearm or overwrite an aborted preselection");
         check(std::strcmp(o::reason_name(reason), "unknown") != 0, "static human reason available");
     }
     o::Policy misuse;
     check(misuse.arm(0, 10000000) && !misuse.finish_probe(0, true) &&
         misuse.reason() == o::Reason::kProtocol, "cannot prepare without granted probe");
+}
+
+void concurrent_first_arm_after_unarmed_calls() {
+    o::Policy policy;
+    constexpr std::uint64_t armed_at = 300000;
+    std::barrier all_unarmed(8);
+    std::array<o::Probe, 8> before{};
+    std::array<bool, 8> armed{};
+    std::array<std::thread, 8> threads;
+    for (std::size_t index = 0; index < threads.size(); ++index) {
+        threads[index] = std::thread([&, index] {
+            before[index] = policy.begin_probe(armed_at);
+            all_unarmed.arrive_and_wait();
+            armed[index] = policy.arm(armed_at, 10000000);
+        });
+    }
+    for (auto& thread : threads) thread.join();
+    unsigned winners = 0;
+    for (std::size_t index = 0; index < threads.size(); ++index) {
+        check(before[index] == o::Probe::kStopped,
+              "all concurrent pre-signal candidates are stock-only");
+        winners += armed[index] ? 1u : 0u;
+    }
+    check(winners == 1 && policy.reason() == o::Reason::kNone &&
+          policy.probes() == 0 && policy.attempts() == 0,
+          "competing signals publish exactly one first arm without probing");
+    check(policy.begin_probe(armed_at) == o::Probe::kGranted &&
+          !policy.finish_probe(armed_at, false) && policy.reason() == o::Reason::kNone,
+          "winning first arm publishes a usable policy after concurrent unarmed calls");
 }
 
 void concurrent_nonspinning_admission() {
@@ -275,9 +355,11 @@ void composed_exception_paths() {
 
 int main() {
     waiting_and_limits();
+    late_arm_wait_does_not_consume_lifetime();
     preparation_budget_and_one_shot();
     deadline_clock_and_abort();
     concurrent_nonspinning_admission();
+    concurrent_first_arm_after_unarmed_calls();
     composed_normal_paths();
     composed_exception_paths();
     std::cout << checks << " checks, " << failures << " failures\n";

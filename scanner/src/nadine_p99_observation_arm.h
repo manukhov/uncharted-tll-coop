@@ -1,0 +1,21 @@
+#pragma once
+#include <Windows.h>
+#include <cstdint>
+#include <string>
+
+namespace coop::p99_observation_arm {
+// An exact process instance, not a reusable PID or an acknowledgement of arming.
+[[nodiscard]] inline std::wstring event_name(DWORD pid, std::uint64_t creation) {
+    return L"Local\\TLL-P99-Source-Arm-v1-" + std::to_wstring(pid) +
+        L"-" + std::to_wstring(creation);
+}
+
+[[nodiscard]] inline bool creation_stamp(HANDLE process, std::uint64_t& creation) noexcept {
+    creation = 0;
+    FILETIME started{}, exited{}, kernel{}, user{};
+    if (!GetProcessTimes(process, &started, &exited, &kernel, &user)) return false;
+    creation = (static_cast<std::uint64_t>(started.dwHighDateTime) << 32) |
+        started.dwLowDateTime;
+    return true;
+}
+} // namespace coop::p99_observation_arm

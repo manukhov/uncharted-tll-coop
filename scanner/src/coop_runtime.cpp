@@ -46,6 +46,7 @@
 #include "nadine_p99_group_fiber.h"
 #include "nadine_p99_group_native_frame.h"
 #include "nadine_p99_source_observation.h"
+#include "nadine_p99_observation_arm.h"
 #include "nadine_p99_preselection_trace.h"
 #include "nadine_pistol_grip_policy.h"
 #if defined(TLL_P99_PREPARATION_AUDIT)
@@ -80358,7 +80359,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-20preselect-scalar "
+        "TLL co-op runtime init 2026-09-20late-arm "
         "(bounded preselection diagnostics; observer opt-in only; both pose writers disabled; appearance and AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
@@ -80889,9 +80890,10 @@ DWORD WINAPI install_hook(void*) {
     log_line("one-shot split render activation ENABLED after login_state==3");
     const bool state_net_started = start_state_net();
     if constexpr (kEnableP99SourceObservation && !kEnableRejectedNadineWeaponRuntimeProbes) {
-        const bool ready = state_net_started && install_p99_group_package(true);
-        boot_log_line(ready ? "P99-OBSERVE READY one source attempt; 120s deadline; 100ms probe gap; 1ms post-call cap; writes=0"
-                            : "P99-OBSERVE SKIPPED ingress package");
+        const bool installed = state_net_started && install_p99_group_package(true);
+        const bool waiting = installed && start_p99_source_observation_arm_wait();
+        boot_log_line(waiting ? "P99-OBSERVE WAITING load/draw first; explicit PID/creation-bound arm required; stock-only until ARMED; writes=0"
+                              : "P99-OBSERVE SKIPPED ingress or arm-wait setup");
     } else if constexpr (kEnableP99GroupShadow && !kEnableRejectedNadineWeaponRuntimeProbes) {
         const bool ready = state_net_started && install_p99_group_shadow();
         boot_log_line(ready ? "P99-GROUP READY state2; owned 21-row source; cmd16 shadows only; early-owner gate; validation budget 1ms"

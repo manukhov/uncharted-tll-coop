@@ -5723,7 +5723,13 @@ FUNCTIONS = {
         "probes1 attempts0 writes0. Residual17.5ms is normal interval, not local "
         "initialization. First owner refusal controller-slot: int32+120 readfail "
         "or outside0..17, no value captured. State+134/weapon/numeric checks not "
-        "reached; do not relax gates or blame native math. No grip repair.",
+        "reached; do not relax gates or blame native math. No grip repair. "
+        "2026-09-20 late-arm orchestration keeps this existing ingress stock-only "
+        "until explicit PID/creation-bound signal after user Draw; no new retail "
+        "hook/owner reads on wait worker. CommitDrawn current-slot publication "
+        "does not prove WeaponOut2; no existing completed-P99 scalar callback. "
+        "Original owner gates/1ms/one-shot/writersfalse preserved. No live "
+        "admission or timing fix claimed from offline arm tests.",
     ),
     0x141A8F9D0: (
         "AnimManager_DispatchRetainedOwnerPhase",

@@ -11,6 +11,21 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
+Current late-arm handoff (2026-09-20): PID9852 already absent, not terminated here.
+No existing no-read completed-P99 hook exists; CommitDrawn != state2, ApplyState
+has no state argument/installedhook, TakeTransitions rifle seed not applicable.
+Added explicit PID+creation-bound named-event arm for source exam ONLY. Installer
+leaves readyfalse/stock-only; bounded separate worker waits300s, then one Policy.arm
+on signal starts120s lifetime. Never auto-arm/rearm; 1ms/ownerchecks/writersfalse
+unchanged. Helper verifies exactlive PID/creation/image and OpenEvent-only; signal
+success is not ARMED/admission. Release both builds/CTest27/Python132 pass;
+Policy5039/tool32checks; owned80/12/12/42/21 unchanged1008byte hash.
+Frozen reports/late-arm-20260920 DLLad385ec0...705d90/PDB3c741168...24eec.
+Full evidence/quota and before-launch prediction at endCOOP_STATUS. New scenario:
+WAITING+appearanceREADY before userload; user drawsP99/stands/repliesready+Nadine;
+ONLY THEN signal once, exactprocess/watcher verified, and read ARMED+terminal result.
+Not a grip fix or proven17.5ms fix; no repeated old loading-time test.
+
 Current scalar-preselect handoff (2026-09-20): previous2692 already absent,
 not terminated here. STATIC frozen1ca7e5d6 PE proves unused epoch initialization
 survived before normal checks. Observer now uses24B normal identity/80B selection

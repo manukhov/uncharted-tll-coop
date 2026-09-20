@@ -553,7 +553,7 @@ bool seh_prepare_p99_group_shadow(const void* context, P99GroupProcess* process,
 
 bool install_p99_group_package(bool observe_only) {
     if (!g_p99_group_install_gate.begin())
-        return observe_only ? g_p99_source_observation_ready.load(std::memory_order_acquire)
+        return observe_only ? g_p99_source_observation_installed.load(std::memory_order_acquire)
                             : g_p99_group_shadow_ready.load(std::memory_order_acquire);
     g_p99_group_shadow_ready.store(false, std::memory_order_release);
     LARGE_INTEGER frequency{};
@@ -561,9 +561,7 @@ bool install_p99_group_package(bool observe_only) {
     g_p99_group_cost_limit = coop::p99_group_budget::one_millisecond(
         static_cast<std::uint64_t>(frequency.QuadPart));
     if (observe_only) {
-        g_p99_source_observation_install_ms = GetTickCount64();
-        if (!g_p99_source_observation.arm(g_p99_source_observation_install_ms,
-                static_cast<std::uint64_t>(frequency.QuadPart))) return false;
+        g_p99_source_observation_qpc_frequency = static_cast<std::uint64_t>(frequency.QuadPart);
     }
     if (g_enable_aim_case6_probe || kEnableLegacyNadineP99ChloeGripTransfer ||
         kEnableLegacyNadineMazurSteadyHandsCommandCensus ||
@@ -716,7 +714,7 @@ bool install_p99_group_package(bool observe_only) {
     const bool ready=installed&&restored&&all_match(true);
     const bool clean=!ready&&restored&&all_match(false);
     if(ready) {
-        if(observe_only) g_p99_source_observation_ready.store(true,std::memory_order_release);
+        if(observe_only) g_p99_source_observation_installed.store(true,std::memory_order_release);
         else g_p99_group_shadow_ready.store(true,std::memory_order_release);
     }
     resume_suspended_process_threads(suspended);

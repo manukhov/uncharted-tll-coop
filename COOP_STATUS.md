@@ -35008,3 +35008,79 @@ No claim that VirtualQuery itself consumed17.5ms or that64763 pauses overlapped
 the first probe. Further diagnostic design must separate existing+120 read
 success/value from phase and query elapsed from external pauses; it must not
 skip/raise the combined1ms cap, add unsafe reads or launch a repeat by default.
+
+### Late-arm source observation: separate user readiness from installation
+
+2026-09-20 continuation: previous PID9852 already absent, no termination here.
+STATIC competing readiness boundaries audited before changing orchestration:
+CommitDrawn1410AAF20 publishes current+120 atAAF89, but not WeaponOut2;
+ApplyState1410AAFB0 writes state2 atAB701 after Get-action removalAB4E4/staged
+commitAB4F8/overlayAB6F2, then refreshAB717. It has no state argument or enum
+return. Fresh callers are ApplyWeaponSwitch1410A2C9C/controllerUpdate1410AE3A8.
+Normal job141A92A00 runs without a drawn-state prerequisite; it processes groups
+at141A92E78/141A932F8 then Player+410/418 at141A934D5/141A934E8. None of these
+is an existing no-read P99-ready callback. Runtime has no ApplyState/CommitDrawn
+hook. REJECTED shortcut: repurpose TakeTransitions rifle Grab1/Holster5 seed,
+WeaponPartial request or Player+408 postblend as a completed-P99 event. No new
+retail detour or staged-slot substitution introduced to force a readiness claim.
+
+Instead, source-exam installation now publishes installed, NOT observation-ready.
+The existing native wrapper goes directly to stock while ready=false. A separate
+bounded worker waits up to300s on an initially nonsignalled auto-reset event named
+Local\\TLL-P99-Source-Arm-v1-<PID>-<creationFILETIME>. Only explicit signal then
+successful Policy.arm(now,frequency) publishes ready;120s probe lifetime starts
+at arm, not installation. Existing events, CreateEvent/CreateThread/identity/wait
+errors and timeout fail closed; event is closed exactly once, no retries/rearm.
+The event carries no Player/weapon pointers, is not owner authority, and performs
+no game reads on the worker. There are no waits/event calls on the animation path.
+Installation still resumes all suspended threads before creating the waiter.
+
+New tll_p99_observation_arm requires --pid N --creation FILETIME --expected-image
+ABSOLUTE_EXE. It checks a live process handle, exact creation and equivalent image,
+opens ONLY the existing named event, rechecks liveness and signals once. It never
+creates an event on the CLI path, launches/injects/reads memory or sends game input.
+Signal-sent is NOT ARMED or P99 acceptance; fresh runtime ARMED and result must be
+read. Normal DLL observerOFF, both writersfalse, original 1ms combined cap, owner
+reads/normal checks/one-attempt/stock-once unchanged. Explicit timing authorization
+does not permit bypassing a refusal. Patched runtime DLL unloading remains unsupported.
+
+Release default+exam builds pass; CTest27/27, Python132/132. Policy5039checks include
+300s unarmed waiting, backwards pre-arm time, full arm-relative deadline, eight
+concurrent first-arm contenders, immutable budget and terminal non-rearm. New
+tool32checks run only against its own process/event and verify bad PID/creation/
+image/missing-event refusal without side effects and one auto-reset signal.
+Wiring tests require no automatic arm and no waiting/game reads on the native path.
+Fresh owned preparation regression reports/p99-late-arm-owned-20260920.json:
+80queries/12Resolve/12Find/42DoJoint/21Blend, unchanged1008byte SHA
+c3613114c77ed16949d7de7d374131e86a4ab5ce57a3695a8f0b9ba2bee122e7.
+
+Frozen exam reports/late-arm-20260920:
+DLL SHA256ad385ec044dedf5f25f24d528701ffd1a08caa176c5283ffe891f424c8705d90;
+PDB SHA2563c741168327f71aedf2f4357c055840f848e6c534bdbcca24448449533e24eec.
+The tested helper is frozen alongside DLL/PDB/injector/watcher. No claim of grip
+repair, live admission, or17.5ms cost removal follows from these offline results.
+
+Evidence quota for the changed exam phase: native writer/disassembly and vtable/
+caller distinction above reject premature automatic Draw endpoints; source dataflow
+proves the only ready publication is after exact wait+one-shot arm; agreement with
+confirmed current+120/state+134/normal-job contracts preserves all later admission.
+Independent live-owned event tests/Policy tests and full producer regression support
+the orchestration change. No new engine mutation/function hook is part of this exam.
+
+Written prediction BEFORE launch: one game, appearance installed before user load.
+At menu and while loading/drawing, WAITING/ARM-WAIT and appearanceREADY appear,
+but no P99 probe/RESULT/STOP before a signal (unless300s arm timeout). User loads,
+drawsP99, stands3-5s and reports ready+Nadine. Only then send the exact PID/creation
+signal once after checking current image/module/watcher; require fresh ARMED.
+After that, unchanged full owner/read/budget checks either select and perform at
+most one source calculation, or produce terminal refusal/budget evidence. No writes
+or visible grip change is expected; this distinguishes premature loading-time
+observation from a user-established drawn phase WITHOUT declaring that phase valid
+before the strict checks. If17.5ms remains, late arming did not solve the separate
+cost issue. No automatic retry/rearm. Do not signal an old process or expired waiter.
+
+Frozen PE/PDB identity independently matches GUID133eb5ac-a9ab-4851-b893-3328f5d28b46
+age4, image size209000. WorkerRVA19BD0, arm-wait setup72EC0, native wrapper2F8A0,
+candidate4F8A0, selected50020. IDB existing native-job comment updated with late-arm
+scope;1902functions/73data/1type, save_database returned True in
+reports/ida_apply_late_arm_20260920_status.txt. MCP restarted; no new retail labels.

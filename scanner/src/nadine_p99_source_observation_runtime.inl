@@ -3,7 +3,11 @@
 namespace p99_observe = coop::p99_source_observation;
 p99_observe::Policy g_p99_source_observation;
 std::atomic<bool> g_p99_source_observation_reported{false};
-std::uint64_t g_p99_source_observation_install_ms = 0; // Published by ready release.
+std::atomic<bool> g_p99_source_observation_installed{false};
+std::atomic<bool> g_p99_source_observation_wait_started{false};
+std::uint64_t g_p99_source_observation_qpc_frequency = 0; // Installation-only.
+std::uint64_t g_p99_source_observation_arm_ms = 0; // Published by ready release.
+constexpr DWORD kP99SourceArmWaitMs = 300000;
 
 void p99_source_observation_stop_report(const char* external_reason = nullptr,
     const p99_preselect::Trace* trace = nullptr, std::uint64_t probe_ticks = 0) {
@@ -45,6 +49,71 @@ void p99_source_observation_stop_report(const char* external_reason = nullptr,
         external_reason ? external_reason : p99_observe::reason_name(reason), g_p99_source_observation.probes(),
         g_p99_source_observation.attempts());
     boot_log_line(line);
+}
+
+// Installation has completed before this separate worker starts. Waiting and
+// event signalling never run on the animation path and carry no game pointers.
+// The external signal chooses WHEN to begin checks, not whether an owner passes.
+DWORD WINAPI await_p99_source_observation_arm(void* argument) {
+    const auto event = static_cast<HANDLE>(argument);
+    const auto result = WaitForSingleObject(event, kP99SourceArmWaitMs);
+    CloseHandle(event); // Exactly one worker owns this handle after CreateThread.
+    if (result != WAIT_OBJECT_0) {
+        (void)g_p99_source_observation.abort(result == WAIT_TIMEOUT
+            ? p99_observe::Reason::kExpired : p99_observe::Reason::kException);
+        p99_source_observation_stop_report(result == WAIT_TIMEOUT ? "arm-timeout" : "arm-wait-failed");
+        return 0;
+    }
+    const auto arm_ms = GetTickCount64();
+    if (!g_p99_source_observation_installed.load(std::memory_order_acquire) ||
+        !g_p99_source_observation.arm(arm_ms, g_p99_source_observation_qpc_frequency)) {
+        (void)g_p99_source_observation.abort(p99_observe::Reason::kProtocol);
+        p99_source_observation_stop_report("arm-refused");
+        return 0;
+    }
+    g_p99_source_observation_arm_ms = arm_ms;
+    // Log before publishing admission so a fast first probe cannot print STOP
+    // before ARMED. This is not an owner/weapon/source acceptance witness.
+    boot_log_line("P99-OBSERVE ARMED explicit signal; one source attempt; 120s deadline from arm; 100ms probe gap; 1ms combined cap; writes=0");
+    g_p99_source_observation_ready.store(true, std::memory_order_release);
+    return 0;
+}
+
+bool start_p99_source_observation_arm_wait() {
+    if (!kEnableP99SourceObservation ||
+        !g_p99_source_observation_installed.load(std::memory_order_acquire) ||
+        g_p99_source_observation_wait_started.exchange(true, std::memory_order_acq_rel)) return false;
+    std::uint64_t creation = 0;
+    if (!coop::p99_observation_arm::creation_stamp(GetCurrentProcess(), creation)) {
+        (void)g_p99_source_observation.abort(p99_observe::Reason::kProtocol);
+        p99_source_observation_stop_report("arm-process-identity");
+        return false;
+    }
+    const auto name = coop::p99_observation_arm::event_name(GetCurrentProcessId(), creation);
+    SetLastError(ERROR_SUCCESS);
+    const auto event = CreateEventW(nullptr, FALSE, FALSE, name.c_str());
+    const auto error = GetLastError();
+    if (event == nullptr || error == ERROR_ALREADY_EXISTS) {
+        if (event != nullptr) CloseHandle(event);
+        (void)g_p99_source_observation.abort(p99_observe::Reason::kProtocol);
+        p99_source_observation_stop_report("arm-event-create-or-stale");
+        return false;
+    }
+    const auto worker = CreateThread(nullptr, 0, &await_p99_source_observation_arm, event, 0, nullptr);
+    if (worker == nullptr) {
+        CloseHandle(event);
+        (void)g_p99_source_observation.abort(p99_observe::Reason::kProtocol);
+        p99_source_observation_stop_report("arm-thread-create");
+        return false;
+    }
+    CloseHandle(worker); // Bounded worker owns the event; no join on a game thread.
+    char line[256]{};
+    std::snprintf(line, sizeof(line),
+        "P99-OBSERVE ARM-WAIT pid=%lu creation=%llu timeout_ms=%lu probes=0 writes=0; no automatic arm",
+        static_cast<unsigned long>(GetCurrentProcessId()),
+        static_cast<unsigned long long>(creation), static_cast<unsigned long>(kP99SourceArmWaitMs));
+    boot_log_line(line);
+    return true;
 }
 
 // A rate-limited owner/pistol preselection, not source materialization. Its
@@ -143,9 +212,9 @@ __declspec(noinline) void p99_source_observation_candidate(void* job, P99FiberFr
 void __fastcall hooked_p99_source_observation_async(void* job) {
     if (g_p99_source_observation_ready.load(std::memory_order_acquire)) {
         const auto now = GetTickCount64();
-        if (now < g_p99_source_observation_install_ms ||
-            now - g_p99_source_observation_install_ms >= p99_observe::kLifetimeMs)
-            p99_source_observation_stop_report(now < g_p99_source_observation_install_ms ? "clock" : "expired");
+        if (now < g_p99_source_observation_arm_ms ||
+            now - g_p99_source_observation_arm_ms >= p99_observe::kLifetimeMs)
+            p99_source_observation_stop_report(now < g_p99_source_observation_arm_ms ? "clock" : "expired");
     }
     if (!g_p99_source_observation_ready.load(std::memory_order_acquire)) {
         g_p99_group_async(job);
