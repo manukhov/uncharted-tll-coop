@@ -5711,7 +5711,14 @@ FUNCTIONS = {
         "Elapsed184816ticks vs limit10000; normal bin184671, owner54. "
         "The slow initial bin includes stack/value initialization, reads, "
         "queries and instrumentation/debugger delays; do not call owner the "
-        "slow stage or infer full-math/grip/P99-state2 acceptance from it.",
+        "slow stage or infer full-math/grip/P99-state2 acceptance from it. "
+        "2026-09-20 STATIC observer storage reduction verified in matched "
+        "exam68f4c51a/PDB age3: selected frame2F90->6F0, old epoch record/group "
+        "clears removed, Reader setup retained. Same full/scalar predicates; "
+        "80B selection/24B normal identity do not publish a pose. Nine bins "
+        "separate setup/normal; optional first-failure owner detail preserves "
+        "all short-circuit reads. Original1ms/defaultOFF/both writersfalse. "
+        "No live speedup/old18ms cause/grip claim; see COOP_STATUS prediction.",
     ),
     0x141A8F9D0: (
         "AnimManager_DispatchRetainedOwnerPhase",

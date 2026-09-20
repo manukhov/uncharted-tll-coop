@@ -7,6 +7,7 @@
 #include <iostream>
 #include <iterator>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace s = coop::p99_source_read;
@@ -16,6 +17,22 @@ void check(bool value, const char* name) {
     ++checks;
     if (!value) { ++failures; std::cerr << "FAIL " << name << '\n'; }
 }
+bool same_owner(const s::Owner& a, const s::Owner& b) {
+    // Compare fields, never unspecified structure padding.
+    const auto fields = [](const s::Owner& v) {
+        return std::tie(v.player, v.fg, v.art, v.raw, v.local_pose, v.controller,
+            v.grenade, v.weapon, v.parent, v.retained, v.fg_owner, v.weapon_slot,
+            v.player_id, v.weapon_id, v.slot, v.state, v.position, v.orientation,
+            v.move_stick, v.move_world, v.move_magnitude);
+    };
+    return fields(a) == fields(b);
+}
+struct Access {
+    char kind;
+    std::uintptr_t address;
+    std::size_t bytes;
+    friend bool operator==(const Access&, const Access&) = default;
+};
 struct Fixture {
     std::uintptr_t base;
     std::vector<std::byte> data = std::vector<std::byte>(0x12000);
@@ -24,6 +41,8 @@ struct Fixture {
     std::uintptr_t guard = 0, turn_address = 0;
     std::uint32_t turn_value = 0;
     unsigned turn_on = 0, hits = 0, copies = 0, queries = 0;
+    unsigned fail_query_at = 0, fail_copy_at = 0;
+    std::vector<Access> accesses;
     explicit Fixture(std::uintptr_t origin = 0x100000) : base(origin), slot(base), retained(base+0x1000),
         player(base+0x2000), fg(base+0x8000), art(base+0x9000), raw(base+0xA000), pose(base+0xB000),
         controller(base+0xC000), grenade(base+0xD000), weapon(base+0xE000), handle(base+0xF000), parent(base+0x10000) {
@@ -51,6 +70,8 @@ struct Fixture {
     }
     bool query(std::uintptr_t address, coop::p99_group_readability::Region& out) {
         ++queries;
+        accesses.push_back({'q', address, 0});
+        if (queries == fail_query_at) return false;
         if (address < base || address-base >= data.size()) return false;
         const auto page = address & ~std::uintptr_t{0xFFF};
         out = {page, 0x1000, true, true, page == guard};
@@ -58,15 +79,44 @@ struct Fixture {
     }
     bool copy(std::uintptr_t address, void* output, std::size_t bytes) {
         ++copies;
+        accesses.push_back({'c', address, bytes});
+        if (copies == fail_copy_at) return false;
         if (address < base || bytes > data.size() || address-base > data.size()-bytes) return false;
         if (address == turn_address && ++hits == turn_on) put(turn_address, turn_value);
         std::memcpy(output, data.data()+(address-base), bytes);
         return true;
     }
-    bool capture(s::Owner& result) {
+    bool capture(s::Owner& result, s::OwnerCheck expected = s::OwnerCheck::Count,
+                 std::uintptr_t expected_player = 0) {
+        // All fixture captures, including the pre-existing mutation tests, run
+        // the exact same initial bytes twice with only the optional pointer varied.
+        Fixture observed = *this;
+        s::Owner instrumented = result;
+        s::OwnerObservation observation{s::OwnerCheck::Complete};
+        const auto expected_address = expected_player == 0 ? player : expected_player;
         s::Reader reader([&](auto address, auto& out){ return query(address,out); },
                          [&](auto address, auto* out, auto bytes){ return copy(address,out,bytes); });
-        return s::owner(reader, contract, player, result);
+        const bool plain = s::owner(reader, contract, expected_address, result);
+        s::Reader observed_reader(
+            [&](auto address, auto& out){ return observed.query(address,out); },
+            [&](auto address, auto* out, auto bytes){ return observed.copy(address,out,bytes); });
+        const bool traced = s::owner(observed_reader, observed.contract, expected_address,
+                                     instrumented, &observation);
+        check(plain == traced && same_owner(result, instrumented),
+              "optional owner observation preserves result and every output field");
+        check(accesses == observed.accesses && queries == observed.queries &&
+              copies == observed.copies && reader.query_count() == observed_reader.query_count(),
+              "optional owner observation preserves exact ordered query/copy transcript");
+        check(data == observed.data && hits == observed.hits,
+              "optional owner observation preserves turnover and source bytes");
+        check(plain ? observation.check == s::OwnerCheck::Complete :
+              observation.check != s::OwnerCheck::NotStarted &&
+              observation.check != s::OwnerCheck::Complete &&
+              observation.check != s::OwnerCheck::Count,
+              "owner observation records completion or a reached first-failure group");
+        if (expected != s::OwnerCheck::Count)
+            check(observation.check == expected, "owner first-failure group is exact");
+        return plain;
     }
 };
 
@@ -82,6 +132,161 @@ struct Allocation {
     void* pointer = nullptr;
     ~Allocation(){ if(pointer) VirtualFree(pointer,0,MEM_RELEASE); }
 };
+
+// Independently enumerated original copy groups. Faulting each boundary proves
+// that a failed read cannot be attributed to a later group (including refreshes).
+void owner_observation_boundaries() {
+    using C = s::OwnerCheck;
+    constexpr std::array copy_checks{
+        C::RetainedPair, C::RetainedPair, C::RetainedObject, C::RetainedObject,
+        C::PlayerVtable, C::PlayerState, C::PlayerLook, C::PlayerId,
+        C::FgPointerAndRange, C::FgKind, C::FgOwnerPair, C::FgOwnerPair,
+        C::FgOwnerObject, C::FgOwnerObject, C::ArtPointerAndRange, C::ArtId,
+        C::ArtJointCount, C::RawPointerAndRange, C::RawSkeletonId, C::RawJointCount,
+        C::LocalPose, C::ControllerPointerAndRange, C::ControllerVtable,
+        C::ControllerOwner, C::ControllerSlot, C::ControllerState,
+        C::GrenadePointerAndRange, C::GrenadeVtable, C::GrenadeOwner, C::GrenadeState,
+        C::WeaponPair, C::WeaponPair, C::WeaponObjectAndRange, C::WeaponObjectAndRange,
+        C::WeaponVtable, C::WeaponId, C::WeaponArt, C::WeaponParent, C::WeaponParentOwner,
+        C::Position, C::Orientation, C::MoveStick, C::MoveWorld, C::MoveMagnitude,
+        C::ClosingRetainedPair, C::ClosingRetainedPair,
+        C::ClosingRetainedObject, C::ClosingRetainedObject, C::ClosingPlayerVtable,
+        C::ClosingFgPointer, C::ClosingControllerPointer, C::ClosingGrenadePointer,
+        C::ClosingPlayerLook, C::ClosingPlayerState, C::ClosingFgOwnerPair,
+        C::ClosingFgOwnerPair, C::ClosingArtPointer, C::ClosingLocalPose,
+        C::ClosingFgKind, C::ClosingControllerVtable, C::ClosingControllerOwner,
+        C::ClosingControllerSlot, C::ClosingControllerState, C::ClosingGrenadeVtable,
+        C::ClosingGrenadeOwner, C::ClosingGrenadeState,
+        C::ClosingWeaponPair, C::ClosingWeaponPair,
+        C::ClosingWeaponObject, C::ClosingWeaponObject, C::ClosingWeaponVtable,
+        C::ClosingWeaponArt, C::ClosingWeaponParent, C::ClosingWeaponParentOwner
+    };
+    Fixture baseline;
+    s::Owner output{};
+    check(baseline.capture(output, C::Complete), "owner observation baseline completes");
+    check(baseline.copies == copy_checks.size(), "original owner copy count stays exact");
+    for (unsigned nth = 1; nth <= copy_checks.size(); ++nth) {
+        Fixture failed;
+        failed.fail_copy_at = nth;
+        check(!failed.capture(output, copy_checks[nth - 1]) && failed.copies == nth &&
+              !failed.accesses.empty() && failed.accesses.back().kind == 'c',
+              "every copy failure stops immediately at its original owner group");
+        check(failed.accesses.size() <= baseline.accesses.size() &&
+              std::equal(failed.accesses.begin(), failed.accesses.end(), baseline.accesses.begin()),
+              "copy refusal transcript is the exact successful prefix");
+    }
+    constexpr std::array query_checks{
+        C::RetainedPair, C::RetainedObject, C::RetainedObject,
+        C::PlayerRange, C::PlayerRange, C::PlayerRange, C::PlayerRange,
+        C::FgPointerAndRange, C::ArtPointerAndRange, C::RawPointerAndRange,
+        C::LocalPose, C::ControllerPointerAndRange, C::GrenadePointerAndRange,
+        C::WeaponObjectAndRange, C::WeaponObjectAndRange, C::WeaponParent
+    };
+    check(baseline.queries == query_checks.size(), "original owner page query count stays exact");
+    for (unsigned nth = 1; nth <= query_checks.size(); ++nth) {
+        Fixture failed;
+        failed.fail_query_at = nth;
+        check(!failed.capture(output, query_checks[nth - 1]) && failed.queries == nth &&
+              !failed.accesses.empty() && failed.accesses.back().kind == 'q',
+              "every query failure stops before any attempted payload copy");
+        check(failed.accesses.size() <= baseline.accesses.size() &&
+              std::equal(failed.accesses.begin(), failed.accesses.end(), baseline.accesses.begin()),
+              "query refusal transcript is the exact successful prefix");
+    }
+    for (unsigned field = 0; field != 5; ++field) {
+        Fixture failed;
+        switch (field) {
+        case 0: failed.contract.retained_slot = 0; break;
+        case 1: failed.contract.player_vtable = 0; break;
+        case 2: failed.contract.controller_vtable = 0; break;
+        case 3: failed.contract.grenade_vtable = 0; break;
+        case 4: failed.contract.weapon_vtable = 0; break;
+        }
+        check(!failed.capture(output, C::Contract) && failed.accesses.empty(),
+              "invalid contract refuses before all game reads");
+    }
+    Fixture wrong_player;
+    check(!wrong_player.capture(output, C::ExpectedPlayer, wrong_player.player + 1) &&
+          wrong_player.copies == 4,
+          "expected-player mismatch stops directly after retained resolution");
+    for (unsigned value = 0; value < static_cast<unsigned>(C::Count); ++value)
+        check(std::string(s::owner_check_name(static_cast<C>(value))) != "unknown",
+              "every owner diagnostic has a stable name");
+    check(std::string(s::owner_check_name(C::Count)) == "unknown" &&
+          std::string(s::owner_check_name(static_cast<C>(255))) == "unknown",
+          "invalid owner diagnostic values are safely named unknown");
+}
+
+void owner_observation_shared_scopes() {
+    constexpr std::array<std::uintptr_t, 12> pages{
+        0, 0x1000, 0x2000, 0x8000, 0x9000, 0xA000,
+        0xB000, 0xC000, 0xD000, 0xE000, 0xF000, 0x10000};
+    for (int guard = -1; guard < static_cast<int>(pages.size()); ++guard) {
+        std::array<Fixture, 2> fixtures{Fixture{}, Fixture{}};
+        std::array<std::array<bool, 3>, 2> results{};
+        std::array<std::array<s::Owner, 3>, 2> outputs{};
+        s::OwnerObservation observation{};
+        for (unsigned pass = 0; pass != 2; ++pass) {
+            auto& fixture = fixtures[pass];
+            if (guard >= 0) fixture.guard = fixture.base + pages[guard];
+            s::Reader reader([&](auto a, auto& r) { return fixture.query(a, r); },
+                             [&](auto a, auto* p, auto n) { return fixture.copy(a, p, n); });
+            std::uintptr_t player = 0;
+            if (!s::retained_player(reader, fixture.slot, player)) continue;
+            for (unsigned phase = 0; phase != 3; ++phase) {
+                if (phase == 2) fixture.put(fixture.weapon + 0xBC, std::uint32_t{999});
+                results[pass][phase] = s::owner(reader, fixture.contract, player,
+                    outputs[pass][phase], pass == 0 ? nullptr : &observation);
+                if (!results[pass][phase]) break;
+            }
+        }
+        check(results[0] == results[1] && fixtures[0].accesses == fixtures[1].accesses &&
+              fixtures[0].queries == fixtures[1].queries && fixtures[0].copies == fixtures[1].copies &&
+              fixtures[0].data == fixtures[1].data,
+              "shared retained/owner reader preserves full observed/plain transcript");
+        for (unsigned phase = 0; phase != 3; ++phase)
+            check(same_owner(outputs[0][phase], outputs[1][phase]),
+                  "shared owner reader preserves every output in all phases");
+        if (guard < 0)
+            check(results[0] == std::array<bool, 3>{true, true, false} &&
+                  observation.check == s::OwnerCheck::WeaponObjectAndRange,
+                  "optional diagnostics retain fresh payload checks with cached page certificates");
+    }
+    Fixture boundary;
+    s::Owner output{};
+    check(boundary.capture(output, s::OwnerCheck::Complete), "paired owner before fresh-reader boundary");
+    boundary.guard = boundary.weapon;
+    check(!boundary.capture(output, s::OwnerCheck::WeaponObjectAndRange),
+          "paired fresh reader observes newly guarded dependency");
+    boundary.guard = 0;
+    check(boundary.capture(output, s::OwnerCheck::Complete), "paired fresh reader recovers after guard removal");
+}
+
+bool capture_live(const Fixture& real, s::Owner& output, s::OwnerCheck expected) {
+    std::array<std::vector<Access>, 2> accesses;
+    std::array<bool, 2> accepted{};
+    std::array<s::Owner, 2> results{};
+    s::OwnerObservation observation{};
+    for (unsigned pass = 0; pass != 2; ++pass) {
+        s::Reader reader(
+            [&](auto address, auto& region) {
+                accesses[pass].push_back({'q', address, 0});
+                return coop::p99_group_memory::query_region(address, region);
+            },
+            [&](auto address, auto* destination, auto bytes) {
+                accesses[pass].push_back({'c', address, bytes});
+                return live_copy(address, destination, bytes);
+            });
+        accepted[pass] = s::owner(reader, real.contract, real.player, results[pass],
+                                 pass == 0 ? nullptr : &observation);
+    }
+    check(accepted[0] == accepted[1] && same_owner(results[0], results[1]) &&
+          accesses[0] == accesses[1],
+          "real read-only/guard mapping has identical observed and plain read sequence");
+    check(observation.check == expected, "real mapping first-failure evidence is exact");
+    output = results[0];
+    return accepted[0];
+}
 
 // These are lexical wiring tripwires, not a C++ control-flow proof. They ensure
 // this fixture cannot pass while a known source caller silently drops purpose.
@@ -363,6 +568,8 @@ void wiring(const std::filesystem::path& runtime_path) {
 int main(int argc,char** argv) {
     range_batch_scopes();
     owner_phase_scopes();
+    owner_observation_boundaries();
+    owner_observation_shared_scopes();
     Fixture valid;
     const auto untouched=valid.data;
     s::Owner out{};
@@ -373,7 +580,7 @@ int main(int argc,char** argv) {
     check(valid.queries<32,"bounded callback-free owner certificate reuse");
     for(const auto slot:std::array<std::int32_t,5>{-1,18,22,23,INT32_MAX}){
         Fixture bad;bad.put(bad.controller+0x120,slot);out= s::Owner{};out.player=1;
-        check(!bad.capture(out)&&out.player==0,"P99 rejects noncurrent/admissible slot");
+        check(!bad.capture(out,s::OwnerCheck::ControllerSlot)&&out.player==0,"P99 rejects noncurrent/admissible slot");
     }
     for(unsigned mutation=0;mutation<21;++mutation){
         Fixture bad;
@@ -401,7 +608,14 @@ int main(int argc,char** argv) {
         case 20:bad.put(bad.weapon,std::uintptr_t{0});break;
         }
         out.player=1;
-        check(!bad.capture(out)&&out.player==0,"identity/state mutation fails closed");
+        using C = s::OwnerCheck;
+        constexpr std::array expected{
+            C::RetainedPair, C::RetainedPair, C::RetainedObject, C::RetainedObject,
+            C::PlayerVtable, C::PlayerState, C::PlayerLook, C::FgKind, C::FgOwnerPair,
+            C::ArtId, C::RawSkeletonId, C::ControllerVtable, C::ControllerOwner,
+            C::ControllerState, C::GrenadeState, C::WeaponPair, C::WeaponPair,
+            C::WeaponObjectAndRange, C::WeaponArt, C::WeaponParentOwner, C::WeaponVtable};
+        check(!bad.capture(out,expected[mutation])&&out.player==0,"identity/state mutation fails closed");
     }
     for(unsigned mutation=0;mutation<5;++mutation){
         Fixture bad;bad.turn_on=2;
@@ -409,7 +623,10 @@ int main(int argc,char** argv) {
             bad.controller+0x170,bad.weapon+0xBC,bad.slot+8};
         bad.turn_address=addresses[mutation];bad.turn_value=mutation==0?1:999;
         out.player=1;
-        check(!bad.capture(out)&&out.player==0,"observed turnover rejected");
+        constexpr std::array expected{s::OwnerCheck::ClosingControllerState,
+            s::OwnerCheck::ClosingControllerSlot, s::OwnerCheck::ClosingWeaponPair,
+            s::OwnerCheck::WeaponId, s::OwnerCheck::ClosingRetainedPair};
+        check(!bad.capture(out,expected[mutation])&&out.player==0,"observed turnover rejected");
     }
     for(const auto offset:std::array<std::uintptr_t,5>{0x1000,0x2000,0xC000,0xE000,0xF000}){
         Fixture bad;bad.guard=bad.base+offset;
@@ -448,23 +665,20 @@ int main(int argc,char** argv) {
     if(!VirtualProtect(memory.pointer,0x12000,PAGE_READONLY,&previous)||
        !VirtualProtect(reinterpret_cast<void*>(address+0x12000),0x1000,PAGE_READONLY|PAGE_GUARD,&previous))return 2;
     {
-        s::Reader reader(&coop::p99_group_memory::query_region,&live_copy);
-        check(s::owner(reader,real.contract,real.player,out),"read-only owner inputs succeed");
+        check(capture_live(real,out,s::OwnerCheck::Complete),"read-only owner inputs succeed");
         check(std::memcmp(memory.pointer,real.data.data(),real.data.size())==0,"read-only fixture byte-for-byte unchanged");
         MEMORY_BASIC_INFORMATION info{};VirtualQuery(reinterpret_cast<void*>(address+0x12000),&info,sizeof(info));
         check((info.Protect&PAGE_GUARD)!=0,"adjacent guard not consumed");
     }
     if(!VirtualProtect(reinterpret_cast<void*>(real.weapon),0x1000,PAGE_READONLY|PAGE_GUARD,&previous))return 2;
     {
-        s::Reader reader(&coop::p99_group_memory::query_region,&live_copy);
-        check(!s::owner(reader,real.contract,real.player,out),"fresh post-boundary reader sees guard");
+        check(!capture_live(real,out,s::OwnerCheck::WeaponObjectAndRange),"fresh post-boundary reader sees guard");
         MEMORY_BASIC_INFORMATION info{};VirtualQuery(reinterpret_cast<void*>(real.weapon),&info,sizeof(info));
         check((info.Protect&PAGE_GUARD)!=0,"internal guard not consumed");
     }
     if(!VirtualProtect(reinterpret_cast<void*>(real.weapon),0x1000,PAGE_READONLY,&previous))return 2;
     {
-        s::Reader reader(&coop::p99_group_memory::query_region,&live_copy);
-        check(s::owner(reader,real.contract,real.player,out),"new snapshot after protection restoration");
+        check(capture_live(real,out,s::OwnerCheck::Complete),"new snapshot after protection restoration");
     }
     const auto runtime_path=argc>1?std::filesystem::path(argv[1]):
         std::filesystem::path(__FILE__).parent_path().parent_path()/"src"/"coop_runtime.cpp";

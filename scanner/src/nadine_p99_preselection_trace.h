@@ -7,11 +7,12 @@
 namespace coop::p99_preselection_trace {
 
 enum class Stage : std::uint8_t {
-    NormalJob, SelectGate, Retained, FgKind, Owner, Target, Registry, Identity, Count
+    Setup, NormalJob, SelectGate, Retained, FgKind, Owner, Target, Registry, Identity, Count
 };
 
 [[nodiscard]] constexpr const char* stage_name(Stage stage) noexcept {
     switch (stage) {
+    case Stage::Setup: return "setup";
     case Stage::NormalJob: return "normal-job";
     case Stage::SelectGate: return "select-gate";
     case Stage::Retained: return "retained";
@@ -36,9 +37,9 @@ struct Stamp {
 // Instrumentation and debugger/scheduling overhead remain in elapsed wall time;
 // these bins cannot establish uninstrumented production performance.
 struct Trace {
-    std::array<std::uint64_t, 8> elapsed{};
+    std::array<std::uint64_t, 9> elapsed{};
     std::uint32_t entered_mask = 0;
-    Stage active = Stage::NormalJob;
+    Stage active = Stage::Setup;
     const char* detail = "not-started";
     bool clock_valid = true;
     bool finished = false;
@@ -54,8 +55,8 @@ struct Trace {
         if (finished) return;
         if (started) { clock_valid = false; return; }
         started = true;
-        active = Stage::NormalJob;
-        detail = "normal-job";
+        active = Stage::Setup;
+        detail = "setup";
         entered_mask |= std::uint32_t{1};
         last = begin;
         clock_valid = clock_valid && begin.valid;
@@ -98,7 +99,7 @@ private:
     }
 };
 
-static_assert(static_cast<std::uint8_t>(Stage::Count) == 8);
+static_assert(static_cast<std::uint8_t>(Stage::Count) == 9);
 static_assert(std::is_standard_layout_v<Trace>);
 static_assert(std::is_trivially_copyable_v<Trace>);
 static_assert(std::is_trivially_destructible_v<Trace>);

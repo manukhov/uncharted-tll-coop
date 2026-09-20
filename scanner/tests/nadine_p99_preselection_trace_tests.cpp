@@ -21,12 +21,12 @@ std::uint64_t total(const Trace& value) {
 
 void exact_partition_and_names() {
     Trace value;
-    constexpr std::array<const char*, 8> names{
-        "normal-job", "select-gate", "retained", "fg-kind", "owner", "target", "registry", "identity"};
-    constexpr std::array<std::uint64_t, 9> times{100, 105, 110, 110, 120, 135, 155, 160, 180};
+    constexpr std::array<const char*, 9> names{
+        "setup", "normal-job", "select-gate", "retained", "fg-kind", "owner", "target", "registry", "identity"};
+    constexpr std::array<std::uint64_t, 10> times{100, 103, 105, 110, 110, 120, 135, 155, 160, 180};
     value.start({times[0], true});
-    check(value.started && value.active == Stage::NormalJob && value.entered_mask == 1 &&
-        std::strcmp(value.detail, "normal-job") == 0, "start initializes normal-job boundary");
+    check(value.started && value.active == Stage::Setup && value.entered_mask == 1 &&
+        std::strcmp(value.detail, "setup") == 0, "start initializes setup boundary");
     for (std::uint8_t index = 1; index < names.size(); ++index)
         value.enter(static_cast<Stage>(index), {times[index], true}, names[index]);
     value.skeleton_id = 0xC39CA709;
@@ -40,15 +40,15 @@ void exact_partition_and_names() {
               "exact stage name");
         check(value.elapsed[index] == times[index + 1] - times[index], "each interval charged to prior stage");
     }
-    check(value.clock_valid && value.finished && value.entered_mask == 0xFF && total(value) == 80,
-          "eight bins partition complete elapsed interval exactly");
+    check(value.clock_valid && value.finished && value.entered_mask == 0x1FF && total(value) == 80,
+          "nine bins partition complete elapsed interval exactly");
     check(value.skeleton_id == 0xC39CA709 && value.parameter_count == 6480 &&
         value.normal_passed && value.queries == 13 && value.selected,
         "finish preserves caller-provided scalar evidence");
 }
 
 void early_refusals_and_boundaries() {
-    for (std::uint8_t terminal = 0; terminal < 8; ++terminal) {
+    for (std::uint8_t terminal = 0; terminal < static_cast<std::uint8_t>(Stage::Count); ++terminal) {
         Trace value;
         value.start({7, true});
         for (std::uint8_t index = 1; index <= terminal; ++index)
@@ -58,7 +58,7 @@ void early_refusals_and_boundaries() {
               "refusal never becomes admission evidence");
         check(value.entered_mask == (std::uint32_t{1} << (terminal + 1)) - 1 &&
             total(value) == std::uint64_t{terminal} + 1, "only reached stages have intervals");
-        for (std::uint8_t index = terminal + 1; index < 8; ++index)
+        for (std::uint8_t index = terminal + 1; index < static_cast<std::uint8_t>(Stage::Count); ++index)
             check(value.elapsed[index] == 0, "unentered refusal tail stays zero");
     }
     Trace zero;
@@ -69,7 +69,7 @@ void early_refusals_and_boundaries() {
           "equal timestamps and null diagnostic reason are supported");
     Trace repeated;
     repeated.start({2, true});
-    repeated.enter(Stage::NormalJob, {5, true}, "same-stage");
+    repeated.enter(Stage::Setup, {5, true}, "same-stage");
     repeated.finish({8, true});
     check(repeated.elapsed[0] == 6 && repeated.entered_mask == 1 && repeated.clock_valid,
           "repeated stage accumulates without adding mask bits");
@@ -107,7 +107,7 @@ void invalid_stages_overflow_and_terminal_immutability() {
         Trace value;
         value.start({0, true});
         value.enter(invalid, {10, true}, "invalid");
-        check(!value.clock_valid && value.entered_mask == 1 && value.active == Stage::NormalJob &&
+        check(!value.clock_valid && value.entered_mask == 1 && value.active == Stage::Setup &&
             total(value) == 0, "invalid next enum fails before indexing or shifting");
         check(std::strcmp(trace::stage_name(invalid), "unknown") == 0, "invalid stage name bounded");
         value.finish({20, true});
@@ -135,7 +135,7 @@ void invalid_stages_overflow_and_terminal_immutability() {
     completed.enter(Stage::Owner, {0, false}, "late");
     completed.start({0, false});
     check(completed.clock_valid && completed.finished && total(completed) == 2 &&
-        completed.entered_mask == 1 && completed.active == Stage::NormalJob,
+        completed.entered_mask == 1 && completed.active == Stage::Setup,
         "double finish and post-finish updates are inert");
     Trace unstarted;
     unstarted.enter(Stage::Owner, {10, true}, "unstarted");

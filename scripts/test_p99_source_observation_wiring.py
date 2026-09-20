@@ -65,17 +65,50 @@ class ObservationWiringTests(unittest.TestCase):
             "p99_source_range(purpose, job, 0x10, phase)",
             "Stage::Retained", "p99_source_retained_player(purpose, phase)",
             "Stage::FgKind", "p99_source_range(purpose, fg,",
-            "Stage::Owner", "seh_resolve_p99_source_owner_scope(player, &owner, purpose, &captured_owner, phase)",
+            "Stage::Owner", "seh_resolve_p99_source_owner_scope(player, &owner, purpose, &captured_owner, phase, trace)",
             "!owner.valid || owner.player != player", "Stage::Target",
             "Stage::Registry", 'trace->detail = "runtime-ids"')
         self.assertNotIn("boot_log_line", selector)
         self.assertIn("if (trace) trace->enter(stage, p99_preselection_stamp(), detail);", self.runtime)
+
+    def test_preselect_uses_only_small_outputs_and_same_checks(self):
+        selected = self.observer.split("bool p99_source_observation_selected(", 1)[1].split(
+            "__declspec(noinline) void p99_source_observation_candidate", 1)[0]
+        self.assertIn("P99NormalJobIdentity normal{};", selected)
+        self.assertIn("P99ChloeTransferSelection selected{};", selected)
+        self.assertNotIn("P99GroupJob", selected)
+        self.assertNotIn("P99ChloeTransferEpoch", selected)
+        header = self.runtime.split("struct P99ChloeTransferSelection {", 1)[1].split("};", 1)[0]
+        for forbidden in ("records", "rows", "groups", "Retarget", "GroupResult"):
+            self.assertNotIn(forbidden, header)
+        self.assertIn("sizeof(P99ChloeTransferSelection) <= 80", self.runtime)
+        self.assertIn("template<class Selection>\nbool seh_select_p99_chloe_transfer_epoch(", self.runtime)
+        self.assertIn("template<class NormalJob>\nbool seh_p99_group_normal_job(", self.group)
+        # Full producer retains its original output layout and complete epoch.
+        self.assertIn("struct P99GroupJob : coop::p99_group_scope::State {", self.group)
+        self.assertIn("P99ChloeTransferEpoch epoch{};", self.group)
+        self.assertIn("seh_select_p99_chloe_transfer_epoch(job, &epoch, purpose, &selection_pages)", self.group)
+
+    def test_owner_refusal_detail_preserves_wrapper_read_order(self):
+        owner = self.runtime.split("bool seh_resolve_p99_source_owner_scope(", 1)[1].split(
+            "struct P99ChloeTransferArtSkeleton", 1)[0]
+        self.assert_in_order(owner,
+            "if (g_module == 0)", "if (!g_state_net.enabled)", "if (player == nullptr)",
+            "p99_source::owner(", "trace ? &owner_observation : nullptr",
+            "p99_source::owner_check_name(owner_observation.check)",
+            'trace->detail = "owner-position"', "!valid_network_position(",
+            'trace->detail = "owner-orientation"', "!valid_network_orientation(",
+            "output->valid = true;")
+        self.assertEqual(owner.count("p99_source::owner("), 1)
+        for forbidden in ("boot_log_line", "QueryPerformanceCounter", "query_count()"):
+            self.assertNotIn(forbidden, owner)
 
     def test_preselect_trace_keeps_reader_local_and_exports_no_borrowed_pointers(self):
         selected = self.observer.split("bool p99_source_observation_selected(", 1)[1].split(
             "__declspec(noinline) void p99_source_observation_candidate", 1)[0]
         self.assertIn("P99SourceReader pages(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);", selected)
         self.assert_in_order(selected,
+            "P99SourceReader pages(", "Stage::NormalJob",
             "if (seh_p99_group_normal_job(job, &normal, pages, &trace))",
             "Stage::SelectGate", "if (seh_select_p99_chloe_transfer_epoch(",
             "P99SourcePurpose::kOwnedGroupValues, &pages, &trace)", "Stage::Identity",

@@ -11,6 +11,21 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
+Current scalar-preselect handoff (2026-09-20): previous2692 already absent,
+not terminated here. STATIC frozen1ca7e5d6 PE proves unused epoch initialization
+survived before normal checks. Observer now uses24B normal identity/80B selection
+via same templated checks; full producer layouts and reads unchanged. Final
+exam68f4c51a...e19418/PDB119f5115...6d90d01 frozen reports/preselect-scalar-20260920,
+RSDS/PDB GUID133eb5ac...8b46 age3. selected frame2F90->6F0/no __chkstk, old
+epoch clears gone; Reader remains. Nine bins separate setup from normal; optional
+OwnerCheck records exact failing group without extra game reads. Original1ms,
+observer defaultOFF/examON, both writersfalse, stock-once remain. Release/CTest26/
+Python129 pass, owner1219/trace100checks; owned80/12/12/42/21 exact1008byte SHA
+unchanged. No live speedup or grip claim. New evidence quota/competing candidates
+and falsifiable one-game scenario recorded at endCOOP_STATUS before launch.
+Once deployed, verify fresh READY before user load, Nadine identity, then read
+terminal9-bin/owner-detail evidence; no rearm/reinjection after refusal.
+
 Current preselect-trace handoff (2026-09-20): source-only observer now reports
 eight scalar QPC bins, stage/detail, selected/normal, actual raw-id/params and
 Reader queries on terminal STOP only. Original short-circuit game reads,1ms

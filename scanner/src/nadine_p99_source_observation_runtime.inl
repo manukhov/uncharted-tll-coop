@@ -21,7 +21,7 @@ void p99_source_observation_stop_report(const char* external_reason = nullptr,
             "P99-OBSERVE STOP reason=%s probes=%u attempts=%u writes=0 "
             "selected=%u normal=%u stage=%s detail=%s mask=%x clock=%u "
             "probe_ticks=%llu limit=%llu queries=%llu raw_id=%08x params=%u "
-            "ticks_normal=%llu gate=%llu retained=%llu fg=%llu owner=%llu "
+            "ticks_setup=%llu ticks_normal=%llu gate=%llu retained=%llu fg=%llu owner=%llu "
             "target=%llu registry=%llu identity=%llu; future jobs stock-only",
             external_reason ? external_reason : p99_observe::reason_name(reason),
             g_p99_source_observation.probes(), g_p99_source_observation.attempts(),
@@ -35,7 +35,8 @@ void p99_source_observation_stop_report(const char* external_reason = nullptr,
             static_cast<unsigned long long>(e[0]), static_cast<unsigned long long>(e[1]),
             static_cast<unsigned long long>(e[2]), static_cast<unsigned long long>(e[3]),
             static_cast<unsigned long long>(e[4]), static_cast<unsigned long long>(e[5]),
-            static_cast<unsigned long long>(e[6]), static_cast<unsigned long long>(e[7]));
+            static_cast<unsigned long long>(e[6]), static_cast<unsigned long long>(e[7]),
+            static_cast<unsigned long long>(e[8]));
         boot_log_line(line);
         return;
     }
@@ -49,10 +50,11 @@ void p99_source_observation_stop_report(const char* external_reason = nullptr,
 // A rate-limited owner/pistol preselection, not source materialization. Its
 // pointers expire on return; the real producer repeats every owner/page check.
 bool p99_source_observation_selected(void* job, p99_preselect::Trace& trace) {
-    P99GroupJob normal{};
-    P99ChloeTransferEpoch selected{};
+    P99NormalJobIdentity normal{};
+    P99ChloeTransferSelection selected{};
     P99SourceReader pages(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
     bool admitted = false;
+    p99_preselection_enter(&trace, p99_preselect::Stage::NormalJob, "normal-job");
     if (seh_p99_group_normal_job(job, &normal, pages, &trace)) {
         p99_preselection_enter(&trace, p99_preselect::Stage::SelectGate, "select-gate");
         if (seh_select_p99_chloe_transfer_epoch(job, &selected,

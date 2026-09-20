@@ -34809,3 +34809,93 @@ No second-chance dump; event count is not attribution to the measured stage.
 Result comment saved to the single IDB,1902functions/73data/1type,
 save_database returned True (reports/ida_apply_preselect_result_20260920_status.txt).
 MCP restarted; existing native job label retained. No runtime binary changed.
+
+### Preselect scalar storage and exact owner refusal (2026-09-20)
+
+Current continuation: PID2692 was already absent on inspection; no process was
+terminated by this turn. Appearance/attachments remain unchanged. The visible
+P99 grip is NOT fixed. Work below removes proved unused observer storage and
+prepares a different, bounded source-only diagnostic exam.
+
+STATIC frozen PE/PDB audit of source17d4d84 in
+reports/preselect-trace-20260920: DLL1ca7e5d6...def6c5, matching RSDS/PDB GUID
+133eb5ac-a9ab-4851-b893-3328f5d28b46 age1. RVA4D467 calls outer cost_start4C840;
+Trace stores4D473..4D579 are inside the measured interval. Selected4DA40 has
+frame2F90 and __chkstk call4DA5B. Before normal-job4E484->63EE0 it executes
+two record memset45C at4DB5E/4DC3D plus93-record sentinel loops, group memset1B00
+at4DCC7 and helper2480 called4DCD8 (six more3F0 clears), then Reader memset600
+at4DD11 and64 Region default stores4DD16..4E46F. Ten memset calls total16728
+bytes before normal checks. SelectGate QPC is4E4A4. Normal-job rows clear was
+already optimized away: scalar normal can remove large output-offset storage,
+NOT a surviving rows memset. Candidate frame710 precedes outer begin.
+__chkstk's conditional page-touch loop is not proved to have executed/faulted.
+
+STATIC minimal change: shared templated selector writes either unchanged full
+P99ChloeTransferEpoch or80-byte header-only P99ChloeTransferSelection; observer
+uses the latter. Shared normal checks write full producer P99GroupJob or24-byte
+P99NormalJobIdentity. No full-epoch inheritance/layout change, no new game read,
+no relaxed predicate, no cached owner. Existing nonce/output-reset behavior and
+full producer remain. The optional OwnerObservation enum records first failing
+logical field group. Null retained/module/network and numeric position/orientation
+have separate wrapper detail. Header predicates/call order match previous HEAD
+exactly after stripping diagnostic-only tokens. No per-read logs or QPC calls
+inside owner. Setup is a ninth QPC bin; all nine still partition the same outer
+envelope and stay subject to the original combined1ms cap.
+
+Final optimized exam frozen at reports/preselect-scalar-20260920:
+DLL SHA25668f4c51ae4f4088fafb5cc5fdaff9a39755836e74ed87513a26aead983e19418;
+PDB SHA256119f51156c820f235b1431267377a05767ffa141932edb1815ac9a4446d90d01;
+same GUID, age3. STATIC selected4F300 is out-of-line (candidate4EB80 calls4EE4A),
+frame6F0,10400bytes less than2F90, no __chkstk. Before normal only Reader's
+memset600 at4F39F plus64 defaults survive; old epoch record/group clears gone.
+Reader setup ends4FA99, Setup/Normal QPC4FAB3, normal call4FB86, nextQPC4FBA6,
+scalar selector call4FC81. Normal91A0 writes0/8/10 at9319/931D/9322; full normal
+8FC0/Epoch9370 remain separate from scalar selector9EB0. Candidate frame720 is
+allocated before begin4ED17->4E0E0. Query API still560B0->VirtualQuery560D6.
+This is binary work-removal proof, NOT live speedup/18ms-cause proof.
+
+Release/default and separate exam builds pass. Default observerOFF confirmed
+in cache, exam explicitON; both writersfalse/static_assert, no profile admission
+or native pose publication changes. CTest26/26 and Python129/129 pass; source-read
+1219 checks, trace100 checks. Paired null-vs-observed tests cover every existing
+mutation,74 copy failures,16 query failures, shared phases and real guarded/
+readonly mappings with exact ordered-query/copy and output equality. Full owned
+producer regression reports/p99-preselect-scalar-owned-20260920.json passes:
+80queries/12Resolve/12Find/42DoJoint/21Blend; exact1008byte SHA
+c3613114c77ed16949d7de7d374131e86a4ab5ce57a3695a8f0b9ba2bee122e7. Its isolated
+1.58ms first/1.47ms one warm sample is NOT a live budget admission; no claim of
+speedup. Default DLL4442aa61...64a210 remains uninjected.
+
+Competing hypotheses still open: old18ms arose in setup, normal page/query/read
+work, or debugger/scheduling delay. New bin separates setup from normal, NOT
+VirtualQuery from descheduling within normal. Owner rejection alternatives are
+retained-null/identity/layout, controller slot/state or selected weapon, and
+numeric payload acceptance. New detail distinguishes these at first failure;
+it does not infer later P99 state or bypass startup failures.
+
+Evidence quota for this diagnostic exam: (1) matched optimized PE disassembly
+above proves actual work and QPC boundaries; (2) dataflow/token comparison shows
+unchanged short-circuit owner reads and shared full/scalar selection predicates;
+(3) structural agreement with confirmed normal job141A92A00 and weak-resolution
+1410A1F90 contract: same retained0/localNadine/Fg/rawC39CA709/P99/state2 gates,
+same two ingress sites1417815B7/141782B3A and stock-once/no-write lifetime.
+Independent owned numeric and access-transcript regressions support preservation.
+
+Written falsifiable one-game prediction BEFORE launch: after appearance READY
+and user load/drawP99/stand3-5s, a terminal trace has separate ticks_setup and
+ticks_normal plus an exact owner detail if owner fails. Their complete nine-bin
+sum must equal probe_ticks when clock1. Owner failure has attempts0 and no RESULT;
+if selected within1ms, at most one full source preparation can emit RESULT, always
+writes0. Any future job after STOP is stock-only. A large normal bin with small
+setup would contradict assigning the residual cost to local initialization; a
+specific slot/state/weapon/numeric detail rejects the competing failure groups
+only up to the reached check. No promise that the budget now passes or the visible
+grip changes. Appearance must remain Nadine; no second game or agent game input.
+Bounded watcher timing remains perturbing, not production performance evidence.
+If STOP refuses, read it and return to static work; never rearm/reinject on a guess.
+
+IDB handoff before deployment: MCP stopped, updated existing141A92A00 comment
+applied to the single ida/tll.i64;1902functions/73data/1type,
+save_database returned True in reports/ida_apply_preselect_scalar_20260920_status.txt.
+MCP restarted; native job name/address and ingress xrefs read back. No new
+retail labels required; new RVAs above belong to the mod DLL, not the retail IDB.

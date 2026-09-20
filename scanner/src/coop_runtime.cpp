@@ -61935,14 +61935,20 @@ void* p99_source_retained_player(P99SourcePurpose purpose, P99SourceReader* phas
 
 bool seh_resolve_p99_source_owner_scope(void* player, IdleArmPoseOwnerScope* output,
     P99SourcePurpose purpose, p99_source::Owner* captured_out = nullptr,
-    P99SourceReader* phase = nullptr) {
+    P99SourceReader* phase = nullptr, p99_preselect::Trace* trace = nullptr) {
+    if (trace) trace->detail = "owner-output";
     if (output == nullptr) return false;
     if (captured_out != nullptr) *captured_out = {};
     if (purpose == P99SourcePurpose::kPersistentJointCache)
         return seh_resolve_idle_arm_pose_owner_scope(player, 0, output);
     P99_PREP_AUDIT_BEGIN(owner, kOwner);
     *output = {};
-    if (g_module == 0 || !g_state_net.enabled || player == nullptr) return false;
+    if (trace) trace->detail = "owner-module";
+    if (g_module == 0) return false;
+    if (trace) trace->detail = "owner-network";
+    if (!g_state_net.enabled) return false;
+    if (trace) trace->detail = "owner-retained-null";
+    if (player == nullptr) return false;
     const p99_source::Contract contract{
         g_module + kRetainedSlotTableRva, g_module + kPlayerVtableRva,
         g_module + kPlayerWeaponControllerVtableRva, g_module + kFastGrenadeControllerVtableRva,
@@ -61950,10 +61956,17 @@ bool seh_resolve_p99_source_owner_scope(void* player, IdleArmPoseOwnerScope* out
         kLegacyNadineTargetSkeletonArtId, kLegacyNadineUnderlyingSkeletonId, p99_order::kP99ArtId};
     P99SourceReader reader(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
     p99_source::Owner captured{};
+    p99_source::OwnerObservation owner_observation{};
     if (!p99_source::owner(phase != nullptr ? *phase : reader,
-            contract, reinterpret_cast<std::uintptr_t>(player), captured) ||
-        !valid_network_position(captured.position.data()) ||
-        !valid_network_orientation(captured.orientation.data())) return false;
+            contract, reinterpret_cast<std::uintptr_t>(player), captured,
+            trace ? &owner_observation : nullptr)) {
+        if (trace) trace->detail = p99_source::owner_check_name(owner_observation.check);
+        return false;
+    }
+    if (trace) trace->detail = "owner-position";
+    if (!valid_network_position(captured.position.data())) return false;
+    if (trace) trace->detail = "owner-orientation";
+    if (!valid_network_orientation(captured.orientation.data())) return false;
     output->player = reinterpret_cast<void*>(captured.player);
     output->fg_anim_data = reinterpret_cast<std::byte*>(captured.fg);
     output->local_pose = reinterpret_cast<std::byte*>(captured.local_pose);
@@ -62015,6 +62028,28 @@ struct P99ChloeTransferLockedOperands {
     std::array<std::array<std::byte, kP99ChloeTransferRowBytes>,
                p99_order::kRequiredJointCount> nadine_references{};
 };
+
+// Preselection has no materialized rows, retarget records, or group results.
+// Keep the full epoch layout unchanged for its existing producer consumers.
+struct P99ChloeTransferSelection {
+    bool active = false;
+    bool valid = false;
+    bool ambiguous = false;
+    std::uint32_t depth = 0;
+    std::uint64_t nonce = 0;
+    void* job = nullptr;
+    void* player = nullptr;
+    void* fg_anim_data = nullptr;
+    void* local_pose = nullptr;
+    void* target_skeleton = nullptr;
+    void* weapon = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    std::uint32_t anim_registry_epoch = 0;
+};
+static_assert(sizeof(P99ChloeTransferSelection) <= 80);
+static_assert(std::is_trivially_copyable_v<P99ChloeTransferSelection> &&
+    std::is_trivially_destructible_v<P99ChloeTransferSelection>);
 
 struct P99ChloeTransferEpoch {
     bool active = false;
@@ -63015,11 +63050,14 @@ bool build_p99_chloe_embedded_source_rows(
 }
 
 
+template<class Selection>
 bool seh_select_p99_chloe_transfer_epoch(
-    void* job, P99ChloeTransferEpoch* output,
+    void* job, Selection* output,
     P99SourcePurpose purpose = P99SourcePurpose::kPersistentJointCache,
     P99SourceReader* caller_phase = nullptr,
     p99_preselect::Trace* trace = nullptr) {
+    static_assert(std::is_same_v<Selection, P99ChloeTransferEpoch> ||
+        std::is_same_v<Selection, P99ChloeTransferSelection>);
     if (output == nullptr) {
         return false;
     }
@@ -63057,7 +63095,7 @@ bool seh_select_p99_chloe_transfer_epoch(
             return false;
         }
         p99_preselection_enter(trace, p99_preselect::Stage::Owner, "owner-snapshot-or-numeric");
-        if (!seh_resolve_p99_source_owner_scope(player, &owner, purpose, &captured_owner, phase)) {
+        if (!seh_resolve_p99_source_owner_scope(player, &owner, purpose, &captured_owner, phase, trace)) {
             return false;
         }
         if (trace) trace->detail = "owner-fg-state-p99";
@@ -80320,7 +80358,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-20preselect-trace "
+        "TLL co-op runtime init 2026-09-20preselect-scalar "
         "(bounded preselection diagnostics; observer opt-in only; both pose writers disabled; appearance and AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(

@@ -4,6 +4,13 @@ namespace p99_shadow = coop::p99_group_shadow;
 namespace p99_program = coop::p99_group_program_manifest;
 namespace p99_admit = coop::p99_group_admission;
 
+struct P99NormalJobIdentity {
+    std::uintptr_t fg = 0;
+    std::uintptr_t art = 0;
+    std::uintptr_t raw = 0;
+};
+static_assert(sizeof(P99NormalJobIdentity) == 3 * sizeof(std::uintptr_t));
+
 struct P99GroupJob : coop::p99_group_scope::State {
     p99_shadow::SourceRows rows{};
     std::uintptr_t fg = 0;
@@ -122,8 +129,11 @@ bool p99_group_program_exact(P99ReadBatch& pages, std::uintptr_t raw, std::uintp
     return p99_program::validate(regions,bindings).admitted();
 }
 
-bool seh_p99_group_normal_job(void* job, P99GroupJob* output, P99SourceReader& pages,
+template<class NormalJob>
+bool seh_p99_group_normal_job(void* job, NormalJob* output, P99SourceReader& pages,
     p99_preselect::Trace* trace = nullptr) {
+    static_assert(std::is_same_v<NormalJob, P99GroupJob> ||
+        std::is_same_v<NormalJob, P99NormalJobIdentity>);
     __try {
         if (trace) trace->detail = "job-range-or-entry";
         if (!pages.range(reinterpret_cast<std::uintptr_t>(job), 0x38) ||
