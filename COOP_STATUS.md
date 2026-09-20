@@ -11,11 +11,12 @@ Observer disabled again in default AFE-safe source/DLL; both writersfalse and
 1ms unchanged. Correction: the user reports playing Chloe in AFE,
 not Nadine. Role B is configuration only; this was NOT a validated Nadine/P99
 exam. User resumed work: init-only appearance witnesses are prepared and tested
-in 2026-09-20look-init and deployed once to PID23264. INSTALL/READY are verified;
-user scene load and visual Nadine confirmation are pending. Do not reinject.
-Read the final appearance test plan before any further runtime work.
-First establish actual local look after full hook READY and a user-loaded scene;
-do not rebuild the look live or infer Nadine cost from the previous budget stop.
+in 2026-09-20look-init and deployed once to PID23264. Appearance is now CONFIRMED
+for this run: exact Init hash-selected for retained0 plus the user's screenshot
+showing Nadine. Pistol grip is still visibly wrong; observer/writers remain off.
+Do not reinject. Next work returns to bounded preselection-stage attribution,
+not to changing the working appearance/weapon attachments. AFE's prior failure
+cause remains unproven; do not infer Nadine cost from its budget stop.
 
 ## Historical priority snapshot (2026-08-27)
 
@@ -34598,3 +34599,40 @@ do not claim the appearance issue fixed or this a valid Nadine grip test yet.
 Keep this process (if alive), no second copy or repeat injection. Next action:
 read only fresh PID23264 Init markers plus user's visual report; classify using
 the above prediction. Both pose writers/P99 source observer remain disabled.
+
+### Appearance exam result: Nadine visible; pistol grip still wrong
+
+CONFIRMED, limited to this cold-load appearance exam: the user supplied
+codex-clipboard-9b412f72-b07a-4dc4-a236-b58264ae065d.png (local screenshot,
+533534bytes, file timestamp2026-09-20 10:36:46 Moscow), visibly showing Nadine.
+The same PID23264 fresh log contains exactly one LOCAL-LOOK INIT decision:
+hash-selected,caller1BB4AB9,player=retained0=0x10E0A92C80,requested1,hashD27C074F.
+INSTALL/READY precede this witness at log lines103426/103431; Init at103432.
+No local-mismatch/role-disabled/no-output marker is present for this PID.
+This satisfies the written prediction: init-time selection plus user-observed
+Nadine, not merely a role or installer banner. The bounded witness is per outcome,
+not per spawn; do not claim the screenshot's current object address from it.
+
+The screenshot still shows the abnormal pistol/arm hold. Grip was not changed
+in this build: P99 observer and both experimental pose writers remainfalse;
+the fresh log reports P99-GROUP DISABLED and no P99-OBSERVE or APPLIED marker.
+Do not classify this as grip success, numerical source acceptance, or proof
+that AFE's prior Chloe result was caused by late injection. This successful
+sequence establishes the usable Nadine baseline without weakening identity
+gates, forcing a live rebuild, or changing existing holster/back repairs.
+
+At result inspection, game23264 and watcher13724 were still alive; watcher had
+not yet reported a terminal outcome. No stability/performance verdict follows.
+No launch, injection, game input, live-memory or runtime-source changes in this
+result-only turn. Resume P99 preselection-stage/cost attribution separately;
+retain the confirmed appearance-ready-before-scene-load test sequence.
+
+Handoff refresh: watcher reached its300s bound and reported DETACHED=1,
+timeout_or_stop1; watcher13724 is now absent while game23264 remains alive.
+Capture counted50967 handled first-chance events (last PCs0x7ffea1068e5f),
+no second-chance dump. These are not crash attribution or a production timing
+measurement; no new exception-site/caller attribution attempted in this turn.
+Player_GetAppearanceHash comment updated with this limited runtime result,
+single IDB savedTrue (1902functions/73data/1type) to log
+reports/ida_apply_local_appearance_confirmed_20260920_status.txt; MCP restarted
+and the updated comment read back. Runtime binaries unchanged; no rebuild needed.

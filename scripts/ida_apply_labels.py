@@ -1109,7 +1109,11 @@ FUNCTIONS = {
         "0x141BB4AB9 (call 0x141BB4AB2), not at arbitrary per-frame reads. "
         "It does not change Player+0x15A0 or animation knowledge, nor rebuild "
         "an existing look. A selected hash alone is not rendered-mesh proof: "
-        "Init can use ProcessSpawnInfo+0x98 after querying this getter.",
+        "Init can use ProcessSpawnInfo+0x98 after querying this getter. "
+        "CONFIRMED limited runtime 2026-09-20look-init PID23264: exact "
+        "Init callback returned D27C074F for player==retained0, followed "
+        "by a user screenshot showing Nadine. This confirms the tested "
+        "cold-load appearance path, not pistol grip or AFE's prior failure cause.",
     ),
     0x1410D6AD0: (
         "Player_ApplyLook2MeshKnowledge",

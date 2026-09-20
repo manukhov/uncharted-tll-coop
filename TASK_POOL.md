@@ -26,9 +26,16 @@ Deployed once after sourcec03d4da push: game23264 FILETIME134343632316225263,
 frozenDLL30c4624b...1378f at0x7ffea1020000,size1994752. Watcher13724 READY before
 injection,300s bounded capture reports/local-look-20260920-p23264. Fresh INSTALL
 installed/protection-restored1,error0 and READY hook1/state-net1/Nadine/D27C074F
-verified; no Init yet. User was told to stay at menu until this point, then load
-save and report Nadine vs Chloe. Await user visual+freshPID23264 Init result.
-Do not reinject/start another copy or resume grip test on role banner alone.
+verified. RESULT CONFIRMED: user screenshot9b412f72 shows Nadine; exact Init
+hash-selected at1BB4AB9 has player==retained0=10E0A92C80,hashD27C074F. No failure
+outcomes logged. The pistol/arm hold is visibly still wrong; no grip change or
+source admission occurred (observer/writersfalse). Do not reinject/start another
+copy. Appearance baseline restored for this sequence; AFE prior cause unproven.
+Next separate work: bounded preselection-stage attribution on a verified Nadine
+baseline, preserving the appearance gate and all confirmed weapon attachments.
+Watcher has now detached at its300s bound; game23264 is still alive. Capture
+50967 handled first-chance events, no second-chance dump; not crash attribution
+or performance proof. Confirmation comment savedTrue/read back in the single IDB.
 
 User hold / AFE appearance correction (2026-09-20): user saw Chloe, not Nadine.
 Role2/B banner is configuration, not a mesh/skeleton witness; AFE is NOT a
