@@ -130,7 +130,31 @@ class PinnedSliceTests(unittest.TestCase):
             maximum_translation_delta = max(maximum_translation_delta,
                                             *(abs(before[i] - after[i]) for i in (3, 7, 11)))
         self.assertGreater(maximum_translation_delta, 0.)
-        self.assertAlmostEqual(maximum_translation_delta, 7.560920467747367e-5, delta=1e-12)
+        self.assertAlmostEqual(maximum_translation_delta, 7.635285096518896e-5, delta=1e-12)
+
+    def test_missing_or_stale_quaternion_decoder_model_rejected(self):
+        profile = a.profile_decoder.audit(self.data)
+        for marker in (None, "legacy-incorrect-smallest-three-order"):
+            with self.subTest(marker=marker):
+                changed = dict(profile)
+                if marker is None:
+                    del changed["quaternion_decoder_model"]
+                else:
+                    changed["quaternion_decoder_model"] = marker
+                # All asset and row hashes still match; model provenance must
+                # independently reject artifacts from the old permutation.
+                with self.assertRaisesRegex(ValueError, "profile model identity"):
+                    a.audit(self.data, changed)
+
+    def test_all_profile_and_bind_local_scales_are_exactly_unit(self):
+        profile = a.profile_decoder.audit(self.data)
+        packed = bytes.fromhex(profile["scalar_model_rows_f32_hex"])
+        references = a.authored.skeleton_inputs(self.data, self.skeleton)["references"]
+        self.assertEqual(len(packed), 426 * 48)
+        for parameter in range(426):
+            with self.subTest(parameter=parameter):
+                self.assertEqual(struct.unpack_from("<3f", packed, parameter * 48), (1., 1., 1.))
+                self.assertEqual(struct.unpack_from("<3f", references, parameter * 48), (1., 1., 1.))
 
     def test_parent_mutation_rejected(self):
         data = bytearray(self.data)

@@ -26,20 +26,28 @@ matrices have a closed g0/g1 op40/op53 slice; no procedural writes to their104
 parameters or required matrices. Separate-scale propagation replays authored
 bind inverses within3.187e-7. Locator oracle matches84 archived nativelocators
 within2.385e-7, but24 differ in bytes; not instruction-exact native operands.
-scripts/p99_direct_grip_audit.py now compares all21 D350/B8 rows: profile-present
-R124 vs conditional R157(R20), max151.847deg atfinger137, palm21.601deg,
-prop-relative origin0.115614assetunits. Prop mode3/S/T unchanged. Bind-basis-only
-analytic control (NOT authoredR124 or live absence evidence) reduces max to
-0.013459deg/origin6.758e-6. Large difference is profile contribution within this
-model, not additive order; no source/DLL/writer change or game launch.
-NEXT: localize thumb137->139->141 profile-vs-bind local rotations and endpoints
-relative to P99, then establish a useful contact correction before a writer exam.
+CORRECTION: old151.847deg/palm21.601/origin0.115614 results are REJECTED as
+Python opcode24 decoder errors (axis insertion and32767 instead of32768).
+Corrected C/B/A/D selector swaps + nativefloat constants match42 archived native
+D350/B8 rows within1.193e-7. Runtime source rows/DLL are unaffected. All21-row
+comparison now max13.794632deg atthumb141, palm0.005460deg, prop-relative
+origin0.013231176assetunits. Bind analytic control stays0.013459deg/6.758e-6.
+Thumb local profile-vs-bindQ differs only0.0025..0.0032deg; ~21.545deg global
+basis difference is inherited from shoulder/elbow/wrist. All426 profileS=1.
+NEXT: same Nadine hand surface versus exactP99 mesh, after skin-weight encoding
+and mesh/frame ownership are established. Bone-origin distance to Chloe is not
+contact quality (different finger lengths/bind axes); no writer exam yet.
 Do not globally remove E51542CA, substitute this scalar result for runtime
 records, or claim the separate left support arm is corrected. Native cmd16
 custom wrappers have QPC/FLS/global dependencies; do not wholesale-call them
 in a mapped image. Existing 71*46 zero UNUSED nativeR124 fixture remains unused.
-Verification: Python212/212, CTest27/27, fresh audits pass; singleIDB savedTrue,
-MCP restarted/readback verified. No tll/native retail execution this pass.
+Previous212-test suite missed the decoder defect: identity-like inputs and
+self-pinned profile hashes are not independent quaternion oracles. New explicit
+all-selector asymmetric goldens and archived native42-row checks cover it.
+Updated verification/IDB handoff is in the final COOP_STATUS section.
+Current correction verification: Python226/226, CTest27/27, corrected audits
+pass; IDB1902functions/76data names/1type savedTrue and MCP readback verified.
+No game/native retail execution or runtime DLL/source-row change.
 
 Current late-arm handoff (2026-09-20): PID9852 already absent, not terminated here.
 No existing no-read completed-P99 hook exists; CommitDrawn != state2, ApplyState
@@ -5249,7 +5257,15 @@ whole compatible bundle with the authored NPC-Nadine retarget path; do not
 substitute a single hands clip. The next game launch is allowed only for an
 atomic local-only visual repair supported by three independent evidence types.
 
-**STATIC / REJECTED (retarget map/profile split):** runtime entry 124 is
+**Historical STATIC / REJECTED (retarget map/profile split):**
+
+**2026-09-20 correction:** the following historical3.13/0.24/5.76deg and
+quaternion-identity claims used the faulty Python opcode24 decoder; their
+numerical support for mixed-profile-primary rejection is withdrawn, not
+automatically inverted. Map/mask/IK facts and actual abw/aby outcomes survive.
+Do not restart those exams or patch profiles; see current handoff above.
+
+Historical record: runtime entry124 is
 authored `proto 1003D654 -> nadine-dlc-base C67A06F1`, while the correct
 NPC-firearm entry 133 is `npc-normal-base B91C4EA3 -> nadine-dlc-base`. Both use
 the exact 74-row StringId map at raw `skel-retargets.bin+0x2720` and profile

@@ -171,7 +171,8 @@ def audit(data: bytes, profile=None):
     skeleton = source.load_skeleton(data, source.NADINE_SKELETON)
     proof = prove_slice(data, skeleton)
     profile = profile_decoder.audit(data) if profile is None else profile
-    if (profile["asset_sha256"] != source.sha256(data)
+    if (profile.get("quaternion_decoder_model") != profile_decoder.DECODER_MODEL
+            or profile["asset_sha256"] != source.sha256(data)
             or profile["profile"] != "E51542CA" or profile["decoded_parameter_rows"] != 426):
         raise ValueError("profile model identity mismatch")
     packed = bytes.fromhex(profile["scalar_model_rows_f32_hex"])
@@ -190,12 +191,13 @@ def audit(data: bytes, profile=None):
     if not all(math.isfinite(v) for row in forward_rows.values() for v in row):
         raise ValueError("nonfinite scalar profile matrix")
     return {"classification": "STATIC_SCALAR_REQUIRED_PROFILE_MATRIX_SLICE",
+            "quaternion_decoder_model": profile_decoder.DECODER_MODEL,
             "game_or_native_execution": False, "runtime_builder_operands_ready": False,
             "asset_sha256": source.sha256(data), "profile": "E51542CA", "proof": proof,
             "required_globals": list(REQUIRED_GLOBALS), "local_rows": rows,
             "forward_affine_rows": forward_rows,
             "forward_matrices": {j: export_transform(workspace[j]) for j in REQUIRED_GLOBALS},
-            "limits": ["Scalar operation order/rounding and decoder normalization are not native bit-exact",
+            "limits": ["Scalar propagation rounding and decoder rsqrt/Newton surrogate are not native bit-exact",
                        "Half subnormals retain the decoder's explicit MXCSR/DAZ limitation",
                        "Only required row124 matrices are modeled, not all580 AnimateObject outputs",
                        "No live registration, residency, runtime operand or visual grip claim"]}

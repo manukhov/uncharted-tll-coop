@@ -3,7 +3,7 @@
 This is a scalar CONSTANT-STREAM audit, not AnimateObject or builder operands.
 Opcode22 half vectors, opcode24 smallest-three quaternions and opcode25 float
 scalars occupy separate JointParams/scalar banks. Padding destinations are not
-logical joints. Native normalization/unused SIMD lanes are not emulated exactly.
+logical joints. Native reciprocal-square-root/unused SIMD lanes are not emulated exactly.
 The sampled global matrices, procedural joint programs and live residency remain
 outside this decoder. Never substitute its rows for completed runtime records.
 """
@@ -22,6 +22,7 @@ import p99_native_source_audit as authored
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ASSET = ROOT / "reports/actor_packages/nadine-dlc-base.pak"
 PROFILE_ID = 0xE51542CA
+DECODER_MODEL = source.native.load_audit_module().PACKED_QUATERNION_MODEL
 RAW_OFFSET, RAW_SIZE = 0x2DA0, 11088
 RAW_SHA = "322dc889cfbef6d041081956a8bebc55d65f2257290bd2836aadbe73677ae74c"
 COUNTS = (66, 38, 96, 83, 88, 52, 3)
@@ -184,6 +185,7 @@ def audit(data: bytes):
                                 "parameter": parameter, "rotation_component_delta": qerror,
                                 "scale_translation_component_delta": st_error})
     return {"classification": "STATIC_SCALAR_CONSTANT_STREAM_DECODE",
+            "quaternion_decoder_model": DECODER_MODEL,
             "game_or_native_execution": False, "runtime_builder_operands_ready": False,
             "profile": f"{PROFILE_ID:08X}", "database": f"{source.NADINE_DATABASE_ID:08X}",
             "asset_sha256": source.sha256(data), "raw_sha256": RAW_SHA,
@@ -192,7 +194,7 @@ def audit(data: bytes):
             "scalar_bank_sha256": source.sha256(scalars), "scalars": scalar_bank,
             "reference_differences": differences,
             "scalar_model_rows_f32_hex": packed.hex(),
-            "limits": ["Quaternion decoder is scalar, not instruction-exact native normalization",
+            "limits": ["Quaternion decoder models native component order/float constants, but sqrt is not instruction-exact rsqrt/Newton",
                        "Python preserves half subnormals; native op22 manual conversion is MXCSR/DAZ-dependent",
                        "JointParams padding lanes are zero placeholders, not native SIMD bytes",
                        "All constant rows decoded; joint programs/global matrices not evaluated",

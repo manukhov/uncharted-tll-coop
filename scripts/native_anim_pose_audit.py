@@ -143,7 +143,7 @@ class MappedImage:
                 cursor += block_size
 
         # The retail CRT initializer at 0x140128020 materializes four AVX
-        # permutation rows used by joint-program opcode 28.  A mapped image
+        # permutation rows used by packed-quaternion opcodes24/28. A mapped image
         # does not run the CRT constructor table, so copy only the two exact
         # build-pinned constant blocks instead of executing arbitrary game
         # initialization inside the audit helper.

@@ -121,6 +121,8 @@ class ConstantProfileTests(unittest.TestCase):
         result = a.audit(a.DEFAULT_ASSET.read_bytes())
         self.assertFalse(result["game_or_native_execution"])
         self.assertFalse(result["runtime_builder_operands_ready"])
+        self.assertEqual(result["quaternion_decoder_model"],
+                         "opcode24-cba-swap-f32-32768-sqrt-v2")
         self.assertEqual(result["decoded_parameter_rows"], 426)
         self.assertEqual(result["decoded_scalars"], 27)
         self.assertEqual(sum(op["meaningful_half_subnormals"] for group in result["groups"]
@@ -128,7 +130,9 @@ class ConstantProfileTests(unittest.TestCase):
         self.assertEqual([g["parameter_count"] for g in result["groups"]], list(a.COUNTS))
         self.assertEqual([g["first_parameter"] for g in result["groups"]], [0, 66, 104, 200, 283, 371, 423])
         self.assertEqual(len(bytes.fromhex(result["scalar_model_rows_f32_hex"])), 426 * 48)
-        self.assertEqual(result["scalar_model_rows_sha256"], "fee2c8d5fe406d321d85e3d8929ab31cd21be1c6b3009bde082d9ed67bf1d78c")
+        # Regression pin AFTER the independently native-backed opcode24
+        # permutation/32768-quantizer correction. This hash alone is no oracle.
+        self.assertEqual(result["scalar_model_rows_sha256"], "fb79dd267fb62650bce59b2d14100bc4557d40d63712fb7576e26e9486f124cb")
         self.assertEqual(result["scalar_bank_sha256"], "ee934915ba1f832e25da615234ccf35e086a76f4236860977a23750ca581be31")
         self.assertAlmostEqual(result["scalars"][26], .3)
         self.assertTrue(any("not evaluated" in note for note in result["limits"]))

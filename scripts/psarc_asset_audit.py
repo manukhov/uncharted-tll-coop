@@ -788,24 +788,38 @@ def audit_skeleton_joint_tables(
             )
 
 
+PACKED_QUATERNION_MODEL = "opcode24-cba-swap-f32-32768-sqrt-v2"
+
+
 def decode_packed_quaternion_48(raw: bytes) -> tuple[float, float, float, float]:
-    """Decode the engine's 48-bit smallest-three quaternion representation."""
+    """Scalar model of opcode24's packed quaternion, not instruction-exact SIMD.
+
+    142185CF0 extracts A15/B15/C16, scales by pinned float32 constants with
+    denominator32768, and assembles pre-permute lanes C/B/A/D. The selector
+    SWAPS D with its destination, it does not insert D into the A/B/C list.
+    CRT140128020 copies the two permutation-table halves from142BF0700/0740.
+    D uses sqrt(max(FLT_MIN, 1-((C*C+B*B)+A*A))) here; native uses rsqrt plus
+    Newton refinement. Neither path normalizes the completed quaternion.
+    """
 
     if len(raw) != 6:
         raise ValueError("packed quaternion must contain exactly six bytes")
     packed = int.from_bytes(raw, "little")
-    omitted = packed & 3
-    inv_sqrt_two = math.sqrt(0.5)
-    full_scale = (2.0 * inv_sqrt_two) / 32767.0
-    half_scale = inv_sqrt_two / 32767.0
-    components = [
-        ((packed >> 2) & 0x7FFF) * full_scale - inv_sqrt_two,
-        ((packed >> 17) & 0x7FFF) * full_scale - inv_sqrt_two,
-        ((packed >> 32) & 0xFFFF) * half_scale - inv_sqrt_two,
-    ]
-    missing = math.sqrt(max(0.0, 1.0 - sum(value * value for value in components)))
-    components.insert(omitted, missing)
-    return tuple(components)  # type: ignore[return-value]
+    selector = packed & 3
+
+    def f32(value):
+        return struct.unpack("<f", struct.pack("<f", value))[0]
+
+    full_scale, half_scale, offset, minimum = struct.unpack(
+        "<4f", struct.pack("<4I", 0x383504F3, 0x37B504F3, 0xBF3504F3, 0x00800000))
+    a = f32(f32(((packed >> 2) & 0x7FFF) * full_scale) + offset)
+    b = f32(f32(((packed >> 17) & 0x7FFF) * full_scale) + offset)
+    c = f32(f32(((packed >> 32) & 0xFFFF) * half_scale) + offset)
+    squared = f32(f32(f32(c*c) + f32(b*b)) + f32(a*a))
+    missing = f32(math.sqrt(max(minimum, f32(1.0 - squared))))
+    lanes = (c, b, a, missing)
+    permutations = ((3, 1, 2, 0), (0, 3, 2, 1), (0, 1, 3, 2), (0, 1, 2, 3))
+    return tuple(lanes[index] for index in permutations[selector])
 
 
 def audit_constant_animation_poses(data: bytes, specifications: list[str]) -> None:

@@ -11,6 +11,7 @@ import argparse
 import json
 import math
 from pathlib import Path
+import struct
 
 import p99_grip_composition_audit as grip
 import p99_locator_basis_audit as locator
@@ -26,6 +27,44 @@ def column_major_to_mat34(values):
     if values[3:12:4] != (0., 0., 0.) or values[15] != 1.:
         raise ValueError("nonaffine exported profile transform")
     return tuple(values[column * 4 + row] for row in range(3) for column in range(4))
+
+
+def authored_joint_name(data, pak, skeleton, joint, parser):
+    page, _, at = pak.resolve_pointer(skeleton.spec.joint_table_offset + 16 * joint + 8)
+    end = data.find(b"\0", at, pak.pages[page].file_offset + pak.pages[page].size)
+    if end < 0:
+        raise ValueError("unterminated authored joint name")
+    name = data[at:end].decode("ascii")
+    if parser.string_id(name.encode("ascii")) != skeleton.joint_ids[joint]:
+        raise ValueError("authored joint name/id mismatch")
+    return name
+
+
+def affine_gram_error(values):
+    """Deviation of the forward 3x3 columns from an orthonormal basis."""
+    return max(abs(sum(values[4 * k + r] * values[4 * k + c] for k in range(3))
+                   - float(r == c)) for r in range(3) for c in range(3))
+
+
+def profile_basis_ancestry(data, pak, skeleton, parser, basis, bind_inverse, parents):
+    references = matrix.authored.skeleton_inputs(data, skeleton)["references"]
+    result = []
+    for joint in (22, 24, 26, 28, 137, 139, 141):
+        group, local = skeleton.location(joint)
+        processing = skeleton.processing[skeleton.groups[group].processing_index]
+        bind = struct.unpack_from("<12f", references, 48 * (processing.first_parameter + local))
+        profile = basis["local_rows"][joint]
+        forward = basis["forward_affine_rows"][joint]
+        profile_q = locator.quaternion_from_basis(forward)[0]
+        bind_q = locator.quaternion_from_basis(locator.affine_inverse(bind_inverse[joint]))[0]
+        result.append({
+            "target_global": joint, "parent_global": parents[joint],
+            "target_name": authored_joint_name(data, pak, skeleton, joint, parser),
+            "profile_vs_bind_local_rotation_degrees": grip.angular_degrees(profile[4:8], bind[4:8]),
+            "profile_vs_bind_global_rotation_degrees": grip.angular_degrees(profile_q, bind_q),
+            "profile_local_scale": list(profile[:3]), "bind_local_scale": list(bind[:3]),
+            "profile_forward_gram_max_abs_error": affine_gram_error(forward)})
+    return result
 
 
 def direct_base(player, target_reference, mode, joint_locator, parent_locator):
@@ -66,6 +105,7 @@ def audit(asset, archive, dc_archive, prefix=grip.DEFAULT_PREFIX, metadata=grip.
     player_bytes = actor.extract(source.PLAYER_SKELETON.entry_name)
     player, player_inverse, player_parents = locator.load_basis(player_bytes, source.PLAYER_SKELETON)
     nadine, bind_inverse, nadine_parents = locator.load_basis(data, source.NADINE_SKELETON)
+    nadine_pak = source.PagedPak(data)
     retarget_data = parser.Psarc(Path(dc_archive), None).extract(source.RETARGET_ENTRY_NAME)
     row124 = fixture.row124_mapping(retarget_data)
     records = source.resolve_runtime_records(row124, player, nadine)
@@ -96,6 +136,10 @@ def audit(asset, archive, dc_archive, prefix=grip.DEFAULT_PREFIX, metadata=grip.
         direct_rows.append(direct)
         proposed_rows.append(proposed)
         comparisons.append({"semantic": transfer["semantic"], "target_global": target_joint,
+                            "target_name": authored_joint_name(data, nadine_pak, nadine,
+                                                               target_joint, parser),
+                            "profile_vs_bind_local_rotation_degrees": grip.angular_degrees(
+                                basis["local_rows"][target_joint][4:8], reference[4:8]),
                             **comparison})
         # Deliberately invalid as an authored R124 operand: change only the
         # target basis to bind pose to isolate the sampled profile's effect.
@@ -116,6 +160,8 @@ def audit(asset, archive, dc_archive, prefix=grip.DEFAULT_PREFIX, metadata=grip.
     proposed_frames = grip.prop_relative(grip.distal_frames(proposed_rows, parents))
     control_frames = grip.prop_relative(grip.distal_frames(control_rows, parents))
     for index, comparison in enumerate(comparisons):
+        comparison["direct_prop_relative_joint_origin_asset_units"] = list(direct_frames[index][8:11])
+        comparison["proposed_prop_relative_joint_origin_asset_units"] = list(proposed_frames[index][8:11])
         comparison["prop_relative_origin_delta_asset_units"] = math.sqrt(sum(
             (direct_frames[index][8 + j] - proposed_frames[index][8 + j])**2 for j in range(3)))
         comparison["prop_relative_rotation_delta_degrees"] = grip.angular_degrees(
@@ -124,11 +170,20 @@ def audit(asset, archive, dc_archive, prefix=grip.DEFAULT_PREFIX, metadata=grip.
             (control_frames[index][8 + j] - proposed_frames[index][8 + j])**2 for j in range(3)))
     return {
         "classification": "APPROXIMATE_PROFILE_PRESENT_R124_VS_CONDITIONAL_CHLOE_CHAIN",
+        "quaternion_decoder_model": basis["quaternion_decoder_model"],
         "retail_or_game_execution": False, "runtime_record_output": False,
         "live_grip_or_skin_contact_proven": False, "row124_profile": "E51542CA present",
+        "geometry_scope": "Prop-relative joint origins and bone axes only; origins are not fingertips, skin vertices or weapon-contact points",
         "row157_basis": "archived AGZ conditional no-profile, not live proof",
         "row124_map": map_proof,
         "profile_slice_required_globals": basis["required_globals"],
+        "profile_basis_ancestry": profile_basis_ancestry(
+            data, nadine_pak, nadine, parser, basis, bind_inverse, nadine_parents),
+        "profile_required_basis": {
+            "count": len(basis["local_rows"]),
+            "local_scales_all_unit": all(row[:3] == (1., 1., 1.) for row in basis["local_rows"].values()),
+            "forward_gram_max_abs_error": max(affine_gram_error(row)
+                                              for row in basis["forward_affine_rows"].values())},
         "comparisons": comparisons,
         "max_base_rotation_delta_degrees": max(row["base_rotation_delta_degrees"] for row in comparisons),
         "max_composite_rotation_delta_degrees": max(row["composite_rotation_delta_degrees"] for row in comparisons),

@@ -311,7 +311,7 @@ def audit_payloads(inputs: bytes, stages: bytes, output: bytes, sources, transfe
             "Double algebra is not instruction-exact F16/rsqrt/SIMD/weighted-slerp emulation",
             "Quaternion sign is equivalent; norms are checked before geometry-only normalization",
             "Reference scale/translation are receiver-specific; finger frame differences are not automatically defects",
-            "Direct R124 absolute base versus composed R20/R157 remains unmeasured",
+            "Direct R124 versus composed R20/R157 is outside this audit; use the separately versioned p99_direct_grip_audit",
             "No proof of live operands, final animation ownership, skin contact, or corrected visual grip",
         ],
     }

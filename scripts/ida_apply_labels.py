@@ -281,11 +281,15 @@ FUNCTIONS = {
     ),
     # --- 2026-08-26: native animation opcode-28 offline parity ---
     0x140128020: (
-        "InitializeAnimJointProgramOpcode28PermutationRows",
+        "AnimJointProgram_InitializePackedQuaternionPermutationRows",
         "CRT initializer registered in the executable constructor table at "
         "0x1425EAA30. It copies the two 32-byte constant blocks at "
         "0x142BF0700/0x142BF0740 into the AVX permutation rows at "
-        "0x146C71CE0/0x146C71D00 consumed by joint-program opcode 28.",
+        "0x146C71CE0/0x146C71D00 consumed by packed-quaternion operators, "
+        "including opcode24 worker142185CF0 xref142185EE5 and opcode28. "
+        "Rows are(3,1,2,0),(0,3,2,1),(0,1,3,2),(0,1,2,3). They swap "
+        "the reconstructed D lane into the selector; do not insert D into "
+        "a natural-order smallest-three list. Source blocks are NOT contiguous.",
     ),
     # --- 2026-08-21: cold ProcessWeapon factory lifecycle ---
     0x141103B70: (
@@ -4477,8 +4481,16 @@ FUNCTIONS = {
         "matrices or their104 input parameters. Sampled world output is "
         "64-byte column-vector Transform; CE108..CE141 transposes each "
         "inverse to the builder's48-byte row-major Mat34. Scalar direct "
-        "R124 versus conditional R157(R20) differs up151.847deg; bind-only "
-        "analytic control reduces this to0.01346deg. Not live/skin proof.",
+        "R124 versus conditional R157(R20) originally reported151.847deg, "
+        "but that result is REJECTED: Python opcode24 decoder used wrong "
+        "permutation/divisor. Corrected scalar max13.794632deg, palm "
+        "0.005460deg; analytic bind control0.01346deg. Still not live/skin "
+        "proof and not evidence of globally wrong authored profile. "
+        "Corrected thumb137/139/141 local profile-vs-bindQ differs only "
+        "0.0025..0.0032deg; inherited global basis differs~21.545deg via "
+        "shoulder22/elbow24/wrist26. All426 profile/bind local scales are "
+        "unit. A posed input need not commute with this inherited basis; "
+        "do not mislabel the remaining13.79deg as a local thumb-profile bend.",
     ),
     0x1417CE210: (
         "SkelTable_BuildRetargetEntry",
@@ -4605,9 +4617,17 @@ FUNCTIONS = {
     ),
     0x142185CF0: (
         "AnimJointProgram_DecodePackedQuaternions8",
-        "Decodes the low two-bit omitted-component selector and three quantized "
-        "smallest-three components, reconstructs the positive missing component, "
-        "normalizes the quaternion and writes eight mapped rows at a time.",
+        "Decodes A=bits2..16, B=bits17..31, C=bits32..47 of each6-byte "
+        "packed quaternion. A/B use float383504F3, C37B504F3; offsetBF3504F3 "
+        "(denominator32768, NOT32767). Pre-permutation lanes at142185F9B/FA1 "
+        "are(C,B,A,D), with positiveD from1-((C*C+B*B)+A*A), FLT_MIN clamp "
+        "and rsqrt/Newton sqrt approximation. No completed-Q normalization "
+        "occurs before stores.142185FAC uses the selector row from146C71CE0: "
+        "0(D,B,A,C),1(C,D,A,B),2(C,B,D,A),3(C,B,A,D). Historical Python "
+        "natural insertion and32767 divisor are REJECTED. Corrected scalar "
+        "decoder matches42 frozen nativeD350/B8 Q within1.193e-7, but scalar "
+        "sqrt is not instruction-exact. Do not reuse prior profile hash "
+        "fee2c8d5/151.847deg comparison as engine behavior.",
     ),
     0x142193DA0: (
         "AnimJointProgramOp25_CopyFloatLanes",
@@ -13808,6 +13828,23 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x146C71CE0: (
+        "g_AnimPackedQuaternionPermutationRows",
+        "Four16-byte vpermilps selector rows, materialized by140128020 "
+        "from separate32-byte blocks142BF0700/0740. Used by opcode24 "
+        "worker142185CF0 at142185EE5 and related packed-quaternion workers. "
+        "Rows(3,1,2,0),(0,3,2,1),(0,1,3,2),(0,1,2,3) act on(C,B,A,D).",
+    ),
+    0x142BF0700: (
+        "k_AnimPackedQuaternionPermutationRows01",
+        "First32-byte initializer block for146C71CE0: selector0=(3,1,2,0), "
+        "selector1=(0,3,2,1). Next32 bytes are unrelated; secondhalf at142BF0740.",
+    ),
+    0x142BF0740: (
+        "k_AnimPackedQuaternionPermutationRows23",
+        "Second32-byte initializer block copied to146C71D00: "
+        "selector2=(0,1,3,2),selector3=(0,1,2,3).",
+    ),
     0x143714A10: (
         "g_NdjobJointBlendJobRegistration",
         "0x20-byte registration record: +0 name AsyncObjectUpdate_JointBlend_Job "

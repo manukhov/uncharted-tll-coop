@@ -84,6 +84,17 @@ class DirectGripTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 a.column_major_to_mat34(changed)
 
+    def test_gram_diagnostic_measures_columns_not_translation_or_rows(self):
+        # Last column has squared length145; subtract identity =>144.
+        # A row-based Gram calculation would instead report212.
+        forward = (1., 2., 3., 40., 4., 5., 6., 50., 7., 8., 10., 60.)
+        self.assertEqual(a.affine_gram_error(forward), 144.)
+        shifted = list(forward)
+        shifted[3], shifted[7], shifted[11] = -1e4, 2e4, -3e4
+        self.assertEqual(a.affine_gram_error(shifted), 144.)
+        self.assertEqual(a.affine_gram_error((1., 0., 0., 19., 0., 1., 0., -23.,
+                                             0., 0., 1., 29.)), 0.)
+
     def test_mode1_uses_raw_receiver_ST_and_not_player_or_profile_rows(self):
         player = row(Z90, (2., 3., 4.), (11., 13., 17.))
         raw_reference = row(X90, (5., 7., 9.), (-19., 23., -29.))
@@ -208,6 +219,72 @@ def have_frozen_inputs():
 
 class FrozenDirectGripTests(unittest.TestCase):
     @unittest.skipUnless(have_frozen_inputs(), "pinned local assets/dependency not present")
+    def test_named_joint_origins_are_not_promoted_to_fingertips_or_contact(self):
+        base = a.source.native.DEFAULT_GAME / "Uncharted4_data/build/pc/thelostlegacy"
+        result = a.audit(a.ROOT / "reports/actor_packages/nadine-dlc-base.pak",
+                         base / "actor77.psarc", base / "dc1.psarc")
+        self.assertEqual(result["quaternion_decoder_model"], "opcode24-cba-swap-f32-32768-sqrt-v2")
+        self.assertIn("joint origins and bone axes only", result["geometry_scope"])
+        self.assertIn("not fingertips, skin vertices or weapon-contact points", result["geometry_scope"])
+        self.assertFalse(result["live_grip_or_skin_contact_proven"])
+        self.assertFalse(result["runtime_record_output"])
+        expected_names = {28: "r_palm", 30: "r_hand_prop_attachment",
+            105: "r_pinkya", 107: "r_pinkyb", 109: "r_pinkyc", 111: "r_pinkyd",
+            137: "r_thumba", 139: "r_thumbb", 141: "r_thumbc",
+            113: "r_ring_metacarpal", 115: "r_ringa", 117: "r_ringb", 119: "r_ringc",
+            121: "r_middle_metacarpal", 123: "r_middlea", 125: "r_middleb", 127: "r_middlec",
+            129: "r_index_metacarpal", 131: "r_indexa", 133: "r_indexb", 135: "r_indexc"}
+        self.assertEqual({entry["target_global"]: entry["target_name"]
+                          for entry in result["comparisons"]}, expected_names)
+        for entry in result["comparisons"]:
+            direct = entry["direct_prop_relative_joint_origin_asset_units"]
+            proposed = entry["proposed_prop_relative_joint_origin_asset_units"]
+            self.assertEqual((len(direct), len(proposed)), (3, 3))
+            self.assertTrue(all(math.isfinite(value) for value in direct+proposed))
+            distance = math.sqrt(sum((x-y)**2 for x, y in zip(direct, proposed)))
+            self.assertAlmostEqual(entry["prop_relative_origin_delta_asset_units"], distance, delta=1e-14)
+            self.assertFalse(any("fingertip" in key or "contact" in key for key in entry))
+        prop = next(entry for entry in result["comparisons"] if entry["target_global"] == 30)
+        self.assertLess(max(abs(value) for key in ("direct_prop_relative_joint_origin_asset_units",
+                            "proposed_prop_relative_joint_origin_asset_units") for value in prop[key]), 1e-12)
+
+    @unittest.skipUnless(have_frozen_inputs(), "pinned local assets/dependency not present")
+    def test_local_thumb_pose_is_separated_from_inherited_global_basis(self):
+        base = a.source.native.DEFAULT_GAME / "Uncharted4_data/build/pc/thelostlegacy"
+        result = a.audit(a.ROOT / "reports/actor_packages/nadine-dlc-base.pak",
+                         base / "actor77.psarc", base / "dc1.psarc")
+        ancestry = result["profile_basis_ancestry"]
+        self.assertEqual([entry["target_global"] for entry in ancestry], [22, 24, 26, 28, 137, 139, 141])
+        self.assertEqual([entry["parent_global"] for entry in ancestry], [20, 22, 24, 26, 28, 137, 139])
+        self.assertEqual([entry["target_name"] for entry in ancestry],
+                         ["r_shoulder", "r_elbow", "r_wrist", "r_palm", "r_thumba", "r_thumbb", "r_thumbc"])
+        for entry in ancestry[:3]:
+            self.assertGreater(entry["profile_vs_bind_local_rotation_degrees"], 10.)
+        compared = {entry["target_global"]: entry for entry in result["comparisons"]}
+        for entry in ancestry[3:]:
+            local = entry["profile_vs_bind_local_rotation_degrees"]
+            inherited = entry["profile_vs_bind_global_rotation_degrees"]
+            self.assertLess(local, .01)
+            self.assertGreater(inherited, 20.)
+            self.assertLess(inherited, 25.)
+            self.assertAlmostEqual(compared[entry["target_global"]]["profile_vs_bind_local_rotation_degrees"],
+                                   local, delta=1e-12)
+        for joint in (137, 139, 141):
+            # Retarget output difference is another quantity, NOT the tiny
+            # profile-vs-bind local joint rotation reported just above.
+            self.assertGreater(compared[joint]["base_rotation_delta_degrees"], 5.)
+        for entry in ancestry:
+            self.assertEqual(entry["profile_local_scale"], [1., 1., 1.])
+            self.assertEqual(entry["bind_local_scale"], [1., 1., 1.])
+            self.assertTrue(math.isfinite(entry["profile_forward_gram_max_abs_error"]))
+            self.assertLess(entry["profile_forward_gram_max_abs_error"], 1e-5)
+        basis = result["profile_required_basis"]
+        self.assertEqual(basis["count"], 71)
+        self.assertIs(basis["local_scales_all_unit"], True)
+        self.assertGreaterEqual(basis["forward_gram_max_abs_error"], 0.)
+        self.assertLess(basis["forward_gram_max_abs_error"], 1e-5)
+
+    @unittest.skipUnless(have_frozen_inputs(), "pinned local assets/dependency not present")
     def test_pinned_comparison_is_finite_conditional_and_not_runtime_evidence(self):
         base = a.source.native.DEFAULT_GAME / "Uncharted4_data/build/pc/thelostlegacy"
         result = a.audit(a.ROOT / "reports/actor_packages/nadine-dlc-base.pak",
@@ -233,6 +310,32 @@ class FrozenDirectGripTests(unittest.TestCase):
         self.assertLess(prop["composite_rotation_delta_degrees"], 1e-5)
         self.assertLess(prop["composite_ST_component_delta"], 1e-5)
         json.dumps(result, allow_nan=False)
+
+    @unittest.skipUnless(have_frozen_inputs(), "pinned local assets/dependency not present")
+    def test_corrected_packed_profile_rejects_historical_axis_swap_baseline(self):
+        base = a.source.native.DEFAULT_GAME / "Uncharted4_data/build/pc/thelostlegacy"
+        result = a.audit(a.ROOT / "reports/actor_packages/nadine-dlc-base.pak",
+                         base / "actor77.psarc", base / "dc1.psarc")
+        # Corrected op24 is independently tested against42 archived NATIVE
+        # source rows in test_packed_quaternion_audit. The former natural-insert
+        # decoder produced151.847deg and0.115614units here; those were parser
+        # artifacts, not evidence about the grip. These pins remain scalar
+        # model regressions, not newly captured native R124 outputs.
+        self.assertAlmostEqual(result["max_base_rotation_delta_degrees"],
+                               13.794629174718969, delta=1e-7)
+        self.assertAlmostEqual(result["max_composite_rotation_delta_degrees"],
+                               13.794632021254229, delta=1e-7)
+        self.assertAlmostEqual(result["max_prop_relative_origin_delta_asset_units"],
+                               .013231175572052506, delta=1e-10)
+        palm = result["comparisons"][0]
+        self.assertEqual(palm["target_global"], 28)
+        self.assertAlmostEqual(palm["base_rotation_delta_degrees"],
+                               .0054594580077776175, delta=1e-7)
+        self.assertLess(result["max_base_rotation_delta_degrees"], 14.)
+        self.assertLess(palm["base_rotation_delta_degrees"], .01)
+        self.assertFalse(result["runtime_record_output"])
+        self.assertFalse(result["live_grip_or_skin_contact_proven"])
+        self.assertIn("conditional", result["row157_basis"])
 
     @unittest.skipUnless(have_frozen_inputs(), "pinned local assets/dependency not present")
     def test_bind_control_changes_only_locators_and_remains_explicitly_invalid_R124(self):
