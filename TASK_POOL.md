@@ -25,6 +25,12 @@ unchanged. No live speedup or grip claim. New evidence quota/competing candidate
 and falsifiable one-game scenario recorded at endCOOP_STATUS before launch.
 Once deployed, verify fresh READY before user load, Nadine identity, then read
 terminal9-bin/owner-detail evidence; no rearm/reinjection after refusal.
+DEPLOYED after5f33041 push: PID9852 FILETIME134343662202234920, watcher8464
+READY-before-injection,300s capture reports/preselect-scalar-20260920-p9852.
+Frozen DLL at7ffea1000000,size2129920, injector0/module readback confirmed.
+Fresh observerREADY plus LOCAL-LOOK READY hook1/state-net1/Nadine verified;
+logoffset20819113. User asked to load/drawP99/stand3-5s and confirmready+Nadine.
+Await result, no new Init/STOP recorded yet, no visible grip claim.
 
 Current preselect-trace handoff (2026-09-20): source-only observer now reports
 eight scalar QPC bins, stage/detail, selected/normal, actual raw-id/params and

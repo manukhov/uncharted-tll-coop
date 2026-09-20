@@ -34899,3 +34899,20 @@ applied to the single ida/tll.i64;1902functions/73data/1type,
 save_database returned True in reports/ida_apply_preselect_scalar_20260920_status.txt.
 MCP restarted; native job name/address and ingress xrefs read back. No new
 retail labels required; new RVAs above belong to the mod DLL, not the retail IDB.
+
+### Scalar-preselect exam deployed: awaiting user P99 scenario
+
+Source5f33041 committed/pushed before launch. One gamePID9852 started
+2026-09-20 11:23:40.2234920 Moscow; creationFILETIME134343662202234920
+(31279321:1466148904). No other tll process existed. Watcher8464 attached with
+300s bound; exact PID/image/creation READY checked before injection. Capture
+reports/preselect-scalar-20260920-p9852; one frozen injector exited0, module
+readback base7ffea1000000,size2129920, exact frozen scalar DLL path.
+Preinjection locomotion_hook.log offset20819113. Fresh PID9852 lines confirm
+tagpreselect-scalar, LOCAL-LOOK INSTALL installed/protection-restored1/error0,
+roleB/requestNadine, observer two-producer INSTALLED/READY writes0, and
+LOCAL-LOOK READY hook1/state-net1/requestNadine/hashD27C074F. No Init/result at
+this checkpoint. User told to load save only after READY, drawP99, stand3-5s,
+reply ready and confirm visualNadine. No agent game input, second copy, or
+reinjection. Read that fresh visual/Init and terminal9-bin/owner-detail result
+next; this source-only build intentionally cannot change visible grip.
