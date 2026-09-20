@@ -17,19 +17,29 @@ mode1 Rabs(X*B)=Rabs(X)*Radd(B), modulo floating point; mode3 copies source.
 Player/Chloe/Nadine prop is a direct child of the right palm and all three maps
 20/124/157 use prop mode3, so the proposed sequence cannot change that relative
 bone frame. This does not prove skin contact or direct/composed base equality.
-Quantify R124(D350) versus R157(R20(D350)) before promoting another writer exam;
-do not reopen coarse profile-primary/ordinal fixes or confuse a1008-byte stable
-calculation with a visible repair. See latest COOP_STATUS correction and tests.
+Direct/composed comparison is now quantified below; do not reopen coarse
+profile-primary/ordinal fixes or confuse a1008-byte stable calculation with a
+visible repair. See latest COOP_STATUS correction and tests.
 Both writers remain OFF; appearance and attachment fixes untouched.
-Value audit: scalar/native max4.503e-7, equivariance4.997e-16; prop all48bytes
-unchanged. Fresh row124 map71/selected21 preserved; all21 cmd16 consumers and
-parent order/padding/no-later-overwrite checks pass. Python156/CTest27 pass.
-No built numericR124 exists in prior preparation fixtures (71*46 zero UNUSED).
-Its E51542CA profile DOES have exacttargetED25C708/C39CA709 disk registration
-in Nadine PAK (93E98->93278->A21A0->2DA0),7groups/1frame, not live residency.
-NEXT: reconstruct full sampled local references/inverse globals before
-1417CE198->1417CE210, then quantify direct/composed base values. Group0-only
-decode/null-profile R124 or wholesale global AnimateObject are not substitutes.
+Latest STATIC: all426 E51542CA parameters/27scalars decoded. Required71 target
+matrices have a closed g0/g1 op40/op53 slice; no procedural writes to their104
+parameters or required matrices. Separate-scale propagation replays authored
+bind inverses within3.187e-7. Locator oracle matches84 archived nativelocators
+within2.385e-7, but24 differ in bytes; not instruction-exact native operands.
+scripts/p99_direct_grip_audit.py now compares all21 D350/B8 rows: profile-present
+R124 vs conditional R157(R20), max151.847deg atfinger137, palm21.601deg,
+prop-relative origin0.115614assetunits. Prop mode3/S/T unchanged. Bind-basis-only
+analytic control (NOT authoredR124 or live absence evidence) reduces max to
+0.013459deg/origin6.758e-6. Large difference is profile contribution within this
+model, not additive order; no source/DLL/writer change or game launch.
+NEXT: localize thumb137->139->141 profile-vs-bind local rotations and endpoints
+relative to P99, then establish a useful contact correction before a writer exam.
+Do not globally remove E51542CA, substitute this scalar result for runtime
+records, or claim the separate left support arm is corrected. Native cmd16
+custom wrappers have QPC/FLS/global dependencies; do not wholesale-call them
+in a mapped image. Existing 71*46 zero UNUSED nativeR124 fixture remains unused.
+Verification: Python212/212, CTest27/27, fresh audits pass; singleIDB savedTrue,
+MCP restarted/readback verified. No tll/native retail execution this pass.
 
 Current late-arm handoff (2026-09-20): PID9852 already absent, not terminated here.
 No existing no-read completed-P99 hook exists; CommitDrawn != state2, ApplyState

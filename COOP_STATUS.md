@@ -3,24 +3,24 @@
 ## Current user priority / handoff (2026-09-20)
 
 Continue the local Nadine P99 grip repair, including the reported lag/crash.
-ADF corrected the real retarget capacity to256 and traced ordinary ownership.
-AFE source-only exam reached its first preselection budget stop: probes1,
-attempts0, writes0; fullproducer never entered. Game23348 later exited0 with
-no second-chance fault;4235 handled first-chance exceptions are not crash proof.
-Observer disabled again in default AFE-safe source/DLL; both writersfalse and
-1ms unchanged. Correction: the user reports playing Chloe in AFE,
-not Nadine. Role B is configuration only; this was NOT a validated Nadine/P99
-exam. User resumed work: init-only appearance witnesses are prepared and tested
-in 2026-09-20look-init and deployed once to PID23264. Appearance is now CONFIRMED
-for this run: exact Init hash-selected for retained0 plus the user's screenshot
-showing Nadine. Pistol grip is still visibly wrong; observer/writers remain off.
-Do not reinject any already loaded runtime. PID2692 preselect trace completed:
-probes1/attempts0/writes0, normal Nadine gate accepted, owner snapshot refused;
-184671/184816ticks fell in the INITIAL normal bin, not the owner bin (54ticks).
-No full producer/math ran. See final result before more tests. Next separate
-work: statically inspect cold preselect initialization/normal-read boundaries
-and the early owner rejection; do not blame full pose math or widen the budget.
-Default builds remain observer OFF; working appearance/attachments unchanged.
+The user self-closed the last unchanged PID18204; no late-arm source exam ran.
+Do not repeat that diagnostic by default. Appearance Nadine was user-confirmed;
+both P99 writers and the ordinary observer remain OFF. Attachments unchanged.
+
+Latest STATIC value audit closes the missing profile-present R124 comparison:
+decode E51542CA's426 parameters/27 scalars, prove a71-matrix g0/g1 dependency
+slice, reconstruct packed locator algebra, compare21 semantic D350/B8 rows.
+Direct R124 versus archived conditional Chloe chain differs up151.847deg at
+finger137, palm21.601deg; prop mode3 remains invariant. Analytic bind-basis-only
+control reduces max to0.013459deg and prop-relative origin0.115614 to6.758e-6
+asset units. Thus sampled target basis matters in this approximate model;
+additive order alone does not. Not a visual fix, native-bit-exact result, live
+R124/profile-residency proof or permission to remove the profile globally.
+Next: localize the thumb137->139->141/profile-versus-bind geometry relative to
+P99, establish what would improve skin/handle contact, and distinguish the left
+support-arm issue from these21 right-hand rows. Preserve exact source/owner
+admission; do not resume cost campaigns or launch a writer on angle magnitude
+alone. Full result, alternatives and verification are in the final section.
 
 ## Historical priority snapshot (2026-08-27)
 
@@ -35267,3 +35267,135 @@ row124-profile, op40-consumer and op53-handoff comments (1902functions,
 `reports/ida_apply_p99_equivariance_20260920_status.txt`). Restarted read-only
 MCP resolves141AE2100 as RetargetPlugin_DoJointRetarget and retains its code
 xref141AE2EBE from ApplyJointRetargets. No parallel IDB or new game process.
+
+### 2026-09-20 STATIC: quantify the profile-present R124 hand basis without running the game
+
+Continuation after the unchanged game was closed. No game/process injection,
+arming, native retail execution, gameplay input or runtime C++ change. Both
+writers remain false. This completes the previously missing numerical comparison,
+not the grip repair. New scripts are pure offline audits, not runtime fixtures.
+
+**Alternatives and result.** H-order-alone remains REJECTED by the earlier
+same-map equivariance proof. H-route/basis-convention-error is disfavored by
+independent locator and bind-replay oracles plus the control below. H-distinct-
+profile-base is supported STATIC: direct profile-present R124 differs greatly
+from the archived conditional R157(R20) base. H-that-difference-fixes-contact
+remains HYPOTHESIS: angle size proves neither the correct direction nor skin
+contact, active live ownership, or the state of the left support arm. The older
+coarse reference-profile/primary-ordinal rejections are NOT overturned wholesale.
+
+**Complete authored constants.** `p99_nadine_profile_audit.py` pins Nadine PAK
+SHA256 `2bf66e61fae156a41952d8d2659e06215dbe8f0c827a9f6a89cada0c9490b06b`.
+Exact registration93E98->slot93278->descriptorA21A0->ANIM2DA0 resolves
+E51542CA, databaseED25C708, skeletonC39CA709. The11088-byte raw ANIM SHA is
+`322dc889cfbef6d041081956a8bebc55d65f2257290bd2836aadbe73677ae74c`.
+Seven groups have66/38/96/83/88/52/3 parameter rows, cumulative0/66/104/200/
+283/371/423: total426. Every group uses constant op22+24; g0 also op25.
+Op22/24 address state+8 JointParams, but op25 `142193DA0->142186270` addresses
+the SEPARATE state+10h scalar bank:27 logical,32 padded writes, sentinel112.
+Padding destination repetitions are not logical joints; padded data may overlap
+following payload and must not be decoded as meaningful values. Scalar-model
+float32 row SHA `fee2c8d5fe406d321d85e3d8929ab31cd21be1c6b3009bde082d9ed67bf1d78c`.
+This decoder alone is NOT sampled AnimateObject output.
+
+**Required sampling dependency closed.** BuildRetargetEntries1417CDDC0 calls
+AnimateObject1418AB8F0 atCE068, then exports sampled locals/inverse world bases
+toCE198->BuildRetargetEntry1417CE210. Flags2 builds all8 skeleton groups, although
+the profile has7 ANIM groups; cmd27 exports cumulative parameter rows AFTER
+cmd15/16. Cmd25 exports64-byte column-vector transforms, andCE108..CE141
+transposes inverse results to the48-byte row-major Mat34 builder input.
+Authored row124 resolves71/74 records (excluded1,3,70), modes0:1/1:62/2:6/3:2.
+Target joint/parent closure is exactly `{0,2..30,32..34,104..141}`, allg0/g1.
+Source closure is `{0,2..13,16..35,639..676}`. No root-prefix allocation claim
+follows: native parent loads still physically precede its negative-root branch.
+
+`p99_profile_matrix_audit.py` checks all53 operators and full encoded writes.
+No operator overwrites the104 g0/g1 parameter-prefix rows; no non-op40 writer
+touches any of the required71 matrices. Every op40 parent and flag agrees with
+authored raw parents. g0 op53 ordinal49 exports full palm27/28 matrices W700/740
+to scratchF90/FD0, subsequently read by left/right finger roots; no later write
+overlaps this scratch. Duplicate producers are exact SIMD padding at0/34/141.
+Cmd15 identity seed is141ABA921; builder cmd25 root isCE003..CE032 identity.
+
+At op40 worker142189FB0, workspace64 is3 affine rows plus SEPARATE local scale,
+not an ordinary4x4. Parent(A,t,S), local(R,T,s) give
+`Anew=A*diag(flag8?1:S)*R`, `tnew=A*(S*T)+t`, `Snew=s`; do not normalize Q.
+Flag8 is set on required joints except2/14. Cmd25 worker14218AC90 applies the
+remaining localS and transposes to `(Anew*diag(Snew),tnew)`. An independent
+authored-bind replay times authored inverse yields max identity error3.186435e-7
+over71 matrices. This is stronger than validating a matrix model against itself.
+
+**Reject wholesale cmd16 execution in raw mapped code.** Custom128/129/131/132
+buffer-local numeric outputs do not make wrappers isolated. In particular131
+QPC calls141A94DC0/141A9502D divide by mutable143077520, update14388BF4C/
+14388BF40 and call14160C120 at141A950A9 unconditionally. This helper uses FLS
+and render-state globals1437E9700/146B18088/90 and may cache FLS slots4/5.
+128/129 have analogous tails97748/95A90. Do not stub those globals/imports or
+declare owned evaluator buffers sufficient. The pure dependency slice avoids
+executing those wrappers after proving their outputs irrelevant to its matrices.
+
+**Packed locator algebra independently checked.** `p99_locator_basis_audit.py`
+reconstructs `half(conj(Qsource)*Qtarget)` from inverse-global Mat34 converted
+back to forward bases. Parent+14h is builtCF634..CFA6C; joint+06h CFA70..CFE78.
+No builder normalization precedes nearest-even half packing; consumer141AE1F10
+normalizes after unpacking. General cofactor/determinant/reciprocal inverse
+14023ABB0 is renamed Matrix4x4_InvertAffine (old InvertRigid was too narrow).
+Quaternion142177E50 branch/tie convention and float32-before-half are modeled.
+84 saved native locators,42row20+42conditionalrow157, agree within2.385e-7;
+24 are NOT byte-identical. Wrong multiplication order gives0.172/0.262 errors.
+This validates the algebra, not every native float/reciprocal/MXCSR instruction.
+
+**Numerical comparison and falsifying control.** `p99_direct_grip_audit.py`
+keeps all21 semantic mappings, raw receiver reference S/T (NOT sampled profile
+S/T), D350 base, B8 additive and conditional row157 operands pinned. Only R124
+locator bases use the newly reconstructed profile slice. Profile-present direct
+versus conditional Chloe-chain max local base angle is151.847286deg at joint137;
+after the same additive it is151.847284deg. Palm28 differs21.601301deg. Prop30
+mode3 remains unchanged; palm-to-prop relative rotation is effectively identical
+(~1.75e-6deg numeric noise). S/T component differences are zero. Largest distal
+prop-relative origin difference is0.115614261 ASSET UNITS atjoint119; no physical
+unit or rendered contact is inferred. Thumb137/139/141 local deltas are
+151.8473/41.6420/72.8002deg; its last prop-relative rotation is161.842deg.
+
+Analytic bind-basis control replaces ONLY R124 target inverse basis with authored
+Nadine inverse-bind, leaving all other operands untouched. It is explicitly NOT
+authored profile-present R124 or evidence of live profile absence. Max local
+base/composite angle drops to0.013457651/0.013458586deg and prop-relative origin
+to6.757505e-6 asset units. Separate half quantization need not cancel exactly.
+Two independent arithmetic reviews agreed. Thus the large difference comes from
+the sampled target basis within this model, not an arbitrary route-length or
+quaternion-order convention. It does NOT authorize deleting E51542CA globally.
+
+Half-subnormal control:26 meaningful fields are all translations. Zeroing them
+changes sampled-world translation by up7.560920e-5 (joint141), but leaves all71
+linear matrices EXACTLY unchanged, so this21-row mode1/mode3 quaternion/S/T
+comparison is unchanged. Full sampled matrices are not claimed identical; mode2
+translation/scale construction is outside this specific control.
+
+**Next bounded step / remaining acceptance.** Localize thumb137->139->141 local
+profile-versus-bind rotations and endpoints relative to P99, checking authored
+hand/weapon geometry to establish which correction improves contact. Keep the
+prop/palm invariant separate from finger skin fit and the left support arm.
+Exact live source ownership/operand admission remains required. Do not restart
+the unchanged diagnostic, weaken owner/budget checks, write fingers into the
+66-row Fg+100 cache, synthesize native records from these approximate floats, or
+launch a writer based on a large angle alone. A useful contact prediction must
+be written before a future one-game test. No runtime test is authorized by this
+pure result and no visual improvement is claimed.
+
+Reproduction: `py -3.12 scripts/p99_nadine_profile_audit.py`,
+`py -3.12 scripts/p99_locator_basis_audit.py`, and
+`py -3.12 scripts/p99_direct_grip_audit.py`. Local optional JSONs are
+reports/p99-nadine-profile-20260920.json and p99-direct-grip-20260920.json.
+All required pinned-asset regression cases run; no substituted/null runtime
+profile is generated. Verification and IDB handoff are recorded below.
+
+Verification: complete Python suite212/212 (56 new tests), CTest27/27,
+fresh profile/direct audits and git diff --check pass. No pinned-asset test was
+skipped. Subnormal and bind-basis controls are retained as regression tests.
+Single IDB save reports1902functions/73data/1type, `save_database returned True`
+in reports/ida_apply_p99_profile_basis_20260920_status.txt. Restarted read-only
+MCP resolves14023ABB0 as Matrix4x4_InvertAffine with builder call xrefsCE0F1,
+CF6BF/CF78A/CFB01/CFBD3 retained; corrected custom131 dependency comment was
+read back. Both source writer flags remain false; no tll process was present.
+Pre-existing untracked tmp/ is user-owned and untouched.

@@ -165,7 +165,14 @@ FUNCTIONS = {
         "This is NOT an isolated leaf: it acquires global 0x146905400, uses "
         "Memory_AllocateFromCurrentAllocator, and dispatches "
         "ProcessAnimCmdListSegment. Do not call it through an uninitialized "
-        "MappedImage merely because selected joint-math leaves are map-safe.",
+        "MappedImage merely because selected joint-math leaves are map-safe. "
+        "STATIC 2026-09-20 profile slice: flags2 emits all8 Nadine skeleton "
+        "groups although E51542CA has7 ANIM groups. Cmd27 exports cumulative "
+        "parameter rows after cmd15/16, not raw constants alone. Only71 "
+        "row124-required matrices are proven independent of procedural ops: "
+        "unchanged g0/g1 parameter prefixes, op40 and op53 palm handoff. "
+        "This pure dependency slice is not permission to execute custom "
+        "operators with their profiling/FLS dependencies offline.",
     ),
     0x1417C9070: (
         "AnimMasterTable_LoginArtGroup",
@@ -4463,7 +4470,15 @@ FUNCTIONS = {
         "row124 fixture has zero UNUSED numeric bytes, not built locators. "
         "For direct-base comparison reconstruct the complete sampled target "
         "references/inverse globals beforeCE198; group0-only profile decode "
-        "and conditional-null row124 are not equivalent operands.",
+        "and conditional-null row124 are not equivalent operands. STATIC "
+        "full E51542CA constant decode covers426 parameters and27 separate "
+        "scalars. Required globals0,2..30,32..34,104..141 form a closed "
+        "71-matrix op40 slice in g0/g1; no other operator writes these "
+        "matrices or their104 input parameters. Sampled world output is "
+        "64-byte column-vector Transform; CE108..CE141 transposes each "
+        "inverse to the builder's48-byte row-major Mat34. Scalar direct "
+        "R124 versus conditional R157(R20) differs up151.847deg; bind-only "
+        "analytic control reduces this to0.01346deg. Not live/skin proof.",
     ),
     0x1417CE210: (
         "SkelTable_BuildRetargetEntry",
@@ -4517,7 +4532,15 @@ FUNCTIONS = {
         "Explicit payload writes startCF490; "
         "no record free or registry epoch write in builder. Package callback "
         "path does not acquire SkelTable registry lock. Compare completed "
-        "owned operands on each preparation rather than cache epoch alone.",
+        "owned operands on each preparation rather than cache epoch alone. "
+        "STATIC 2026-09-20 packed locator algebra: invert source/target "
+        "inverse-global Mat34 through general affine14023ABB0, obtain "
+        "basis quaternions via142177E50, then half(conj(Qsource)*Qtarget). "
+        "Parent quaternion at+14h, joint at+06h. Builder does not normalize "
+        "before nearest-even half packing; decoder141AE1F10 normalizes "
+        "after loading. Approximate scalar oracle agrees with84 archived "
+        "native locators within2.385e-7;24 are not byte-identical. Root "
+        "negative-prefix loads still precede its discard branch.",
     ),
     0x141936490: (
         "RetargetPlugin_AddJointRetargetCommands",
@@ -4565,7 +4588,10 @@ FUNCTIONS = {
     0x142185770: (
         "AnimJointProgram_DecodeHalfVectors8",
         "SIMD body for animation opcode 22. Decodes three IEEE half components for "
-        "each mapped destination in eight-row blocks and writes the float lanes.",
+        "each mapped destination in eight-row blocks and writes the float lanes. "
+        "STATIC E51542CA has26 meaningful half-subnormal components, all "
+        "translations. Manual conversion is MXCSR/DAZ-sensitive; ordinary "
+        "Python half conversion is not an instruction-exact substitute.",
     ),
     0x142193D60: (
         "AnimJointProgramOp24_DecodePackedQuaternions",
@@ -4586,7 +4612,9 @@ FUNCTIONS = {
     0x142193DA0: (
         "AnimJointProgramOp25_CopyFloatLanes",
         "Animation joint-program opcode 25 dispatcher for mapped constant float-lane "
-        "payloads.",
+        "payloads. STATIC: destination bank is state+10h scalar storage, "
+        "not op22/op24 state+8 JointParams. E51542CA g0 has27 logical "
+        "scalars,32 physical writes and repeated padding destination112.",
     ),
     0x142186270: (
         "AnimJointProgram_CopyFloatLanes8",
@@ -5323,7 +5351,13 @@ FUNCTIONS = {
         "other parents are the preceding same-finger matrix. Final records38/39 "
         "repeat local37 as SIMD padding. No later program matrix writer "
         "overlaps a selected output, excluding those exact padding repeats. "
-        "This closes consumer topology, not numerical/skin correctness.",
+        "This closes consumer topology, not numerical/skin correctness. "
+        "STATIC profile reconstruction: workspace stores3 affine rows "
+        "PLUS separate local scale S, not an ordinary4x4. For parent(A,t,S) "
+        "and local(R,T,s): Anew=A*diag(flag8?1:S)*R; "
+        "tnew=A*(S*T)+t; Snew=s. Do not normalize Q here. Flag8 is set "
+        "on all71 required row124 joints except2/14. Authored-bind replay "
+        "times authored inverse gives max identity residual3.187e-7.",
     ),
     0x142194680: (
         "AnimJointProgramOp41_ScatterVectorComponents",
@@ -5502,7 +5536,11 @@ FUNCTIONS = {
         "writes one encoded scalar at record+0x3C. Payload selector 3 resolves a "
         "nested four-pointer table first, so the record destination selector is "
         "relative to that live table rather than the top-level evaluator bases. "
-        "Its dataflow has no camera/global input.",
+        "Its mathematical output is buffer-local, but the wrapper is NOT "
+        "isolated: unconditional QPC profiling divides by143077520, "
+        "updates global counters and calls14160C120 (FLS/render-state "
+        "access), including the tail at141A97748. Do not execute through "
+        "raw mapped retail code with only owned evaluator buffers.",
     ),
     0x141A951F0: (
         "AnimJointProgramCustomOp129",
@@ -5510,8 +5548,10 @@ FUNCTIONS = {
         "encoded 16-byte quaternion, computes a signed wrapped relative angle, and "
         "writes one encoded scalar at record+0x3C through the nested four-pointer "
         "table resolved by payload selector 3. The record selector is therefore "
-        "not a top-level base selector. It has no Player, camera, screen-route or "
-        "gameplay-global read.",
+        "not a top-level base selector. Buffer-local math does not imply "
+        "an isolated wrapper: unconditional QPC/global profiling and "
+        "14160C120 FLS/render-state tail at141A95A90 prohibit raw mapped "
+        "execution with only owned evaluator buffers.",
     ),
     0x141A945F0: (
         "AnimJointProgramCustomOp130",
@@ -5528,7 +5568,10 @@ FUNCTIONS = {
         "builds an affine matrix, and writes authored component codes to encoded "
         "scalar destinations through the nested four-pointer table selected by "
         "payload word 1. Its descriptor destination selector is not a top-level "
-        "base selector. No direct camera/global source is reachable.",
+        "base selector. Correction: buffer-local result does NOT mean "
+        "wrapper purity. QPC calls141A94DC0/141A9502D divide by mutable "
+        "143077520; counters14388BF4C/14388BF40 are written;141A950A9 "
+        "calls14160C120 with FLS/render-state dependencies unconditionally.",
     ),
     0x141A95E80: (
         "AnimJointProgramCustomOp132",
@@ -5541,8 +5584,10 @@ FUNCTIONS = {
         "destinations are full 32-bit encoded values, masked 0xFFFFFFFC, "
         "not truncated 16-bit indices. C39 g0's two instances write encoded "
         "EC0/EC4/EC8 and EF0/EF4/EF8/2E2/34E/3B2. "
-        "It also reads SegmentContext+0x4A flags 0x100/0x200. It has no Player, "
-        "camera, screen-route or gameplay-global read.",
+        "It also reads SegmentContext+0x4A flags 0x100/0x200. Its numeric "
+        "output is buffer-local, but profiling/import/FLS wrapper "
+        "dependencies are not isolated. Do not call a full cmd16 program "
+        "through raw mapped code merely from this encoded-buffer audit.",
     ),
     0x141A97970: (
         "AnimJointProgramCustomOp133",
@@ -5557,7 +5602,11 @@ FUNCTIONS = {
     0x14218AC90: (
         "AnimJointProgram_TransformMatrixRange",
         "Transforms count 64-byte matrix rows by one supplied 3x4 basis and writes "
-        "the resulting 64-byte rows to the encoded destination array.",
+        "the resulting 64-byte rows to the encoded destination array. "
+        "Also used by cmd25 sampled-world export: applies the separately "
+        "stored local scale to the3 affine basis rows, then transposes "
+        "to four column-vector SMath::Transform float4s. For the retarget "
+        "builder identity root at1417CE003..CE032, export is(A*diag(S),t).",
     ),
     0x142194560: (
         "AnimJointProgramOp57_WriteSkinningPalette",
@@ -12304,10 +12353,14 @@ FUNCTIONS = {
         "off-hand target.",
     ),
     0x14023ABB0: (
-        "Matrix4x4_InvertRigid",
-        "Inverts a rigid 4x4 transform. WeaponIK_Apply applies it to the "
+        "Matrix4x4_InvertAffine",
+        "Inverts a general nonsingular affine4x4 transform using cofactors, "
+        "determinant and vrcpps Newton refinement, NOT a rigid transpose. "
+        "The historical InvertRigid name was too narrow. WeaponIK_Apply applies it to the "
         "opposite hand-prop matrix before transferring the opposite wrist-to-"
-        "prop relation onto the selected hand-prop.",
+        "prop relation onto the selected hand-prop. SkelTable retarget "
+        "construction also uses it on sampled transforms and source/target "
+        "inverse-global Mat34 operands converted to4x4 columns.",
     ),
     0x140EE7500: (
         "Matrix4x4_NormalizeBasisRows",
