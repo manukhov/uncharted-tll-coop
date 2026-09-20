@@ -30,7 +30,20 @@ READY-before-injection,300s capture reports/preselect-scalar-20260920-p9852.
 Frozen DLL at7ffea1000000,size2129920, injector0/module readback confirmed.
 Fresh observerREADY plus LOCAL-LOOK READY hook1/state-net1/Nadine verified;
 logoffset20819113. User asked to load/drawP99/stand3-5s and confirmready+Nadine.
-Await result, no new Init/STOP recorded yet, no visible grip claim.
+RESULT user "готово, ни черта не изменилось": grip unchanged. Fresh Init
+hash-selected/normalNadineC39CA709/6480; STOPbudget probes1 attempts0 writes0,
+detailcontroller-slot.175170ticks=setup25+normal175014+gate8+retained72+fg1+
+owner50; zeroRESULT/APPLIED. Residual17.5ms is NOT local setup, exact query/
+scheduling/debugger attribution still absent. Slot check is int32+120 readfail
+OR outside0..17, no scalar captured; state+134/weapon/numeric gates not reached.
+Do not infer-1 solely from adjacentcold log, substitute staged+124, raise1ms,
+rearm/reinject/relaunch or claim repair. Next static: current-slot lifecycle
+and exact normal query call path. See finalCOOP_STATUS; existing game stock-only.
+MCP confirms negative+120 is a normal constructor/holster(-1) or switch(-2)
+lifecycle value; staged/effective weapon getters are not equivalent admission.
+Watcher8464 detached at300s,64763 handled events/no dump; game9852 alive. Last32
+PCs resolve frozenDLL+57C2F readable_bytes, NOT an owner/normal or crash cause.
+Result savedTrue in the singleIDB/MCP restarted; no binary/test change this turn.
 
 Current preselect-trace handoff (2026-09-20): source-only observer now reports
 eight scalar QPC bins, stage/detail, selected/normal, actual raw-id/params and

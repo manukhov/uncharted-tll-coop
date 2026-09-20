@@ -34916,3 +34916,95 @@ this checkpoint. User told to load save only after READY, drawP99, stand3-5s,
 reply ready and confirm visualNadine. No agent game input, second copy, or
 reinjection. Read that fresh visual/Init and terminal9-bin/owner-detail result
 next; this source-only build intentionally cannot change visible grip.
+
+### Scalar-preselect result: controller-slot refuses; setup is not the delay
+
+User reported "Готово, ни черта не изменилось". CONFIRMED user-visible result:
+the grip is still wrong/unchanged, not a successful repair. Fresh PID9852 Init
+selectsD27C074F at caller1BB4AB9 for player==retained0=10E0A89600. Normal checks
+accept actual Nadine rawC39CA709/6480. No new screenshot or explicit visual-name
+confirmation in this reply; do not fabricate one from the earlier request.
+
+Exactly one fresh terminal STOP, zero RESULT/APPLIED:
+reason=budget probes=1 attempts=0 writes=0 selected=0 normal=1 stage=owner
+detail=controller-slot mask=3f clock=1 probe_ticks=175170 limit=10000 queries=3
+raw_id=c39ca709 params=6480 ticks_setup=25 ticks_normal=175014 gate=8 retained=72
+fg=1 owner=50 target=0 registry=0 identity=0. Nine bins sum exactly175170.
+CONFIRMED distribution in this debugger-attached probe: setup2.5us, normal
+17.5014ms (99.91094%), owner5us, total17.517ms. Full source preparation/native
+retarget math never entered. The existing policy checks cost before finish_probe,
+so budget is terminal even though owner selection already returnedfalse.
+
+REJECTED as an explanation of this residual delay: large local epoch/normal
+storage initialization. It is gone from the optimized PE and remaining setup is
+25ticks, while175014ticks lie in normal checks. This does not retroactively prove
+which instruction caused old18ms, and does not establish CPU cost or VirtualQuery
+as the cause. Normal still combines four range requests/shape loads, region query
+work and possible scheduling/debugger pauses. Query count3 is the entire preselect,
+not a per-stage query-duration measurement. No production speedup claim.
+
+CONFIRMED first failing group, not its scalar value: ControllerSlot means
+read int32 at PlayerWeaponController+120 failed OR value<0 OR value>=18.
+All preceding owner groups passed, including Player/Fg/Art/raw/local-pose and
+controller range+138, exact vtable/owner+108. The later controller state+134,
+grenade, selected weapon weak tuple/art/parent and numeric payload checks were
+NOT reached. REJECTED for this refusal: null retained, an earlier owner identity
+gate, position/orientation validation, or claiming P99/state2 already admitted.
+The marker captures no slot value; the adjacent cold-hip log's current=-1/draw0
+is consistent with startup, not a same-instruction witness. Do not change-1 to0,
+use staged+124 as current, relax the0..17 requirement or raise1ms to force admission.
+
+Observer is terminal/stock-only. No reinjection/rearm/relaunch/game input or
+runtime-code change in this result turn. PID9852 and bounded watcher8464 were
+alive at initial read, no second-chance dump then. Read-only follow-up is tracing
+the confirmed current-slot lifecycle and auditing normal's query path; the visible
+repair remains pending, with no request for the user to repeat the same scenario.
+
+STATIC current-slot lifecycle refreshed through MCP (existing labels, no new
+identity claims): constructor14109D2BD writes+120=-1;14109D2DB qword+130=1 also
+initializes state+134=0. ApplyWeaponSwitch1410A28A0 writes transient-2 at1410A38CB
+then staged+124 at1410A38D5. CommitDrawnWeaponHandle1410AAF20 (vtable+248,
+action caller14108A448) writes staged atAAF74 and current atAAF89 after matching
+the inventory handle. ApplyState1410AAFB0 resolves-2 via staged atAB4F8, publishes
+WeaponOut2 atAB701/refresh+300 atAB717, and resets current=-1 atABD71 on holster.
+Thus-1 is valid absence both at construction and after holster, not proof of
+corruption. EffectiveIndex1410A4740 only substitutes staged for-2; CurrentWeapon
+1410A1FE0 normally resolves+12C (special+120==19 path), not the strict current
+P99 gate. Its downstream GetWeaponBySlot writes weapon+72; do not substitute it.
+This statics explains alternatives but does not recover the unlogged9852 value.
+Further lifecycle evidence should distinguish a completed Draw from cold/holstered
+phase without moving unchecked reads outside the budget or skipping the gate.
+
+Watcher8464 subsequently detached at300s with64763 handled first-chance events,
+no second-chance dump; PID9852 remains alive. Last32 recorded events resolve to
+frozen68f4c51a DLL+57C2F, readable_bytes, source32858, via matching age3 PDB.
+This is handled-event attribution only, not crash/normal-bin attribution; the
+global count cannot be assigned to one PC from a last32 ring. The owned normal
+path does not call readable_bytes. Do not replace that unrelated helper globally.
+Result comment saved to single IDB:1902functions/73data/1type, save_database
+returned True in reports/ida_apply_preselect_scalar_result_20260920_status.txt;
+MCP restarted. No runtime binary changed or new game test prepared in this turn.
+
+STATIC final normal-chain audit of the same68f4c51a/age3 binary: normal91A0 has
+four Reader::range callsites91DA(job38),9211(Fg2A8),9291(Art48),92BE(raw40).
+Reader563F0 calls Batch7590 at56457 once per these spans, all below20000. Batch's
+only callsite7664 dispatches query_region560B0; on a miss it clears19 meaningful
+local Region bytes and caches24B after the query. Query560B0 clears local48B MBI
+with three SSE stores and calls ordinary-import VirtualQuery at560D6; PE delay
+import directory is0. No nested heavy constructor, heap, lock, memset, __chkstk,
+retail math or readable_bytes call in this inspected chain. Normal bin also
+includes fixed trace bookkeeping after QPC4FAB3/before call4FB86; endsQPC4FBA6.
+This excludes another hidden epoch initialization, not OS/query/page/scheduling
+latency. Four range requests do not prove four queries;3 is whole-preselect total.
+
+Watcher pauses remain a competing explanation, not an established cause:
+Microsoft Debugging Events documents suspension of all target threads for a
+delivered debugging event until ContinueDebugEvent; QPC is elapsed time, not CPU.
+Sources: https://learn.microsoft.com/en-us/windows/win32/debug/debugging-events
+and https://devblogs.microsoft.com/oldnewthing/20080908-00/?p=20963 . Our watcher
+continues non-attach first chances as DBG_EXCEPTION_NOT_HANDLED, with no sleep,
+but counts/ring timestamps cannot correlate them with this175014-tick interval.
+No claim that VirtualQuery itself consumed17.5ms or that64763 pauses overlapped
+the first probe. Further diagnostic design must separate existing+120 read
+success/value from phase and query elapsed from external pauses; it must not
+skip/raise the combined1ms cap, add unsafe reads or launch a repeat by default.

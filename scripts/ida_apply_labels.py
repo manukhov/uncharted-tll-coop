@@ -5718,7 +5718,12 @@ FUNCTIONS = {
         "80B selection/24B normal identity do not publish a pose. Nine bins "
         "separate setup/normal; optional first-failure owner detail preserves "
         "all short-circuit reads. Original1ms/defaultOFF/both writersfalse. "
-        "No live speedup/old18ms cause/grip claim; see COOP_STATUS prediction.",
+        "No live speedup/old18ms cause/grip claim; see COOP_STATUS prediction. "
+        "CONFIRMED scalar examPID9852: setup25/normal175014/owner50 of175170ticks, "
+        "probes1 attempts0 writes0. Residual17.5ms is normal interval, not local "
+        "initialization. First owner refusal controller-slot: int32+120 readfail "
+        "or outside0..17, no value captured. State+134/weapon/numeric checks not "
+        "reached; do not relax gates or blame native math. No grip repair.",
     ),
     0x141A8F9D0: (
         "AnimManager_DispatchRetainedOwnerPhase",
