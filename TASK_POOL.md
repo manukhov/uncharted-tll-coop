@@ -21,6 +21,13 @@ pass; trace88checks, fresh owned80/12/12/42/21/exact1008bytes. Freeze and writte
 one-game prediction in finalCOOP_STATUS. Game23264 was absent before work; no
 termination. Preserve appearance-ready-before-user-load order, watcher identity
 capture, one instance only; don't equate terminal diagnostics with grip repair.
+DEPLOYED after17d4d84 push: game2692 FILETIME134343645168875070, watcher21264
+READY before injection, capture reports/preselect-trace-20260920-p2692. Frozen
+examDLL1ca7e5d6...def6c5 at7ffe9eb80000,size2125824; one injector exit0, module
+readback verified. ObserverREADY and LOCAL-LOOK READY hook1/state-net1/Nadine
+verified; user asked to load save/drawP99/stand3-5s and report ready+Nadine.
+Await freshPID2692 Init/terminaltrace and user result. No reinjection/rearm/new
+copy; default build staysOFF, both writersfalse. IDB savedTrue/read back.
 
 Current appearance continuation (2026-09-20look-init): user resumed. Prepared
 diagnostic-only build records INSTALL outcomes, at most4 exact Init decisions,

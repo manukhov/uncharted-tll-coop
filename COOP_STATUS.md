@@ -34720,3 +34720,29 @@ bytes0F B6 01 resolve readable_bytes source32857 (c03d4da), SEH page-byte probe.
 50967 is all handled first-chance events, only the retained last32 have this PC.
 Owned preselect does not call this helper, and was disabled in that build.
 No caller/crash/lag or budget attribution follows; do not globally replace it.
+
+### Preselect-trace exam deployed: awaiting user P99 scenario
+
+Source17d4d84 committed/pushed BEFORE launch. Single gamePID2692 started
+2026-09-20 10:55:16.887507 Moscow, creationFILETIME134343645168875070
+(31279317:1612658238). Watcher21264,300s bound, same PID/image/creation READY
+checked before injection; capture reports/preselect-trace-20260920-p2692.
+Frozen injector returned0 once; module independently confirmed at
+0x7ffe9eb80000,size2125824, reports/preselect-trace-20260920 DLL path.
+Preinjection locomotion log offset20782682. Fresh markers confirm INSTALL
+appearance statusinstalled/protection-restored1,error0, roleB requestNadine,
+P99-OBSERVE INSTALLED two producers only, observerREADY writes0 and final
+LOCAL-LOOK READY hook1/state-net1/Nadine/D27C074F. No Init/result at this checkpoint.
+
+User was told to remain at menu until READY, then load save, drawP99, stand3-5s
+and confirm Nadine. All game input is user-owned; no second copy/reinjection.
+Read the fresh PID2692 Init plus terminal observer markers and user visual
+result next. This build cannot fix visible grip: both pose writers are off.
+Default scanner/build remains observerOFF and was not injected. Do not rearm
+or blindly rerun if expired/refused; inspect the first result. Debugger capture
+is bounded and timing-perturbing, not production-performance proof.
+
+IDA comment updated for the trace and saved to the single database:
+1902functions/73data/1type, save_database returned True in
+reports/ida_apply_preselect_trace_20260920_status.txt; MCP restarted and native
+job name/comment read back. No new retail function names required this turn.
