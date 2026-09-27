@@ -26,8 +26,11 @@ Latest conditional contact audit now defines827-triangle LOWER grip patch and
 finds strict surface crossings in both modeled poses (direct223 pairs,
 Chloe-chain191); no clean fix is established. Normal FgInstance ComputeWind
 admission is also excluded, not all material displacement/live writers.
-Next: trace those witnesses to constrained finger-local changes, preserving
-palm/prop; actual source/frame/helper ownership still gates any runtime writer.
+Latest local-response study:113 localX-5deg preserves palm/prop exactly and
+removes ring-only crossings in the modeled subset, but159 totalpairs remain.
+Its Q is not among group1op53 localexports, excluding that specific helper-input
+route. Not a selected runtime correction. Next: close wrist/helper baseline
+inputs for omitted mixedskin and same source/frame before admitting any writer.
 Do not rank poses by
 distance to Chloe bone origins (different proportions/bind axes), globally
 remove the profile, or reopen old game exams. Preserve exact source/owner
@@ -35962,3 +35965,109 @@ WindDeformer_Create1417483F0, WindDeformer_Deform141748650 and
 ComputeWind_Execute141875F90; create callers14187AD2E/14187AE5B and vtable
 xrefs141883438/1418834B0/1418839C0 remain intact. No tll process was present.
 Pre-existing untracked tmp/ was untouched.
+
+### 2026-09-27 — STATIC bounded local-finger response and shared-export dependencies
+
+No game/native pose execution, injection, runtime source-row/DLL or attachment
+change. Both writers and ordinary source observation remain OFF. This turn
+constructs a pure counterfactual local-Q study, NOT a runtime fix or an optimized
+pose. The existing preparation/source/owner restrictions remain in force.
+
+**Alternatives.** Move weapon/palm vs rotate one local finger Q; model a local
+axis vs mistakenly applying a global axis; replace all descendant local Qs vs
+transport their world matrices while retaining local Q/S/T; use final matrices
+vs preserve the native op53 export; treat adjacent even joint IDs as helpers vs
+read their actual left/right semantics; assume helpers are unchanged vs exclude
+only the specific proven shared-input route. The tests and graph distinguish
+these without restarting the unchanged game exam.
+
+**Exact authored dependencies (STATIC).** `p99_finger_dependency_audit.py` pins
+Nadine skeleton SHA2bf66e61fae156a41952d8d2659e06215dbe8f0c827a9f6a89cada0c9490b06b,
+body SHA and typed normal-arms ownership. Existing exhaustive g0/g1 parameter/
+matrix write audits are reused, not replaced with an assumed parent tree.
+Group1 program5CD70 contains exactly op40 `(10,3,0x20)` and op53 `(60,3,0xC0)`.
+38 logical joints plus2 repeated141 padding rows are propagated by142189FB0.
+
+Right chains are105->107->109->111;113->115->117->119;121->123->125->127;
+129->131->133->135;137->139->141, all from sharedpalm28 via encoded parentFDB.
+Even104..140 are LEFT fingers (r_/l_ names/IDs checked), roots frompalm27/F9B,
+not helper joints. Group1 has no localJP writes, no backwards write into
+g0 palm28/prop30 and no overwrite of the palm-input scratchF90..100F.
+
+Op53 worker142194B10 copies LOCAL JP float4 vectors, not world descendants.
+All60 source/destination pairs at5CD70+C0 are pinned. Destinations720..ADF.
+Right quaternion exports:107->760,109->7C0,115->820,117->880,123->8E0,
+125->940,131->9A0,133->A00,137->A60,141->AC0. A localQ change affects its
+chain's world matrices, but does NOT change the descendants' local Q values.
+Non-exported Q105/111/113/119/121/127/129/135/139 changes therefore leave ALL60
+group1 shared exports byte-identical when other local inputs are fixed.
+For113 this means matrices113/115/117/119 change with zero changed shared
+exports. This excludes ONLY the group1-shared-scratch route to later helpers,
+not arbitrary live feedback, aliasing/lifetime mistakes or another input route.
+For an exportedQ, matrix-only replacement would omit its changed local export;
+it is not generally equivalent to a localQ edit before nativeop40/op53.
+
+**Concrete mixed-skin boundary (STATIC inventory, numeric poses unresolved).**
+The1782 excluded vertices all have positive wrist26 influence. Other positive
+outside joints, overlapping counts:88 r_elbow_twist_c_helper351;
+535 r_elbow_twist_b_helper91;536 r_wrist_upper_a_helper287;
+537 r_wrist_lower_helper310;554 r_wrist_upper_b_helper267. These are not a
+disjoint partition.26/88 belong to group0, upstream fixed in this sensitivity
+slice.535/536/537/554 belong to group6 program60E50, with procedural JP writers:
+52 at60E50,47 at60E74 (also60E6A for537),44 at60EB4 or60ECC. Op40 ordinal15
+then produces the matrices; parent encodings535=0809,536/537=12DB,554=0CC9
+(repeated554 padding). These helpers are not ordinary bind-parent FK outputs.
+Their general finger dependency remains UNRESOLVED_PROCEDURAL_INPUT_DEPENDENCY;
+no helper math or absolute mixedskin position was replayed. Even if a given
+input route is constant, an unknown helper baseline is not a contact-ready
+vertex. Do not silently add these1782 vertices to the closed3040 comparison.
+
+**Pure local-axis study.** `p99_finger_response_audit.py` consumes the same
+corrected directR124 report and explicit ASSUME_WEAPON_BIND_ROOT_EQUALS_MODELED_RIGHT_PROP
+condition as the contact audit. For local axis delta dQ at jointj, it forms
+`D=Qj*dQ*conj(Qj)` in prop coordinates, rotates each authored descendant around
+Tj, and left-multiplies descendant Q byD. This is right-multiplication of ONLY
+the target localQ. It keeps localS/T, all other localQ, targetorigin and every
+unaffected selected frame;28/30 tuples are held exactly unchanged. It recomputes
+weighted skin contributions, not a rigid translation of the whole hand.
+
+72 independent probes:12 joints in pinky/ring/middle x3axes x+-5degrees.
+The arbitrary10degree maximum is a study guard, NOT an anatomical limit.
+All invariants pass: max localST residual1.2490009027e-16, otherlocalQ error
+1.3322676296e-15. Counterfactual crossings remain conditional lower bounds.
+Example localX-5deg at113 reduces ring-support pairs41->0 and total223->159:
+73 original pairs disappear but9 NEW pairs appear. Remaining counts middle69,
+pinky60,mixed30. LocalX-5 at105 gives171total/11pinky; at121 gives194total/
+41middle. This identifies sensitive parameters, not an accepted prescription.
+Opposite directions can increase crossings; rotating only distal joints often
+leaves the intersecting proximal surface unchanged. The study does not choose
+a preferred pose or emit any runtime records.
+
+An inspected offline113X-5 diagram uses the same lower patch and incomplete
+hand subset. Ring unsigned mean.015073697->.014750355 and p95.025008737->
+.021389848; mixed-or-palm mean.004530484->.005975811. These distances are NOT
+quality scores, and zero strict ring crossings does not prove correct contact
+(separation/containment/coplanar cases and omitted skin remain possible).
+Local reports: p99-finger-response-20260927.json and
+p99-finger113-minus5x-20260927.png. No visual in-game claim is inferred.
+
+NEXT: close same-source wrist26/group0 and group6 helper baseline inputs for
+affected mixedskin before accepting any finger correction; inspect the actual
+op52/47/44/40 route at60E50 and its shared/aux sources, not a bind-parent
+approximation. Preserve local before-op40/op53 semantics and source/frame
+admission. Do not turn the72-probe count minimum into a runtime writer,
+reintroduce the full Chloe-chain swap, or adjust the accepted weapon attachment.
+
+Verification: Python348/348 and CTest27/27 pass, no installed-asset skips.
+14 new response tests cover noncommuting local axes, fixed pivots, zero/roundtrip,
+preserved localST, protected/left/invalid joints, hierarchy corruption, weighted
+reskin, and pinned conditional113 result;10 dependency tests cover actual hand
+sides, matrix-vs-local exports, changed parents/maps and unresolved helper scope.
+Both CLIs pass; all72 probes completed with no runtime admission. Single IDB
+annotation pass reports1916functions/79data names/1type and
+`save_database returned True` in
+reports/ida_apply_p99_finger_response_20260927_status.txt. After MCP finished
+loading, readback resolves AnimJointProgram_PropagateJointMatrices142189FB0
+and AnimJointProgramOp53_CopyEncodedVectors142194B10. Op40 code xref14219449A
+and op53 table xref143026EC8 are preserved. No tll process was present.
+Pre-existing untracked tmp/ remains untouched.

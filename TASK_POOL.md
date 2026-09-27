@@ -11,7 +11,28 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC (2026-09-27, contact/wind continuation): new pure contact audit
+Latest STATIC (2026-09-27, local finger response): pure bounded72-probe study
+rotates12 lower-right finger LOCAL Q aroundxyz by+-5deg, never palm/prop or
+local S/T. Exact palm28/prop30/unaffected frames preserved; numerical localST
+error<=1.25e-16, other localQ<=1.34e-15. Example113 localX-5deg changes only
+matrices113/115/117/119; ring crossingpairs41->0 in admitted surface subset,
+total223->159 (73 old pairs removed,9 new). This is NOT a chosen correction,
+anatomical limit, complete contact or live proof. No optimized pose/export.
+Group1 program5CD70=op40+op53: even104..140 are LEFT fingers, not helpers.
+Op53 exports60 LOCAL JP vectors, not descendant WORLD matrices. Q105/113/121
+are not exported, so all60 shared values stay unchanged for those single-Q
+changes under fixed other inputs. Only this scratch route is excluded.
+The1782 omitted mixedvertices ALL needwrist26; additional positives88/535/536/
+537/554 are procedural elbow/wrist helpers. Group6 dependencies/numeric replay
+remain unresolved; do not propagate them by bind-parent graph or claim all
+helper positions unchanged. Matrix-only patch is not generally equivalent
+to localQ edit beforeop40/op53. Existing runtime writers stayOFF.
+NEXT: close those wrist/helper baseline inputs (group0 andgroup6 program60E50)
+for same source/frame, then validate a bounded finger correction against the
+full affected skin/contact, not just crossingcount; no unchanged game launch.
+Python348/348, CTest27/27; native annotations/save evidence at endCOOP_STATUS.
+
+Previous STATIC (2026-09-27, contact/wind continuation): new pure contact audit
 defines a MANUAL lower-grip patch (all triangle vertices y<=0 in weapon bind
 root),827triangles, not whole grip/engine contact semantics. Exact welding
 leaves MAIN56 boundary edges, patch49; unsigned distances are not inside/outside.

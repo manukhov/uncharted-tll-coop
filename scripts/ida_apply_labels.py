@@ -5512,7 +5512,13 @@ FUNCTIONS = {
         "records with parent0009, reserved identity row0, and no later root "
         "matrix write. Command15 seeds reserved row0 at141ABA91D..A956. Root "
         "workspace therefore preserves authored root; no claim about arbitrary "
-        "runtime callbacks, other sources or cross-consumer generation equality.",
+        "runtime callbacks, other sources or cross-consumer generation equality. "
+        "STATIC C39 group1 finger slice: program5CD70 has only op40/53. "
+        "Even104..140 are left fingers rooted atpalm27, odd105..141 are right "
+        "fingers rooted atpalm28. Five independent right chains105/113/121/129/137 "
+        "advance by2; only same-chain descendant matrices change after localQ "
+        "perturbation. Group1 never writes JP or upstream palm28/prop30. "
+        "This is not a proof of downstream procedural helper poses.",
     ),
     0x142194680: (
         "AnimJointProgramOp41_ScatterVectorComponents",
@@ -5667,7 +5673,14 @@ FUNCTIONS = {
         "as four vectors into shared scratch+FD0..100F. Group1 right-finger "
         "roots use parentFDB: selector3, matrix offsetFD0 (mask~F at14218A055), "
         "flag8 disables parent-scale inheritance at14218A069. This is not "
-        "a generic encoded-vector offset masked with~3.",
+        "a generic encoded-vector offset masked with~3. STATIC2026-09-27 "
+        "group1 program5CD70 exports60 LOCAL JP vectors toscratch720..ADF, "
+        "not descendant world matrices. RightQ exports:107->760,109->7C0, "
+        "115->820,117->880,123->8E0,125->940,131->9A0,133->A00,137->A60, "
+        "141->AC0. Nonexported Q105/111/113/119/121/127/129/135/139 changes "
+        "leave all60 scratch exports unchanged with other inputs fixed. "
+        "Only that shared-scratch route is excluded; arbitrary later/live "
+        "helper dependencies and numeric replay remain unresolved.",
     ),
     0x142194620: (
         "AnimJointProgramOp59_ConvertJointParamsToMatrices",
