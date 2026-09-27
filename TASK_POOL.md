@@ -11,7 +11,33 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC (2026-09-27, local finger response): pure bounded72-probe study
+Latest STATIC (2026-09-27, wrist surface/helper dependency continuation):
+Same-source LOCAL palm28 row now optionally exported without changing the
+historical21-joint report (SHAac850b5e...). Unit-scale normalized geometry gives
+WristProp=PalmProp*inverse(LocalPalm28), with native parent/write proof26<-24,
+28<-26,30<-28. All original3040 samples/21frames remain exact. Added1288 wrist-
+closed vertices =>4328/4822 hand-touched vertices,8026 triangles.494 vertices
+still need procedural helpers88/535/536/537/554;137 support the113 ring chain.
+Extended conditional baseline315 strict crossingpairs (Chloe-chain287).
+113localX-5 example yields261,108removed/54NEW, not the earlier limited159/9new.
+No runtime candidate, full-contact proof, preferred pose or weapon-frame change.
+Group6 complete read-slice excludes finger shared720..ADF and entryJP/AUX;
+all relevant inputs are g0 exports (+reservedW0 for554), protected against
+intervening groups1..5, including group4op48.535 needsJP49/matrix86/AUX400;
+536/537 needmatrix88/AUX3E4/3EC/404/408;554 needsmatrix24/26,localQ26,AUX3E4.
+Those5 scalar values derive from localQ26 via custom129/128. With fixedg0 and
+nonaliasing banks, finger edits leave these helper outputs unchanged through
+this authored buffer graph, NOT arbitrary live callbacks/generation. LBS
+differences therefore cover1415 ring-supported vertices while137 absolute
+positions remain unknown; no dropping/renormalizing helper contributions.
+NEXT: pure numeric g0 chain85->86->87->88 plus group6 helper replay, using
+same-D350/B8 upstreamQ26/JP49 and elbow24 inputs; first prove whetherJP49 is
+an authored constant. Do NOT use E51542CA locator-profile rows as actual pose
+inputs. Keep left-support/live-final-owner/weapon-frame restrictions separate.
+No unchanged game launch. Runtime writers/source observer remainOFF.
+Python380/380, CTest27/27; single-IDB evidence at endCOOP_STATUS.
+
+Previous STATIC (2026-09-27, local finger response): pure bounded72-probe study
 rotates12 lower-right finger LOCAL Q aroundxyz by+-5deg, never palm/prop or
 local S/T. Exact palm28/prop30/unaffected frames preserved; numerical localST
 error<=1.25e-16, other localQ<=1.34e-15. Example113 localX-5deg changes only

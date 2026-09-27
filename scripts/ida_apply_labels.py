@@ -5518,7 +5518,15 @@ FUNCTIONS = {
         "fingers rooted atpalm28. Five independent right chains105/113/121/129/137 "
         "advance by2; only same-chain descendant matrices change after localQ "
         "perturbation. Group1 never writes JP or upstream palm28/prop30. "
-        "This is not a proof of downstream procedural helper poses.",
+        "This is not a proof of downstream procedural helper poses. "
+        "STATIC unit-scale conditional geometry extension: g0 wrist26<-24 "
+        "(op44 parent0649), palm28<-26 (op46 parent06C9), prop30<-28 "
+        "(op48 parent0749) are untouched local parameters and have no "
+        "non-op40 matrix overwrite. Here op44/46/48 mean program ordinals. "
+        "Thus WristProp=PalmProp*inverse(LocalPalm28) reconstructs wrist26 "
+        "in the normalized unit-scale D350/B8 model while preserving all21 "
+        "previous prop-relative frames. This is not a general scaled workspace "
+        "inverse or proof of actual live wrist/weapon alignment.",
     ),
     0x142194680: (
         "AnimJointProgramOp41_ScatterVectorComponents",
@@ -5547,7 +5555,11 @@ FUNCTIONS = {
         "AnimJointProgram_AssembleEncodedVectors",
         "Consumes twelve encoded scalar inputs per 64-byte record and stores four "
         "encoded float4 destinations. The four destinations can comprise a full "
-        "64-byte workspace matrix.",
+        "64-byte workspace matrix. STATIC C39 group6 op44 at60EB4/60ECC "
+        "assembles helperQ from three AUX scalars per logical lane and "
+        "authored constants. Later op40 parents535=0809 (group6 joint534), "
+        "536/537=12DB (shared g0 matrix88),554=0CC9 (group6 joint553). "
+        "Dependency replay does not numerically solve those helper poses.",
     ),
     0x142194720: (
         "AnimJointProgramOp47_ApplyScalarCoefficients",
@@ -5564,12 +5576,16 @@ FUNCTIONS = {
     0x142192B10: (
         "AnimJointProgram_ApplyScalarCoefficients_Arity1",
         "Opcode-47 one-coefficient scalar worker; writes four encoded scalar "
-        "destinations per batch.",
+        "destinations per batch. Adds the polynomial of the source scalar "
+        "to the OLD destination; dependency analysis must retain this "
+        "read-modify-write edge. SIMD batch reads precede stores.",
     ),
     0x142192D30: (
         "AnimJointProgram_ApplyScalarCoefficients_Arity2",
         "Opcode-47 two-coefficient scalar worker; writes four encoded scalar "
-        "destinations per batch.",
+        "destinations per batch. Adds the polynomial of the source scalar "
+        "to the OLD destination; dependency analysis must retain this "
+        "read-modify-write edge. SIMD batch reads precede stores.",
     ),
     0x142192FD0: (
         "AnimJointProgram_ApplyScalarCoefficients_Arity3",
@@ -5642,6 +5658,16 @@ FUNCTIONS = {
         "Opcode-51 auxiliary worker. Processes four encoded float4 outputs per "
         "16-byte descriptor record and can write a complete workspace matrix.",
     ),
+    0x1421947C0: (
+        "AnimJointProgramOp48_WriteEncodedVectorOutputs",
+        "STATIC built-in joint-program opcode48, table143026EA0. Calls "
+        "14218D2D0 for primary vectors, optionally14218DA70 and14218E880 "
+        "from its authored header counts/offset. Pinned C39 group4 program60760 "
+        "ordinal4 has20 primary and20 final-batch vector destinations, all "
+        "localJP. Including these writes excludes intervening shared-input "
+        "overlap for group6 helpers535/536/537/554. This is a write inventory, "
+        "not a numeric replay or arbitrary live alias/generation proof.",
+    ),
     0x142194AB0: (
         "AnimJointProgramOp52_WriteAuthoredVectorsAndScalars",
         "Built-in joint-program opcode 52 wrapper. Payload words 0/1 count vector "
@@ -5680,7 +5706,12 @@ FUNCTIONS = {
         "141->AC0. Nonexported Q105/111/113/119/121/127/129/135/139 changes "
         "leave all60 scratch exports unchanged with other inputs fixed. "
         "Only that shared-scratch route is excluded; arbitrary later/live "
-        "helper dependencies and numeric replay remain unresolved.",
+        "helper dependencies and numeric replay remain unresolved. "
+        "Later STATIC group6 buffer-read audit refines this boundary: targets "
+        "535/536/537/554 read g0 exports, not720..ADF or group6 entryJP/AUX. "
+        "Groups1..5 do not overwrite those exact shared leaves. Fixed-g0 "
+        "finger-localQ edits leave the four helpers unchanged through this "
+        "authored buffer graph only; numeric baseline remains unresolved.",
     ),
     0x142194620: (
         "AnimJointProgramOp59_ConvertJointParamsToMatrices",
@@ -5708,7 +5739,10 @@ FUNCTIONS = {
         "isolated: unconditional QPC profiling divides by143077520, "
         "updates global counters and calls14160C120 (FLS/render-state "
         "access), including the tail at141A97748. Do not execute through "
-        "raw mapped retail code with only owned evaluator buffers.",
+        "raw mapped retail code with only owned evaluator buffers. "
+        "STATIC C39 g0 op128 at5944A/5945A/59472/5947A reads localQ26 "
+        "encoded4F0 and AUX400, writes AUX3E4/3EC/404/408 respectively. "
+        "These are last scalar writers before g0 shared export to group6.",
     ),
     0x141A951F0: (
         "AnimJointProgramCustomOp129",
@@ -5719,7 +5753,9 @@ FUNCTIONS = {
         "not a top-level base selector. Buffer-local math does not imply "
         "an isolated wrapper: unconditional QPC/global profiling and "
         "14160C120 FLS/render-state tail at141A95A90 prohibit raw mapped "
-        "execution with only owned evaluator buffers.",
+        "execution with only owned evaluator buffers. STATIC C39 g0 op129 "
+        "at593E4 descriptor5A060 reads localQ26 encoded4F0 and writes AUX400, "
+        "the last writer before g0 export and the input to four op128 weights.",
     ),
     0x141A945F0: (
         "AnimJointProgramCustomOp130",

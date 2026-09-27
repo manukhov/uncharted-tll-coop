@@ -96,7 +96,8 @@ def compare_row(player, additive, target_reference, mode, joint_locator, parent_
     }
 
 
-def audit(asset, archive, dc_archive, prefix=grip.DEFAULT_PREFIX, metadata=grip.DEFAULT_METADATA):
+def audit(asset, archive, dc_archive, prefix=grip.DEFAULT_PREFIX, metadata=grip.DEFAULT_METADATA,
+          *, include_local_rows=False):
     data = Path(asset).read_bytes()
     basis = matrix.audit(data)
     transfers = grip.load_metadata(metadata)
@@ -168,7 +169,7 @@ def audit(asset, archive, dc_archive, prefix=grip.DEFAULT_PREFIX, metadata=grip.
             direct_frames[index][4:8], proposed_frames[index][4:8])
         control_comparisons[index]["prop_relative_origin_delta_asset_units"] = math.sqrt(sum(
             (control_frames[index][8 + j] - proposed_frames[index][8 + j])**2 for j in range(3)))
-    return {
+    result = {
         "classification": "APPROXIMATE_PROFILE_PRESENT_R124_VS_CONDITIONAL_CHLOE_CHAIN",
         "quaternion_decoder_model": basis["quaternion_decoder_model"],
         "retail_or_game_execution": False, "runtime_record_output": False,
@@ -209,6 +210,21 @@ def audit(asset, archive, dc_archive, prefix=grip.DEFAULT_PREFIX, metadata=grip.
                    "Native float32/reciprocal/sqrt/half and MXCSR effects remain distinct from scalar arithmetic",
                    "Only D350/B8 subtree compared; live final owner, left support arm and skinned contact not established",
                    "No runtime writes, record fixture generation or game-test authorization"]}
+    if include_local_rows:
+        # Opt-in evidence for parent reconstruction. The default report stays
+        # byte-for-byte compatible with the historical 21-joint surface audit.
+        # Keep raw modeled Q/S/T here; geometry consumers must explicitly gate
+        # unit scale and normalize Q just as distal_frames does.
+        result["local_joint_rows"] = {
+            "model": "conditional-direct-composed-local-rows-v1",
+            "skeleton_sha256": source.sha256(data),
+            "rows": [{"target_global": comparison["target_global"],
+                      "parent_global": nadine_parents[comparison["target_global"]],
+                      "target_name": comparison["target_name"],
+                      "direct_row": list(direct_rows[index]),
+                      "proposed_row": list(proposed_rows[index])}
+                     for index, comparison in enumerate(comparisons)]}
+    return result
 
 
 def main():
@@ -218,8 +234,10 @@ def main():
     parser.add_argument("--archive", type=Path, default=base / "actor77.psarc")
     parser.add_argument("--dc-archive", type=Path, default=base / "dc1.psarc")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--include-local-rows", action="store_true")
     args = parser.parse_args()
-    result = audit(args.asset, args.archive, args.dc_archive)
+    result = audit(args.asset, args.archive, args.dc_archive,
+                   include_local_rows=args.include_local_rows)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n", encoding="utf-8")

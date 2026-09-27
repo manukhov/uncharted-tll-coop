@@ -36071,3 +36071,135 @@ loading, readback resolves AnimJointProgram_PropagateJointMatrices142189FB0
 and AnimJointProgramOp53_CopyEncodedVectors142194B10. Op40 code xref14219449A
 and op53 table xref143026EC8 are preserved. No tll process was present.
 Pre-existing untracked tmp/ remains untouched.
+
+### 2026-09-27 — STATIC same-source wrist reconstruction and group6 helper input closure
+
+No game launch, injection, retail/native pose execution, runtime DLL/source-row
+or accepted attachment change. Both pose writers and ordinary source observer
+remain OFF. This extends the pure conditional model, NOT the live correction.
+
+**Alternatives and scope.** Bind-pose wrist vs recovering it from the same
+modeled local palm; inverse multiplication on the left vs right; renormalizing
+weights after dropping helpers vs retaining their actual contribution;
+ordinary parent-FK helpers vs their procedural program; assuming helper values
+are known because their inputs are constant vs keeping unknown absolute poses
+out of contact. Independent noncommuting algebra tests, exact parent/write
+records, named buffer producers, and indexed same-mesh comparisons distinguish
+these cases. No runtime exam is earned by the results below.
+
+**Wrist reconstruction (STATIC, unit-scale conditional model only).**
+`p99_direct_grip_audit.audit(include_local_rows=True)` optionally exposes raw
+same-source local rows before the existing distal/prop normalization. Default
+output remains unchanged: canonical SHA
+ac850b5e7d8fe2706a46964dba5d86cb6cf674b797abe0ec1616974e8b55158f.
+Local evidence SHA
+a11af17ccce46887b36b0474e058869d7d5e8e980b9b413bce7c1cdc2ed82e58.
+The new `p99_wrist_surface_audit.py` gates both hashes, decoder, pinned skeleton,
+native parent/write slice and all21 local-to-prop frame correspondences.
+The new row is `W=P*inverse(L28)`: Qw=Qp*conj(Qlocal28),
+Tw=Tp-R(Qw)*Tlocal28. UnitS is explicit; raw Q is normalized for geometry only,
+as in the old model. Native unused padding is not an S/Q/T operand.
+No general inversion of scaled/sheared native workspace is claimed.
+
+142189FB0 op40 records: g0 ordinal44 wrist26 parent0649 (joint24), ordinal46
+palm28 parent06C9 (joint26), ordinal48 prop30 parent0749 (joint28). The existing
+exhaustive audit finds no parameter-prefix or non-op40 matrix overwrite for
+this closure. Native flag8 is set; under the admitted unit-scale geometry it
+does not invalidate the rigid relation. Independent forward-worker comparison
+and reversed-order controls pass. All21 original frames, palm/prop anchors,
+and all3040 original surface samples are exactly unchanged.
+
+**Extended same-mesh cohort.** Among the original4822 hand-touched vertices,
+1288 additional vertices become closed by adding ONLY wrist26. Total4328,
+8026 fully supported triangles. Closed IDs SHA
+9ddbc5e401ee368b597df66091ece57c139672433f364bf4883cef74c63068dc;
+added IDs SHA6439e79b5e44aa0184af682b3e907a3b0956c5ae5080bbb34721997fe9948640.
+Unrelated forearm/wrist-only vertices are not silently added to this cohort.
+494 still require unknown helper baseline matrices; overlapping positive
+counts88=351,535=91,536=287,537=310,554=267.137 of those494 also have positive
+support from ring113/115/117/119, so they cannot be ignored for that probe.
+
+Same explicitly ASSUMED weapon-bind-root/rightProp frame and manual827-triangle
+lower-grip patch: extended direct baseline315 crossingpairs/188 handtriangles;
+conditional Chloe-chain287/178. Direct groups middle69,mixed144,pinky61,ring41;
+Chloe-chain49/124/68/46. Thus the entire chain still is not a uniform improvement.
+Probe113localX-5 keeps wrist/palm/prop and other localQs/S/T fixed but now gives
+261 pairs/162 handtriangles,108 baselinepairs removed and54 NEW. Old159/9new
+described only the smaller3040 subset and is NOT complete contact evidence.
+1278 admitted vertices move, max.009326381992110347 assetunits. Ring-labeled
+strict pairs remain zero, but total/non-ring contact is not solved; the patch,
+coplanar/boundary cases, unknown helper positions and live alignment limitations
+still apply. REJECTED: interpreting the old minimum count or zero ring count
+as a complete repair proof. No runtime correction or optimized pose is emitted.
+
+**Group6 helper read graph (STATIC; no numeric helper replay).**
+`p99_wrist_helper_inputs_audit.py` decodes all16 operators of program60E50
+(relativeCE70), group6 first503/workspace52/parameters3. The versioned storage
+graph snapshots SIMD reads before stores, preserves scalar read-modify-write,
+respects sequential overwrites, and refuses any opaque operation reached by a
+target. Op51 remains explicitly opaque but is not in the four target slices.
+Every decoded destination is checked against the independent write inventory.
+The four complete entry-leaf sets are pinned, not merely a few matching reads:
+
+- 535: g0 LOCAL S/Q/T49 `r_elbow_twist_b_offset`, matrix86 `r_elbow_helper`, AUX400.
+- 536/537: g0 matrix88 `r_elbow_twist_c_helper`, AUX3E4/3EC/404/408.
+- 554: g0 matrix24 `r_elbow`, matrix26 `r_wrist`, LOCAL Q26, AUX3E4 and reservedW0.
+
+No group6 entryJP/AUX or shared finger720..ADF is reached. All exact shared
+leaves resolve to g0 copies. Intervening groups1..5 encoded write counts
+100/500/84/248/52 do not overlap these leaves. This includes g4 opcode48:
+wrapper1421947C0/table143026EA0 -> primary14218D2D0, optional14218DA70 and
+14218E880; pinned program60760 ordinal4 writes20 primary +20 final-batch
+vectors, all localJP. New label names the wrapper only; no numeric replay.
+
+Op47 workers142192B10/142192D30 add polynomial(source) to OLD destination;
+discarding that dependency would falsely close the graph. Op44 worker14218C530
+constructs each vector from three AUX scalar inputs and authored constants.
+Group6 op44 at60EB4/60ECC precedes final op40 parents535=0809 (534),
+536/537=12DB (sharedmatrix88),554=0CC9 (553). Do not replace this with bind FK.
+
+Five g0 scalar producers close to localQ26: custom129/141A951F0 at593E4,
+descriptor5A060, reads encoded4F0 (Q26) -> AUX400. Custom128/141A97060 at
+5944A/5945A/59472/5947A reads the sameQ26 plus AUX400 -> AUX3E4/3EC/404/408.
+They are last authored encoded-buffer writers before export. Their mathematical
+dependency is buffer-local; wrapper QPC/global/FLS side effects remain, and no
+raw mapped execution is allowed by this result. Matrix86/88 still need the
+procedural g0 chain85->86->87->88, not just wrist26/palm28/finger frames.
+
+With fixed g0 inputs and distinct/nonaliasing banks, finger localQ edits leave
+these four helper outputs unchanged through the parsed authored buffer graph.
+This closes more than the prior nonexported-Q route, including the exported
+finger Q case for THESE helpers. It is NOT global/live helper constancy,
+callback isolation, frame-generation equality or numeric baseline knowledge.
+
+**Full conditional ring displacement, not position/contact.** Since untouched
+helper terms cancel in a linear-skinning DIFFERENCE, the113X-5 probe's delta
+can be computed for all1415 ring-supported vertices by summing only changed
+joint terms with original packed weights. Never use this partial sum as an
+absolute vertex or renormalize it.1278 known-position deltas agree with full
+absolute subtraction within1.0843e-17. The137 unknown-position deltas have
+max.001787464019603302 assetunits; their absolute contact remains unknown.
+Synthetic arbitrary fixed-helper matrices demonstrate cancellation, while
+missing changed matrices/unresolved dependency proofs are refused.
+
+NEXT: numerical g0 helper chain85->86->87->88 and group6 replay with same-source
+D350/B8 upstream Q26, JP49 and elbow24 operands; first establish whether49 is
+an authored constant. E51542CA sampled locator PROFILE is not the actual pose
+input and must not be substituted to fill unknowns. Keep live final owner,
+weapon-frame/generation, left support-arm and post-skin limits separate.
+No unchanged game exam, global pose swap or attachment-offset experiment.
+
+Verification: Python380/380, CTest27/27 pass without installed-asset skips.
+18 new surface tests and14 helper-graph tests cover inverse order, local-axis
+translation, normalization/padding, stale source/decoder/parent, nonunit scale,
+native parent proof, exact old samples, original cohort partition, shared-bank
+overwrites (including group4op48), opaque/auxiliary refusal and partial-delta
+cancellation without normalization. Reports remain local:
+reports/p99-wrist-surface-20260927.json and reports/p99-wrist-helper-inputs-20260927.json.
+Both CLIs pass. Single-IDB labels/comments saved:1917functions/79data names/
+1type, `save_database returned True` in
+reports/ida_apply_p99_wrist_surface_20260927_status.txt. Restarted read-only
+MCP resolves AnimJointProgramOp48_WriteEncodedVectorOutputs1421947C0 and
+AnimJointProgram_PropagateJointMatrices142189FB0; op48 tablexref143026EA0 and
+custom129 tablexref143026CB8 remain intact. No tll process was present;
+scanner/runtime diff is empty. Pre-existing untracked tmp/ was untouched.
