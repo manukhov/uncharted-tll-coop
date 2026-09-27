@@ -36339,3 +36339,113 @@ reports/ida_apply_p99_upstream_helper_math_20260927_status.txt. Restarted MCP
 resolves all three corrected/new aim/basis names; basis code xrefs142190289/
 1421907BB and op51 tablexref143026EB8 remain intact. No tll process was present.
 Scanner/runtime diff is empty. Pre-existing untracked tmp/ remains untouched.
+
+### 2026-09-27 — STATIC integrated g0 helper85..88 analytic slice (not a source pose)
+
+No game launch, injection, retail worker execution, runtime/source-observer,
+weapon attachment or DLL change. This continues the missing41/44/50 math,
+not a new grip correction. All source/runtime/contact admission flags stay
+false. The remaining494 absolute helper-supported skin positions are NOT
+recovered by finishing a conditional procedural calculation.
+
+**Exact scalar dependency cut.** `p99_wrist_g0_replay.py` traces the scalar
+operands at the actual op44 consumers, retaining old-destination and SIMD
+snapshot edges. Q88 at594A6/ordinal27/lane7 reads AUX2EC/358/3BC; its only
+ancestors are52@0,41@8,47@11 and its entry leaves are LOCAL Q51 atJP9A0..9AC.
+Q87 at594C6/ordinal31/lane2 reads AUX2E8/354/3B8; ancestors are52@0,129@4,
+47@11,128@21/22,47@25. The exact allowed custom boundaries are AUX400/404/408,
+whose previously pinned scalar descriptors read LOCAL Q26. No other opaque
+writer or entry leaf is silently substituted. AUX2E8 is an authored constant;
+AUX354 adds two curves in different SIMD batches (from404 and408), not one
+curve or a simultaneous overwritten sum. AUX3B8 derives from400 through47@11.
+
+An all-operator write audit separately checks every scalar cell of LOCAL
+JP24/26/51, all64bytes of W22/24/26 and reserved W0, including overlapping
+vector stores. The three input parameter rows have no g0 writer. Matrix22
+has sole writer40@36, matrix24 sole40@41, matrix26 sole40@44. Native parent
+encodings are24->W5C9(matrix22),26->W649(matrix24), both flag8; W0 is unwritten.
+The integrated API therefore REQUIRES shoulder22 workspace plus LOCAL
+JP24/26/51, deriving elbow24/wrist26 itself rather than accepting independent
+workspaces inconsistent with the supplied local quaternions. It does not
+establish the same-generation validity or actual values of those four inputs.
+
+The integrated result includes procedural85..88 rows/matrices, upstream24/26
+matrices, five custom scalar weights and the Euler/angle intermediates. It is
+an analytic slice only, not all of g0, not instruction-exact native arithmetic,
+not g6 and not an absolute skin/contact baseline. The contract-only CLI has
+no pose default; synthetic unit tests explicitly choose control inputs and
+never promote them to a live or anatomically admitted baseline.
+
+**Op41/44 numerical meaning, not generic scatter/assemble (STATIC).**
+`p99_wrist_euler_audit.py` pins complete Nadine SHA, the four descriptors and
+their authored A/B constants, retail SHA, all four native workers and dispatch
+slots143026E68/E80.14218BC40 atBDC7..BF78 forms conj(A)*LOCAL_Q*conj(B), calls
+14218B780@BF8C and scatters XYZ degrees, skippingFFFF. No normalization or
+norm-adjusted inverse is inserted. Pinned Q24 mode0 inverses Qy*Qx*Qz; Q51
+mode4 inverses Qz*Qy*Qx. Earlier wording "Euler24-middle" refers ONLY to output
+slot1(Y): AUX314 receives Y, while the middle ROTATION of mode0 is X.
+
+14218B9E3..BA21 selects singular iff abs(s)>=float32 .99999
+(0.9999899864196777) and clamps the asin input to[-1,1]. Singular mode0 forces
+outputZ=0; mode4 forcesX=0, with the corresponding changed atan2 branch.
+The SIMD radians-to-degrees constant is57.2957763671875 (142BEDF50), NOT the
+57.295780181884766 used in custom128/129.14218C200 mode4 converts XYZ degrees
+to half radians atC2D4..C30E, calls sincos1421803E0 and composes Qz*Qy*Qx.
+14218C530 left-multiplies authoredA then right-multipliesB atC7D1..C9D7.
+No final normalization; Q88's tiny authored components are retained rather
+than rounded to identity. Input near-unit validation does not normalize Q.
+
+**Pinned op50 Q85 (STATIC).** `p99_wrist_rotation_audit.py` pins op594F6's
+complete208-byte descriptor, all three repeated Q85 lanes, primary/auxiliary
+identity quaternions, source-Q replacement flag8 and weightAUXBC=1. Full
+writer inventory verifies BC only52@0, shoulderW22 only40@36, LOCAL Q24/W0
+unwritten and Q85 only50@37.143026EB0 selects142194940, primary call1949AB
+and auxiliary tailcall1949D4 establish both phases (not only primary output).
+
+14218F660 reads sourceA's first48bytes, not its separate localScale+30.
+FA87..FBE4 with pinned identityB orthonormalizes columns: x=normalize(A.c0),
+z=normalize(x cross A.c1), y=z cross x; neither source translation nor third
+column contributes to that orientation.142181430@18FBE4 converts to Q;
+18FC20..FC85 normalizes it. This four-lane converter uses trace SIGN bit and
+negative-trace largest diagonal, tie priority X thenY, unlike14218F3B0's
+strict-greater scalar converter used by op51. FD12..FEA6 composes
+Qmatrix*(Qinput*authoredQ). FEDA..FFE8 ordinarily uses hemisphere-adjusted
+oldQ plus weightednewQ; flag8 supplies zero oldQ in this lane.
+
+The auxiliary142190910 NORMALIZES its input at1909FE..A80 (rsqrt+two Newton
+steps) BEFORE right-multiplying authoredQ. There is no normalization after
+that product. Here authoredQ is identity, so the final pinned formula is
+normalize(Qorthonormalized(A22)*LOCAL_Q24). Omitting the auxiliary phase or
+using raw matrix-to-Q without orthonormalization is rejected for this lane.
+The model-only degeneracy guard norm2>1e-24 is NOT a native branch. General
+op50 reference-matrix scale/weight modes are deliberately not generalized.
+
+Pure tests cover noncommuting rotation order, singular threshold/mode controls,
+authored frames, sign/norm behavior, descriptor mutations and overlapping
+writer rejection. Integration tests independently check source separation
+(Q51 changes88 but not85..87; Q26 changes87 angles but not localQ88), native
+parent propagation, sequential scalar contributions and global translation/
+rotation covariance of all four helper workspaces. None is a runtime test.
+
+NEXT: numerical g6 helpers535/536/537/554, extending only reached native
+41/44/50 contracts. In parallel the actual final same-generation source pose
+and validity remain a separate prerequisite: shoulder22, LOCAL24/26/51 and
+JP49 for535 are not supplied by sparse grip clips. Preserve the4328 conditional
+skin vertices/494 absolute-position exclusions and existing weapon-frame,
+left-arm and live-owner restrictions. No justified runtime correction yet.
+
+Verification: final Python485/485 and CTest27/27 pass, no asset skips. New55
+tests are Euler18, rotation21 and integratedg0 16. Rotation read-only PE guards
+pin retail SHA plus complete function sizes181430/1FA,18F660/A57,190910/283,
+194940/99, op50 dispatch slot and Newton/sign constants; a short chained.pdata
+fragment is NOT mistaken for the complete18F660 body. Three CLIs pass. The
+g0 contract report is reports/p99-wrist-g0-helper-contract-20260927.json;
+its actual_pose_replayed/source_or_runtime_admission fields are bothfalse.
+
+IDA names are updated from generic vector operations to quaternion/Euler
+semantics, with three new kernel labels. The singleida/tll.i64 saved
+1921functions/79data names/1type with `save_database returned True` in
+reports/ida_apply_p99_g0_helper_integration_20260927_status.txt. Restarted MCP
+resolves all ten changed/new names;142181430 code caller14218FBE4 and op50
+dispatchxref143026EB0 remain intact. No tll process, scanner/runtime diff
+empty, pre-existing untrackedtmp/ untouched. No actual grip fix claimed.

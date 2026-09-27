@@ -11,7 +11,31 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC (2026-09-27, upstream admission and helper math): do NOT try to
+Latest STATIC (2026-09-27, g0 helper analytic integration): numerical41/44/50
+stages for helper85..88 are now closed by p99_wrist_g0_replay.py from EXPLICIT
+shoulder22 workspace and LOCAL JP24/26/51. It derives elbow/wrist workspaces
+with native flag8 parents, computes custom129/128 weights, Euler/scalar angles,
+Q85/87/88 and the prior51/40 tail. No procedural quaternion/default is supplied
+by hand. Full source-row/matrix write audit and consumer-time dependency graph
+are pinned. This is only an analytic slice, not whole g0/native equivalence.
+Op50 Q85=normalize(Qorthonormalized(A22)*Q24): primary Gram-Schmidt uses first
+two columns, ignores separateS22; the AUX phase normalizes again. Op41 uses
+conj(A)*Q*conj(B); mode0=Y-X-Z, mode4=Z-Y-X. AUX314 is XYZ outputY, NOT mode0
+middle rotationX. Op44mode4=A*(Qz*Qy*Qx)*B, without normalization.
+NEXT: numerical group6 helpers535/536/537/554 using the already-pinned storage
+dependency slice. Generalize ONLY reached op41/44 modes/op50 operands as needed;
+do not assume the pinned g0 identity-reference Q85 covers all g6 op50 cases.
+Separately establish actual same-generation final arm/default validity and
+source values (includingJP49 for535). No sparse D350/B8/profile/default shortcut.
+Four required input values remain unknown; completing math is not source
+admission. Remaining494 absolute helper-supported vertices stay unadmitted;
+do not call an arbitrary control pose an improved grip or launch unchanged game.
+No runtime, source-observer, attachment or DLL change; writers remainOFF.
+Verification: Python485/485 (55 new tests), CTest27/27, no asset skips.
+Single IDB saved1921functions/79data/1type; all new/renamed functions resolved
+after MCP restart, basis caller18FBE4 and op50 tablexref3026EB0 intact.
+
+Previous STATIC (2026-09-27, upstream admission and helper math): do NOT try to
 decode an actual localQ26/elbow pose from D350/B8. Their entire sparse programs
 author ONLY the21 existing distal targets; R124 arm records22/24/26 exist but
 the grip source-valid bits do not. Target49/51 have noR124/R157 map or g0JP

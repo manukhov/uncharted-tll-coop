@@ -5544,37 +5544,55 @@ FUNCTIONS = {
         "inverse or proof of actual live wrist/weapon alignment.",
     ),
     0x142194680: (
-        "AnimJointProgramOp41_ScatterVectorComponents",
+        "AnimJointProgramOp41_ScatterQuaternionEulerDegrees",
         "Built-in joint-program opcode 41 wrapper. Resolves 64-byte authored "
         "records from outer selector 0 and the four encoded destinations through "
         "the nested base table selected by payload word 1, then calls "
-        "AnimJointProgram_ScatterVectorComponents. Each record can write up to "
+        "AnimJointProgram_ScatterQuaternionEulerDegrees. Each record can write up to "
         "twelve optional encoded scalar destinations.",
     ),
+    0x14218B780: (
+        "AnimJointProgram_QuaternionSoAToEulerDegrees",
+        "STATIC four-lane quaternion to Euler XYZ degrees, with authored modes "
+        "0..5. Pinned mode0 inverses Qy*Qx*Qz and mode4 inverses Qz*Qy*Qx; "
+        "do not confuse output Y with mode0 middle rotation X. At B9E3..BA21 "
+        "abs(s)>=float32 .99999 selects singular path and asin input is clamped "
+        "to [-1,1]. Singular mode0 forces Z=0, mode4 X=0. No Q normalization. "
+        "Caller14218BF8C; analytic Python modes0/4 are not native numeric equivalence.",
+    ),
     0x14218BC40: (
-        "AnimJointProgram_ScatterVectorComponents",
-        "Reads four encoded float4 inputs and authored auxiliary vectors per "
-        "64-byte record, then scatters up to twelve scalar results to encoded "
-        "destinations. A 0xFFFF destination is skipped.",
+        "AnimJointProgram_ScatterQuaternionEulerDegrees",
+        "Op41 worker reads four local Q and authored A/B per64-byte record. "
+        "BDC7..BF78 forms conj(A)*Q*conj(B), then calls14218B780 atBF8C. "
+        "Scatters up to12 optional XYZ-degree destinations, FFFF skips, no "
+        "normalization. Nadine g0@59404 lane3 Q24 mode0 writes ONLY Y->AUX314; "
+        "lane5 Q51 mode4 writes AUX2B0/31C/380. Earlier generic scatter name "
+        "was storage-level only, not the numerical operation.",
     ),
     0x1421946D0: (
-        "AnimJointProgramOp44_AssembleEncodedVectors",
+        "AnimJointProgramOp44_AssembleEulerQuaternions",
         "Built-in joint-program opcode 44 wrapper. Resolves 64-byte authored "
         "records from outer selector 0 and encoded destinations through the nested "
         "base table selected by payload word 1, then calls "
-        "AnimJointProgram_AssembleEncodedVectors. Chloe payload 0xF142 is the "
+        "AnimJointProgram_AssembleEulerQuaternions. Chloe payload 0xF142 is the "
         "last operator before consumer 0xF14A and writes row 41 quaternion at "
         "nested selector-0 JointParams destination +0x7C0.",
     ),
+    0x14218C200: (
+        "AnimJointProgram_EulerDegreesSoAToQuaternion",
+        "STATIC four-lane Euler XYZ degrees to Q, authored modes0..5. "
+        "Pinned mode4 degrees->half radians C2D4..C30E, sincos1421803E0, "
+        "masks form Qz*Qy then call1421817F0@C4BE right-multiplies Qx. "
+        "Caller14218C7B0. No normalization; only mode4 is analytically replayed.",
+    ),
     0x14218C530: (
-        "AnimJointProgram_AssembleEncodedVectors",
-        "Consumes twelve encoded scalar inputs per 64-byte record and stores four "
-        "encoded float4 destinations. The four destinations can comprise a full "
-        "64-byte workspace matrix. STATIC C39 group6 op44 at60EB4/60ECC "
-        "assembles helperQ from three AUX scalars per logical lane and "
-        "authored constants. Later op40 parents535=0809 (group6 joint534), "
-        "536/537=12DB (shared g0 matrix88),554=0CC9 (group6 joint553). "
-        "Dependency replay does not numerically solve those helper poses.",
+        "AnimJointProgram_AssembleEulerQuaternions",
+        "Op44 worker reads12 encoded XYZ-degree scalars per64-byte record, "
+        "calls14218C200 atC7B0, forms A*EulerQ*B atC7D1..C9D7 and stores4 Q. "
+        "No normalization. Nadine mode4 Q87@594C6 lane2 consumesAUX2E8/354/3B8, "
+        "Q88@594A6 lane7 consumes2EC/358/3BC. Four stores are quaternions, NOT "
+        "a semantically assembled workspace matrix. C39 group6 parents remain "
+        "535=0809,536/537=12DB,554=0CC9; numerical g6 replay remains open.",
     ),
     0x142194720: (
         "AnimJointProgramOp47_ApplyScalarCoefficients",
@@ -5637,23 +5655,41 @@ FUNCTIONS = {
         "+2/+6/+0xA/+0xE are encoded float4 addresses.",
     ),
     0x142194940: (
-        "AnimJointProgramOp50_ComposeEncodedVectors",
+        "AnimJointProgramOp50_BuildRelativeRotationQuaternions",
         "Built-in joint-program opcode 50 wrapper. Payload word 1 resolves the "
         "nested four-base table and word 2 resolves authored streams from outer "
-        "selector 0. It invokes the primary four-output vector composer plus an "
-        "optional auxiliary full-vector phase. Target-stream payloads Chloe "
+        "selector 0. Calls relative-basis quaternion accumulator14218F660 at "
+        "1949AB and optionally tailcalls normalize/postmultiply142190910 at "
+        "1949D4. Target-stream payloads Chloe "
         "0xF044 and Nadine 0x8F54 write the quaternion vector of Chloe row 35 and "
         "Nadine rows 96/102 respectively.",
     ),
+    0x142181430: (
+        "AnimJointProgram_BasisColumnsToQuaternion4",
+        "STATIC four-lane basis->Q used by14218F660 at18FBE4. Trace SIGN bit "
+        "selects W for positive zero/nonnegative; negative trace chooses largest "
+        "diagonal with strict-less masks, ties X then Y then Z. Differs from "
+        "scalar14218F3B0 strict-greater tie handling used by op51. Primary caller "
+        "normalizes returned Q at18FC20..FC85. Analytic model not native rsqrt equivalence.",
+    ),
     0x14218F660: (
-        "AnimJointProgram_ComposeEncodedVectors",
-        "Primary opcode-50 worker. Its 32-byte four-output descriptor batch "
-        "stores encoded float4 destinations at +6/+0xE/+0x16/+0x1E.",
+        "AnimJointProgram_AccumulateRelativeRotationQuaternions",
+        "Primary op50 four-lane rotation worker. Relative-basis columns: "
+        "FA87..FBE4 normalize first x, z=normalize(x cross second), y=z cross x; "
+        "142181430 converts basis, FC20..FC85 normalizes Q. FD12..FEA6 composes "
+        "Qmatrix*(Qinput*authoredQ). FEDA..FFE8 stores oldQ*sign(dot(oldQ,newQ)) "
+        "+weight*newQ; source-Q flag8 makes oldQ zero. Nadine Q85@594F6 uses "
+        "A=W5C0 matrix22 first48B (not separateS+30), B=identityW0, LOCAL Q24 "
+        "JP490 flag8, weightAUXBC=1 and authored identity. General B scale "
+        "semantics are not numerically modeled by the pinned Python kernel.",
     ),
     0x142190910: (
-        "AnimJointProgram_ComposeEncodedVectorsAux",
-        "Optional opcode-50 auxiliary worker. Uses four encoded float4 addresses "
-        "and a 64-byte authored record to write a complete vector batch.",
+        "AnimJointProgram_NormalizeAndPostMultiplyQuaternions4",
+        "Op50 auxiliary four-lane worker. 1909FE..A80 norm2 and rsqrt+twoNewton "
+        "steps normalize each input Q, then RIGHT multiply authored Q; no "
+        "normalization after authored product. Nadine Q85 authored auxiliary Q "
+        "is identity, yielding normalize(QorthonormalizedShoulder22*LOCAL_Q24). "
+        "Do not omit this phase when analyzing primary14218F660 output.",
     ),
     0x1421949E0: (
         "AnimJointProgramOp51_BuildAimQuaternions",

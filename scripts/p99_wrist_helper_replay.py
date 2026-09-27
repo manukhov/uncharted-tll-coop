@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Bounded pure numeric kernels and staged Nadine g0 helper85..88 replay.
 
-NOT a complete native/helper replay: op50 Q85, op44 Q87/Q88 and op41's
-Euler24-middle scalar remain explicit supplied intermediates. Nothing chooses
-a profile/reference/live baseline. Group6 numeric replay is not implemented.
+NOT a complete native/helper replay: this staged API keeps op50 Q85, op44
+Q87/Q88 and op41's Euler24 Y output as explicit supplied intermediates.
+p99_wrist_g0_replay closes these analytic stages from required source operands;
+neither API chooses a profile/reference/live baseline. Group6 numeric replay
+is not implemented. The historical name Euler24-middle means output slot1(Y),
+NOT the middle rotation in mode0's Y-X-Z composition (which is X).
 
 Closed here: op52 constants, op47 arity1/2 clamped piecewise cubics (including
 SIMD read-before-write and repeated destinations), op49's pinned translation
@@ -248,7 +251,7 @@ def prove_staged_writer_inventory(data,base,ops):
                 writers.append((1,47))
             expected[0,48*joint+4*component]=tuple(writers)
     # Explicit caller inputs: JP51 is an untouched parameter, while the supplied
-    # AUX314 is the result after op41 ordinal8, before consumer op47 ordinal10.
+    # AUX314 is op41's Y output slot, after ordinal8 and before consumer47@10.
     expected.update({(0,48*51+4*i):() for i in range(12)})
     expected[2,0x314]=((0,52),(8,41))
     actual={cell:[] for cell in expected}
@@ -315,7 +318,7 @@ def load_contract(data):
             'curves10':scalar_curves(data,base,ops[10]),
             'missing_native_numerical_stages':{
                 'q85':'op50@594F6: native14218F660/142190910, matrix22 + localQ24',
-                'euler24_middle':'op41@59404 lane3: native14218BC40/14218B780, localQ24',
+                'euler24_middle':'op41@59404 lane3: native14218BC40/14218B780, localQ24 Y output slot',
                 'q87':'op44@594C6 lane2: native14218C530/14218C200, mode4 + AUX2E8/354/3B8',
                 'q88':'op44@594A6 lane7: native14218C530/14218C200, mode4 + AUX2EC/358/3BC',
                 'group6':'No numerical op41/44/50 replay; existing read dependency audit only'}}
@@ -324,7 +327,7 @@ def load_contract(data):
 def replay_g0_staged(contract,*,elbow24,wrist26,jp51,q85,q87,q88,euler24_middle):
     """Numerically replay the closed tail, conditional on ALL explicit operands.
 
-    Q85/Q87/Q88 and Euler24-middle are supplied procedural intermediates; this
+    Q85/Q87/Q88 and Euler24 Y output are supplied procedural intermediates; this
     function does not establish their value, source validity, or generation.
     These inputs MUST NOT be filled from an arbitrary bind/profile by default.
     """
@@ -398,12 +401,13 @@ def audit(path):
             'wrist26':'same-source final g0 workspace matrix26; frame equality required',
             'jp51':'g0 LOCAL parameter51: S/T read by op47@593CA fromJP990/9B0; Q read by op41@59404 lane5',
             'q85':'op50@594F6 result; operands W5C0 matrix22 r_shoulder and LOCAL Q24 atJP490, identityW0',
-            'euler24_middle':'AUX314 from op41@59404 lane3, mode0, LOCAL Q24 atJP490',
+            'euler24_middle':'AUX314 from op41@59404 lane3, mode0, LOCAL Q24 atJP490; Y output, not middle rotation X',
             'q87':'op44@594C6 lane2 result, mode4; AUX2E8/354/3B8 plus authored quaternions',
             'q88':'op44@594A6 lane7 result, mode4; AUX2EC/358/3BC plus authored quaternions'},
         'remaining_native_numerical_stages':contract['missing_native_numerical_stages'],
         'limits':[
             'Staged replay requires supplied Q85/Q87/Q88 and Euler24-middle; it is not a complete helper solution',
+            'p99_wrist_g0_replay provides the integrated analytic slice from explicit shoulder22 and LOCAL JP24/26/51',
             'No default authored/profile/current values are selected for missing source parameters',
             'Scalar double math is not native float32 rsqrt/rcp/libm instruction equivalence',
             'Singular parent and antiparallel fallback degeneracy fail closed; no invented replacement axis',
