@@ -11,7 +11,27 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC (2026-09-27, frame/preskin continuation): exact normal arms
+Latest STATIC (2026-09-27, contact/wind continuation): new pure contact audit
+defines a MANUAL lower-grip patch (all triangle vertices y<=0 in weapon bind
+root),827triangles, not whole grip/engine contact semantics. Exact welding
+leaves MAIN56 boundary edges, patch49; unsigned distances are not inside/outside.
+Explicitly ASSUMED identity weapon-root/rightProp comparison uses3040 same
+Nadine vertices/5526 fully supported triangles. Both modeled poses intersect
+the patch: direct223 strict triangle pairs (121 hand triangles), conditional
+Chloe-chain191 (107). Pinky/ring counts worsen60->65/41->46 while middle
+improves69->49; no uniform correction or contact-free result. These are
+conditional witnesses, NOT live failures/penetration depths or a quality score.
+Normal FgInstance_Init14192EC79 passes wind-enablefalse through14192ECBD;
+mask400/SubMesh+80 gates exclude ComputeWind, unlike generic caller14196641E.
+Material shader displacement/arbitrary late writers are not globally excluded.
+NEXT: trace concrete crossing witnesses to finger-local corrections while
+preserving palm/prop and bounds; close actual source/frame/helper ownership
+before a runtime writer. Do not declare the entire Chloe-chain a proven fix or
+reduce an unsigned mean by moving fingers into the gun. No game exam is ready.
+Both writers/source observer stay OFF; attachments/runtime DLL unchanged.
+Python324/324 and CTest27/27; IDB/save evidence at endCOOP_STATUS.
+
+Previous STATIC (2026-09-27, frame/preskin continuation): exact normal arms
 collection190130 has no authored BlendShapeInstance inputs; mesh181AE8 has
 zero shape count/null table. Native constructor/resource guards exclude the
 SubMeshBlend branch for this authored path, not arbitrary later writers.

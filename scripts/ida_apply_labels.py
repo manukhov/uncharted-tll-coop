@@ -1264,7 +1264,12 @@ FUNCTIONS = {
         "Initializes a newly allocated FgInstance from its FgAnimData owner and "
         "resolved FgGeometry. Stores the shared FgGeometry pointer at "
         "FgInstance+0x1B0, captures the retained owner id at +0x250, and sets "
-        "the per-instance geometry/render state used by every mesh LOD.",
+        "the per-instance geometry/render state used by every mesh LOD. "
+        "STATIC normal arms ComputeWind exclusion:14192EC79 sets a14=false "
+        "for InitializeSubMeshes call14192ECBD. Forwarded141881CA9/14187FEC0 "
+        "to prototype a10, keeps MeshInstance+104 mask400 clear; no wind "
+        "descriptor scan/deformer creation. Generic caller14196641E passes "
+        "true. Not proof against later live replacement/material shaders.",
     ),
     0x14192F0E0: (
         "FgInstance_Reset",
@@ -3734,7 +3739,30 @@ FUNCTIONS = {
         "chain using the InstanceJointData pointer at MeshInstance+0x118. "
         "Optional SubMeshBlend at14188373B precedes Skinning at1418837CF; "
         "optional RecomputeNormals/ComputeWind follow. Unmorphed bind vertices "
-        "therefore do not unconditionally equal live skinning inputs.",
+        "therefore do not unconditionally equal live skinning inputs. "
+        "ComputeWind gate141883916..92E requires MeshInstance mask20 AND "
+        "SubMesh+80. Initializer141882082..099 derives mask20 from that pointer; "
+        "normal FgInstance_Init a14=false excludes its construction.",
+    ),
+    0x1417483F0: (
+        "WindDeformer_Create",
+        "Exact WindDeformer::Create assertion. Retains parameter pointer+50, "
+        "resolves position/normal streams0/2 and optional color stream. "
+        "Called at14187AD2E with override+1F0 or14187AE5B with type23 descriptor; "
+        "both require MeshInstance+104 mask400 at14187AC9F.",
+    ),
+    0x141748650: (
+        "WindDeformer_Deform",
+        "Exact WindDeformer::Deform assertions. Post-skin deformer invoked "
+        "by ComputeWind_Execute; distinct from material vertex shader/cloth. "
+        "Normal FgInstance initialization excludes its command admission, "
+        "not arbitrary later position writers.",
+    ),
+    0x141875F90: (
+        "ComputeWind_Execute",
+        "ComputeWind vtable142B08B40 slot0; COL142CDDE98/type143770DC8. "
+        "Dispatches141748650 WindDeformer_Deform. Native command builder "
+        "requires has-wind mask20 and nonnull SubMesh+80.",
     ),
     0x141875F40: (
         "SubMeshBlend_Execute",
@@ -3761,21 +3789,29 @@ FUNCTIONS = {
         "MeshInstance_InitializePrototypeState",
         "Collection prototype+40 blendinputcount gates allocation of "
         "MeshInstance+10 at14187F646. Zero branch14187F6A9 storesnull. "
-        "Pinned normal Nadine arms collection190130 hascount0/null+38.",
+        "Pinned normal Nadine arms collection190130 hascount0/null+38. "
+        "Wind:14187F400 clears +104 mask400,14187F418 clears +150 override. "
+        "False a10 from FgInstance skips +148 descriptor/type23 scan atF42D..463.",
     ),
     0x141878860: (
         "MeshResource_InitializeFromDescriptor",
         "Copies native mesh+74 shape count toresource+68 at141878F32; "
         "resource+70 initializednull atF40, allocated onlyifpositivecount. "
         "Shape pointers native+78 readatF90. File header is8 bytesearlier; "
-        "Nadine arms181AE8+7C/+80 arezero/no fixup, native desc181AF0.",
+        "Nadine arms181AE8+7C/+80 arezero/no fixup, native desc181AF0. "
+        "Index upload:1418789AB reads native+28 count,9BD source+48; "
+        "9D4/A2E/A86 allocate/upload2*count; A9E stride2,AA6 format57 "
+        "DXGI_FORMAT_R16_UINT. Arms file181AE8+30=36582,+50->5C2FA4, "
+        "73164B/12194triangles, indices0..6447.",
     ),
     0x14187A3B0: (
         "SubMeshInstance_InitializeDeformerResources",
         "At14187A636 creates BlendShapeDeformer onlyifresource+70 nonnull "
         "AND resource+68 shapecount positive; storesSubMesh+40 at14187A67E. "
         "Independent ofcollection blendinput gate. Normal Nadine arms "
-        "authored count/table areabsent, not merelyzero liveweights.",
+        "authored count/table areabsent, not merelyzero liveweights. "
+        "Wind:14187AC8D clears SubMesh+80; AC9F requires MeshInstance+104 "
+        "mask400 before either override+1F0 AD2E or type23 AE5B creation call.",
     ),
     0x141879C90: (
         "SubMeshInstance_Construct",

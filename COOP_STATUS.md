@@ -22,8 +22,13 @@ Latest 2026-09-27: packed skin weights/typed geometry are closed. Normal arms
 authored SubMeshBlend and normal P99 LongGunJiggle construction are excluded.
 Weapon-root cancellation is conditional on same-generation root0/unitS and
 no later world override; all7 pistol-base clips/program preserve identity root.
-Next: define a grip-only MAIN-mesh ROI and close remaining post-skin/frame
-conditions before interpreting conditional surface contact. Do not rank poses by
+Latest conditional contact audit now defines827-triangle LOWER grip patch and
+finds strict surface crossings in both modeled poses (direct223 pairs,
+Chloe-chain191); no clean fix is established. Normal FgInstance ComputeWind
+admission is also excluded, not all material displacement/live writers.
+Next: trace those witnesses to constrained finger-local changes, preserving
+palm/prop; actual source/frame/helper ownership still gates any runtime writer.
+Do not rank poses by
 distance to Chloe bone origins (different proportions/bind axes), globally
 remove the profile, or reopen old game exams. Preserve exact source/owner
 admission and distinguish the left support-arm symptom. Latest section records
@@ -35833,3 +35838,127 @@ SubMeshInstance_InitializeDeformerResources14187A3B0. Binding getter retains
 callers1414FB50A/1414FC51B/1414FC7F6; SubMeshBlend vtable xrefs remain
 141882F10/141882F80/141883734. No tll process was present. Pre-existing
 untracked tmp/ remains untouched.
+
+### 2026-09-27 — STATIC lower-grip surface crossings and normal ComputeWind exclusion
+
+No game launch, injection or retail/shader execution. Both P99 writers and
+ordinary source observation remain OFF; runtime DLL/source rows, appearance,
+attachments and accepted back offsets were not changed. No visible repair claim.
+
+**Alternatives tested.** Whole material/component as grip vs bounded geometric
+patch; unsigned distance as penetration/quality vs actual surface crossing;
+directR124 vs conditional R157(R20) on the SAME Nadine vertices. Separately,
+normal FgInstance ComputeWind construction vs present-but-zero-amplitude wind
+vs generic mesh-constructor wind. Exact evidence distinguishes these below.
+
+**Grip-region definition and topology (STATIC asset geometry).** New
+`p99_grip_contact_audit.py` reuses full pinned P99/pistol ownership/digests. MAIN
+AC5C8's material is still the whole2290-triangle partition. Exact-position xyz
+welding gives1170 used vertices/one component,56 boundary edges, no nonmanifold
+edges, winding mismatches or degenerate triangles. A component/material selection
+does NOT isolate the grip; the main surface is NOT a closed collision solid.
+
+Orthographic asset views identify the region below the trigger guard as lower
+grip. A deliberately MANUAL, pose-independent rule admits only triangles with
+ALL3 vertex y<=0 in weapon-bind-root space:827 triangles;36 straddling triangles
+excluded, no generated cap. Triangle-ID SHA
+323c996898d3fdb64f1bbdf65bace921673997cdfbc26cc0d2ab6ab8f3bdf7ed.
+Bounds x[-.01428985595703125,.014312744140625],
+y[-.0640869140625,-.0002551078796386719],
+z[-.0408935546875,.031707763671875]. Exact welding gives438 used vertices,
+one component/49 boundary edges, no nonmanifold/winding/degenerate cases.
+This is only a LOWER grip surface patch, not full thumb/index contact coverage
+or an engine-authored contact tag. Indices and boundaries are preserved exactly.
+
+**Body triangle ownership.** MeshResource loader141878860 reads native+28
+index count at1418789AB and native+48 source at1418789BD; allocation/upload at
+1418789D4/141878A2E/141878A86 uses2*count. Descriptor stride2 at141878A9E and
+format57 at141878AA6 match installed SDK DXGI_FORMAT_R16_UINT. Fileheader
+181AE8+30 count36582,+50->5C2FA4;73164bytes, indices0..6447 for6448 vertices,
+12194 source triangles. The closed21-joint vertex subset yields5526 triangles
+with all3 modeled vertices; mixed/helper-dependent triangles remain excluded.
+
+**Conditional surface result; no pose selected.** Contact CLI refuses pose
+comparison unless `--assume-identity-weapon-prop` is explicit. This assumption
+is NOT upgraded to live frame proof by the historical ACI samples or prior
+root-cancellation algebra. It consumes the corrected scalar report (canonical
+SHA ac850b5e7d8fe2706a46964dba5d86cb6cf674b797abe0ec1616974e8b55158f),
+same3040 closed vertices/index SHA232789ed...fd7aa3 and exact22-bit weights.
+
+Nearest points are on actual triangles, using a deterministic AABB tree and
+analytic face/edge/vertex projection, not nearest mesh vertices or bone origins.
+Unsigned average distances (authored units) change pinky.011905409->.013525245,
+ring.015073697->.013352424, middle.011255755->.011612725. They are mixed, not a
+uniform reduction. Thumb/index averages to this lower patch do NOT evaluate
+their intended upper contact. All-vertex mean is deliberately NOT a quality score.
+
+More decisively, the modeled hand triangles cross the lower-grip surface in
+BOTH poses. A pair is counted only when an edge's endpoints lie strictly on
+opposite sides of the other face and the intersection is strictly interior to
+that face. Plane epsilon1e-9 assetunits, barycentric epsilon1e-9. This is a
+lower bound: coplanar/boundary/tiny cases are undecided, not declared absent.
+
+- DirectR124:223 intersecting source triangle pairs,121 distinct hand triangles,
+  98 weapon triangles; pairs by supportgroup pinky60/ring41/middle69/mixed53.
+- Conditional Chloe-chain:191 pairs,107 hand triangles,82 weapon triangles;
+  pinky65/ring46/middle49/mixed31. Some counts go up despite aggregate going down.
+
+Every witness retains original body/weapon triangle ordinals and intersection
+point in local reports. These are static MODEL intersections, not confirmed
+live clipping, depth/solid penetration, complete hand coverage or proof that
+fewer pairs is better. Both `preferred_pose=null` and live/improvement flagsfalse
+remain explicit. The claim that this modeled whole-chain transfer alone yields
+a contact-free lower grip is REJECTED within this conditional model; the actual
+runtime route is not globally rejected or promoted by it. Left support arm is
+still outside this comparison. Scientific preview is an asset diagram, not an
+edited game screenshot or a rendered-surface oracle.
+
+**Normal FgInstance ComputeWind branch excluded (STATIC).** Three independent
+evidence types: caller/dataflow guards, RTTI/virtual execution and source strings,
+plus typed pinned arms ownership. FgInstance_Init14192E590 at14192EC79 writes
+argument14=false (`C6 44 24 68 00`) for14192ECBD. Through141881CA9/14187FEC0
+it reaches prototype initializer a10. 14187F400 clears MeshInstance+104 mask400,
+14187F418 nulls override+150; false skips descriptor+148/type23 scanF42D..463.
+SubMesh+80 is nulled at14187AC8D, common mask400 guard14187AC9F excludes BOTH
+override+1F0 call14187AD2E and type23 call14187AE5B to WindDeformer_Create.
+141882082..099 derives has-wind mask20 from SubMesh+80; command builder
+141883916..92E requires that mask AND pointer before ComputeWind. Contrasting
+generic caller14196641E passes argument14=true: not global dead code.
+
+ComputeWind vtable142B08B40 slot0=141875F90; COL142CDDE98->type143770DC8,
+name `.?AUComputeWind@@`. Execute dispatches141748650, with exact
+WindDeformer::Deform assertions. Create1417483F0 has matching source assertions,
+retains parameters+50 and resolves position/normal streams0/2 and optional color.
+Thus no ComputeWind command is constructed on the reviewed normal arms path,
+not merely a live amplitude of zero. Later replacement/reinitialization,
+arbitrary live writes, cloth/helper motion and material vertex shaders remain
+outside this proof. This does not establish all final rendered positions.
+
+`p99_arms_wind_audit.py` checks pinned body/typed ownership, full retail file SHA,
+10 whole reviewed functions and precise callsite/vtable/RTTI bytes. Reads PE
+files only, never executable allocation or native invocation. Mutation tests
+reject an enabled argument, changed full functions, wrong RTTI or body. Native
+prediction is absence of SubMesh+80/ComputeWind on new unmodified normal arms,
+not a zero-effect command; no standalone game launch is justified for it.
+
+NEXT: use concrete pinky/ring/middle crossing witnesses to study constrained
+finger-local corrections preserving palm/prop, not another global weapon offset
+or whole-chain swap. Actual selected source, live frame/generation and omitted
+helper ownership must still be closed before a correction writer/runtime exam.
+Do not optimize an unsigned mean (moving a vertex through the weapon can lower
+it), silently cap the open mesh, or treat geometric patch selection as native
+semantic proof. No unchanged game test is ready.
+
+Verification: Python324/324 and CTest27/27 pass; all installed-asset tests ran.
+19 new contact controls include analytic projections, degenerate geometry,
+asymmetric rigid transforms, BVH/exhaustive agreement, exact seams, topology,
+strict crossing/tangent/coplanar distinction, partial-triangle exclusion and
+explicit-assumption refusal.8 wind tests pass. Both new CLIs pass; local report
+and inspected diagram are reports/p99-grip-contact-20260927.json/.png, wind
+report reports/p99-arms-wind-20260927.json. Single IDB label pass reports
+1916functions/79data names/1type, `save_database returned True` in
+reports/ida_apply_p99_contact_wind_20260927_status.txt. Restarted MCP resolves
+WindDeformer_Create1417483F0, WindDeformer_Deform141748650 and
+ComputeWind_Execute141875F90; create callers14187AD2E/14187AE5B and vtable
+xrefs141883438/1418834B0/1418839C0 remain intact. No tll process was present.
+Pre-existing untracked tmp/ was untouched.
