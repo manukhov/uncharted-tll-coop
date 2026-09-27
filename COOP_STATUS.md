@@ -37,6 +37,16 @@ remove the profile, or reopen old game exams. Preserve exact source/owner
 admission and distinguish the left support-arm symptom. Latest section records
 the decoder correction and precisely affected historical numerical claims.
 
+Latest source-boundary continuation (2026-09-27): pinned g0 postcmd16 return
+141ABA978 holds all five missing operands together;141AB9B3D was a mistaken
+frontier address (tableLEA, actualCALL141ABA973). No live hook used that mistake.
+The256B operand slice is now statically specified, NOT captured/admitted. Normal
+Async cmd14 imports66postblend rows aftercmd3, so earlier validity is superseded.
+Postpose writers, late constant CPU-palette override143682F4A and render palette
+selection prevent calling this a final-render snapshot. Existing pre-stock
+observer cannot supply these inputs. Next is a separately scoped one-shot
+read-only source capture design, not the unchanged old preparation exam.
+
 ## Historical priority snapshot (2026-08-27)
 
 Correct the holstered positions of all other weapons on local legacy Nadine's
@@ -36536,7 +36546,7 @@ frame restrictions. Complete actual skin/contact requires this source proof;
 the existing finger probe is still not an admitted runtime correction.
 
 Concrete next static boundary: existing ProcessAnimCmdListSegment141AB97C0
-command16 call141AB9B3D -> ExecuteSkeletonJointPrograms14217B630. Its recorded
+command16 call141ABA973 (return141ABA978) -> ExecuteSkeletonJointPrograms14217B630. Its recorded
 SegmentContext has currentgroup+38, JointParams+50 and workspace+58. Trace
 final target context, validity and lifetime across this exact group0 execution;
 merely knowing these offsets does not admit a read hook, prove final skin owner
@@ -36556,3 +36566,137 @@ MCP restart resolves new/renamed point-transform, homogeneous-normalize8,
 direct stream sequencer and op49 wrapper names. Normalize callers190C84/194900
 and op49 dispatchxref143026EA8 remain intact; Euler/op50 comments record the
 bounded g6 semantics. Actual visual grip remains unverified and unfixed.
+
+### 2026-09-27 STATIC exact P99 post-cmd16 source window and finality exclusions
+
+**Question.** Where can shoulder22 workspace and LOCAL JP24/26/49/51 be read
+from one real Nadine evaluation, rather than combining frozen clips or different
+generations? This pass establishes the static source window, NOT an actual pose,
+a new runtime admission or a repaired grip.
+
+**Address correction.** The recent frontier incorrectly called141AB9B3D the
+cmd16 call. MCP disassembly and independent read-only retail PE bytes agree:
+141AB9B3D is `488d056cd15601`, LEA custom-table143026CB0. Actual Segment LEA
+is141ABA96B, statusLEA141ABA96F, CALL141ABA973 (`e8b80c6c00`) targets14217B630,
+and return is141ABA978. Older July28/September17 entries already recorded the
+correct call. Corrected current frontiers and clarified the scalar dispatch
+xref. No hook was installed at the mistaken address; recent work was offline.
+
+**Competing boundaries and three independent evidence kinds.**
+
+- Hpre16: read all operands before evaluation. Excluded by full authored writer
+  inventory: W22 does not exist by contract until op40 ordinal36. Command15
+  initializes reservedW0, not every workspace row.
+- Hpost16: after the same g0 call, read all five values. Supported by (1) the
+  exact native argument/call/return instructions and callers, (2) pinned asset
+  group/program dataflow including every overlapping write, and (3) native
+  import/finalization/allocation lifetime and target descriptor layouts.
+- HanyC39/Perform: any matching skeleton or executor is the real final local
+  source. Excluded: Perform141A92759 precedes retained Player+408@141A929A1
+  (Player_PostAnimBlending1410EB6A0); normal Async141A92E78 imports the resulting
+  Fg+100. Executor also has callers141AB7F74/14217DE27; AnimateObject/AnimateJoints
+  use the interpreter. Skeleton identity alone cannot distinguish these paths.
+- Hpost16IsRendered: procedural output is automatically visible final skin.
+  Excluded by concrete later writers/alternate palette routes below.
+- HoldObserver/Archive: existing diagnostic output supplies the real operands.
+  Excluded for the specifically inspected candidates below, not an exhaustive
+  claim about every file in reports/.
+
+**Single-execution operand window.** Nadine g0 program base593C0 has51 operators,
+processing prefix66 and expanded workspace104. Full 48B JP24/26/49/51 have no
+writer, including vector/partial overlaps. W22 has exactly one writer,
+op40 ordinal36. Thus after141ABA973 returns at141ABA978 the four local inputs
+still equal their pre-program values and W22 was computed by that SAME call.
+The minimum raw operand payload is256bytes:
+
+- Segment+50 JP offsets480/4E0/930/990, each48B, preserve all S/Q/T components.
+- Segment+58 workspace offset5C0, 64B row22 (leading reservedW0 included in
+  indexing). Padding is not silently reinterpreted as extra semantic values.
+
+W22's entire reached ancestry is op40 ordinals9/23/28/32/34/36, input JP rows
+0/14/15/16/17/18/20/22 and reserved identityW0. Immediate parent isW20 encoded549;
+there are no opaque producers or expanded-tail inputs. It does NOT depend on
+JP24/26/49/51. This is checked, not an assumption from the bind hierarchy.
+
+**Dominant normal import, not stale ValidBits.** Historical normal58-word list
+contains `0,1,2,9,3,4,14,15,16,17,24,24,26,5`; the earlier live census was Mazur,
+not fresh P99 proof. Cmd3 calls141AB78F0 at141AB9D18. Missing mask comes from
+inverted incoming bits141AB7993/799F and count-mask141AB79A7, default fill at
+141AB79D7, then OR missing bits back at141AB79DC/79E6. JP is published at
+141AB9DD6 and lane context discarded at141AB9E2F/32.
+BUT subsequent normal cmd14@141ABA7F5 ->14217B310 overwrites the entire prefix:
+group+12 count66 at14217B31E, source suppliedPose +48*u16(procdesc+6), first
+parameter0 for processing0 `(66,27,2,0,0)`, copy3168B at14217B360..36D. The
+source is postblend Fg+100. Those earlier cmd3 bits do NOT establish provenance
+of the imported rows. Expanded rows66..103 are unnecessary for these inputs.
+One may use actual admitted copied values without proving that they were
+defaults; only a default/producer-lineage claim requires earlier source evidence.
+Do not invent a requirement that cmd3 be absent, or that its old valid mask
+describe values overwritten by cmd14.
+
+**Lifetime and owner restrictions.** Exact candidate is normal Async mode2 g0
+Process141A92E78, not residual141A932F8 after group0-mask clear. Require retained
+local Nadine owner generation, selected P99, matching job/Fg/Art/rawC39, context
+rootFg+1C0/scratch, exact normal command grammar/output bindings, existing
+normal-job flags and no cached-prepass override. Segment+28 skeleton,+38 group,
++48 group ordinal alone are insufficient. Native invocation/return-slot epoch
+must distinguish re-entry; equal pointers or equal floats are not an epoch.
+Copy immediately after16 before later commands: cmd17@141ABAA12 performs encoded
+scalar writes and is not generically read-only. Cmd5 releases workspace at
+141ABB107 and JP at141ABB120, nulling+58/+50 at141ABB10C/125. Never retain these
+borrowed pointers beyond that scope. No live hook implementation is admitted here.
+
+**Concrete post-boundary finality counterexamples.** Exact callback whitelist
+248B1AAE/514C0761 remains essential. Nd_ProcessAnimPostPosePluginFunc141937D20
+id03D27700 (compare141937D5F) loads JP from Segment+50 at141937F82 and actually
+STORES T at141937FCC, Q at141937FE8, S at141938006. PrecedingFC7/FE3/FF8 are
+SIMD loads/broadcast, not stores. Generic postpose callbacks are not read-only.
+Async then reaches owner+410@141A934D5 Player_Update1410EC230, +418@141A934E8
+WaitUpdateCounter141BBDF20, +420@141A93572 UpdateCloth141BBE3B0. Transitive
+nonmutation through all callbacks is not proved.
+NEW strong STATIC global143682F4A is named g_AnimCpuPaletteConstantOverrideEnabled:
+if nonzero AND Fg+230 nonnull AND !(Fg.flags&0x200),141A935C0..141A935E0 overwrites
+ALL Art+34 CPU palette rows with three constantfloat4s after those callbacks.
+Other reads141C01621/141D3C0AD were checked; the user-facing option/default is
+not inferred and the flag was NOT changed. A final-palette proof must exclude
+this gate for the actual frame, not assume its value.
+FgDrawManager_PrepareInstanceForRendering copies230->240 at14181AB33 but selects
+250 when nonnull at14181AB5A..AB80; instance+260 also selects mesh remap. Preserve
+the known instance78->frame record58->JointData18->latched00 chain and prove the
+specific Fg/mesh, selected palette, generation and frame join. Old250==0 captures
+do not certify a future frame or the weapon/left support-arm correspondence.
+
+**Existing evidence inspected.** Current source_observation_candidate runs
+BEFORE its wrapper calls stock Async once. It materializes authored/frozen rows
+on a private stack, logs only scalar RESULT/timing fields and does not serialize
+post16 arm matrices. Even prepared/output_bytes1008 would not be this snapshot.
+Known full-chain-agz-final input3948/output1360/stages2016 and pinned metadata
+contain21 distal transfers (28/30/odd105..141), no required four locals/W22.
+chloe_idle_native_pose.txt explicitly logs isolated mapped-image clip decoding
+at sample0/84/etc, not localNadine final evaluation. p99-preselect-scalar-owned-
+20260920.json explicitly says ISOLATED_NATIVE/game_launched_or_attached=false/
+live_budget_admitted=false: owned fixture performance is not real pose evidence.
+The three inspected late-arm/preselect run directories have only event/ready
+text, no post16 payload. This bounded inspection does not assert a complete
+search of all reports. Do not rerun stale/full-preparation exams to obtain data
+they do not capture.
+
+**Implementation/next step.** p99_wrist_source_boundary_audit.py reads only disk
+PE/assets, pins exact instruction roles, whole-g0 write inventory, W22 ancestry,
+minimum ranges and finality limits. Mutation tests reject wrong call targets,
+tableLEA-as-call, altered args/return, partial JP overlap, late W22 writer,
+missing producer and changed ancestry. It NEVER elevates a synthetic stamp or
+256 readable bytes to runtime/source admission. Next design a separately scoped
+one-shot read-only capture of those bytes with full owner/native-epoch/normal
+import provenance and existing fail-closed gates; audit actual callsite ABI/
+unwind before implementing. Do not execute retarget preparation in the capture,
+enable a writer, weaken owner/budget gates or alter weapon attachments. A future
+test needs its own written discriminating prediction; none is launched here.
+
+Verification: Python556/556 (16 new), CTest27/27, no asset skips. CLI verifies
+the pinned retail SHA and writes reports/p99-wrist-source-boundary-20260927.json;
+actual_pose_captured/source_or_runtime_admission/final_render_palette_proven are
+false. Runtime/scanner untouched, no new game process. Single IDB saved with
+1922functions/80data/1type and save_database returned True; new global and its
+Async use read back through restarted MCP. Existing untrackedtmp/ preserved. This is a
+source-boundary finding, not a visual grip correction.

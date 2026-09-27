@@ -2372,7 +2372,12 @@ FUNCTIONS = {
         "joint-conversion id 0x248B1AAE reads finalized 64-byte matrices from "
         "the evaluator workspace and writes converted matrices to the command "
         "destination; it does not write WorkBuffer pose lanes. Other ids include "
-        "bounding-sphere and joint-retarget operations and are not interchangeable.",
+        "bounding-sphere and joint-retarget operations and are not interchangeable. "
+        "STATIC counterexample to generic read-only postpose: id03D27700 tested "
+        "at141937D5F loads JP from Segment+50 at141937F82; selected records "
+        "write T at141937FCC, Q at141937FE8 and broadcast S at141938006. "
+        "These are the actual STORE addresses, not preceding SIMD loads. "
+        "P99 normal-suffix admission must retain its exact callback-id whitelist.",
     ),
     0x1406FB070: (
         "PointSwordAnim_RunIk",
@@ -3883,7 +3888,10 @@ FUNCTIONS = {
         "instance+0x78/+0x80 at 0x14181B3A1..B3A5. It separately publishes the "
         "render world matrix into each driven instance at +0x140..+0x17F. Exact "
         "GetRenderWorldMatrix calls 0x14181AD57/0x14181ADFE feed temporal data; "
-        "0x14181B3F4 returns the final matrix copied to each driven instance.",
+        "0x14181B3F4 returns the final matrix copied to each driven instance. "
+        "STATIC P99 source-boundary limit: post-cmd16 g0 values do not prove "
+        "this frame's selected palette, Fg/mesh owner or +260 remap route. "
+        "Historical Fg+250==0 is not an admission for a future frame.",
     ),
     0x14181B890: (
         "FgDrawManager_PrepareInstancesJob",
@@ -4143,7 +4151,19 @@ FUNCTIONS = {
         "is initialized as the "
         "root before decimal command 16. Decimal command 17 runs an authored encoded-"
         "scalar copy over JointParams, FgAnimData+0x120 payload, group temp and the "
-        "shared scratch. Command 0x17/decimal 23 is the separate plugin callback path.",
+        "shared scratch. Command 0x17/decimal 23 is the separate plugin callback path. "
+        "STATIC P99 source-boundary correction:141AB9B3D is LEA of the custom "
+        "operator table, NOT a call. Actual cmd16 CALL141ABA973 ->14217B630 "
+        "returns at141ABA978, with Segment supplied by LEA141ABA96B. Pinned "
+        "Nadine g0 has51 operators: full JP24/26/49/51 survive unchanged; W22 "
+        "has sole writer op40 ordinal36. Post16 before next command holds "
+        "all five inputs: JP+480/4E0/930/990 (48B each), workspace+5C0 (64B). "
+        "This256B slice lacks owner/generation/validity provenance; pre16 "
+        "does not guarantee W22. Cmd5 releases workspace at141ABB107 and "
+        "JP at141ABB120, then nulls+58/+50 at141ABB10C/125. Context/group "
+        "and normal Async141A92E78 provenance are required; Perform/profile "
+        "executions or later group call141A932F8 are not interchangeable. "
+        "Post16 is a procedural source boundary, not a final-render claim.",
     ),
     0x14162B380: (
         "PackageMgr_RequestPackage",
@@ -4957,7 +4977,14 @@ FUNCTIONS = {
         "ONLY when their incoming final bits are clear. D350/B8 clip-local "
         "absence does not imply that condition after other Base/Hands/IK "
         "layers. Never replace unknown valid upstream Q with E51542CA "
-        "locator-profile values or bind references.",
+        "locator-profile values or bind references. The fill is followed by "
+        "OR missing bits into validity at141AB79DC/79E6. Cmd3 publishes JP "
+        "at141AB9DD6 and discards its lane context at141AB9E2F/32. Later "
+        "post16 bytes can supply actual computed values but cannot recover "
+        "which came from defaults; that claim needs earlier ValidBits/lane "
+        "lineage. Final Async mode2 runs cmd3 but THEN cmd14 replaces the "
+        "entire66-row prefix from postblend Fg+100. That earlier cmd3 mask "
+        "does not describe the imported source; do not assume cmd3 is absent.",
     ),
     0x14217B310: (
         "AnimCmdEvaluator_CopyGroupPoseToWorkBuffer",
@@ -5442,7 +5469,11 @@ FUNCTIONS = {
         "all 104/38 expanded rows for g0/g1. Replacing only shadow-context+0x50 "
         "preserves native allocator ownership; never replace original+0x50 "
         "because cmd5 frees it. This does not establish owner lifetime or "
-        "arbitrary terminal callback safety.",
+        "arbitrary terminal callback safety. STATIC P99: owner-neutral executor "
+        "also called at141AB7F74/14217DE27; C39 identity alone does not admit "
+        "retained local Nadine. Normal Async group0 call141A92E78 and actual "
+        "cmd16 return141ABA978 define the candidate procedural read window; "
+        "command suffix, owner callbacks and render palette selection remain.",
     ),
     0x14217BF30: (
         "AnimCmdEvaluator_ExpandJointParamsToTargetWorkspaceCount",
@@ -6075,6 +6106,14 @@ FUNCTIONS = {
         "clears bit zero from both remaining masks before the later Build at "
         "0x141A93038. Thus group zero imports the postblend Fg+0x100 bank once "
         "before the final Fg+0x230 palette publication. "
+        "STATIC P99 finality limit: after owner+420 call141A93572, nonzero "
+        "g_AnimCpuPaletteConstantOverrideEnabled143682F4A with Fg+230 nonnull "
+        "and !(Fg.flags&0x200) makes141A935C0..141A935E0 overwrite ALL Art+34 "
+        "48-byte CPU palette rows from three constant float4s. Exclude this "
+        "gate explicitly for any final-palette claim; do not assume it off. "
+        "Normal g0 Process141A92E78 differs from residual141A932F8 and "
+        "Perform141A92759 before Player+408. The pre-stock source observer "
+        "runs before either Async call and never captures post16 JP/W22. "
         "Retained presentation-Player addresses may turn over before this job; "
         "each invocation revalidates the current Player/Fg generation and the "
         "command list itself owns canonical clip liveness. "
@@ -14172,6 +14211,14 @@ DATA_NAMES = {
         "0x1437E96D8. Distinct from the copied executable job records and "
         "the PE runtime-function row 0x146E9D7E0.",
     ),
+    0x143682F4A: (
+        "g_AnimCpuPaletteConstantOverrideEnabled",
+        "STATIC: nonzero selects Async141A9357F..5E0 constant CPU-palette "
+        "overwrite when Fg+230 exists and !(Fg.flags&0x200); Art+34 rows, "
+        "48B each, after normal groups and owner callbacks. Also read at "
+        "141C01621/141D3C0AD. Broader user-facing option/default not inferred; "
+        "not an actual-frame admission and not enabled by this analysis.",
+    ),
     0x143682F4B: (
         "g_AnimManagerForceCachedSkeletonPrepass",
         "Nonzero forces PerformAnimBlend's cached-skeleton prepass even when "
@@ -14622,6 +14669,26 @@ DATA_NAMES = {
 }
 
 
+INSTRUCTION_COMMENTS = {
+    0x141AB9B3D: (
+        "STATIC P99 correction: LEA custom-operator table143026CB0, NOT cmd16 "
+        "CALL. Actual call141ABA973; return141ABA978. Do not hook this LEA "
+        "as a post-program source boundary."
+    ),
+    0x141ABA973: (
+        "STATIC actual cmd16 CALL14217B630; RDX=stack Segment from141ABA96B. "
+        "Return141ABA978 is the candidate source window only for admitted "
+        "normal Async g0 from Process141A92E78, not arbitrary C39 contexts."
+    ),
+    0x141ABA978: (
+        "STATIC pinned g0 post16: untouched JP24/26/49/51 and newly computed "
+        "W22 coexist. JP+480/4E0/930/990 each48B; workspace+5C0 64B. Copy "
+        "before next command/cleanup;256B alone has no owner/epoch/source "
+        "provenance and is NOT a final rendered palette. No hook admitted."
+    ),
+}
+
+
 FUNCTION_TYPES = {
     0x141ED1380: (
         "unsigned __int8 __fastcall "
@@ -14666,6 +14733,9 @@ def apply_labels():
             ida_name.SN_FORCE | ida_name.SN_NOCHECK,
         )
         ida_bytes.set_cmt(ea, comment, False)
+    for ea, comment in INSTRUCTION_COMMENTS.items():
+        if not ida_bytes.set_cmt(ea, comment, False):
+            raise RuntimeError(f"failed to apply instruction comment at 0x{ea:X}")
     for ea, declaration in FUNCTION_TYPES.items():
         if not idc.SetType(ea, declaration):
             raise RuntimeError(

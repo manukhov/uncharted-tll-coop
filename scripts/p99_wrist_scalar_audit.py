@@ -58,7 +58,7 @@ RECORDS = {
     0x408: (128, 0x5B260, "60dba93d09e6fbbee50785bd773c5d3f2e71d73dcdcfbd3df2b6b8bba9777d3f81a51000f00400000000000002000000020400000000000000008c420a040000"),
 }
 EVIDENCE = {
-    "dispatch": "14217B724/742 custom table 143026CB0 slots0/1 -> 128/129; ProcessAnimCmdListSegment xref141AB9B3D",
+    "dispatch": "14217B724/742 custom table 143026CB0 slots0/1 -> 128/129; table LEA141AB9B3D, distinct cmd16 CALL141ABA973/return141ABA978",
     "129": {
         "hemisphere": "141A95308..32 dot(reference,Q)<0 negates Q",
         "swing": "141A955E5..95728 dot<0.9999989867; crosslength>0.001; antiparallel fallback (0,1,0,0)",

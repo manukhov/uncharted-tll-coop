@@ -11,7 +11,35 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC (2026-09-27, g6 helper analytic integration): the reached numeric
+Latest STATIC (2026-09-27, exact post-cmd16 source boundary): all five missing
+inputs coexist immediately at141ABA978 after CALL141ABA973 ->14217B630 in
+normal Async group0 Process141A92E78. CORRECTION:141AB9B3D is custom-table LEA,
+not this call. No runtime hook used that recent mistaken frontier address.
+Pinned g0 has51ops; full LOCAL JP24/26/49/51 survive; soleW22 writer isop40@36.
+Minimum operand copy is256B: JP+480/4E0/930/990 each48B, W+5C0 64B. W22 sources
+are prefix JP0/14/15/16/17/18/20/22 andW0, not expanded tail or those four locals.
+Normal cmd14 imports66rows/3168B from postblendFg+100, superseding earlier cmd3
+values/validity. Historical normal grammar DOES containcmd3; do not claim absent.
+Post16 bytes give actual computed operands IF owner/execution admission holds;
+they do not recover default/producer lineage or establish final rendered skin.
+New p99_wrist_source_boundary_audit.py pins PE instructions and whole-g0 writers,
+range/ancestry tests; no hook/capture or runtime admission. Cmd5 freesW/JP at
+141ABB107/120. Do not retain pointers or equate address reuse with generation.
+Finality counterexamples: postposeid03D27700 writesJP; late flag143682F4A can
+overwrite all CPU palette rows; rendering can chooseFg250 or instance260 remap.
+Existing pre-stock source observer and the specifically inspected frozen/native
+clip/owned-preparation archives do not supply this post16 localNadine snapshot.
+NEXT: design a separate bounded one-shot READ-ONLY256B capture at the exact
+normal Async g0 post16 boundary, with retained owner/Fg/Art, native job epoch,
+normal grammar/import bindings and lifetime admission. Reuse proven ABI/unwind
+machinery only after checking the selected callsite; do not relaunch old full
+preparation observer, weaken gates, store raw pointers, or enable either writer.
+No new runtime test is admitted yet. Frame/weapon/left-arm joins remain separate.
+Verification: Python556/556 (16 new), CTest27/27; runtime/scanner unchanged.
+Single IDB saved1922functions/80data/1type; source/finality comments saved and
+new late-override global verified after restart. Actual grip still unfixed/unverified.
+
+Previous STATIC (2026-09-27, g6 helper analytic integration): the reached numeric
 slice for535/536/537/554 is closed and composed with g0 helper88 by
 p99_wrist_g6_replay.py. It REQUIRES shoulder22 workspace and LOCAL JP24/26/49/51,
 with no bind/profile/default source substitution. Actual same-generation values
@@ -33,7 +61,7 @@ unchanged, substitute E51542CA, broaden read gates or enable a writer. Only afte
 source and frame admission compare complete affected skin against the P99 grip;
 an arbitrary synthetic control is not a chosen correction. Runtime untouched.
 Concrete static source frontier: ProcessAnimCmdListSegment141AB97C0 command16
-call141AB9B3D -> ExecuteSkeletonJointPrograms14217B630, groupdescriptor+38,
+call141ABA973 (return141ABA978) -> ExecuteSkeletonJointPrograms14217B630, groupdescriptor+38,
 SegmentContext JP+50/workspace+58. Prove final target context, validity and
 the exact lifetime across g0; these offsets alone are NOT a safe read hook.
 Verification: Python540/540 (55 new), CTest27/27, no asset skips; single IDB
