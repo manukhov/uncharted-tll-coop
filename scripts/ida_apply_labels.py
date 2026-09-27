@@ -4707,7 +4707,15 @@ FUNCTIONS = {
         "record+0x2A before calling DoJointRetarget. Therefore +0x2A cannot be "
         "substituted with record+0x28's skeleton-global target joint. It "
         "conditionally dispatches the separate arm/leg IK "
-        "stages only when their runtime entry pointers exist.",
+        "stages only when their runtime entry pointers exist. STATIC P99 "
+        "upstream admission:141AE2D05..D39 skips a map row if the NONNULL "
+        "source ValidBits lacks its MSB-first joint bit;141AE2E55 sets target "
+        "validity only after that gate. R124 contains Player24->Nadine22(mode2), "
+        "26->24(mode1),28->26(mode1), but D350 authors none of those source "
+        "rows. B8/R157 likewise does not author these upstream rows. The21 "
+        "grip targets28/30/right fingers do not determine upstream localQ. "
+        "Nadine49/51 have no R124/R157 map entries; this alone does not prove "
+        "they are final-reference constants in arbitrary blended/live lanes.",
     ),
     0x141AE3320: (
         "RetargetPlugin_DoRetargetArmIk",
@@ -4942,7 +4950,14 @@ FUNCTIONS = {
         "selects the first skeleton-default record. Command 15 may later replace "
         "this allocation in place with a larger target-workspace-count block; "
         "FinalizeGroupDefaults does not initialize that expanded tail. Already-valid "
-        "prefix records retain preceding authored direct/retarget/blend output.",
+        "prefix records retain preceding authored direct/retarget/blend output. "
+        "STATIC P99 helper-source boundary:141AB7993/799F invert existing "
+        "ValidBits and141AB79A7 intersects the count mask before fill141AB79D7. "
+        "Raw target references for g0 rows22/24/26/49/51 are valid fallbacks "
+        "ONLY when their incoming final bits are clear. D350/B8 clip-local "
+        "absence does not imply that condition after other Base/Hands/IK "
+        "layers. Never replace unknown valid upstream Q with E51542CA "
+        "locator-profile values or bind references.",
     ),
     0x14217B310: (
         "AnimCmdEvaluator_CopyGroupPoseToWorkBuffer",
@@ -5641,22 +5656,50 @@ FUNCTIONS = {
         "and a 64-byte authored record to write a complete vector batch.",
     ),
     0x1421949E0: (
-        "AnimJointProgramOp51_BlendEncodedVectors",
+        "AnimJointProgramOp51_BuildAimQuaternions",
         "Built-in joint-program opcode 51 wrapper. Initializes encoded vector "
-        "destinations, then optionally dispatches an authored four-output vector "
-        "blend phase through the nested table selected by payload word 1. Chloe "
+        "destinations as weighted target positions, then optionally dispatches "
+        "encoded aim/up quaternion construction through the nested table "
+        "selected by payload word 1. Earlier BlendEncodedVectors name was "
+        "too broad and misleading: the auxiliary worker is not ordinary "
+        "quaternion interpolation. Chloe "
         "payload 0xF10C writes row 36 quaternion at nested selector-0 JointParams "
         "destination +0x6D0 in both phases.",
     ),
     0x14218D2D0: (
         "AnimJointProgram_InitializeEncodedVectors",
         "Opcode-51 primary worker. Consumes a four-byte tuple per output and "
-        "initializes encoded float4 destinations from authored scalar operands.",
+        "writes encoded matrix translation(xyz,1)*scalarWeight to float4 "
+        "destination, replacing when source flag8 is set and adding otherwise. "
+        "This is temporary target POSITION data, not quaternion interpolation. "
+        "Also called by opcode48 and other wrappers. Pinned C39 g0 op51 "
+        "at59546 copies matrix26 position with AUXC0=1 into JP1030 (Q86 slot) "
+        "before the auxiliary aim solver replaces it with a quaternion.",
     ),
     0x1421902D0: (
-        "AnimJointProgram_BlendEncodedVectors",
-        "Opcode-51 auxiliary worker. Processes four encoded float4 outputs per "
-        "16-byte descriptor record and can write a complete workspace matrix.",
+        "AnimJointProgram_BuildAimQuaternions",
+        "STATIC opcode51 auxiliary aim/up solver, not a generic vector blend. "
+        "Pinned C39 g0 op51@59546 lane2: temporary target JP1030 from matrix26, "
+        "parent matrix85 atW1580, localT86 atJP1040; full inverse of parent "
+        "A*diag(S) maps target-position minus parent translation into parent "
+        "coordinates, then subtracts localT86. Up is matrix24 A*diag(S) "
+        "times authored(0,1,0), transformed by the same parent inverse. "
+        "Mode3 forms x=unitAim,y=orthogonalizedUp,z=x cross y; converts the "
+        "basis through14218F3B0 and RIGHT-multiplies authored SoA lane2 Q "
+        "(0,-0.7071067690849304,0,0.7071067690849304). Threshold142BE8B1C "
+        "is1.19210000093517e-7. Degenerate-up branch normalizes "
+        "(0,-x.z,x.y,x.x+1); antiparallel-X is degenerate, not an invented "
+        "fallback axis. Scalar model is not native float32 equivalence or "
+        "an actual pose. UpstreamQ85/Q87/Q88/Euler24 and fullg6 remain external.",
+    ),
+    0x14218F3B0: (
+        "AnimJointProgram_BasisColumnsToQuaternion",
+        "STATIC converts three packed float4 basis columns to one xyzw "
+        "quaternion: positive-trace branch or largest-diagonal branch with "
+        "strict comparisons (ties select Y, then Z). Called at1421907BB by "
+        "the encoded aim solver and142190289 by another vector solver. "
+        "Pure scalar basis tests cover identity and X/Y/Z half-turns; no "
+        "native rsqrt/float32 error bound or arbitrary nonrigid basis claim.",
     ),
     0x1421947C0: (
         "AnimJointProgramOp48_WriteEncodedVectorOutputs",
@@ -5742,7 +5785,13 @@ FUNCTIONS = {
         "raw mapped retail code with only owned evaluator buffers. "
         "STATIC C39 g0 op128 at5944A/5945A/59472/5947A reads localQ26 "
         "encoded4F0 and AUX400, writes AUX3E4/3EC/404/408 respectively. "
-        "These are last scalar writers before g0 shared export to group6.",
+        "These are last scalar writers before g0 shared export to group6. "
+        "STATIC numeric model: optional twist rotates target basis axis "
+        "around the authored reference axis; acos(dot current,target) has "
+        "NO native input clamp. End>start gives clamped linear1-to0 angular "
+        "falloff; otherwise angle<=start gives1 else0. The four pinned "
+        "ranges are0..100/90/70/70 degrees. Explicit currentQ26 is required; "
+        "descriptor referenceQ is not proof of a current-pose baseline.",
     ),
     0x141A951F0: (
         "AnimJointProgramCustomOp129",
@@ -5755,7 +5804,13 @@ FUNCTIONS = {
         "14160C120 FLS/render-state tail at141A95A90 prohibit raw mapped "
         "execution with only owned evaluator buffers. STATIC C39 g0 op129 "
         "at593E4 descriptor5A060 reads localQ26 encoded4F0 and writes AUX400, "
-        "the last writer before g0 export and the input to four op128 weights.",
+        "the last writer before g0 export and the input to four op128 weights. "
+        "STATIC numeric model: hemisphere-align inputQ to reference, remove "
+        "swing, normalize conj(reference)*conj(swing)*Q, extract signed "
+        "2*atan2 and strict fmod wrap[-pi,pi] to degrees. Antiparallel swing "
+        "fallback141A9571C..724 is xyzw(0,1,0,0), NOT a generic shortest arc. "
+        "Binary64 analytic checks do not establish float32/rsqrt equivalence "
+        "or supply the missing actualQ26 from the D350/B8 sparse grip.",
     ),
     0x141A945F0: (
         "AnimJointProgramCustomOp130",

@@ -11,7 +11,31 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC (2026-09-27, wrist surface/helper dependency continuation):
+Latest STATIC (2026-09-27, upstream admission and helper math): do NOT try to
+decode an actual localQ26/elbow pose from D350/B8. Their entire sparse programs
+author ONLY the21 existing distal targets; R124 arm records22/24/26 exist but
+the grip source-valid bits do not. Target49/51 have noR124/R157 map or g0JP
+writer. Raw references for these rows are valid ONLY if the FINAL incoming
+valid bit is clear; Base/Hands/IK may already own valid values. The known
+sparse-mask fact is now enforced by p99_wrist_source_admission_audit.py and
+connected to missing helper inputs, not rediscovered as a cause of the bug.
+Pure custom129/128 math from suppliedQ26 is implemented with pinned descriptors
+and native branches. Synthetic identity vsX60, same grip, givesAUX3EC0->.51844;
+this proves nonunique helper inputs, not an anatomical or actual pose.
+Op51@1421902D0 is AIM/UP quaternion construction, not generic vector blending;
+IDB names corrected. Partial g0 replay closes52,47 arity1/2,pinned49T85,
+pinned51mode3Q86,40 chain85..88, with full writer-inventory gates. It still
+REQUIRES explicitQ85/Q87/Q88 andEuler24-middle intermediates. JP51 S/T is an
+additional source for88; AUX314 comes from Euler(localQ24), not a constant.
+NEXT: close numerical op50 Q85 (594F6/14218F660/142190910), op41 Euler Q24/Q51
+(59404/14218BC40/14218B780) and op44 mode4 Q87/88 (594C6/594A6/14218C200),
+then g6. Separately prove same-generation final g0 input ownership before
+any absolute helper/contact result. Neither rawrefs nor E51542CA closes that
+source boundary. Source admission is not solved merely by finishing the math.
+No game/native execution, writer, attachment or runtime code change.
+Python430/430, CTest27/27; full baseline/contact still NOT admitted.
+
+Previous STATIC (2026-09-27, wrist surface/helper dependency continuation):
 Same-source LOCAL palm28 row now optionally exported without changing the
 historical21-joint report (SHAac850b5e...). Unit-scale normalized geometry gives
 WristProp=PalmProp*inverse(LocalPalm28), with native parent/write proof26<-24,

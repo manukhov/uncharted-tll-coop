@@ -36203,3 +36203,139 @@ MCP resolves AnimJointProgramOp48_WriteEncodedVectorOutputs1421947C0 and
 AnimJointProgram_PropagateJointMatrices142189FB0; op48 tablexref143026EA0 and
 custom129 tablexref143026CB8 remain intact. No tll process was present;
 scanner/runtime diff is empty. Pre-existing untracked tmp/ was untouched.
+
+### 2026-09-27 — STATIC upstream source admission and bounded procedural helper math
+
+No game launch, injection, retail worker execution, runtime source/DLL,
+weapon attachment or observer change. Source/writer flags remain OFF.
+This turn does NOT recover the remaining494 absolute helper-supported skin
+positions and does not authorize the113 finger probe or another runtime fix.
+
+**Source-boundary correction.** Previous NEXT wording about same-D350/B8
+upstream Q26/JP49 must not be read as implying those clips contain these rows.
+The sparse-mask limitation was already recorded in the2026-08 lifecycle work;
+this turn connects it to the exact missing helper inputs and enforces it.
+`p99_wrist_source_admission_audit.py` inspects every declared group, not only
+known nonempty groups: D350 groups0/7 author Player30/32 and19 right fingers,
+groups1..6 contain only terminators. B8 groups0/2 author Chloe39/41 and19 right
+fingers, groups1/3/4/5/6 are terminator-only. Both map to precisely target
+28/30/odd105..141. No upstream22/24/26/49/51 source row is authored.
+
+The R124 map DOES contain Player24->Nadine22(mode2),26->24(mode1),28->26(mode1).
+Map existence is not pose validity. Native141AE2D05..D39, for the ordinary
+non-null source ValidBits path, tests the exact MSB-first source bit and skips
+to2F19 when absent; target bit141AE2E55 and numeric141AE2EBE occur only after
+that gate. R157 likewise cannot supply these rows from B8. Target49/51 have
+no R124/R157 map entries and no group0 parameter writers.
+
+Raw target reference rows for22/24/26/49/51 are pinned by complete skeleton
+SHA, compressed reference offset and exact48-byte row hashes. They are NOT
+automatically the actual inputs. FinalizeGroupDefaults141AB78F0 inverts
+existing validity at141AB7993/799F, ANDs the processing-count mask at79A7,
+and calls142188FF0->142192640 at79D7 for MISSING rows only. Already-valid
+Base/Hands/IK output survives. The separate142188A30 one-sided-valid copy rule
+agrees. A model requiring explicit final validity retains two differentQ26s
+with identical distal local grip. It never treats a readable reference as
+authority to overwrite an unknown valid value.
+
+REJECTED as input admission: blindly filling upstream rows from skeleton bind
+references or E51542CA because D350/B8 does not author them. This is not a claim
+that the references can never be correct, nor a newly proved cause of the
+visible pistol fault. A clear final validity bit would justify the reference;
+that actual same-generation condition is not supplied by these frozen clips.
+
+**Five wrist scalar operators (STATIC analytic approximation).**
+`p99_wrist_scalar_audit.py` pins all64-byte records at5A060,
+5B0E0/5B160/5B220/5B260 and the complete Nadine asset. Its API requires an
+explicit LOCAL Q26, with no default baseline. Read-only PE verification pins
+the installed executable SHAed1371a4..., both complete native handlers and
+dispatch table143026CB0 slots0/1; no code is mapped for execution.
+
+Custom129/141A951F0: hemisphere-alignQ to reference at141A95308..332; construct
+swing from the selected reference/current basis axes; normalize
+conj(reference)*conj(swing)*Q at141A95728..9582C; signed2*atan2 at958B7,
+fmod2pi at9592A and strict[-pi,pi] correction at9593B/94B, then degrees.
+The near-parallel thresholds and fallback matter: antiparallel swing fallback
+141A9571C..724 is XYZW(0,1,0,0), NOT a generic shortest-arc axis choice.
+
+Custom128/141A97060: optional AUX400 degrees rotates the authored target basis
+axis about the authored reference basis axis; compare with currentQ26 axis,
+acos(dot) at141A975B2 with NO native input clamp. If end>start, clamp
+1-(angle-start)/(end-start) to0..1; otherwise angle<=start gives1, else0.
+Pinned ranges AUX3E4=0..100deg,3EC=0..90deg,404/408=0..70deg. Float32 authored
+constants/thresholds are retained, but binary64 sqrt/division/libm replace
+native rsqrt/rcp/refinement arithmetic. Only tiny analytic acos excursions
+<=1e-12 are projected; native numeric equivalence/error bound is NOT proved.
+Unsafe QPC/global/FLS wrapper tails remain unexecuted.
+
+Explicit synthetic control, NOT live/anatomically admitted: identityQ26 gives
+AUX400=.6524047543,3E4=.1225440970,3EC=0,404=0,408=.1500127508;
+Q26=(.5,0,0,.8660254037844386), localX60deg, gives400=6.4429965367,
+3E4=0,3EC=.5184412095,404=0,408=.1490216024. Grip clip bytes do not change.
+This independently falsifies unique helper weights from the21 distal rows.
+No control pose is selected as a correction.
+
+**Partial group0 numerical contract, not full helper replay.**
+`p99_wrist_helper_replay.py` closes op52 authored constants, op47 arity1/2
+clamped piecewise cubics plus OLD destination, the pinned op49 translation
+case forT85, op51 mode3 aim/upQ86, and scale-separated op40 chain85->86->87->88.
+The scalar implementation snapshots all four SIMD input lanes before stores;
+duplicate destinations keep the last store rather than accumulate all lanes.
+Knot comparison is strict. No native float32/rcp/rsqrt error bound is claimed.
+
+All operator writes are checked at scalar-cell granularity, including vector
+overlaps. AUX BC/C0/144/1C0/23C/74/84/94 have only ordinal0/op52 as writer.
+S/T85 starts at52, T85 is replaced by49 ordinal42; T86 X/Z additionally use47
+ordinal10; S/T87 only52; S/T88 xyz additionally use47 ordinal1. JP51 all48bytes
+has no group0 writer. AUX314 is written only by52@0 then41@8; it is the
+Euler24-middle result, not a free constant. Mutation tests reject extra writes
+toAUXC0 and vector overlaps onS85. The exact49 source/dest/zero-point/weight1
+and normalize-by-W phase are also pinned before simplifyingT85 to position24.
+
+**Op51 semantic correction.**14218D2D0 first writes weighted matrix translation
+(xyz,1), replacing on source flag8 or adding otherwise. In the pinned59546
+lane2 it puts matrix26 position into JP1030, temporarily using the Q86 slot as
+a POSITION; AUXC0 is the proven unchanged authored1.1421902D0 then solves an
+aim/up orientation, not ordinary quaternion/vector blending. IDB names become
+AnimJointProgramOp51_BuildAimQuaternions1421949E0 and
+AnimJointProgram_BuildAimQuaternions1421902D0.
+
+Pinned mode3: parent=W1580/matrix85, localT86=JP1040, target=matrix26 position.
+Full inverse(A85*diag(S85)) maps target-parentTranslation; subtract localT86.
+Up is A24*diag(S24)*(0,1,0), mapped by the same parent inverse. Form normalized
+x=aim,y=orthogonalizedUp,z=x cross y, then convert basis with14218F3B0 and
+RIGHT-multiply authored SoA lane2Q=(0,-.7071067690849304,0,.7071067690849304).
+Orthogonal-basis threshold at142BE8B1C is1.19210000093517e-7. Degenerate-up
+fallback normalizes(0,-x.z,x.y,x.x+1); antiparallel-X degenerates and the pure
+model rejects it rather than invent an axis.14218F3B0 is labeled
+AnimJointProgram_BasisColumnsToQuaternion; trace/largest-diagonal branches
+and noncommuting post-rotation controls are tested.
+
+The staged API REQUIRES elbow24,wrist26,JP51,Q85,Q87,Q88,Euler24-middle.
+It supplies no source/default values. Q85 is unreplayed op50@594F6 from
+matrix22/LOCAL Q24. Euler24-middle AUX314 is op41@59404 record3 fromQ24;
+op41 record5 also consumesQ51. Q87/88 are unreplayed op44 mode4 at594C6 lane2
+and594A6 lane7 from AUX2E8/354/3B8 and2EC/358/3BC, including angle/scalar
+dependencies. JP51 S/T (JP990/9B0) is the additional actual source of88's S/T.
+Group6 numerical replay remains unimplemented. Do not pass identity/reference
+quaternions into these mandatory arguments and call the result an actual pose.
+
+NEXT: complete the narrow numeric41/44/50 contracts (14218BC40/14218B780,
+14218C530/14218C200,14218F660/142190910), then group6. Independently establish
+same-generation final g0 arm/default validity and source values before using
+these kernels for absolute skin/contact. More D350/B8 decoding cannot supply
+Q24/Q26, and finishing the math alone cannot solve source ownership. Preserve
+the existing4328-vertex conditional scope and all weapon-frame/left-arm limits;
+do not replace accepted attachments or restart the unchanged game exam.
+
+Verification: Python430/430 and CTest27/27 pass without asset skips. New tests:
+12 source admission,16 scalar math/descriptor/native-byte guards,22 staged
+kernel/producer inventory cases. Three CLIs pass. Local reports use the
+p99-wrist-source-admission, p99-wrist-scalar-control and p99-wrist-helper-contract
+20260927 JSON names; scalar control is explicitly NOT a live baseline.
+Single IDB saved1918functions/79data names/1type with
+`save_database returned True` in
+reports/ida_apply_p99_upstream_helper_math_20260927_status.txt. Restarted MCP
+resolves all three corrected/new aim/basis names; basis code xrefs142190289/
+1421907BB and op51 tablexref143026EB8 remain intact. No tll process was present.
+Scanner/runtime diff is empty. Pre-existing untracked tmp/ remains untouched.
