@@ -11,7 +11,35 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC (2026-09-27, g0 helper analytic integration): numerical41/44/50
+Latest STATIC (2026-09-27, g6 helper analytic integration): the reached numeric
+slice for535/536/537/554 is closed and composed with g0 helper88 by
+p99_wrist_g6_replay.py. It REQUIRES shoulder22 workspace and LOCAL JP24/26/49/51,
+with no bind/profile/default source substitution. Actual same-generation values
+and final validity remain UNKNOWN, so remaining494 absolute helper-supported
+skin positions and full contact are still NOT admitted. This closes procedural
+math, not the visual grip defect, whole g0/g6, or native instruction equivalence.
+g6 precursor553: S=(1,1,1,1), T=(t26,1), Q=normalize(Qorthonormalized(A24)*Q26),
+op40 parentW0 flag8. This is independently pinned, not assumed fromg0 Q85.
+Mode3 op44=Qx*Qz*Qy; mode4=Qz*Qy*Qx, both authoredA*Q*B without normalization.
+535 usesJP49S/Q/T plus86/AUX400,536/537 use88 andfourQ26 weights,554 uses553
+andAUX3E4. Exact parent/copy/last-writer and g1..5 shared-survival checks hold.
+Unreached g6 operators5/6(arity4/3),8,10,13(aim51) are not guessed or executed.
+NEXT: establish source values at the final g0 evaluation boundary: same-owner/
+same-generation shoulder22 and LOCAL24/26/49/51 with exact validity provenance.
+First trace their actual producer/read boundary statically and determine which
+already available evidence, if any, can supply it. Frozen D350/B8 cannot. The
+old late-arm source exam is stale/unexecuted, not evidence; do not relaunch it
+unchanged, substitute E51542CA, broaden read gates or enable a writer. Only after
+source and frame admission compare complete affected skin against the P99 grip;
+an arbitrary synthetic control is not a chosen correction. Runtime untouched.
+Concrete static source frontier: ProcessAnimCmdListSegment141AB97C0 command16
+call141AB9B3D -> ExecuteSkeletonJointPrograms14217B630, groupdescriptor+38,
+SegmentContext JP+50/workspace+58. Prove final target context, validity and
+the exact lifetime across g0; these offsets alone are NOT a safe read hook.
+Verification: Python540/540 (55 new), CTest27/27, no asset skips; single IDB
+saved1922functions/79data/1type, MCP names/callers/tablexref verified.
+
+Previous STATIC (2026-09-27, g0 helper analytic integration): numerical41/44/50
 stages for helper85..88 are now closed by p99_wrist_g0_replay.py from EXPLICIT
 shoulder22 workspace and LOCAL JP24/26/51. It derives elbow/wrist workspaces
 with native flag8 parents, computes custom129/128 weights, Euler/scalar angles,

@@ -36449,3 +36449,110 @@ reports/ida_apply_p99_g0_helper_integration_20260927_status.txt. Restarted MCP
 resolves all ten changed/new names;142181430 code caller14218FBE4 and op50
 dispatchxref143026EB0 remain intact. No tll process, scanner/runtime diff
 empty, pre-existing untrackedtmp/ untouched. No actual grip fix claimed.
+
+### 2026-09-27 — STATIC g6 helper535/536/537/554 analytic closure, source pose still unadmitted
+
+No game launch, injection, retail worker execution, observer, writer, runtime
+DLL or weapon-attachment change. `p99_wrist_g6_replay.py` composes the reached
+g6 helper slice with the previous g0 model. All five missing skin helper frames
+88/535/536/537/554 can now be computed CONDITIONALLY from explicit shoulder22
+workspace and LOCAL JP24/26/49/51. Their actual same-generation values/validity
+remain unknown. Therefore the existing4328 conditional vertices/494 absolute
+position exclusions remain unchanged; no complete skin/contact or grip repair
+is asserted. Neither a reference profile nor an identity control is admitted
+as the actual pose by this implementation.
+
+**Pinned g6 base553 / local50.** `p99_wrist_g6_base_audit.py` independently
+pins the whole asset, op49's80-byte descriptor61490 and op50's208-byte
+descriptor614E0, authored primary/auxiliary Q identity, weights and all
+producer cells. T553 op49@60E5A lane3=(F5B,980) reads shared g0matrix26,
+zero point AUX3C/4C/5C and weightAUX2C=1. Source flag8 replaces oldT. The
+normalization list containsJP980 five times, but all eight source vectors
+are snapshotted before stores, not successively transformed in place.
+
+14218D570's full operation is weighted homogeneous point transformation:
+xyz=A*(localS*point)+translation, appendW1, multiplyweight; source0 skips;
+flag8 replaces or otherwise adds oldfloat4. Source separateS+30 participates
+here, unlike op50.14218D800 divides each of eight float4s by its OWN W using
+rcp plus one Newton step. It is not quaternion normalization or pairwise
+blending.142194880 calls these at1948EE/194900; the third-phase count is0 in
+the pinned553 descriptor and its general semantics are not expanded here.
+Independent sequencer142190C30 agrees: header=a3+12*count, calls190C72/190C84,
+optional14218E120@190C96. Only dataxref146EDCAD4 was observed for that
+sequencer; this is a static layout cross-check, not a gameplay-caller claim.
+
+Q553 op50@60E62 lane3=(ED3,1,25B,970) uses sharedg0matrix24 first48bytes,
+identityW0 reference and shared LOCAL Q26, replacementflag8, AUX2C=1.
+BOTH authored quaternion corrections are independently pinned to identity,
+so the g0 orthonormalization kernel can be reused for THIS lane: final
+Q553=normalize(Qorthonormalized(A24)*LOCAL_Q26). No general second-matrix
+scale rule is inferred. S553_xyzw=(1,1,1,1); T553_xyzw=(translation26,1).
+S only52@0, Q only50@2, T52@0 then49@1; no47 curve writes these fields.
+W553 only40@12 with nativeparent9 (identityW0, flag8). Actual S.w/T.w are
+preserved inJP, while the workspace remains13 meaningful components in the
+existing semantic model; no native padding bytes are invented/serialized.
+
+**Reached Euler producers.** `p99_wrist_g6_euler_audit.py` pins all eight
+records/constants and exact Q writer counts.14218C200 mode3 masks atC25B..C2D0
+select Qx*Qz, then1421817F0@C4BE right-multipliesQy: mode3=Qx*Qz*Qy, NOT
+the existing mode4=Qz*Qy*Qx.14218C530 retains authoredA*Q*B, no normalization.
+Op41@60E92 lane6/descriptor65D70 reads SHARED493 (g0LOCALQ49) inmode4 and
+writes AUX78/148/218. Op44@60EB4 local31(global534) ismode4, local33/34
+(536/537) and51(554) aremode3. Op44@60ECC local32(535) ismode4.
+Local51's descriptors664C0/D0/E0 are identical; lane31's final store wins,
+not an accumulated quaternion product. Tiny authored components on32/51
+and nonidentity wrist corrections on33/34 are not rounded away.
+
+**Numerical integration and exact dataflow.** All target scalar curves use
+the existing arity1/2 clamp/cubic+old-value kernels with SIMD read-before-write.
+Only ancestors of final target outputs are evaluated. Reached g6 ordinals are
+0/1/2/3/4/7/9/11/12/14/15; arity4/3 at5/6, propagation8, copy10 and aim51@13
+are unreached. Tests redirect those unreviewed writers into a target and
+require rejection rather than silently treating them as no-ops.
+
+The full dependency slices, all g0 copy origins and last writers, and writes
+in groups1..5 are checked. Shared JP49 at480/490/4A0 maps to LOCAL JP930/940/950;
+matrix86/88 at1290/12D0 maps to W15C0/1640, not similarly named live caches.
+Five weight copies map to the previously proved Q26 custom129/128 outputs.
+G0JP49 has no program writer, but that does NOT make it a known constant.
+Native g6 op40 parents: local31->129B(g0matrix86),32->809(local31),33/34->12DB
+(g0matrix88),51->CC9(local50), including the four identical local51 padding
+records. Public replay requires five source operands, computes g0 once, and
+passes its matching24/26/86/88 matrices/scalars to g6; no independently chosen
+procedural quaternion or conflicting arm workspace can be supplied instead.
+
+Tests independently distinguish mode3 vs4 and frame-product order, source49
+vs51 effects, full S/T preservation, parent propagation and rigid-transform
+covariance of all five output helper frames. These are synthetic controls,
+not anatomically chosen poses or runtime validation. Binary64 sqrt/division/
+trigonometry remains an analytic approximation without a native error bound.
+
+NEXT is the actual source boundary, not another arbitrary pose or more sparse
+grip decoding: trace the final g0 source producers and validity for shoulder22
+and LOCAL24/26/49/51, then identify same-owner/same-generation evidence. The
+stale late-arm source exam never supplied such data and must not be relaunched
+unchanged. Keep original gates, source observer/writersOFF and weapon/left-arm
+frame restrictions. Complete actual skin/contact requires this source proof;
+the existing finger probe is still not an admitted runtime correction.
+
+Concrete next static boundary: existing ProcessAnimCmdListSegment141AB97C0
+command16 call141AB9B3D -> ExecuteSkeletonJointPrograms14217B630. Its recorded
+SegmentContext has currentgroup+38, JointParams+50 and workspace+58. Trace
+final target context, validity and lifetime across this exact group0 execution;
+merely knowing these offsets does not admit a read hook, prove final skin owner
+or authorize reviving rejected Process/cmd16 writers.
+
+Verification: Python540/540 and CTest27/27, no asset skips. New55 tests comprise
+Euler17, base55320 and integration18. Read-only PE checks cover existing
+Euler/op50 workers plus op49/normalize/wrapper/op40 complete bodies, dispatch
+and native constants; no retail code is called. Three CLIs pass; local g6
+contract report is reports/p99-wrist-g6-helper-contract-20260927.json with
+actual_pose_replayed/source_or_runtime_admission bothfalse. Runtime/scanner
+diff empty, no tll process; pre-existing untrackedtmp/ preserved.
+
+Single IDB saved1922functions/79data names/1type and `save_database returned True`
+in reports/ida_apply_p99_g6_helper_integration_20260927_status.txt. Readback after
+MCP restart resolves new/renamed point-transform, homogeneous-normalize8,
+direct stream sequencer and op49 wrapper names. Normalize callers190C84/194900
+and op49 dispatchxref143026EA8 remain intact; Euler/op50 comments record the
+bounded g6 semantics. Actual visual grip remains unverified and unfixed.

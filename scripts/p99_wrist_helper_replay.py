@@ -4,8 +4,9 @@
 NOT a complete native/helper replay: this staged API keeps op50 Q85, op44
 Q87/Q88 and op41's Euler24 Y output as explicit supplied intermediates.
 p99_wrist_g0_replay closes these analytic stages from required source operands;
-neither API chooses a profile/reference/live baseline. Group6 numeric replay
-is not implemented. The historical name Euler24-middle means output slot1(Y),
+neither API chooses a profile/reference/live baseline. The companion
+p99_wrist_g6_replay closes the reached g6 helper slice, not the whole program.
+The historical name Euler24-middle means output slot1(Y),
 NOT the middle rotation in mode0's Y-X-Z composition (which is X).
 
 Closed here: op52 constants, op47 arity1/2 clamped piecewise cubics (including
@@ -321,7 +322,7 @@ def load_contract(data):
                 'euler24_middle':'op41@59404 lane3: native14218BC40/14218B780, localQ24 Y output slot',
                 'q87':'op44@594C6 lane2: native14218C530/14218C200, mode4 + AUX2E8/354/3B8',
                 'q88':'op44@594A6 lane7: native14218C530/14218C200, mode4 + AUX2EC/358/3BC',
-                'group6':'No numerical op41/44/50 replay; existing read dependency audit only'}}
+                'group6':'Outside this staged API; see p99_wrist_g6_replay for the conditional helper slice'}}
 
 
 def replay_g0_staged(contract,*,elbow24,wrist26,jp51,q85,q87,q88,euler24_middle):

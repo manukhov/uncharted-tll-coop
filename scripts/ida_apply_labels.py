@@ -5583,7 +5583,9 @@ FUNCTIONS = {
         "STATIC four-lane Euler XYZ degrees to Q, authored modes0..5. "
         "Pinned mode4 degrees->half radians C2D4..C30E, sincos1421803E0, "
         "masks form Qz*Qy then call1421817F0@C4BE right-multiplies Qx. "
-        "Caller14218C7B0. No normalization; only mode4 is analytically replayed.",
+        "Mode3 masks C25B..C2D0 select (Qx*Qz), then C4BE right-multiplies Qy. "
+        "Pinned g6 local33/34/51 use mode3; modes3/4 analytically replayed. "
+        "Caller14218C7B0. No normalization or arbitrary mode generalization.",
     ),
     0x14218C530: (
         "AnimJointProgram_AssembleEulerQuaternions",
@@ -5592,7 +5594,9 @@ FUNCTIONS = {
         "No normalization. Nadine mode4 Q87@594C6 lane2 consumesAUX2E8/354/3B8, "
         "Q88@594A6 lane7 consumes2EC/358/3BC. Four stores are quaternions, NOT "
         "a semantically assembled workspace matrix. C39 group6 parents remain "
-        "535=0809,536/537=12DB,554=0CC9; numerical g6 replay remains open.",
+        "535=0809,536/537=12DB,554=0CC9. Pinned g6 mode3=Qx*Qz*Qy for "
+        "local33/34/51; local51 lanes29/30/31 identical overwrites, not sums. "
+        "Conditional analytic helper slice is closed, actual source pose is not.",
     ),
     0x142194720: (
         "AnimJointProgramOp47_ApplyScalarCoefficients",
@@ -5631,23 +5635,41 @@ FUNCTIONS = {
         "destinations per batch.",
     ),
     0x142194880: (
-        "AnimJointProgramOp49_WriteEncodedVectors",
+        "AnimJointProgramOp49_TransformEncodedPoints",
         "Built-in joint-program opcode 49 wrapper. Payload word 1 resolves the "
         "nested four-base table and word 2 resolves authored streams from outer "
-        "selector 0. It invokes the primary encoded-float4 writer plus two optional "
+        "selector 0. Calls weighted point-transform14218D570 at1948EE, "
+        "optional homogeneous normalization14218D800 at194900, then optional "
+        "14218E120. These are the primary plus two optional "
         "auxiliary writer phases selected by the authored header. Target-stream "
         "payloads Chloe 0xF03C and Nadine 0x8F4C rewrite the translation vector of "
         "Chloe row 35 and Nadine rows 96/102 respectively.",
     ),
     0x14218D570: (
-        "AnimJointProgram_WriteEncodedVectors",
-        "Primary opcode-49 worker. Processes authored per-output streams and "
-        "stores arbitrary encoded float4 destinations.",
+        "AnimJointProgram_AccumulateWeightedTransformedPoints",
+        "STATIC primary op49 worker: encoded source0 skips; affine point "
+        "A*(localS*xyz)+translation, append W1, multiply scalar weight. Source "
+        "flag8 replaces destination; otherwise add OLD float4. Source localS "
+        "at+30 participates, unlike op50 sourceA. Nadine g6@60E5A lane3 "
+        "F5B->JP980 uses g0matrix26, pointAUX3C/4C/5C=zero, weightAUX2C=1: "
+        "T553=(t26,1), followed by homogeneous normalization. Callers1948EE/190C72.",
     ),
     0x14218D800: (
-        "AnimJointProgram_WriteEncodedVectorPairs",
-        "Optional opcode-49 auxiliary worker. A 16-byte descriptor addresses "
-        "eight encoded float4 operands and can write full workspace rows.",
+        "AnimJointProgram_NormalizeHomogeneousVectors8",
+        "STATIC optional op49 auxiliary: eight encoded float4 operands are "
+        "all read before stores. Each vector divides by its OWN W using rcp "
+        "+one Newton step; not quaternion normalization or pairwise blending. "
+        "g6 base553 stream listsJP980 five times but all receive same normalized "
+        "snapshot, not five cumulative transformations. Callers194900/190C84.",
+    ),
+    0x142190C30: (
+        "AnimJointProgram_ProcessTransformedPointStreams",
+        "STATIC direct stream sequencer: count a1, bank table a2, descriptor a3. "
+        "Header=a3+12*count; primary14218D570 at190C72, optional header[0] "
+        "eight-vector normalization14218D800 at190C84, optional header[2] "
+        "14218E120 at190C96 with header-relative offset[1]. Independent layout "
+        "agreement with builtin op49 wrapper142194880. Only dataxref146EDCAD4 "
+        "observed; no gameplay caller or runtime role asserted.",
     ),
     0x14218E120: (
         "AnimJointProgram_WriteEncodedVectorBatches",
@@ -5681,7 +5703,9 @@ FUNCTIONS = {
         "+weight*newQ; source-Q flag8 makes oldQ zero. Nadine Q85@594F6 uses "
         "A=W5C0 matrix22 first48B (not separateS+30), B=identityW0, LOCAL Q24 "
         "JP490 flag8, weightAUXBC=1 and authored identity. General B scale "
-        "semantics are not numerically modeled by the pinned Python kernel.",
+        "semantics are not numerically modeled by the pinned Python kernel. "
+        "g6@60E62 lane3 (ED3,1,25B,970) instead uses sharedg0matrix24 andLOCALQ26 "
+        "with independently pinned identity corrections/weight1, producingQ553.",
     ),
     0x142190910: (
         "AnimJointProgram_NormalizeAndPostMultiplyQuaternions4",

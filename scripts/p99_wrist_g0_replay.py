@@ -183,7 +183,7 @@ def audit(path):
             'No actual same-generation source values/validity recovered',
             'No identity/bind/profile fallback for unknown valid source rows',
             'Analytic double math; no native float32/rsqrt/rcp/trigonometric error bound',
-            'Group6 helper numerical replay and absolute helper-supported skin positions remain open',
+            'Group6 helper analytic slice is in p99_wrist_g6_replay; actual source/absolute skin positions remain unadmitted',
             'No selected corrected pose, attachment change, hook or visual fix'],
     }
 
