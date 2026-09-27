@@ -11,7 +11,25 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC (2026-09-27): interrupted asset work completed. Packed skin
+Latest STATIC (2026-09-27, frame/preskin continuation): exact normal arms
+collection190130 has no authored BlendShapeInstance inputs; mesh181AE8 has
+zero shape count/null table. Native constructor/resource guards exclude the
+SubMeshBlend branch for this authored path, not arbitrary later writers.
+Normal P99 art8075397D class0 fails LongGunJiggle class1 gate (Mazur raw17->1).
+ED0A70 correction is inverse(localRoot * relative(cacheRoot,cacheSelected));
+when selected joint0/unitS/low5F0 and SAME generation root feeds skinning,
+weapon-root motion cancels. Do not substitute an extra guessed attachment offset.
+All7 pinned pistol-base clips preserve identity root; sole skeleton program
+preserves it, and command27/26 export one completed workspace without an
+intervening pose write. This does NOT prove cross-frame attachment/render
+generation, absence of Animating override, or all post-skin deformation.
+NEXT: define grip-only MAIN-mesh ROI and audit remaining wind/render-frame
+conditions before interpreting conditional contact; no unchanged game exam.
+Both writers/source observation remain OFF, runtime source/attachments unchanged.
+Pure audits/tests Python297/297 and CTest27/27 pass; IDB verification at end
+COOP_STATUS. No visible repair claim.
+
+Previous STATIC (2026-09-27): interrupted asset work completed. Packed skin
 weights are uint22 + uint10 joint, proven by shipped mode1 DXIL (f32scale34800002,
 48-byte matrix LBS, no sum renormalization), CPU uploads and shader selection.
 Old uint16/65535 weight magnitudes are REJECTED;88-ID referenced support list
@@ -22,8 +40,8 @@ Typed normal Nadine arms mesh181AE8/palette1E15C0 closed. Conditional surface
 comparison covers3040 fully supported vertices, maxdelta0.0233565426446assetunits
 (mean0.0103428054524), exactzero same-pose control. Difference is not improvement
 or contact; mixed helpers/morphs/live owner and weapon-frame remain excluded.
-NEXT: native same-Nadine weapon mesh-root/world vs rightProp30 presentation and
-active pre-skin SubMeshBlend inputs, then defined grip-only contact analysis.
+That checkpoint's mesh-root and pre-skin frontier is refined above; remaining
+live frame conditions and defined grip-only contact are not yet closed.
 No unchanged game exam; both writers/source observation remain OFF. New audits
 and independent tests Python274/274, CTest27/27; IDB1903functions/79data savedTrue.
 Detailed evidence, limitations and correction scope at endCOOP_STATUS.

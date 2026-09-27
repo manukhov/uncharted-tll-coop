@@ -1,5 +1,6 @@
 """Pinned asset/negative topology checks; no retail function or live process."""
 import hashlib
+import math
 import mmap
 from pathlib import Path
 import struct
@@ -35,6 +36,68 @@ class ReadOnlyArchiveTests(unittest.TestCase):
         self.assertTrue(mappings[0].closed)
         self.assertEqual(values, (b"read-only-fixture" + a.P99_ENTRY.encode(),
                                   b"read-only-fixture" + a.PISTOL_ENTRY.encode()))
+
+
+class PresentationEquationTests(unittest.TestCase):
+    def setUp(self):
+        h = math.sqrt(.5)
+        self.attachment = a.pose.row(rotation=(0, 0, h, h), translation=(5, 7, 11))
+        self.primary = a.pose.row(rotation=(h, 0, 0, h), translation=(2, 3, 4))
+        self.root = a.pose.row(rotation=(0, h, 0, h), translation=(-13, 17, 19))
+        self.cache = a.pose.row(rotation=(.5, -.5, .5, .5), translation=(101, 103, 107))
+
+    def test_nonidentity_root_cancels_when_current_and_render_roots_agree(self):
+        result = a.corrected_main_frame(self.attachment, self.primary, self.root,
+                                       self.cache, self.cache, self.root)
+        expected = a.pose.blend(self.attachment, self.primary)
+        self.assertLess(a.pose.row_error(result["main_frame"], expected), 1e-12)
+        # Known noncommuting Z90 * X90 and translated primary.
+        for value, wanted in zip(result["main_frame"][4:11], (.5, .5, .5, .5, 2, 9, 15)):
+            self.assertAlmostEqual(value, wanted)
+        self.assertGreater(a.pose.row_error(result["world"], expected), 1.)
+        self.assertFalse(result["live_frame_proven"])
+
+    def test_identity_primary_anchors_main_to_attachment_not_inverse_root(self):
+        result = a.corrected_main_frame(self.attachment, a.pose.row(), self.root,
+                                       self.cache, self.cache, self.root)
+        self.assertLess(a.pose.row_error(result["main_frame"], self.attachment), 1e-12)
+
+    def test_stale_render_root_does_not_cancel(self):
+        result = a.corrected_main_frame(self.attachment, a.pose.row(), self.root,
+                                       self.cache, self.cache, a.pose.row())
+        self.assertGreater(a.pose.row_error(result["main_frame"], self.attachment), 1.)
+
+    def test_nonroot_selector_is_not_silently_treated_as_root(self):
+        child = a.pose.blend(self.cache, a.pose.row(translation=(1, 0, 0)))
+        result = a.corrected_main_frame(self.attachment, a.pose.row(), self.root,
+                                       self.cache, child, self.root)
+        self.assertGreater(a.pose.row_error(result["main_frame"], self.attachment), .5)
+
+    def test_nonunit_scale_and_nonfinite_frames_refused(self):
+        for bad in (a.pose.row(scale=(2, 1, 1)), a.pose.row(translation=(math.nan, 0, 0)),
+                    a.pose.row(rotation=(0, 0, 0, 2))):
+            with self.assertRaises(ValueError):
+                a.corrected_main_frame(bad, a.pose.row(), self.root, self.cache, self.cache, self.root)
+
+    def test_class_mapping_matches_both_native_branches(self):
+        for raw, offline in ((-1, -1), (-5, -1), (0, 0), (1, 1), (16, 0), (17, 1), (22, 1), (23, 23)):
+            self.assertEqual(a.campaign_weapon_class(raw), offline)
+            self.assertEqual(a.campaign_weapon_class(raw, online=True), raw if raw >= 0 else -1)
+        for bad in (True, 1., 1 << 32):
+            with self.assertRaises(ValueError):
+                a.campaign_weapon_class(bad)
+
+    @unittest.skipUnless(a.DEFAULT_ARCHIVE.with_name("dc1.psarc").exists(), "local dc1 unavailable")
+    def test_pinned_p99_class_excludes_long_gun_constructor(self):
+        path = a.DEFAULT_ARCHIVE.with_name("dc1.psarc")
+        with path.open("rb") as stream, mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ) as mapping:
+            data = a.Psarc(path, None, data=mapping).extract("weapon-art.bin")
+        result = a.audit_weapon_art(data)
+        self.assertEqual([r["campaign_class"] for r in result["records"]], [0, 1])
+        self.assertEqual([r["passes_long_gun_init_class_gate"] for r in result["records"]], [False, True])
+        self.assertFalse(result["p99_long_gun_jiggle_constructed_by_normal_init"])
+        with self.assertRaisesRegex(ValueError, "SHA256"):
+            a.audit_weapon_art(data[:-1])
 
 
 class PinnedP99MeshTests(unittest.TestCase):

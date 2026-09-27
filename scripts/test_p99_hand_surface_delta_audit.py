@@ -106,6 +106,51 @@ class PinnedSurfaceTests(unittest.TestCase):
         self.assertFalse(r["skin_contact_or_improvement_proven"])
         self.assertFalse(r["runtime_writes"])
 
+    def test_two_independent_authored_preskin_gates_are_absent(self):
+        p = self.result["preskin_admission"]
+        self.assertEqual(p["classification"], "STATIC_AUTHORED_SUBMESH_BLEND_ABSENT")
+        self.assertEqual(p["collection_blend_input_count"], 0)
+        self.assertEqual(p["mesh_blend_shape_count"], 0)
+        self.assertIsNone(p["collection_blend_name_table"])
+        self.assertIsNone(p["mesh_blend_shape_table"])
+        self.assertTrue(p["authored_blendshape_delta_absent"])
+        self.assertFalse(p["runtime_no_other_position_writers_proven"])
+
+    def test_changed_preskin_counts_or_raw_tables_are_rejected(self):
+        for offset, kind in ((0x190168, "Q"), (0x190170, "I"),
+                             (0x181B64, "I"), (0x181B68, "Q")):
+            for value in (1, 0xFFFFFFFF):
+                pak = skin.PagedPak(self.body)
+                raw = bytearray(pak.data)
+                struct.pack_into("<" + kind, raw, offset, value)
+                pak.data = bytes(raw)
+                with self.subTest(offset=hex(offset), value=value), self.assertRaisesRegex(ValueError, "pre-skin"):
+                    a.body_preskin_admission(pak)
+
+    def test_zero_page_local_blend_pointer_is_not_null(self):
+        for offset in (0x190168, 0x181B68):
+            pak = skin.PagedPak(self.body)
+            self.assertEqual(struct.unpack_from("<Q", pak.data, offset)[0], 0)
+            pak.fixups[pak.absolute_to_page(offset)].add(0)
+            with self.subTest(offset=hex(offset)), self.assertRaisesRegex(ValueError, "pointer fixup"):
+                a.body_preskin_admission(pak)
+
+    def test_preskin_gate_does_not_admit_a_different_owned_mesh(self):
+        pak = skin.PagedPak(self.body)
+        raw = bytearray(pak.data)
+        raw[0x18FEE8:0x18FEF0] = raw[0x18FED8:0x18FEE0]
+        pak.data = bytes(raw)
+        with self.assertRaisesRegex(ValueError, "ownership"):
+            a.body_preskin_admission(pak)
+
+    def test_preskin_native_array_member_index_must_match_file_header(self):
+        pak = skin.PagedPak(self.body)
+        raw = bytearray(pak.data)
+        struct.pack_into("<i", raw, 0x18FEF0, 0)
+        pak.data = bytes(raw)
+        with self.assertRaisesRegex(ValueError, "native mesh descriptor ownership"):
+            a.body_preskin_admission(pak)
+
     def test_same_pose_asset_control_is_exact_zero(self):
         same = copy.deepcopy(self.pose)
         for row in same["prop_relative_joint_frames"]:

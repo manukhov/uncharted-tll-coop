@@ -12,12 +12,14 @@ from dataclasses import dataclass
 import hashlib
 import json
 import mmap
+import math
 from pathlib import Path
 import struct
 
 from pak_skin_influence_audit import PagedPak, find_mesh_headers, read_joint_names
 from nadine_other_weapon_clearance_audit import positions
 from psarc_asset_audit import Psarc, string_id
+import p99_grip_composition_audit as pose
 
 
 DEFAULT_ARCHIVE = Path(
@@ -37,6 +39,7 @@ GRIP_MATERIAL = (
     "objects/weapons/p99/p99-u4-mp/p99-silencer-dlc/p99-u4-dlc-grip:default,"
     "ab54ae2f-550e-427c-8091-e2506633f659,physical-shader.fx")
 FRAME_MODEL = "conditional-p99-weapon-bind-root-v1"
+WEAPON_ART_SHA256 = "5f5a601d2a7d799c741ce906f57f4b3e49172d81a85e412e6df67cb52a106d53"
 
 
 @dataclass(frozen=True)
@@ -214,7 +217,8 @@ def audit_assets(p99: bytes, pistol: bytes, *, include_geometry: bool = False) -
               "additional_authored_mesh_transform_proven_absent": False,
               "geometry_scope": "Entire main partition using the grip material; not an isolated contact ROI.",
               "right_prop_frame_condition": (
-                  "A rightProp30 comparison additionally requires identity posed weapon root and "
+                  "A rightProp30 comparison additionally requires identity posed weapon root or "
+                  "verified same-generation rigid root cancellation, and "
                   "a verified same-Nadine weaponWorld/rightPropWorld relation. Historical ACI "
                   "identity samples are conditional, not proof for Chloe or every live state."),
               "limits": "No posed skin, collision/contact verdict, render shader displacement, or live acceptance.",
@@ -233,13 +237,95 @@ def load_assets(archive: Path = DEFAULT_ARCHIVE) -> tuple[bytes, bytes]:
         return pak.extract(P99_ENTRY), pak.extract(PISTOL_ENTRY)
 
 
+def campaign_weapon_class(raw: int, *, online: bool = False) -> int:
+    """1414FDDD0 normalizes art+8 only offline; invalid enum stays invalid."""
+    if type(raw) is not int or not -(1 << 31) <= raw < (1 << 31):
+        raise ValueError("weapon class must be signed32")
+    if raw < 0:
+        return -1
+    return {16: 0, 17: 1, 22: 1}.get(raw, raw) if not online else raw
+
+
+def audit_weapon_art(data: bytes) -> dict:
+    require(len(data) == 119637 and hashlib.sha256(data).hexdigest() == WEAPON_ART_SHA256,
+            "weapon-art size/SHA256")
+    require(data[:4] == b"00CD", "weapon-art root format")
+    roots = [u32(data, 0x20 + i*16 + 8) for i in range(u32(data, 0x14))
+             if u32(data, 0x20 + i*16) == 0x61D589D9]
+    require(roots == [0x1BC0], "normal art registry changed")
+    root = roots[0]
+    count = u32(data, root)
+    keys, values = struct.unpack_from("<QQ", data, root + 8)
+    records = []
+    for art, address, model, raw_class in ((0x8075397D, 0x6CE8, MODEL, 0),
+                                         (0x33E29A1B, 0x9D18, "sniper-rifle-bolt", 17)):
+        slots = [i for i in range(count) if u32(data, keys + i*4) == art]
+        require(len(slots) == 1, "art id absent or ambiguous")
+        row = struct.unpack_from("<Q", data, values + slots[0]*8)[0]
+        require(row == address and struct.unpack_from("<i", data, row + 8)[0] == raw_class,
+                "art class/definition changed")
+        name = struct.unpack_from("<Q", data, row + 0x18)[0]
+        require(data[name:data.index(b"\0", name)].decode() == model, "art model changed")
+        binding = struct.unpack_from("<Q", data, row + 0xD8)[0]
+        effective = campaign_weapon_class(raw_class)
+        records.append({"art": f"{art:08X}", "definition": f"{row:X}", "model": model,
+                        "raw_class": raw_class, "campaign_class": effective,
+                        "binding_nonnull": bool(binding),
+                        "passes_long_gun_init_class_gate": effective == 1})
+    return {"classification": "STATIC_NORMAL_ART_LONG_GUN_INIT_GATE",
+            "weapon_art_sha256": WEAPON_ART_SHA256, "records": records,
+            "native_gate": "1414FB50A: weapon+898 bit0 AND class1414FDDD0==1 AND binding1414FD7B0!=0",
+            "p99_long_gun_jiggle_constructed_by_normal_init": False,
+            "limits": "This proves the normal constructor branch, not arbitrary later pointer writes or live state."}
+
+
+def rigid_row(values):
+    values = tuple(float(x) for x in values)
+    require(len(values) == 12 and all(math.isfinite(x) for x in values), "invalid rigid row")
+    require(values[:4] == (1., 1., 1., 0.) and values[11] == 0., "nonunit scale/padding")
+    require(abs(sum(x*x for x in values[4:8])-1) < 1e-8, "nonunit quaternion")
+    return values
+
+
+def inverse_rigid(values):
+    values = rigid_row(values)
+    q = pose.qconj(values[4:8])
+    return pose.row(rotation=q, translation=pose.rotate(q, tuple(-v for v in values[8:11])))
+
+
+def corrected_main_frame(attachment, primary, local_root, cache_root, cache_selected,
+                         render_root):
+    """Conditional scalar ED0A70 low-blend equation followed by main root skin.
+
+    R = localRoot * inverse(cacheRoot) * cacheSelected.
+    World = attachment * primary * inverse(R); main = World * renderRoot.
+    Not a live admission test: assumes selector>=0, blend5F0<.001, unitS,
+    identity root inverse-bind, no jiggle/Animating/world override afterward.
+    All inputs are explicit; a changed render generation must not be hidden.
+    """
+    a, c, r, g0, gj, palette = map(rigid_row,
+        (attachment, primary, local_root, cache_root, cache_selected, render_root))
+    relative = pose.blend(inverse_rigid(g0), gj)
+    correction = pose.blend(r, relative)
+    world = pose.blend(pose.blend(a, c), inverse_rigid(correction))
+    return {"world": world, "main_frame": pose.blend(world, palette),
+            "live_frame_proven": False, "model": "conditional-rigid-root-cancellation-v1"}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", type=Path, default=DEFAULT_ARCHIVE)
     parser.add_argument("--include-geometry", action="store_true")
+    parser.add_argument("--dc-archive", type=Path,
+                        help="also audit P99 versus Mazur normal-art LongGunJiggle admission")
     args = parser.parse_args()
-    print(json.dumps(audit_assets(*load_assets(args.archive),
-                                 include_geometry=args.include_geometry), indent=2))
+    result = audit_assets(*load_assets(args.archive), include_geometry=args.include_geometry)
+    if args.dc_archive:
+        with args.dc_archive.open("rb") as stream, mmap.mmap(stream.fileno(), 0,
+                access=mmap.ACCESS_READ) as mapping:
+            result["normal_art_admission"] = audit_weapon_art(
+                Psarc(args.dc_archive, None, data=mapping).extract("weapon-art.bin"))
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":

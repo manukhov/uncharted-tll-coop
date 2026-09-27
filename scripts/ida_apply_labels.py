@@ -315,6 +315,20 @@ FUNCTIONS = {
         "not rewrite attachment selection or binding fields.",
     ),
     # --- 2026-08-21: cold ProcessWeapon LongGunJiggle lifecycle ---
+    0x1414FDDD0: (
+        "ProcessWeapon_GetNormalizedArtClass",
+        "Resolves weapon+860 through normal art registry; reads signed art+8. "
+        "Offline only maps16->0 and17/22->1; negative/missing ->-1. "
+        "Init1414FB50A requires result1 before LongGunJiggle creation. "
+        "Pinned P99 art8075397D atweapon-art.bin6CE8 hasclass0, so this "
+        "constructor branch is excluded; Mazur33E29A1B raw17 normalizes1.",
+    ),
+    0x1414FD7B0: (
+        "ProcessWeapon_GetHolsterBindingDescriptor",
+        "Resolves weapon+860 through cached art registry and returns art+D8 "
+        "binding descriptor ornull. Used with normalizedclass1 andweapon+898 "
+        "bit0 by1414FB50A LongGunJiggle constructor admission.",
+    ),
     0x141500880: (
         "ProcessWeaponBase_Update",
         "Per-frame ProcessWeaponBase update. For weapon+0x838 it computes the "
@@ -1514,7 +1528,13 @@ FUNCTIONS = {
         "parent/primary/inverse-rig result returns directly. An output-only "
         "world translation after this call bypasses that already-completed "
         "blend. Runtime +0x510/+0x520 is not the authored secondary endpoint "
-        "used by PlayerWeaponController_BlendSlotToSecondaryHolsterBinding.",
+        "used by PlayerWeaponController_BlendSlotToSecondaryHolsterBinding. "
+        "STATIC low5F0/unitS equation: A*C*inverse(RlocalRoot * "
+        "inverse(cacheRootWorld)*cacheSelectedWorld). 141ED0AF4/B8C reads "
+        "Fg+100 first48B JP Q/T, not a separate art offset. Atlocaljoint0 "
+        "the cache relative isidentity; root-skinned geometry subsequently "
+        "cancels R when render palette has the same rigid root. Samegeneration, "
+        "no laterjiggle/Animating/override andunitS remain conditions.",
     ),
     0x141ED2060: (
         "NdAttachableObject_UpdateAnimatingLayersAndPublish",
@@ -2441,7 +2461,11 @@ FUNCTIONS = {
         "producer copies build-context qword 6 into the command payload and emits "
         "header 0x40011 at 0x141A90119. The command-16 header 0x00020010 is "
         "appended first at 0x141A900F5..0x141A90106; command 17 is appended only "
-        "at 0x141A90111..0x141A9012C, so it cannot initialize case-16 op40 inputs.",
+        "at 0x141A90111..0x141A9012C, so it cannot initialize case-16 op40 inputs. "
+        "STATIC export27 at141A90474..4BE immediately precedes export26 "
+        "at141A90543..5AE, without interveningworkpose mutation. A complete "
+        "normal list exportslocal JP andskinpalette fromone workpose; this "
+        "does not prove later ED0A70/read-render samegeneration.",
     ),
     0x141A91490: (
         "AnimManager_BuildCommandSegmentsForObjectMask",
@@ -3711,6 +3735,52 @@ FUNCTIONS = {
         "Optional SubMeshBlend at14188373B precedes Skinning at1418837CF; "
         "optional RecomputeNormals/ComputeWind follow. Unmorphed bind vertices "
         "therefore do not unconditionally equal live skinning inputs.",
+    ),
+    0x141875F40: (
+        "SubMeshBlend_Execute",
+        "RTTI SubMeshBlend vtable142B08B20 slot0. Dispatches141747CF0 with "
+        "deformer+10, rendercontext, retainedblend instance+8.",
+    ),
+    0x141747CF0: (
+        "BlendShapeDeformer_Blend",
+        "Exact BlendShapeDeformer::Blend source assertion. Reads inputindex "
+        "array at272B batch+60 and weights atblendinstance+8; called by "
+        "SubMeshBlend_Execute before ordinary skinning.",
+    ),
+    0x141748060: (
+        "BlendShapeInstance_InitializeInputs",
+        "Caller14187F6A2 only. Collection+40 count/+38 stringpairs initialize "
+        "zero weights atinstance+8, IDs+10 andanimparam mapping+18.",
+    ),
+    0x141747C20: (
+        "BlendShapeDeformer_ResolveInputIds",
+        "Caller141882105. Matches272B shapebatch StringIds+A0 against "
+        "blendinstance IDs+10 and storesresolved inputindices atbatch+60.",
+    ),
+    0x14187F1B0: (
+        "MeshInstance_InitializePrototypeState",
+        "Collection prototype+40 blendinputcount gates allocation of "
+        "MeshInstance+10 at14187F646. Zero branch14187F6A9 storesnull. "
+        "Pinned normal Nadine arms collection190130 hascount0/null+38.",
+    ),
+    0x141878860: (
+        "MeshResource_InitializeFromDescriptor",
+        "Copies native mesh+74 shape count toresource+68 at141878F32; "
+        "resource+70 initializednull atF40, allocated onlyifpositivecount. "
+        "Shape pointers native+78 readatF90. File header is8 bytesearlier; "
+        "Nadine arms181AE8+7C/+80 arezero/no fixup, native desc181AF0.",
+    ),
+    0x14187A3B0: (
+        "SubMeshInstance_InitializeDeformerResources",
+        "At14187A636 creates BlendShapeDeformer onlyifresource+70 nonnull "
+        "AND resource+68 shapecount positive; storesSubMesh+40 at14187A67E. "
+        "Independent ofcollection blendinput gate. Normal Nadine arms "
+        "authored count/table areabsent, not merelyzero liveweights.",
+    ),
+    0x141879C90: (
+        "SubMeshInstance_Construct",
+        "Initializes submesh deformation members; blendshape+40 isnull "
+        "at141879CBE beforeoptional resource-driven setup14187A3B0.",
     ),
     0x141876A60: (
         "SkinningModel_InitializeMeshResourcesAndShaders",
@@ -5399,7 +5469,14 @@ FUNCTIONS = {
         "and local(R,T,s): Anew=A*diag(flag8?1:S)*R; "
         "tnew=A*(S*T)+t; Snew=s. Do not normalize Q here. Flag8 is set "
         "on all71 required row124 joints except2/14. Authored-bind replay "
-        "times authored inverse gives max identity residual3.187e-7.",
+        "times authored inverse gives max identity residual3.187e-7. "
+        "STATIC 2026-09-27 pistol-base: all7 pinned clips author unitS/identityQ/zeroT "
+        "at localJP0; dynamic scatter padding never targets its48 bytes. Sole "
+        "skeleton programBB0 has noJP0 overwrite; root op40BE6 repeats4 padding "
+        "records with parent0009, reserved identity row0, and no later root "
+        "matrix write. Command15 seeds reserved row0 at141ABA91D..A956. Root "
+        "workspace therefore preserves authored root; no claim about arbitrary "
+        "runtime callbacks, other sources or cross-consumer generation equality.",
     ),
     0x142194680: (
         "AnimJointProgramOp41_ScatterVectorComponents",

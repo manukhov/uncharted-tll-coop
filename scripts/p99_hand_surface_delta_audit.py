@@ -153,6 +153,49 @@ def body_ownership(pak):
             "mesh_name": mesh_name, "material": "18D658", "normal_palette": "1E15C0"}
 
 
+def body_preskin_admission(pak):
+    """Reject authored blend inputs in the exact normal arms/collection path.
+
+    Native collection+0x40 gates MeshInstance+0x10 at 14187F646..6A9.
+    Independently, native mesh+0x74 (file header+0x7C) is copied to the
+    render resource+0x68 at 141878F32..40. A positive count allocates its
+    +0x70 shape table from native mesh+0x78 (file+0x80). Only that count AND
+    table permit SubMesh+0x40 creation at 14187A636..68E. The command builder
+    also requires MeshInstance+0x10 at 14188366D and SubMesh+0x40/+0x08 at
+    141883698. These are two independent absent gates, not zero live weights.
+
+    This does not prove an arbitrary runtime instance has no other position
+    writers or that post-skin wind/material presentation is absent.
+    """
+    body_ownership(pak)
+    # 141965403 feeds descriptorArray + 176*meshIndex to 141878860. The
+    # normal collection's member1 pointer and index must identify that row.
+    native_array = pak.resolve_absolute(0x195F78 + 0x48)
+    mesh_index = struct.unpack_from("<i", pak.data, 0x18FEE8 + 8)[0]
+    if (struct.unpack_from("<I", pak.data, 0x195F78 + 0x28)[0] != 37 or
+            native_array != 0x181A40 or mesh_index != 1 or
+            native_array + 176*mesh_index != MESH_OFFSET + 8):
+        raise ValueError("pre-skin native mesh descriptor ownership changed")
+    fields = ((0x190130 + 0x38, "Q", "collection blend-name table"),
+              (0x190130 + 0x40, "I", "collection blend-input count"),
+              (MESH_OFFSET + 0x7C, "I", "mesh blend-shape count"),
+              (MESH_OFFSET + 0x80, "Q", "mesh blend-shape table"))
+    for offset, kind, label in fields:
+        skin._require_page_span(pak, offset, struct.calcsize("<" + kind))
+        if struct.unpack_from("<" + kind, pak.data, offset)[0] != 0:
+            raise ValueError(f"authored pre-skin {label} is not absent")
+        # A zero page-local pointer can be valid: raw zero alone is insufficient.
+        if kind == "Q" and pak.fixups.get(pak.absolute_to_page(offset)):
+            raise ValueError(f"authored pre-skin {label} has a pointer fixup")
+    return {"classification": "STATIC_AUTHORED_SUBMESH_BLEND_ABSENT",
+            "collection": "190130", "mesh": "181AE8", "native_mesh_descriptor": "181AF0",
+            "collection_blend_input_count": 0, "collection_blend_name_table": None,
+            "mesh_blend_shape_count": 0, "mesh_blend_shape_table": None,
+            "authored_blendshape_delta_absent": True,
+            "runtime_no_other_position_writers_proven": False,
+            "scope": "Normal pinned rural arms resource path only; not a live-instance or post-skin proof"}
+
+
 def summarize(distances):
     distances = sorted(distances)
     if not distances or not all(math.isfinite(x) and x >= 0 for x in distances):
@@ -212,6 +255,7 @@ def audit(report, body_path, skeleton_path):
     if len(meshes) != 1 or meshes[0].vertex_count != 6448:
         raise ValueError("pinned body mesh missing or changed")
     ownership = body_ownership(body)
+    preskin = body_preskin_admission(body)
     skeleton_pak = skin.PagedPak(Path(skeleton_path))
     spec = locator.source.NADINE_SKELETON
     _, matrices, _ = locator.load_basis(skeleton_pak.data, spec)
@@ -237,6 +281,7 @@ def audit(report, body_path, skeleton_path):
             "geometry_scope": "Same bind vertices in modeled prop-relative frames; NOT actual fingertips, weapon contact or final rendered surface",
             "body_sha256": BODY_SHA256, "mesh_offset": hex(MESH_OFFSET),
             "ownership": ownership,
+            "preskin_admission": preskin,
             "skeleton_sha256": hashlib.sha256(skeleton_pak.data).hexdigest(),
             "source_report_canonical_sha256": hashlib.sha256(json.dumps(report, sort_keys=True,
                 separators=(",", ":"), allow_nan=False).encode()).hexdigest(),
@@ -246,7 +291,7 @@ def audit(report, body_path, skeleton_path):
             "units": "authored asset units; no physical length calibration asserted",
             **result,
             "limits": ["Conditional D350/B8 subtree; R157 basis and live final owner remain unproven",
-                       "Unmorphed pinned bind positions; active SubMeshBlend/correctives/wind are not reproduced",
+                       "Pinned normal arms/collection have no authored SubMeshBlend inputs or shapes; arbitrary live position writers and post-skin wind/material deformation are not reproduced",
                        "Only vertices whose positive influences lie entirely within the 21 modeled joints",
                        "Scalar pose, matrix and accumulation math is approximate, not native/GPU bit exact",
                        "Common prop-frame affine is applied per influence; moving translation after the sum differs by (sumWeights-1)*translation, so nonunit quantized sums do not prove exact world-frame cancellation",

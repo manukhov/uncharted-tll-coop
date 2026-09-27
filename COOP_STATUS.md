@@ -18,8 +18,12 @@ Thumb LOCAL profile-vs-bind rotations are only0.0025..0.0032deg: the surviving
 ~21.545deg GLOBAL basis difference comes from shoulder/elbow/wrist ancestry,
 not an authored151deg thumb bend. All426 scales are exactunit. This is still
 an approximate conditional model, not skin contact or a live fix.
-Next: compare the same Nadine hand surface against exactP99 geometry only after
-closing skin-weight encoding and mesh/frame ownership. Do not rank poses by
+Latest 2026-09-27: packed skin weights/typed geometry are closed. Normal arms
+authored SubMeshBlend and normal P99 LongGunJiggle construction are excluded.
+Weapon-root cancellation is conditional on same-generation root0/unitS and
+no later world override; all7 pistol-base clips/program preserve identity root.
+Next: define a grip-only MAIN-mesh ROI and close remaining post-skin/frame
+conditions before interpreting conditional surface contact. Do not rank poses by
 distance to Chloe bone origins (different proportions/bind axes), globally
 remove the profile, or reopen old game exams. Preserve exact source/owner
 admission and distinguish the left support-arm symptom. Latest section records
@@ -35706,3 +35710,126 @@ reports/ida_apply_p99_skinning_20260927_status.txt. Restarted MCP readback
 resolves SkinningModel_InitializeMeshResourcesAndShaders141876A60, preserves
 all3 callers and shader-table xrefs141876B6F/141967DF3/141967FB4. No tll
 process was present. Pre-existing untracked tmp/ remains untouched.
+
+### 2026-09-27 — STATIC authored preskin admission and P99 root-frame contract
+
+No game, injection or native retail pose execution. Both P99 writers and
+ordinary source observer stay OFF; no runtime source, DLL, appearance or
+accepted attachment offset changed. This is not a visual grip repair.
+
+**Competing explanations.** Authored arms morph inputs vs merely zero live
+morph weights vs later non-morph displacement; P99 long-gun jiggle vs ordinary
+attachment vs Animating world override; identity root vs nonidentity root
+compensated at attachment vs stale/non-root/scale mismatch. The findings below
+exclude only their exact native/asset branches, not all possible live writers.
+
+**Normal Nadine arms have no authored SubMeshBlend inputs (STATIC).** Three
+independent kinds of evidence: exact typed asset ownership/null fixups, native
+resource/constructor dataflow, and downstream deformer admission/RTTI slots.
+
+- Normal collection190130+38 is rawnull/no fixup, +40 count0. At14187F646,
+  MeshInstance_InitializePrototypeState14187F1B0 tests prototype+40; zero path
+  14187F6A9 sets MeshInstance+10=null instead of initializing blend inputs.
+- Geometry195F78+48->181A40 and mesh index18FEF0=1 select native descriptor
+  181AF0 by176-byte stride at141965403. File header181AE8+7C=0 shape count,
+  +80 rawnull/no fixup. MeshResource_InitializeFromDescriptor141878860 at
+  141878F32..F40 copies native+74 to resource+68; resource+70 remains null
+  without positive count. This is header+8 native layout, not header itself.
+- SubMeshInstance_Construct141879C90 initializes SubMesh+40=null at141879CBE.
+  InitializeDeformerResources14187A3B0 at14187A636 requires resource+70 AND
+  positive resource+68 before allocation/store14187A67E. Builder141883580
+  requires MeshInstance+10 at14188366D and SubMesh+40/+8 at141883698.
+  SubMeshBlend_Execute141875F40 is vtable142B08B20 slot0 and reaches source-
+  assert-named BlendShapeDeformer_Blend141747CF0. Thus this authored normal
+  arms path has no blend delta, not an unmeasured zero-weight assumption.
+
+Both parsers agree on null/no-fixup fields; all4 body LOD collections and all37
+body meshes have zero authored counts. Executable gate intentionally admits
+only exact normal arms. `body_preskin_admission` reports
+STATIC_AUTHORED_SUBMESH_BLEND_ABSENT and explicitly leaves runtime absence of
+other position writers false. Next post-skin wind admission boundary is
+14187AC8D..AE5B (MeshInstance+104 bit400, descriptor type23); not closed here.
+
+**Normal P99 cannot construct LongGunJiggle (STATIC).** Normal weapon-art.bin
+in dc1.psarc is119637bytes, SHA
+5f5a601d2a7d799c741ce906f57f4b3e49172d81a85e412e6df67cb52a106d53.
+Registry61D589D9/root1BC0 resolves P99 art8075397D->definition6CE8, class0,
+modelp99-silencer-dlc, binding148A8. Mazur33E29A1B->9D18, class17,
+modelsniper-rifle-bolt, binding13958 provides the contrasting long-gun case.
+ProcessWeapon_GetNormalizedArtClass1414FDDD0 reads normal art+8 and maps only
+offline16->0 and17/22->1 (online raw; missing -1). GetHolsterBindingDescriptor
+1414FD7B0 independently resolves the same art and returns art+D8.
+Init1414FAF40 at1414FB50A requires weapon+898 mask1, normalized class1 AND
+non-null binding before E0 allocation/LongGunJiggle vtable142A9AF48/store
+weapon+838 at1414FB923. RTTI vtable has only initializer1414FB61E and
+destructor-reset1414FBC10 code xrefs. P99 fails class gate regardless of binding.
+This excludes normal construction, not arbitrary later writes to weapon+838.
+
+**Attachment correction cancels a coherent root (STATIC, conditional).**
+141ED0A70 reads rig=weapon+1A8, persistent local JointParams rig+100 root
+Q+10/T+20 at141ED0AF4/B8C; this is not a second authored art offset.
+Rig+108 supplies cached joint worlds; weapon+68C selects the joint. The call
+141ED0BA1 computes inverse(cacheRootWorld)*cacheSelectedWorld. With nonnegative
+selector, weapon+5F0<0.001 and unitS, column-vector equations are:
+
+    R = localRoot * inverse(cacheRootWorld) * cacheSelectedWorld
+    WeaponWorld = AttachmentWorld * Primary4F0 * inverse(R)
+    MainWorld = WeaponWorld * renderRoot
+
+P99 MAIN is full root0 weight and identity inverse bind (previous audit).
+When selected joint0 and renderRoot==localRoot from the same generation,
+R=localRoot and MainWorld=AttachmentWorld*Primary4F0. Nonidentity root alone
+does not require an offset fix. Non-root selector, stale render root, nonunitS,
+later world/jiggle overrides are explicit falsifiers, not silently canceled.
+New scalar controls use noncommuting rotations/translations, prove coherent
+root cancellation and show stale/non-root failure; reject nonfinite/nonunitS.
+
+Native graph:1418B7060 combines record joint-world*record-local and normalizesQ;
+141ED1780->141ED19BB->141ED0A70 performs correction;141ED1380 may then jiggle
+and, when5F8, converts finalworld via inverse cached parent110/120 to local
+weapon130/140. 141ED2060 can later overwrite130/140 when object+C0 active state
+contains StringId Animating;141ED287B composes parent/local,141ED288F publishes.
+Phase40/141A8FC00 also publishes stockworld. No assertion that all Animating
+overrides are absent. FgPrepare14181B3F4 copies GetRenderWorldMatrix straight
+to FgInstance+140..17F without another composition at that point; not a proof
+of zero shader/material displacement or current weaponWorld/rightProp equality.
+
+**Authored pistol root is preserved (STATIC, not live generation proof).**
+`p99_pistol_root_audit.py` pins prior pistol-base SHA934840e4...78838 and all7
+ANIMs: p-reload4A70/raw2CD0, revolver-reload4AC8/3150, p-fire49C0/3470,
+toy-gun-idle4B20/3A40, revolver-idle4B78/3C80, p-noammo4A18/3EC0, idle4968/4100.
+All author exact root0 S1/Qidentity/T0. Opcode15/16 dynamic scatter maps,
+including SIMD-padding destinations, never touch root bytes0..47. Sole skeleton
+programBB0 opcodes52,50,47,54,47,41,40,49,47,40,44,40 contain no JP0 writer.
+Root op40BE6 repeats four identical padding records with parent0009 and no
+later root matrix overwrite. Evaluator command15 seeds reserved parent row0
+identity at141ABA91D..A956 (constants142880690/6D0/6A0 and142BED260). Worker
+142189FB0 writes root rigidQ/T workspace+40 and separateS+70; skin exporter
+14218B170 adds localS/inverseBind, giving the same root for unitS/identitybind.
+
+Command builder141A8FCF0 emits final jointprogram16 at141A90102, scalar17 at
+141A90119, optional callbacks24, local export27 at141A90474..904BE, then skin
+export26 at141A90543..905AE without an intervening workspace pose write.
+Command27 copies48B JP rows at141ABAF7D..AFB4; command26 reads64B workspace
+rows at141ABAE8C. This establishes one completed-list source relationship,
+NOT ED0A70/render cross-frame generation equality. Other clip sources,
+callbacks and alternate rig+250 render palettes remain outside this contract.
+
+**Next:** define a grip-only subset of the MAIN triangles (material labels the
+whole MAIN), close relevant wind/render-frame conditions and then compare
+conditional same-Nadine contact. Do not equate smaller surface displacement
+with a better grip or change accepted attachment offsets from the root alone.
+No runtime correction/exam is ready; do not repeat the unchanged diagnostic run.
+
+Verification: pure Python297/297 and CTest27/27 pass, no asset-test skips.
+New negative cases cover morph count/table/fixup/ownership, raw art class,
+noncommuting/root-generation algebra, dynamic root-padding writes and later
+procedural root overwrites. Weapon/root CLIs pass against installed read-only
+archives. Single IDB label pass reports1913functions/79data names/1type and
+`save_database returned True` in
+reports/ida_apply_p99_frame_contract_20260927_status.txt. Restarted MCP resolves
+ProcessWeapon_GetNormalizedArtClass1414FDDD0, SubMeshBlend_Execute141875F40 and
+SubMeshInstance_InitializeDeformerResources14187A3B0. Binding getter retains
+callers1414FB50A/1414FC51B/1414FC7F6; SubMeshBlend vtable xrefs remain
+141882F10/141882F80/141883734. No tll process was present. Pre-existing
+untracked tmp/ remains untouched.
