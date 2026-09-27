@@ -20260,7 +20260,8 @@ chain is allocated but forced invisible.
 
 Independent mesh and renderer evidence rejects both leaves as the small pistol.
 All four `nadine-holster-game` LODs use only skeleton joints
-`3,5,15,16,38,39,74,92--96,99`; `r_leg_holster` joint 99 influences 4284/5990
+`3,5,15,16,38,39,74,92--96,99,551` (22-bit weight correction, 2026-09-27);
+`r_leg_holster` joint 99 influences 4284/5990
 LOD0 vertices and hand joint 30 influences zero. Regular `nadine-holster` uses
 only its authored belt chain 143--165 and also has zero hand weights. Both use
 the same 580-entry StringId palette; `FgDrawManager_PrepareInstanceForRendering
@@ -22530,6 +22531,13 @@ Three independent evidence classes close the boundary and the compact set:
    `23/24`, palms `27/28` and hand attachment locators `29/30` have no direct
    body weight, so copying them at this late body-only seam would add bytes
    without changing a rendered body vertex.
+
+   2026-09-27 correction: the original first-u16 weight magnitude and printed
+   weight/65535 totals are REJECTED. Packed records actually use uint22 weights
+   and uint10 palette ordinals (shader proof in the latest section). This tool
+   counted every record regardless of weight, and all 97 partitions have zero
+   zero22 records; its referenced joint sets/counts and the 88-ID constexpr
+   therefore survive unchanged. This does not reinstate the old runtime test.
 3. **Owner and ABI closure.** The already-confirmed Player `+0x408` admission
    resolves retained Player/Fg identity, ED25/C39/580, exact P99 or Mazur
    ProcessWeapon ownership, WeaponOut state 2, grenade idle state 0, zero-action
@@ -30094,7 +30102,9 @@ measurement is not inferred merely from an art type or similar asset name.
 name table `3FF8`; joint 0 is `root 19D64D2A`. Its default local at `3540`
 and inverse bind at `39E0` are exact identity. All three QBZ LODs reference
 this skeleton. The validated HALF4 streams contain 22940 vertices, of which
-22442 have only positive joint-0 influence with total weight 65535. The
+22442 have only positive joint-0 influence. The old total-weight65535 wording
+was based on a truncated first-u16 decoder and is superseded by the 22-bit
+format correction below (full packed weight is4194303, not65535). The
 remaining animated parts are deliberately excluded from the rigid support
 claim. No separate per-mesh transform exists in the audited mesh headers.
 
@@ -35577,3 +35587,122 @@ readback resolves140128020 as AnimJointProgram_InitializePackedQuaternionPermuta
 retains table xrefs140128028/142185EE5, and returns the corrected opcode24
 comment. No tll process was present. Both runtime writer flags/source rows
 remain unchanged; pre-existing untracked tmp/ was not touched.
+
+### 2026-09-27 — STATIC packed skinning proof and conditional same-Nadine surface audit
+
+Recovered the interrupted uncommitted 2026-09-20 asset work. No game or retail
+pose evaluator was executed; no injection, runtime source row, DLL, appearance
+or attachment adjustment was made. Both P99 writers and ordinary source
+observation remain OFF. This is not a visible pistol-grip fix.
+
+**Alternatives and decisive evidence.** H16 separate uint16 weight/joint-high
+word is REJECTED; H22 unsigned22 weight plus10-bit joint is STATIC; signed22,
+packed-float weight, denominator4194304 and per-vertex sum normalization are
+REJECTED for the five admitted packed-mode1 shader families. CPU palette
+publication alone was insufficient to distinguish matrix LBS from DQ.
+
+1. CPU dataflow: SkinningModel_InitializeMeshResourcesAndShaders141876A60,
+   called by1418775E0/141878860/141879DB0, reads sparseDescriptor+8==0 at
+   1418773B7, selects packed flag8, copies each8-byte vertex count/byte-offset
+   row at141877464, and uploads4*recordCount bytes at1418774CB..4FD rather
+   than the unpacked8*count. Mesh-native descriptor+68 is file-header+70.
+2. Shader names/selection:141876BA3 formats `%s-mode%d` and resolves five
+   Cs_Skinning families x8 modes plus Cs_RopeSkinning-mode0 into146904C60.
+   SubMeshSkinning_Construct1418830AE..0D9 builds modebit0=packed,
+   bit1=debug pass-through, bit2=joint-cache threshold. DMENU strings at
+   141B96BA7/BD4 bind14386FC79 to `Pass-through Skinning (T-pose mode)`;
+   141B96C72/CF4 binds14300B138 to joint threshold, capped310 at141B96D2C.
+   This is not a DQ switch.580-joint body cannot take the capped cache path.
+   141967ED2..EDD selects the table entry and Execute141875F50 reaches
+   SkinningDeformer_SkinSubMesh1418778F0/GPU dispatch.
+3. Independently shipped DXIL: `thelostlegacy/shaders.psarc` contains all
+   named blobs. SDK26100 IDxcCompiler3::Disassemble only, no shader execution,
+   device or compilation, proves `joint=word>>22`, `q=word&4194303`, unsigned
+   int-to-float then multiply by exact f32bits34800002. LLVM spells the
+   widened constant0x3E90000040000000. This is f32(1/4194303), not1/4194304.
+   Index*48 loads three palette rows; xyz accumulate weight*dot4(row,(pos,1)).
+   There is no weight-sum renormalization or DQ conversion in admitted mode1.
+   `p99_skin_shader_audit.py` pins all five blobs and checks connected unpack,
+   palette addressing and weighted-dot4 accumulation. Example tangent blob
+   SHA be454c78e9fe286eae122e9d6815b719d927f51c1757564d2efe068426800cbd.
+   Mode5 cache arithmetic and debug passthrough are not claimed by this audit.
+
+Command26 path141ABAE8C -> AnimCmdEvaluator_WriteSkinningPalette14218B170
+uses identity common basis and writes `GlobalWithLocalScale * inverseBind`
+as three row-major float4s, not reversed order. SubMeshBlend14188373B occurs
+BEFORE skinning1418837CF; normal recomputation/wind may follow. Therefore
+unmorphed bind positions are a bounded input, not automatically live inputs.
+
+**Parser correction and impact.** `pak_skin_influence_audit.py` now retains
+raw22-bit weights and exposes individual shader-rounded float weights. It
+rejects unsupported8-byte records, bad palette indices/counts/offsets and
+cross-page arrays. Existing aggregate reference-set semantics keep zero-weight
+records; positive support uses all22 bits. `nadine_other_weapon_clearance_audit`
+uses the same decoder and4194303 full-root check. No accepted offset changed.
+Body37 partitions contain23 positive22/zero-low16 records, shirt15 contain0,
+head45 contain32. All97 partitions contain no zero22 records. Body weight
+sums range4194291..4194313; no arbitrary normalization is added. Example
+body181AE8 vertex1941 word1A4D0000 is joint105 with weight0xD0000, not zero.
+Head words6CA00000/6CE00000 are joints434/435 with roughlyhalf weight each.
+The old printed weight magnitudes are withdrawn, not the88-ID support list,
+StringId compatibility or recorded runtime failures. Holster-game also uses
+joint551; corrected union is annotated above. Its non-hand conclusion remains.
+
+**Typed geometry ownership.** New pure `p99_weapon_mesh_audit.py` closes
+P99 normal three-LOD mesh ownership from B0CA0/B0CD8/255BEBA0 to artgroupB06A0,
+geometryB0A40, tableAD150, LOD0 collectionAE7B0/meshlistAF9E0. MainAC5C8
++58 -> materialAE140 -> exact grip-material string95C18. Its1567 vertices
+(half4, w=0) atE745C and6870indices at118C18 form2290triangles. Every main
+vertex is one0x003FFFFF influence. All9 P99 partitions/10055vertices use one
+full-weight influence, joints0/1/2/8. The material names the whole MAIN mesh,
+not an isolated grip-contact region.
+
+ForegroundB0D00+28/+2C identifies pistol-base databaseE97C9972/skeleton50497451.
+Pinned pistol-base.pak SHA934840e417e2b57af11ad17369b2b391894e5d64bfb8d558b4c1194186a27838:
+JOINT_HIERARCHY740 -> raw800,23joints/17parameters, names1998. Root0 has
+StringId19D64D2A and exact identity local880/inverseBind1330. Weapon bind-root
+space does NOT prove identity posed root, absence of another mesh transform,
+or live weaponWorld/rightPropWorld equality. Earlier B0738 id4726E7E3 is not
+the skeleton ID. No contact verdict is inferred from these assets.
+
+Body normal lookup197558 -> row197590/A674E571 -> artgroup195D30;
+foreground1975B8 identifies ED25C708/C39CA709 and exact palette1E15C0.
+Geometry195F78+50 ->18A2F8 -> collection190130 `pmCollection0.nadine-rural-body`
+->meshlist18FED8/member1 ->181AF0 (header181AE8+8). Named rural_arms_lod0
+partition material18D658 is Nadine arms/physical-shader.fx. Its6448 FLOAT3
+positions and actual weighted ordinals validate against all4 embedded palettes.
+
+**Conditional surface result, not grip quality.** Completed
+`p99_hand_surface_delta_audit.py` compares the same Nadine bind vertices under
+corrected approximate directR124 versus archived conditional R157(R20), using
+`sum(weight * propRelativeJoint * inverseBind * bindVertex)`. It admits only
+vertices wholly supported by the selected21 joints:3040 of4822 touched, excluding
+1782 helper/mixed-support vertices. Source report now exports explicit named
+prop-relative rows, with decoder-model and exact-joint-set gates. No live pose
+or left support-arm extrapolation is made.
+
+Displacement in authored asset units: mean0.0103428054524, RMS0.0119420301862,
+p95 0.0209953285237, max0.0233565426446. This measures difference, NOT distance
+to a gun, penetration, improvement, physical centimetres or actual fingertips.
+Closed-index SHA232789ed8d78b7ee6d959f6cc1d46c94aee6b2f48903eb0588fb3dd52afd7aa3;
+weight sums0.9999987876508385..1.0000012060627341 are deliberately not normalized.
+The same-pose control gives EXACT zero for all3040 vertices. Independent
+asymmetric affine/order and multiweight tests reject transpose/reversed-bind
+and forced normalization mistakes. Scalar matrices/accumulation are not GPU
+bit-exact. Applying the common prop affine per influence versus after the sum
+also differs by `(sumWeights-1)*translation`; no exact world cancellation is
+claimed without actual shared frame data. Active morph/corrective inputs,
+live final owner and exact weapon presentation remain unresolved.
+
+NEXT: close same-Nadine ProcessWeapon mesh-root/presentation transform against
+rightProp30 and active pre-skin SubMeshBlend inputs, then assess contact on a
+defined grip-only surface. Do not pick a pose merely by smaller displacement,
+globally remove E51542CA, enable either writer, or repeat the unchanged exam.
+
+Verification: Python274/274 and CTest27/27 pass, no local-asset skips. Shader,
+weapon and corrected surface CLIs pass; reports use20260927 suffix. Single IDB
+label pass1903functions/79data/1type savedTrue in
+reports/ida_apply_p99_skinning_20260927_status.txt. Restarted MCP readback
+resolves SkinningModel_InitializeMeshResourcesAndShaders141876A60, preserves
+all3 callers and shader-table xrefs141876B6F/141967DF3/141967FB4. No tll
+process was present. Pre-existing untracked tmp/ remains untouched.

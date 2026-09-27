@@ -185,6 +185,12 @@ def audit(asset, archive, dc_archive, prefix=grip.DEFAULT_PREFIX, metadata=grip.
             "forward_gram_max_abs_error": max(affine_gram_error(row)
                                               for row in basis["forward_affine_rows"].values())},
         "comparisons": comparisons,
+        "prop_relative_joint_frames": [
+            {"target_global": comparison["target_global"],
+             "target_name": comparison["target_name"],
+             "direct_row": list(direct_frames[index]),
+             "proposed_row": list(proposed_frames[index])}
+            for index, comparison in enumerate(comparisons)],
         "max_base_rotation_delta_degrees": max(row["base_rotation_delta_degrees"] for row in comparisons),
         "max_composite_rotation_delta_degrees": max(row["composite_rotation_delta_degrees"] for row in comparisons),
         "max_prop_relative_origin_delta_asset_units": max(row["prop_relative_origin_delta_asset_units"] for row in comparisons),

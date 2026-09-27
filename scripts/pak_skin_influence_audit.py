@@ -3,9 +3,9 @@
 
 The mesh resource stores its skin palette count at header ``+0x68`` and a
 fixup-backed sparse influence descriptor at ``+0x70``.  Every vertex has
-an eight-byte ``{count, byte_offset}`` row; each referenced four-byte influence
-is ``{weight_u16, encoded_joint_u16}``, where ``encoded_joint >> 6`` is the
-skeleton joint index.  This tool resolves the PAK page fixups, validates mesh
+an eight-byte ``{count, byte_offset}`` row; each packed four-byte influence
+uses the upper 10 bits for a palette index and lower 22 for weight. This tool
+resolves the PAK page fixups, validates mesh
 headers, and reports the exact joints used by every discovered mesh partition.
 
 It is deliberately read-only and operates on already extracted PAK entries.
@@ -128,6 +128,69 @@ class JointTotal:
     records: int = 0
 
 
+PACKED_WEIGHT_MASK = 0x3FFFFF
+# Cs_SkinningPosNormalTangent-mode1.cxo: uint22 -> float -> multiply
+# by exact float bits34800002. No sum renormalization follows in the shader.
+PACKED_WEIGHT_SCALE = struct.unpack("<f", struct.pack("<I", 0x34800002))[0]
+
+
+@dataclass(frozen=True)
+class PackedInfluence:
+    """One packed record; retain the exact integer, including zero weights."""
+
+    joint: int
+    weight_quantized: int
+
+    @property
+    def weight(self) -> float:
+        return struct.unpack("<f", struct.pack("<f", self.weight_quantized * PACKED_WEIGHT_SCALE))[0]
+
+
+def decode_packed_influence(word: int) -> PackedInfluence:
+    if type(word) is not int or not 0 <= word <= 0xFFFFFFFF:
+        raise ValueError("packed influence must be an unsigned 32-bit word")
+    return PackedInfluence(word >> 22, word & PACKED_WEIGHT_MASK)
+
+
+def _require_page_span(pak: PagedPak, absolute: int, size: int) -> None:
+    """An array must stay in one page, not merely end in some valid page."""
+    page, local = pak.absolute_to_page(absolute)
+    if size < 0 or local + size > pak.pages[page].size:
+        raise ValueError(f"array at 0x{absolute:X} crosses its PAK page")
+
+
+def iter_vertex_influences(pak: PagedPak, mesh: MeshHeader,
+                           skeleton_joint_count: int):
+    """Yield exact packed records per vertex, without sum renormalization.
+
+    +0x70 is one descriptor, not an array of +0x78 descriptors. Native
+    1418773B7 distinguishes packed 4-byte records by descriptor+8 == 0.
+    Unpacked 8-byte records are deliberately unsupported here.
+    """
+    if not 1 <= skeleton_joint_count <= 1024:
+        raise ValueError("packed skin palette must contain 1..1024 joints")
+    descriptor = pak.resolve_absolute(mesh.absolute + 0x70)
+    _require_page_span(pak, descriptor, 0x20)
+    record_count, unpacked = struct.unpack_from("<II", pak.data, descriptor + 4)
+    if unpacked:
+        raise ValueError("unpacked sparse skin records are not supported")
+    if not record_count or record_count > mesh.vertex_count * 16:
+        raise ValueError(f"invalid sparse influence record count {record_count}")
+    table = pak.resolve_absolute(descriptor + 0x10)
+    records = pak.resolve_absolute(descriptor + 0x18)
+    _require_page_span(pak, table, mesh.vertex_count * 8)
+    _require_page_span(pak, records, record_count * 4)
+    for vertex in range(mesh.vertex_count):
+        count, offset = struct.unpack_from("<II", pak.data, table + vertex * 8)
+        if count > 16 or offset & 3 or offset // 4 + count > record_count:
+            raise ValueError(f"vertex {vertex} has invalid sparse count/offset {count}/0x{offset:X}")
+        influences = tuple(decode_packed_influence(struct.unpack_from(
+            "<I", pak.data, records + offset + index * 4)[0]) for index in range(count))
+        if any(row.joint >= skeleton_joint_count for row in influences):
+            raise ValueError(f"vertex {vertex} has an out-of-range palette joint")
+        yield influences
+
+
 def find_mesh_headers(pak: PagedPak, skeleton_joint_count: int) -> list[MeshHeader]:
     signature = struct.pack("<I", skeleton_joint_count)
     headers: list[MeshHeader] = []
@@ -190,52 +253,15 @@ def parse_sparse_influences(
     mesh: MeshHeader,
     skeleton_joint_count: int,
 ) -> dict[int, JointUse]:
-    sparse_descriptor = pak.resolve_absolute(mesh.absolute + 0x70)
     result: dict[int, JointUse] = {}
-    # +0x70 points directly at this mesh's descriptor.  Descriptors for adjacent
-    # LODs are often contiguous, so treating +0x78 as an array count would walk
-    # into the next LOD and double-count it.
-    for stream_index, stream in enumerate((sparse_descriptor,)):
-        influence_record_count = struct.unpack_from("<I", pak.data, stream + 4)[0]
-        if not influence_record_count or influence_record_count > mesh.vertex_count * 16:
-            raise ValueError(
-                f"mesh 0x{mesh.absolute:X} sparse[{stream_index}] has invalid "
-                f"record count {influence_record_count}"
-            )
-        vertex_table = pak.resolve_absolute(stream + 0x10)
-        influences = pak.resolve_absolute(stream + 0x18)
-        pak.absolute_to_page(vertex_table + mesh.vertex_count * 8 - 1)
-        pak.absolute_to_page(influences + influence_record_count * 4 - 1)
-
-        for vertex in range(mesh.vertex_count):
-            count, byte_offset = struct.unpack_from(
-                "<II", pak.data, vertex_table + vertex * 8
-            )
-            if count > 16 or byte_offset & 3:
-                raise ValueError(
-                    f"mesh 0x{mesh.absolute:X} sparse[{stream_index}] vertex "
-                    f"{vertex} has invalid count/offset {count}/0x{byte_offset:X}"
-                )
-            first_record = byte_offset // 4
-            if first_record + count > influence_record_count:
-                raise ValueError(
-                    f"mesh 0x{mesh.absolute:X} sparse[{stream_index}] vertex "
-                    f"{vertex} exceeds the influence record array"
-                )
-            for record_index in range(first_record, first_record + count):
-                weight, encoded_joint = struct.unpack_from(
-                    "<HH", pak.data, influences + record_index * 4
-                )
-                joint = encoded_joint >> 6
-                if joint >= skeleton_joint_count:
-                    raise ValueError(
-                        f"mesh 0x{mesh.absolute:X} sparse[{stream_index}] uses "
-                        f"out-of-range joint {joint}"
-                    )
-                use = result.setdefault(joint, JointUse(set()))
-                use.vertices.add(vertex)
-                use.total_weight += weight
-                use.records += 1
+    for vertex, influences in enumerate(iter_vertex_influences(pak, mesh, skeleton_joint_count)):
+        for row in influences:
+            # Preserve the historical record-reference semantics, including
+            # zero weights. Positive support must use weight_quantized > 0.
+            use = result.setdefault(row.joint, JointUse(set()))
+            use.vertices.add(vertex)
+            use.total_weight += row.weight_quantized
+            use.records += 1
     return result
 
 
@@ -400,7 +426,9 @@ def format_joint(
     if joint in names:
         joint_id, name = names[joint]
         suffix = f" id=0x{joint_id:08X} name={name}"
-    normalized_weight = total_weight / 65535.0
+    # Aggregate diagnostic, not an instruction-exact sum of individual shader
+    # float weights. Individual weights are available as PackedInfluence.weight.
+    normalized_weight = total_weight / PACKED_WEIGHT_MASK
     return (
         f"joint={joint:3d} vertexRefs={vertex_references:6d} "
         f"records={records:6d} weight={normalized_weight:11.4f}{suffix}"

@@ -3707,12 +3707,31 @@ FUNCTIONS = {
     0x141883580: (
         "MeshInstance_BuildDeformerCommandChain",
         "Walks the MeshInstance submeshes and constructs their deformer command "
-        "chain using the InstanceJointData pointer at MeshInstance+0x118.",
+        "chain using the InstanceJointData pointer at MeshInstance+0x118. "
+        "Optional SubMeshBlend at14188373B precedes Skinning at1418837CF; "
+        "optional RecomputeNormals/ComputeWind follow. Unmorphed bind vertices "
+        "therefore do not unconditionally equal live skinning inputs.",
+    ),
+    0x141876A60: (
+        "SkinningModel_InitializeMeshResourcesAndShaders",
+        "STATIC: initializes mesh skin resource streams; first use resolves "
+        "five Cs_Skinning families mode0..7 and Cs_RopeSkinning-mode0 "
+        "into146904C60, formatting %s-mode%d at141876BA3. Mesh descriptor+68 "
+        "is sparse data (file header+70); sparse+8==0 at1418773B7 sets packed "
+        "flag8, uploads 8-byte vertex count/offset rows at141877464 and "
+        "4-byte packed versus8-byte unpacked records at1418774CB..4FD. "
+        "Pinned mode1 DXIL proves joint=word>>22, weight=f32((word&3FFFFF)* "
+        "f32bits34800002), no sum normalization; this CPU loader does not "
+        "perform skin arithmetic. Callers1418775E0/141878860/141879DB0.",
     ),
     0x141882FB0: (
         "SubMeshSkinning_Construct",
         "Exact SubMeshSkinning source type. Installs vtable 0x142B08B10 and "
-        "retains the supplied InstanceJointData pointer at +0x10.",
+        "retains the supplied InstanceJointData pointer at +0x10. "
+        "1418830AE..0D9 selects family and mode: bit0 packed4B, bit1 "
+        "14386FC79 debug pass-through (not dual-quaternion), bit2 joint "
+        "cache threshold optimization. Command byte0 indexes146904C60 "
+        "at141967ED2..EDD. Threshold14300B138 is capped310 by141B96D2C.",
     ),
     0x141875F50: (
         "SubMeshSkinning_Execute",
@@ -3724,7 +3743,10 @@ FUNCTIONS = {
         "Exact SkinningDeformer::Skin assertions for one submesh. Validates "
         "InstanceJointData and its latched +0x00 current bone buffer, then calls "
         "SkinningDeformer_EncodeBoneBufferDescriptors with the +0x00/+0x08 "
-        "buffer pointers plus the submesh descriptor's joint count.",
+        "buffer pointers plus the submesh descriptor's joint count. "
+        "GPU dispatch consumes selected Cs_Skinning*-modeN; CPU buffer "
+        "binding alone does not prove vertex/weight arithmetic. Pinned mode1 "
+        "DXIL independently establishes weighted dot4 matrix LBS, not DQ.",
     ),
     0x141744100: (
         "SkinningDeformer_EncodeBoneBufferDescriptors",
@@ -5638,7 +5660,11 @@ FUNCTIONS = {
         "AnimCmdEvaluator_WriteSkinningPalette",
         "Command-26 matrix converter. It combines the 64-byte joint workspace "
         "with the supplied basis/inverse-bind data and writes three float4 rows "
-        "per joint to the destination generated from FgAnimData+0x230.",
+        "per joint to the destination generated from FgAnimData+0x230. "
+        "Under command26 identity common basis at141ABAE8C, output is "
+        "GlobalWithSeparateLocalScale * InverseBind, not reverse order. "
+        "Three row-major float4 rows are consumed at48-byte stride by "
+        "packed-mode1 GPU matrix skinning shaders.",
     ),
     0x141B5CE90: (
         "AudioManager_RenderJobEntry",
@@ -13828,6 +13854,22 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x146904C60: (
+        "g_SkinningShaderByFamilyAndMode",
+        "6x8 shader-pointer table filled by141876A60 from IngameShaderMgr. "
+        "Five ordinary Cs_Skinning families have8 modes; rope onlymode0. "
+        "141967ED2..EDD selects8*family+mode using commandbyte0.",
+    ),
+    0x14386FC79: (
+        "g_SkinningPassThroughEnabled",
+        "DMENU Pass-through Skinning (T-pose mode) at141B96BA7/BD4. "
+        "Adds shader modebit1 in1418830D9; not a dual-quaternion switch.",
+    ),
+    0x14300B138: (
+        "g_SkinningJointCacheThreshold",
+        "DMENU Skinning Joint Threshold at141B96C72/CF4, capped310 "
+        "at141B96D2C. Compared with bonecount at1418830CB for modebit2.",
+    ),
     0x146C71CE0: (
         "g_AnimPackedQuaternionPermutationRows",
         "Four16-byte vpermilps selector rows, materialized by140128020 "

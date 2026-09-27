@@ -11,6 +11,23 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
+Latest STATIC (2026-09-27): interrupted asset work completed. Packed skin
+weights are uint22 + uint10 joint, proven by shipped mode1 DXIL (f32scale34800002,
+48-byte matrix LBS, no sum renormalization), CPU uploads and shader selection.
+Old uint16/65535 weight magnitudes are REJECTED;88-ID referenced support list
+and actual failed runtime results survive. Parser/clearance positivity corrected,
+no runtime offset/DLL/row changes. P99 material->2290 main triangles and
+pistol-base root identity bind are pinned; live rightProp alignment is NOT.
+Typed normal Nadine arms mesh181AE8/palette1E15C0 closed. Conditional surface
+comparison covers3040 fully supported vertices, maxdelta0.0233565426446assetunits
+(mean0.0103428054524), exactzero same-pose control. Difference is not improvement
+or contact; mixed helpers/morphs/live owner and weapon-frame remain excluded.
+NEXT: native same-Nadine weapon mesh-root/world vs rightProp30 presentation and
+active pre-skin SubMeshBlend inputs, then defined grip-only contact analysis.
+No unchanged game exam; both writers/source observation remain OFF. New audits
+and independent tests Python274/274, CTest27/27; IDB1903functions/79data savedTrue.
+Detailed evidence, limitations and correction scope at endCOOP_STATUS.
+
 Current value-audit direction (2026-09-20): NO repeat of the unchanged source
 exam by default. STATIC review rejects additive-order-alone as a correction:
 mode1 Rabs(X*B)=Rabs(X)*Radd(B), modulo floating point; mode3 copies source.

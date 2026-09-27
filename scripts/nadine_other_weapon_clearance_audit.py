@@ -37,7 +37,8 @@ import struct
 
 from chloe_mazur_holster_pose_audit import MARKER_BITS, compose, matrix_to_quaternion
 import native_anim_pose_audit as native
-from pak_skin_influence_audit import PagedPak, find_mesh_headers
+from pak_skin_influence_audit import (PACKED_WEIGHT_MASK, PagedPak,
+                                      find_mesh_headers, iter_vertex_influences)
 from psarc_asset_audit import Psarc, string_id
 
 
@@ -191,22 +192,11 @@ def positions(pak: PagedPak, mesh):
 
 
 def positive_joints(pak: PagedPak, mesh):
-    descriptor = pak.resolve_absolute(mesh.absolute + 0x70)
-    table = pak.resolve_absolute(descriptor + 0x10)
-    records = pak.resolve_absolute(descriptor + 0x18)
-    record_count = u32(pak.data, descriptor + 4)
-    for vertex in range(mesh.vertex_count):
-        count, offset = struct.unpack_from("<II", pak.data, table + vertex * 8)
-        if count > 16 or offset & 3 or offset // 4 + count > record_count:
-            raise ValueError("invalid sparse influence range")
-        joints = set()
-        weight_sum = 0
-        for index in range(count):
-            weight, encoded = struct.unpack_from("<HH", pak.data, records + offset + index * 4)
-            if weight:
-                joints.add(encoded >> 6)
-                weight_sum += weight
-        if joints == {0} and weight_sum != 65535:
+    palette_count = u32(pak.data, mesh.absolute + 0x68)
+    for influences in iter_vertex_influences(pak, mesh, palette_count):
+        joints = {row.joint for row in influences if row.weight_quantized}
+        weight_sum = sum(row.weight_quantized for row in influences)
+        if joints == {0} and weight_sum != PACKED_WEIGHT_MASK:
             raise ValueError("root-only vertex is not fully weighted to root 0")
         yield joints
 
