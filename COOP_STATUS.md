@@ -37496,3 +37496,101 @@ NEXT: independently resolve/certify external target DLL/export/ABI entries; impl
 owned debug-event hold + external transaction with real quiescence/safe-hold recovery,
 then ACK reception after verified Continue/detach and separate manual arm. Current
 source supplies preparation/publication, not this complete installer or grip repair.
+
+### 2026-09-28 — P99 external debugger lifecycle and default-DLL ABI refusal (STATIC / OWNED OS TESTS)
+
+**Scope.** Implemented the external stop/release component for the proposed
+five-site wrist installer ending at141ABA973. Still no production installer CLI,
+WriteProcessMemory/VirtualProtectEx adapter, game launch/injection, ACK receiver,
+observer activation or grip repair. This library does not discover targets, open
+processes, mutate thread contexts or certify native quiescence. All live wrist
+preparation/observation flags and source exam remain disabled.
+
+**STATIC build refusal, not a missing-symbol workaround.** Independently inspected
+the current optimized default DLL/OBJ with dumpbin and verified SHA256 locally:
+1efc1a419ac392c12ac8144ede577b2abc663856d341e79bb480eefb837babe8,
+AMD64 SizeOfImage1E8000; sole PE export TllP99WristPreparedV1 atRVA1E5000. Four
+hooked_p99_wrist_* adapters/candidate/process_call/post16/prepare are absent from
+the optimized coop_runtime.obj; the invoke code prefix is absent from final DLL.
+With hardFALSE /O2 /Ob2 and linker /OPT:REF /OPT:ICF, source declarations/PDB names
+do not prove retained callable addresses. MASM PUBLIC is not a PE export. The two
+retained bridges are Async RVA1420,size24,unwindB6818=0104010004620000 and Process
+RVA1450,size5C,unwindB6820=0104010004A20000. These helper bytes alone are NOT a
+positive certificate for the missing observation route. Reject this default DLL
+as an external install candidate; no live flags/retention were changed this turn.
+
+Future ABI binding must distinguish four actual patch-target roles (Async
+void(void*), Process0/1 uint32(original seven args), cmd16 uint32*(uint32*,constvoid*))
+from three helper roles (Async MASM3args, Process MASM9args, invoke6args). Offer
+ingress0/1 must bind the same Async, Process entries must be distinct. A minimal
+candidate is versioned actual-adapter exports plus a trusted final-file SHA256 /
+role->RVA manifest including helper bodies, relocations and .pdata/.xdata/SEH
+funclets. Export/EAT is only a locator: verify against the trusted file and loaded
+bytes, do not trust remote EAT, Offer addresses, timestamp/PDBGUID or oneRXbyte.
+No target function or LoadLibrary call may be used for address discovery. This
+manifest/export change is NEXT, not implemented or admitted by today's tests.
+
+**Implemented one-owner stop lifecycle.** nadine_p99_debug_lifecycle.h separates
+Refused, AttachUnknown, KillPolicyFailed, AttachedNoEvent, EventRejected, Held,
+UnsafeHeld, ReleaseUnknown, ContinuedDetachFailed, DetachedUnverified and Detached.
+Successful DebugActiveProcess alone is not Held. WindowsOps checks the borrowed
+process handle's live PID/creation/image path, refuses an existing debugger, attaches,
+sets KillOnExit(FALSE), waits at most4seconds for a delivered event, and requires a
+matching synthetic CREATE_PROCESS_DEBUG_EVENT with null start address, expected
+main image base, matching event-process handle and fresh selected-process identity.
+Only then does Session expose a stop certificate. Header explicitly denies patch/
+RIP/ABI admission: downstream fresh byte/resource/quiescence proofs are still needed.
+[Attach event ordering](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-debugactiveprocess),
+[held-event thread stop](https://learn.microsoft.com/en-us/windows/win32/debug/writing-the-debugger-s-main-loop).
+
+release(false) retains UnsafeHeld and makes ZERO Continue/Stop calls. A later
+explicit safe release requires the caller's fresh installed OR restored-stock
+proof including protections/flush/reachable lifetimes; a failed transaction alone
+is not permission. Before attempting Continue, state becomes ReleaseUnknown: a
+FALSE-before/after-effect result never leaves stale held/barrier_ready permission
+for rollback. Successful Continue followed by failed detach is already beyond
+the known hold, with no ACK. Successful detach is checked by fresh no-debugger
+and live identity queries. Only fully Detached may acknowledge. No implicit
+retry/re-attach/rollback follows any attempted release. A review caught possible
+cross-target misuse on the same debugger thread: Session now also binds the exact
+Ops instance; WindowsOps is noncopyable. Wrong owner or different Ops cannot release.
+
+The real OS adapter continues ONLY its certified synthetic NONEXCEPTION first
+event and immediately calls DebugActiveProcessStop; it never drains/swallow-marks
+an arbitrary first breakpoint as the attach breakpoint. Exceptions are not classified
+by this component. Its file handles are closed on receive; borrowed target ownership
+stays with caller. Destructors do not Continue/Stop/kill. Caller MUST keep Session,
+Ops, borrowed handle/path and the dedicated debugger thread alive during unresolved
+ownership. This is not crash atomic: after KillOnExit(FALSE), Windows detaches all
+connections on debugger-thread exit regardless of C++ destructor policy. If setting
+that policy fails, default target-kill-on-thread-exit risk remains and the owner
+must not just return. [Exit policy](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-debugsetprocesskillonexit),
+[Continue](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-continuedebugevent),
+[detach](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-debugactiveprocessstop).
+
+**OWNED proofs.** Pure lifecycle99checks cover every prerequisite/release failure,
+before/after-effect ambiguity, unsafe holds, no destructor action, wrong thread,
+same-thread foreign Ops, duplicate calls and exact operation order. Production
+Windows library is separately compiled without fault seams and is not game-linked.
+Extended own-child fixture uses the actual Session/WindowsOps:31normal checks,
+36Continue-before,35Continue-after,35Stop-before,34Stop-after. Failure wrappers call
+the real OS operation in after-effect cases then report FALSE. With a held event,
+150ms counter and queued child-thread request do not progress, including release(false).
+Normal release is one Continue+directStop. Explicit fixture-only recovery handles
+injected failures because NO code was written and the process was created/owned
+by the test. It is not permission to auto-detach a production uncertain install.
+Fresh PID/creation/path errors and competing existing-debugger attempts refuse.
+
+All five OS cases show both counters progressing after cleanup and child normal
+exit, with no stray initial-breakpoint crash. Each passed3 repeated CTest runs.
+Delivered debug process/thread handles were invalid after successful detach in
+these runs; parent total handle count had+1 until its own process exit (diagnostic,
+not a general handle-lifetime or leak-free theorem). No relay/native code patched
+or executed, no external PID/executable accepted, no real target recovery tested.
+
+Verification: complete MSVC build; Python576/576; CTest77/77; no tll or leftover
+owned child process. Existingtmp/ preserved. No new game-function semantics/name
+established; single IDB unchanged. NEXT: retain and certify the actual ABI roles in
+a separate intentional build; external manifest/export/loaded-image verifier;
+then connect real remote page transaction + RIP/native ownership checks and an
+explicit persistent uncertainty-recovery owner before ACK/manual-arm integration.

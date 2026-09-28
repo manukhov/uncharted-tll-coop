@@ -10,6 +10,7 @@
 #define NOMINMAX
 #endif
 #include <Windows.h>
+#include "nadine_p99_debug_windows.h"
 #include <array>
 #include <cstdint>
 #include <iostream>
@@ -48,6 +49,7 @@ struct Shared {
     std::uint64_t magic = 0;
     DWORD parent_pid = 0, child_pid = 0;
     std::uint64_t parent_creation = 0, child_creation = 0;
+    std::uintptr_t main_base = 0; // owned fixture identity, not external admission
     alignas(8) volatile LONG64 counter = 0;
     alignas(8) volatile LONG64 spawned_counter = 0;
     volatile LONG request_seen = 0, spawned = 0;
@@ -124,6 +126,8 @@ int child(const std::wstring& base) {
     Worker second{&shared, stop.value, spawned.value, true};
     Handle counter(CreateThread(nullptr, 0, count, &first, 0, nullptr));
     if (!counter) return 26;
+    shared.main_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+    MemoryBarrier();
     if (!SetEvent(ready.value)) {
         SetEvent(stop.value);
         if (WaitForSingleObject(counter.value, kWaitMs) != WAIT_OBJECT_0) ExitProcess(30);
@@ -229,6 +233,85 @@ bool progress(volatile LONG64& counter, DWORD timeout) {
     return false;
 }
 
+namespace dl=coop::p99_debug_lifecycle;
+std::wstring_view lifecycle_case;
+unsigned continue_calls=0,detach_calls=0;
+BOOL lifecycle_continue(DWORD pid,DWORD tid,DWORD status) noexcept {
+    ++continue_calls;
+    if(lifecycle_case==L"continue-before"){SetLastError(ERROR_ACCESS_DENIED);return FALSE;}
+    const auto result=ContinueDebugEvent(pid,tid,status);
+    if(lifecycle_case==L"continue-after"){SetLastError(ERROR_ACCESS_DENIED);return FALSE;}
+    return result;
+}
+BOOL lifecycle_detach(DWORD pid) noexcept {
+    ++detach_calls;
+    if(lifecycle_case==L"detach-before"){SetLastError(ERROR_ACCESS_DENIED);return FALSE;}
+    const auto result=DebugActiveProcessStop(pid);
+    if(lifecycle_case==L"detach-after"){SetLastError(ERROR_ACCESS_DENIED);return FALSE;}
+    return result;
+}
+void lifecycle(OwnedChild& target,Shared& shared,const std::wstring& executable,
+    HANDLE request,HANDLE spawned,HANDLE stop) {
+    const auto wrong_image=executable+L".wrong";
+    dl::WindowsOps bad_creation(target.process.value,target.pid,target.started^1,shared.main_base,executable);
+    dl::WindowsOps bad_pid(target.process.value,target.pid+1,target.started,shared.main_base,executable);
+    dl::WindowsOps bad_image(target.process.value,target.pid,target.started,shared.main_base,wrong_image);
+    dl::Session rejected_creation,rejected_pid,rejected_image;
+    check(!rejected_creation.acquire(bad_creation) && rejected_creation.state()==dl::State::Refused,"real wrong creation rejected before attach");
+    check(!rejected_pid.acquire(bad_pid) && rejected_pid.state()==dl::State::Refused,"real wrong PID rejected before attach");
+    check(!rejected_image.acquire(bad_image) && rejected_image.state()==dl::State::Refused,"real wrong image rejected before attach");
+    dl::WindowsOps ops(target.process.value,target.pid,target.started,shared.main_base,executable);
+    dl::Session session;
+    DWORD handles_before=0,handles_after=0;
+    check(GetProcessHandleCount(GetCurrentProcess(),&handles_before)!=FALSE,"handle baseline before lifecycle attach");
+    const bool held=session.acquire(ops);
+    target.attached=session.state()!=dl::State::Refused;
+    target.event=ops.event();target.held=target.event.dwDebugEventCode!=0;
+    if(!check(held && session.barrier_ready(),"production lifecycle acquires first matching synthetic event"))return;
+    dl::WindowsOps competing(target.process.value,target.pid,target.started,shared.main_base,executable);
+    dl::Session contender;
+    check(!contender.acquire(competing) && contender.state()==dl::State::Refused && session.held(),
+        "existing debugger refuses competing session without stealing or detaching owner");
+    const auto before=read(shared.counter);
+    check(SetEvent(request)!=FALSE,"queue own child's thread request while lifecycle holds");
+    check(!session.release(ops,false) && session.held() && !session.barrier_ready(),"unsafe outcome preserves owned stop without releasing");
+    check(WaitForSingleObject(spawned,150)==WAIT_TIMEOUT && read(shared.counter)==before && !read(shared.request_seen),"retained unsafe hold stops counter and new request service");
+    const dl::Audit audit{lifecycle_continue,lifecycle_detach};dl::g_audit=&audit;
+    const bool released=session.release(ops,true); // no code has been written anywhere
+    dl::g_audit=nullptr;
+    // Any Continue attempt revokes certainty, including FALSE-after-effect. The
+    // fixture may recover explicitly because it owns this child AND never patched.
+    target.held=false;
+    if(lifecycle_case==L"normal") {
+        check(released && session.acknowledged() && continue_calls==1 && detach_calls==1,"one Continue then checked direct detach, no exception swallowing");
+        target.attached=!released;
+    } else {
+        check(!released && !session.held() && !session.barrier_ready() && !session.acknowledged(),"release failure cannot authorize rollback or ACK");
+        const bool continue_failure=lifecycle_case.starts_with(L"continue-");
+        check(session.state()==(continue_failure?dl::State::ReleaseUnknown:dl::State::ContinuedDetachFailed),"continue uncertainty distinct from detach failure");
+        check(continue_calls==1 && detach_calls==(continue_failure?0u:1u),"no hidden retry/detach after failed Continue");
+        if(lifecycle_case==L"continue-before")check(ops.proceed(),"explicit no-write fixture recovery of known injected before-effect failure");
+        BOOL debugged=TRUE;
+        if(!check(CheckRemoteDebuggerPresent(target.process.value,&debugged)!=FALSE,"observe actual debugger state for owned fixture cleanup"))return;
+        if(debugged && !check(ops.detach(),"explicit fixture cleanup detach, never production rollback"))return;
+        target.attached=false;
+    }
+    BOOL debugged=TRUE;
+    check(CheckRemoteDebuggerPresent(target.process.value,&debugged) && !debugged,"lifecycle detach observable from process handle");
+    check(GetProcessHandleCount(GetCurrentProcess(),&handles_after)!=FALSE,"handle count after lifecycle detach");
+    DWORD process_flags=0,thread_flags=0;
+    const bool event_process_live=GetHandleInformation(target.event.u.CreateProcessInfo.hProcess,&process_flags)!=FALSE;
+    const bool event_thread_live=GetHandleInformation(target.event.u.CreateProcessInfo.hThread,&thread_flags)!=FALSE;
+    std::cout<<"debug handles delta="<<static_cast<std::int64_t>(handles_after)-handles_before
+        <<" delivered process/thread still valid="<<event_process_live<<'/'<<event_thread_live<<'\n';
+    if(!check(WaitForSingleObject(spawned,kWaitMs)==WAIT_OBJECT_0,"queued child request runs after direct detach"))return;
+    check(read(shared.request_seen)==1 && read(shared.spawned)==1,"exactly one child thread starts after release");
+    check(progress(shared.counter,kWaitMs) && progress(shared.spawned_counter,kWaitMs),"both child counters progress after release");
+    check(SetEvent(stop)!=FALSE && WaitForSingleObject(target.process.value,kWaitMs)==WAIT_OBJECT_0,"owned child exits normally after lifecycle test");
+    DWORD code=STILL_ACTIVE;
+    check(GetExitCodeProcess(target.process.value,&code) && code==0,"no stray initial breakpoint crashes owned child after direct detach");
+}
+
 void parent() {
     const auto executable = image(GetCurrentProcess());
     LARGE_INTEGER nonce{};
@@ -278,6 +361,7 @@ void parent() {
     if (!check(ResumeThread(target.initial_thread.value) == 1, "run child before debugger attach")) return;
     if (!check(WaitForSingleObject(ready.value, kWaitMs) == WAIT_OBJECT_0, "child ready handshake")) return;
     if (!check(progress(shared.counter, kWaitMs), "counter really progresses before attach")) return;
+    if(!lifecycle_case.empty()) {lifecycle(target,shared,executable,request.value,spawned.value,stop.value);return;}
     BOOL debugged = FALSE;
     if (!check(CheckRemoteDebuggerPresent(target.process.value, &debugged) && !debugged, "own child has no previous debugger")) return;
     if (!check(identity(target.process.value, target.pid, target.started, executable), "fresh identity before sole attach")) return;
@@ -315,6 +399,12 @@ void parent() {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc == 3 && std::wstring(argv[1]) == L"--fixture-child") return child(argv[2]);
+    if(argc==3 && std::wstring_view(argv[1])==L"--lifecycle") {
+        lifecycle_case=argv[2];
+        if(lifecycle_case!=L"normal" && lifecycle_case!=L"continue-before" && lifecycle_case!=L"continue-after" &&
+            lifecycle_case!=L"detach-before" && lifecycle_case!=L"detach-after")return 2;
+        parent();std::cout<<checks<<" checks, "<<failures<<" failures; OWNED_LIFECYCLE_ONLY\n";return failures?1:0;
+    }
     if (argc != 1) {
         std::cerr << "No PID or external executable arguments are accepted.\n";
         return 2;

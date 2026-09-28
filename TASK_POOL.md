@@ -11,7 +11,29 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / OWNED PREPARATION TESTS (2026-09-28, real resources and RO publication):
+Latest STATIC / OWNED DEBUG LIFECYCLE (2026-09-28, hold vs release uncertainty):
+Added one-shot Session + WindowsOps (production static library, not wired to game).
+Acquisition requires fresh PID/creation/image + no existing debugger, successful
+attach/KillOnExit(FALSE), and held matching synthetic CREATE_PROCESS with null
+start/main base. release(false) performs NO Continue/Stop; destructor also does
+nothing. Before any attempted Continue the known-held certificate is revoked:
+FALSE may be before/after effect. Continue failure, continued/detach failure and
+detached-but-unverified remain distinct; no replay, automatic rollback or ACK.
+Session binds owner thread AND same noncopyable Ops instance (cross-target fix).
+99core checks; actual own-child cases31/36/35/35/34checks use real Continue+direct
+Stop, including before/after-effect fault seams. All repeated3x. No code patched,
+no exception swallowed; child counters resume and child exits normally. This is
+NOT the external write adapter, native RIP/quiescence proof or crash-atomic hold.
+Owner thread must stay alive on uncertainty: OS auto-detaches on its exit.
+STATIC current default DLL is NOT install candidate: SHA1efc1a41...837babe8,
+image1E8000, only prepared-page export1E5000. HardFALSE/O2 removes four callback
+bodies/invoke path from final image; retained MASM bridges1420/1450 alone do not
+certify route. NEXT: explicit retained/versioned ABI roles + trusted final-DLL
+manifest/export locator, then remote byte/relocation/unwind verification and actual
+external transaction/recovery/ACK receiver. Do not enable existing default as exam.
+Full build; Python576/576; CTest77/77. No game; all live flags remainFALSE; tmp/ kept.
+
+Previous STATIC / OWNED PREPARATION TESTS (2026-09-28, real resources and RO publication):
 Implemented hardFALSE PREPARED-only branch BEFORE all ordinary installers; return
 on success AND refusal, no game code/patch/network/appearance/observer arm. Actual
 body gathers self/process identity, permanently PINs DLL, allocates5RW near leaves,
