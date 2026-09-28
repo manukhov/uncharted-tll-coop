@@ -48,6 +48,9 @@
 #include "nadine_p99_source_observation.h"
 #include "nadine_p99_observation_arm.h"
 #include "nadine_p99_preselection_trace.h"
+#include "nadine_p99_wrist_snapshot.h"
+#include "nadine_p99_wrist_invoke.h"
+#include "nadine_p99_process_native_frame.h"
 #include "nadine_pistol_grip_policy.h"
 #if defined(TLL_P99_PREPARATION_AUDIT)
 #include "../tests/p99_preparation_audit.h"
@@ -209,6 +212,10 @@ using AnimCmdExpandJointParamsFunction = std::uint32_t*(__fastcall*)(
     std::uint32_t*, void*);
 using AnimCmdExecuteJointProgramsFunction = std::uint32_t*(__fastcall*)(
     std::uint32_t*, const void*);
+static_assert(std::is_same_v<ProcessAnimCmdListSegmentFunction,
+    coop::p99_process_native_frame::Native>);
+static_assert(std::is_same_v<AnimCmdExecuteJointProgramsFunction,
+    coop::p99_wrist_invoke::Native>);
 using AnimJointProgramOperatorFunction = std::uintptr_t(__fastcall*)(
     const std::uint16_t*, const std::uintptr_t*, const void*);
 
@@ -61819,6 +61826,12 @@ constexpr bool kEnableP99SourceObservation = false;
 static_assert(!kEnableP99GroupShadow && !kEnableLegacyNadineP99ChloeGripTransfer,
     "Source observation requires both pose writers disabled");
 std::atomic<bool> g_p99_source_observation_ready{false};
+// The read-only post-cmd16 adapter is compiled for integration verification.
+// No installer/arm route may publish it before the complete production-route
+// fixture and fresh preflight have been audited. Neither old exam enables it.
+constexpr bool kEnableP99WristObservation = false;
+static_assert(!kEnableP99WristObservation,
+    "Post-cmd16 observer integration is not admitted to a live exam yet");
 enum class P99SourcePurpose { kPersistentJointCache, kOwnedGroupValues };
 
 namespace p99_preselect = coop::p99_preselection_trace;
@@ -64004,6 +64017,8 @@ bool install_legacy_nadine_p99_chloe_grip_transfer() {
 }
 
 #include "nadine_p99_group_runtime.inl"
+#include "nadine_p99_wrist_read_runtime.inl"
+#include "nadine_p99_wrist_observation_runtime.inl"
 
 void clear_local_nadine_mazur_weapon_palette_census_target() {
     g_nadine_mazur_weapon_palette_census_fg.store(

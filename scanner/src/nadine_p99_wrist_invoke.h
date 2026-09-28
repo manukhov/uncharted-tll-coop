@@ -21,7 +21,8 @@ struct State {
 
 // Ordinary compiled Windows x64 call wrapper, not a detour or retail adapter.
 // DO NOT patch the game's two-argument CALL directly to this six-argument
-// helper. A separately audited two-argument entry adapter is still required.
+// helper. observation_runtime.inl supplies the distinct two-argument adapter;
+// that route remains uninstalled until its complete live admission is audited.
 // Native must be a valid nonnull function and is called exactly once, including
 // terminal/reentrant paths, with the original two arguments. Its exceptions
 // propagate; there is no retry. A nested call using this State cancels capture.

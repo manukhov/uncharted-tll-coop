@@ -30,6 +30,7 @@ CMD16_RETURN = 0x141ABA978
 # Exact independently observed retail instructions. In particular TABLE_LEA is
 # an address-of-data operation, NOT a call and NOT the cmd16 return boundary.
 INSTRUCTIONS = {
+    PROCESS: bytes.fromhex('405556574154415541564157488dac2490eaffffb870160000e83227a300482be0'),
     TABLE_LEA: bytes.fromhex('488d056cd15601'),
     0x141ABA96B: bytes.fromhex('488d5580'),       # rdx = stack SegmentContext
     0x141ABA96F: bytes.fromhex('488d4d58'),       # rcx = status destination
@@ -80,6 +81,15 @@ def verify_boundary_instructions(read):
         'native_input_arguments': ['RCX=status', 'RDX=original SegmentContext'],
         'native_return': 'RAX=original status pointer; *status=0 is not program coverage',
         'incoming_R8_R9_are_not_extra_arguments': True,
+        'process_entry_return_slot': {
+            'seven_pushes_bytes': 0x38,
+            'rbp_below_entry_return_slot': 0x15A8,
+            'segment_below_entry_return_slot': 0x1628,
+            'status_below_entry_return_slot': 0x1550,
+            'slot_must_be_published_independently_before_native_call': True,
+            'Segment_plus_8_is_parent_pointer': False,
+            'invocation_identity_is_owner_or_lifetime_admission': False,
+        },
     }
 
 
@@ -185,7 +195,7 @@ def audit(skeleton_path, exe_path):
             'all_later_paths_excluded_for_an_actual_frame': False,
         },
         'limits': [
-            'No live hook, payload parser or capture admission is implemented',
+            'Compiled read-only adapters are uninstalled; live capture admission and payload export remain disabled',
             'A repeated pointer or equal source values cannot establish same generation',
             'The pre-stock Async source observer does not produce these post-cmd16 inputs',
             'A 256-byte operand block alone is insufficient; no default pose is substituted',

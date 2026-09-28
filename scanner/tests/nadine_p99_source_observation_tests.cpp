@@ -162,6 +162,55 @@ void deadline_clock_and_abort() {
         misuse.reason() == o::Reason::kProtocol, "cannot prepare without granted probe");
 }
 
+void split_observation_completion() {
+    // Stock execution is deliberately absent from the measured intervals.
+    // The independent wall deadline still applies after that execution.
+    for (const bool captured : {false, true}) {
+        for (const auto ticks : {0ull, 9999ull, 10000ull, 10001ull}) {
+            o::Policy policy;
+            check(policy.arm(100, 10000000) &&
+                policy.begin_probe(100) == o::Probe::kGranted &&
+                policy.finish_probe(101, true), "split observation selected once");
+            coop::p99_group_budget::Budget cost{10000};
+            check(cost.charge(11, 11), "empty overhead interval allowed");
+            (void)cost.charge(1000000, 1000000 + ticks); // Not elapsed stock time.
+            const auto expected = ticks > 10000 ? o::Reason::kBudget :
+                captured ? o::Reason::kSuccess : o::Reason::kRefused;
+            check(policy.finish_observation(119999, cost, captured) == expected,
+                "sum overhead not wall interval, exact one-millisecond bound");
+            check(policy.begin_probe(120000) == o::Probe::kStopped && policy.attempts() == 1,
+                "split success and refusal terminal without retry");
+        }
+    }
+    for (const auto now : {100ull, 120100ull}) {
+        o::Policy policy;
+        check(policy.arm(100, 10000000) &&
+            policy.begin_probe(101) == o::Probe::kGranted && policy.finish_probe(102, true),
+            "split deadline fixture selected");
+        coop::p99_group_budget::Budget cost{10000};
+        check(policy.finish_observation(now, cost, true) ==
+            (now == 100 ? o::Reason::kClock : o::Reason::kExpired),
+            "backward clock or expired native return cannot publish");
+    }
+    for (const auto limit : {0ull, 9999ull, 10001ull, UINT64_MAX}) {
+        o::Policy policy;
+        check(policy.arm(0, 10000000) && policy.begin_probe(0) == o::Probe::kGranted &&
+            policy.finish_probe(0, true), "split immutable limit fixture selected");
+        check(policy.finish_observation(0, {limit}, true) == o::Reason::kProtocol,
+            "caller cannot replace arm-time overhead limit");
+    }
+    o::Policy protocol;
+    check(protocol.arm(0, 10000000) &&
+        protocol.finish_observation(0, {10000}, true) == o::Reason::kProtocol,
+        "no split completion without a selected lease");
+    o::Policy aborted;
+    check(aborted.arm(0, 10000000) && aborted.begin_probe(0) == o::Probe::kGranted &&
+        aborted.finish_probe(0, true), "aborted split fixture selected");
+    check(aborted.abort(o::Reason::kException) == o::Reason::kException &&
+        aborted.finish_observation(0, {10000}, true) == o::Reason::kException,
+        "late split completion cannot overwrite a stock fault");
+}
+
 void concurrent_first_arm_after_unarmed_calls() {
     o::Policy policy;
     constexpr std::uint64_t armed_at = 300000;
@@ -357,6 +406,7 @@ int main() {
     waiting_and_limits();
     late_arm_wait_does_not_consume_lifetime();
     preparation_budget_and_one_shot();
+    split_observation_completion();
     deadline_clock_and_abort();
     concurrent_nonspinning_admission();
     concurrent_first_arm_after_unarmed_calls();

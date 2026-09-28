@@ -58,6 +58,22 @@ class BoundaryInstructionTests(unittest.TestCase):
             with self.subTest(address=address), self.assertRaisesRegex(ValueError, 'boundary bytes'):
                 audit.verify_boundary_instructions(self.reader({address: b'\x90'*7}))
 
+    def test_process_native_frame_geometry_requires_exact_full_prologue(self):
+        frame = audit.verify_boundary_instructions(self.reader())['process_entry_return_slot']
+        self.assertEqual(frame['rbp_below_entry_return_slot'], 0x38 + 0x1570)
+        self.assertEqual(frame['segment_below_entry_return_slot'], 0x15A8 + 0x80)
+        self.assertEqual(frame['status_below_entry_return_slot'], 0x15A8 - 0x58)
+        self.assertTrue(frame['slot_must_be_published_independently_before_native_call'])
+        self.assertFalse(frame['Segment_plus_8_is_parent_pointer'])
+        self.assertFalse(frame['invocation_identity_is_owner_or_lifetime_admission'])
+        original = audit.INSTRUCTIONS[audit.PROCESS]
+        self.assertEqual(len(original), 33)  # 32 would split the final SUB.
+        for index in range(len(original)):
+            changed = bytearray(original)
+            changed[index] ^= 1
+            with self.subTest(index=index), self.assertRaisesRegex(ValueError, 'boundary bytes'):
+                audit.verify_boundary_instructions(self.reader({audit.PROCESS: changed}))
+
 
 class SourceOperandBoundaryTests(unittest.TestCase):
     @classmethod

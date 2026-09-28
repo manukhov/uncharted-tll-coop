@@ -101,6 +101,22 @@ public:
         return stop(prepared ? Reason::kSuccess : Reason::kRefused);
     }
 
+    // Dedicated post-native observer: the caller charges ONLY mod work into
+    // separate intervals. Never present a stock-inclusive wall interval as
+    // overhead or fabricate timestamps from accumulated ticks. This method
+    // also checks expiry after the native call and before owned publication.
+    // The budget limit must be the original immutable arm-time limit.
+    Reason finish_observation(std::uint64_t now_ms,
+        const p99_group_budget::Budget& overhead, bool captured) noexcept {
+        if (phase_.load(std::memory_order_acquire) != Phase::kPreparation)
+            return stop(Reason::kProtocol);
+        if (!within_lifetime(now_ms)) return reason();
+        if (overhead.limit != limit_ticks_) return stop(Reason::kProtocol);
+        if (overhead.failed || overhead.spent > limit_ticks_)
+            return stop(Reason::kBudget);
+        return stop(captured ? Reason::kSuccess : Reason::kRefused);
+    }
+
     // Lease-owner only. A stopped policy cannot be restarted or have its first
     // terminal reason replaced by a later finally/exception/clock observation.
     Reason abort(Reason reason = Reason::kException) noexcept {

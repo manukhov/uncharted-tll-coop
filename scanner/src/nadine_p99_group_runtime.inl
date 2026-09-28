@@ -26,11 +26,18 @@ struct P99GroupProcess {
     std::uint32_t group = UINT32_MAX;
     bool consumed = false;
 };
+struct P99WristJob;
+struct P99WristProcess;
 struct P99FiberFrame : coop::p99_group_fiber::Binding {
     P99GroupJob* job = nullptr;
     P99GroupProcess* process = nullptr;
     std::uintptr_t native_return_slot = 0;
     coop::p99_group_entry::Active entry{};
+    // Mutually exclusive, read-only observer state. Old writer fields remain
+    // null on this route; sharing the package's one FLS slot is not authority
+    // to use either AFE preparation or AGW's pose-substitution state machine.
+    P99WristJob* wrist = nullptr;
+    P99WristProcess* wrist_process = nullptr;
 };
 coop::p99_group_fiber::Slot<P99FiberFrame> g_p99_group_fiber;
 AnimManagerAsyncObjectUpdateJointBlendJobFunction g_p99_group_async = nullptr;

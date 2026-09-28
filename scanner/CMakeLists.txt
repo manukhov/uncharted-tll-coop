@@ -3,6 +3,7 @@ project(TLLCoopTools LANGUAGES CXX)
 
 enable_language(ASM_MASM)
 add_library(tll_p99_native_frame_bridge OBJECT src/nadine_p99_group_native_frame.asm)
+add_library(tll_p99_process_frame_bridge OBJECT src/nadine_p99_process_native_frame.asm)
 
 add_executable(tll_object_scanner src/object_scanner.cpp)
 add_executable(tll_player_nudge src/player_position_nudge.cpp)
@@ -18,7 +19,9 @@ add_executable(tll_input_slot_dump src/input_slot_dump.cpp)
 add_executable(tll_crash_watch src/crash_watch.cpp)
 add_executable(tll_p99_observation_arm src/p99_observation_arm.cpp)
 add_library(tll_coop_runtime SHARED src/coop_runtime.cpp
-    $<TARGET_OBJECTS:tll_p99_native_frame_bridge>)
+    src/nadine_p99_wrist_invoke.cpp
+    $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
+    $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
 option(TLL_P99_SOURCE_OBSERVATION_EXAM "Enable one writer-disabled source observation in an explicit exam build" OFF)
 if(TLL_P99_SOURCE_OBSERVATION_EXAM)
     target_compile_definitions(tll_coop_runtime PRIVATE TLL_P99_SOURCE_OBSERVATION_EXAM=1)
@@ -78,7 +81,9 @@ if(BUILD_TESTING)
     # Complete production preparation in an inert, explicitly bound offline DLL.
     # Its private macro cannot change the separately compiled runtime target.
     add_library(tll_p99_preparation_bridge SHARED tests/p99_preparation_bridge.cpp
-        $<TARGET_OBJECTS:tll_p99_native_frame_bridge>)
+        src/nadine_p99_wrist_invoke.cpp
+        $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
+        $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
     target_include_directories(tll_p99_preparation_bridge PRIVATE src tests)
     target_compile_features(tll_p99_preparation_bridge PRIVATE cxx_std_20)
     target_compile_definitions(tll_p99_preparation_bridge PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
@@ -213,7 +218,7 @@ if(BUILD_TESTING)
         target_compile_options(tll_local_appearance_observation_tests PRIVATE -Wall -Wextra -Wpedantic)
     endif()
     add_test(NAME local_appearance_observation COMMAND tll_local_appearance_observation_tests)
-    # Isolated original-call/SEH/ABI proof. This code is NOT linked into runtime.
+    # Isolated original-call/SEH/ABI proof for the compiled, uninstalled route.
     add_executable(tll_nadine_p99_wrist_invoke_tests
         tests/nadine_p99_wrist_invoke_tests.cpp
         src/nadine_p99_wrist_invoke.cpp
@@ -225,6 +230,39 @@ if(BUILD_TESTING)
         "$<$<COMPILE_LANGUAGE:CXX>:/W4;/permissive-;/EHsc>")
     add_test(NAME nadine_p99_wrist_invoke COMMAND tll_nadine_p99_wrist_invoke_tests)
     set_tests_properties(nadine_p99_wrist_invoke PROPERTIES TIMEOUT 20)
+    add_executable(tll_nadine_p99_process_native_frame_tests
+        tests/nadine_p99_process_native_frame_tests.cpp
+        tests/nadine_p99_process_native_frame_fixture.asm
+        $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
+    target_include_directories(tll_nadine_p99_process_native_frame_tests PRIVATE src)
+    target_compile_features(tll_nadine_p99_process_native_frame_tests PRIVATE cxx_std_20)
+    target_compile_definitions(tll_nadine_p99_process_native_frame_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(tll_nadine_p99_process_native_frame_tests PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX>:/W4;/permissive-;/EHsc>")
+    add_test(NAME nadine_p99_process_native_frame COMMAND tll_nadine_p99_process_native_frame_tests)
+    set_tests_properties(nadine_p99_process_native_frame PROPERTIES TIMEOUT 20)
+    # Exercise the actual compiled route with explicitly synthetic admission,
+    # time and native bodies. Each case owns a fresh one-shot policy/FLS process.
+    add_executable(tll_nadine_p99_wrist_route_tests
+        tests/nadine_p99_wrist_route_tests.cpp
+        tests/nadine_p99_wrist_route_fixture.asm
+        tests/nadine_p99_process_native_frame_fixture.asm
+        src/nadine_p99_wrist_invoke.cpp
+        $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
+        $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
+    target_include_directories(tll_nadine_p99_wrist_route_tests PRIVATE src)
+    target_compile_features(tll_nadine_p99_wrist_route_tests PRIVATE cxx_std_20)
+    target_compile_definitions(tll_nadine_p99_wrist_route_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(tll_nadine_p99_wrist_route_tests PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX>:/W4;/permissive-;/EHsc>")
+    foreach(route_case normal owner-refuse process-refuse read-refuse callback-fault
+            cmd16-fault process-fault async-fault budget-before budget-after expiry
+            old-async wrapped-async old-process nested-cmd16 other-lease-fault
+            disable-ready disable-role poison-scope duplicate-g0)
+        add_test(NAME nadine_p99_wrist_route_${route_case}
+            COMMAND tll_nadine_p99_wrist_route_tests ${route_case})
+        set_tests_properties(nadine_p99_wrist_route_${route_case} PROPERTIES TIMEOUT 20)
+    endforeach()
     foreach(policy group_program_manifest group_admission group_scope group_readability group_memory group_entry group_budget group_ingress group_fiber group_native_frame source_read source_materialize operand_identity retarget_table_admission source_observation preselection_trace wrist_snapshot)
         add_executable(tll_nadine_p99_${policy}_tests tests/nadine_p99_${policy}_tests.cpp)
         target_include_directories(tll_nadine_p99_${policy}_tests PRIVATE src)

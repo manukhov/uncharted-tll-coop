@@ -11,7 +11,34 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / OWNED TESTS (2026-09-28, read-only snapshot building blocks):
+Latest STATIC / OWNED ROUTE TESTS (2026-09-28, Process-bound read-only route):
+Dedicated wrist_read_runtime.inl + wrist_observation_runtime.inl now compile in
+the runtime TU, but kEnableP99WristObservation remainsFALSE with a hard assertion;
+there is NO installer, arm publisher or live payload exporter for this route.
+It uses fresh owner/normal/manifest/grammar/storage checks, its own observation
+policy, original7 Process bridge and actual2arg cmd16 adapter. No old retarget
+preparation, copied context or writer state is used. Global output is owned256B,
+only after normal Async return and FLS restore; source/final-render flagsFALSE.
+Process epoch is independently published R: Segment+1628==status+1550==R;
+do not derive R from Segment or compare reserved+08 to the parent. Expected
+g1..7 stay stock; foreign/reentrant Process or abnormal return cancels capture.
+Split overhead completion checks the original1ms limit and wall expiry after
+stock. A nonselected probe MUST NOT alter policy after releasing its lease and
+entering stock, because another thread may own the next probe by then.
+The actual route .inl is exercised by synthetic stock/data/time fixtures, with
+real FLS/SEH and both MASM bridges. This proves routing/cleanup only, NOT real
+owner/grammar/allocator admission, live timing or a captured game pose.
+NEXT: production-data phase fixture/fault matrix and scalar refusal diagnostics;
+then complete pinned read-only installer preflight,
+PID/creation-bound arm/expiry worker and off-thread owned result export.
+Do not launch yet, enable old AFE/AGW, weaken owner gates or claim visual repair.
+No game running/launched in this turn; accepted grip/attachment behavior unchanged.
+Verification: Python558/558; CTest50/50, including20 actual-route fixture cases;
+Process bridge1261checks and observation policy5086checks. Complete runtime and
+inert harness rebuilt. Single IDB saved1923functions/80data/2types (save True),
+Process name and prologue read back after MCP restart. This is no live capture.
+
+Previous STATIC / OWNED TESTS (2026-09-28, read-only snapshot building blocks):
 nadine_p99_wrist_snapshot.h copies ONLY JP24/26/49/51 andW22 (five reads/256B),
 checks fresh supplied Segment/allocator value contracts, stages privately and
 publishes nothing on partial failure. Attempt is terminal on success/refusal;

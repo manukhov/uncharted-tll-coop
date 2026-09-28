@@ -36814,3 +36814,104 @@ launched; no production hook wiring or installed DLL changes. IDA labels/type
 saved1923functions/80data/2types with save_database returned True, then new helper
 name/callers and executor's two-argument pseudocode read back via MCP. Existing
 untrackedtmp/ is preserved. No visual repair or actual-pose capture claimed.
+
+### 2026-09-28 — STATIC: independent Process epoch and compiled read-only wrist route
+
+**Hypothesis and alternatives.** A normal Async owner token alone cannot bind
+cmd16 to the intended Process invocation: an old/unwrapped recursive Process
+can inherit the same FLS/job/Fg. A Segment+08 parent-pointer comparison is rejected
+(native field is zero). The accepted STATIC discriminator is an independently
+published return-slot address for the actual seven-argument Process call, in
+addition to the existing Async parent-context return-slot comparison.
+
+Evidence of different kinds: (1) fresh MCP disassembly of141AB97C0 shows seven
+pushes0x38, LEA RBP,[RSP-1570] at141AB97CC and subRSP,1670; cmd16 argument LEAs
+141ABA96B/96F use RBP-80 andRBP+58; therefore Segment+1628=status+1550=entryR.
+(2) callers distinguish normal Async first g0 CALL141A92E78 and later groups
+141A932F8; other callers/profile/Perform are not admitted by those identities.
+(3) the established Async native-frame/borrowed stack lifetime model agrees:
+an ordinary CALL bridge publishes R immediately before CALL, while an inner
+native invocation has another R even when object pointers match. The executable
+SHA remains ed1371a4b47961abc160e92aa0b9bdfd787638fa1a39ba2403b423ab45c210be;
+the audit now pins the complete33B Process prefix (32B would split SUB) plus both
+LEAs. Geometry/byte checks are reject-only, not a reference or atomic owner lease.
+
+nadine_p99_process_native_frame.h/.asm supplies a NINE-argument helper forwarding
+the originalSEVEN unchanged, not a nine-argument replacement entry. subRSP,58,
+outgoing stackargs+20/+28/+30 and saved private slot-pointer+40 keep storage out
+of all native home slots. Normal return preservesEAX and clears the slot; callers
+clear under finally on exception. Real MASM/Windows unwind fixtures verify
+alignment, all original7, home clobber, nonvolatile GPR/XMM, normal/old/wrapped
+recursion and nested SEH. No native retail code is executed by these tests.
+
+**Compiled route, NOT installed or runtime admitted.** New
+nadine_p99_wrist_read_runtime.inl directly uses the existing owner resolver for
+kOwnedGroupValues (explicit roleB/net outside, unchanged conservative slot0..17,
+position/orientation numeric checks). It never invokes selector/materialize/seal
+or native retarget functions. All normal manifest regions, dispatch-table/count
+entries, commands and allocator metadata are copied through bounded Readers;
+no Reader/page certificate crosses stock. Pre/post/closing identities include
+Player/Fg/Art/raw/localpose/controller/grenade/weapon/parent, weak pairs and IDs,
+slot/state. Movement values are read but were not numerically gated by the old
+owner helper; no additional claim is made. Numeric position/orientation are
+checked afresh, not compared bytewise. Equality rereads cannot exclude arbitrary
+ABA and do not create an atomic lifetime lease.
+
+nadine_p99_wrist_observation_runtime.inl joins this to its OWN one-shot policy
+and private job value, shared package FLS slot but separate read-only frame fields,
+Async and Process native-frame identities, original7 Process wrappers and an
+actual TWO-argument cmd16 adapter calling the tested six-argument invoke normally.
+g0 grammar/import/program are checked before stock and freshly after cmd16;
+original context/status are passed once, source256B privately staged, closing
+owner reread before acceptance. Normal later groups1..7 have separate Process
+slots and remain stock (not erroneous capture refusals). Foreign/reentered calls,
+duplicate g0/cmd16, lost FLS, data rejection or stock exception cancel publication.
+No broad exception handler catches/retries stock. Owned publication waits until
+normal Async return, FLS restoration, readiness/role checks and terminal budget/
+expiry completion; it is NOT a final-render or grip-correction witness.
+
+Budget intervals cover mod admission/read/copy and explicit cleanup, exclude the
+stock native work, and retain the immutable1ms limit. This is post-call containment,
+not preemption or a hard ceiling on all wrapper/OS bookkeeping. finish_observation
+checks expiry after native work as well. Nonselected probes release their lease
+before stock; their later fault/cleanup must not abort another thread's probe.
+Terminal rejection disables readiness rather than repeatedly doing expensive reads.
+
+The route is compiled into ordinary runtime and inert preparation harness, with
+both old writers OFF and kEnableP99WristObservation=false guarded by static_assert.
+No installer/arm option sets ready, no route is reachable from a patched game,
+and no file/network/log I/O occurs on this callback path. A future installer must
+pin actual operator code as well as manifest addresses and both frame layouts;
+owned-result export must be off-thread. Full production-data fault/turnover fixture,
+installer/arming/lifecycle review and a written falsifiable game prediction remain
+required before a new exam. Game not launched/injected; no actual inputs captured,
+attachments/animations not changed, no visible repair claimed.
+
+**Owned integration fixture, narrower than live admission.**
+nadine_p99_wrist_route_tests.cpp includes the actual observation .inl rather than
+a parallel model. Real Windows FLS/SEH, Async/Process MASM bridges and compiled
+two-argument cmd16 entry are used; data-phase owner/grammar/allocator functions,
+clock and native bodies are explicitly synthetic. FF25 stubs exist only in a
+test-owned private image; no retail function/address is executed. Fresh process
+per case avoids resetting/rearming the one-shot/FLS machinery. Cases exercise
+all8 groups, exactly-once stock calls, owned256B publication only after Async and
+FLS exit; owner/process/read refusal, callback partial-write+fault, native faults
+at each depth, before/after overhead overflow, poststock expiry, old/wrapped Async,
+old Process, nested cmd16, duplicateg0 and cancellation before final publication.
+The other-lease-fault case grants a new synthetic probe after a nonselected outer
+probe releases its lease, then faults outer stock: the new grant remains intact.
+Scope poison must suppress payload even when raw FLS restoration can succeed;
+poison itself is not proof a native exception occurred. Rejected cases leave the
+entire global owned payload zero. These tests do NOT exercise the production data
+phase, its real timing/page faults, installer atomicity or off-thread exporter.
+
+Final verification: full MSVC/Ninja build (ordinary runtime and inert harness)
+passed; Python558/558 and CTest50/50, including20 actual-route fixture cases.
+Process bridge1261 checks/0 failures; observation policy5086/0. Read-only pinned
+PE/asset boundary CLI passes all new Process-prefix/LEA mutations and still reports
+source_or_runtime_admission=false. IDA saved1923functions/80data/2types,
+save_database returned True in local ida_apply_p99_process_epoch_20260928_status;
+MCP restarted and Process name/prologue verified. No live process/game test or
+deployment took place. Existing untrackedtmp/ preserved, generated artifacts
+remain ignored. NEXT is production-data fault/turnover/cost fixture plus scalar
+refusal diagnostics, then separately reviewed installer/arm/owned export.

@@ -4173,7 +4173,15 @@ FUNCTIONS = {
         "JP at141ABB120, then nulls+58/+50 at141ABB10C/125. Context/group "
         "and normal Async141A92E78 provenance are required; Perform/profile "
         "executions or later group call141A932F8 are not interchangeable. "
-        "Post16 is a procedural source boundary, not a final-render claim.",
+        "Post16 is a procedural source boundary, not a final-render claim. "
+        "STATIC invocation binding: seven pushes0x38; LEA RBP,[RSP-1570] "
+        "gives RBP=entryReturnSlot-15A8, before sub rsp,1670. Cmd16 LEAs "
+        "141ABA96B/96F use Segment=RBP-80, status=RBP+58. Thus "
+        "Segment+1628=status+1550=Process entry return-slot; it must be "
+        "published independently by the original-call bridge, NOT derived "
+        "from Segment itself. Segment+08 remains zero, not the parent. "
+        "Exact Process epoch is distinct from Async parent-context epoch. "
+        "Neither integer comparison is an atomic owner lifetime lease.",
     ),
     0x14162B380: (
         "PackageMgr_RequestPackage",
@@ -14686,6 +14694,13 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x141AB97CC: (
+        "STATIC native Process epoch: seven pushes put RSP=entryReturnSlot-38; "
+        "this LEA yields RBP=entryReturnSlot-15A8. After sub rsp,1670, "
+        "cmd16 Segment=RBP-80 and status=RBP+58 imply offsets1628/1550. "
+        "Compare with an independently published original-call return slot; "
+        "do not invent epoch authority from Segment+08 (reserved zero)."
+    ),
     0x141AB9B3D: (
         "STATIC P99 correction: LEA custom-operator table143026CB0, NOT cmd16 "
         "CALL. Actual call141ABA973; return141ABA978. Do not hook this LEA "
@@ -14697,7 +14712,9 @@ INSTRUCTION_COMMENTS = {
         "normal Async g0 from Process141A92E78, not arbitrary C39 contexts. "
         "Two-arg ABI; original RCX/RDX must be forwarded once. Caller reloads "
         "R10/R11 at978/97D and parser reloads EDX/R8/R9; no inherited volatile "
-        "argument is a source of authority. Stock faults must propagate, not retry."
+        "argument is a source of authority. Stock faults must propagate, not retry. "
+        "Independently captured native Process R must equal Segment+1628 and "
+        "status+1550; Async frame identity alone cannot exclude nested Process."
     ),
     0x141ABA978: (
         "STATIC pinned g0 post16: untouched JP24/26/49/51 and newly computed "
