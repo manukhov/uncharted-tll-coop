@@ -11,7 +11,29 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / OWNED LIFECYCLE TESTS (2026-09-28, terminal report/arm/expiry):
+Latest STATIC / OWNED INSTALL TESTS (2026-09-28, distinct transaction/code manifest):
+Dedicated wrist5-site value planner/transaction is implemented and tested but NOT
+wired to a production OS installer. Exact sites1417815B7/141782B3A/141A92E78/
+141A932F8/141ABA973 span FIVE pages; stock-only planner, unchanged opcodes, rel32
+ranges, leaf alias/overflow checks and full plan revalidation precede adapters.
+Any attempted code write retains relays/DLL even after verified rollback; partial
+write/flush/protection/resume uncertainty never counts as Installed. Explicit
+relays_ready requires exact sealed/flushed RX leaves plus target/lifetime proof.
+Owned3344checks include real VirtualAlloc/Protect/Query/Flush but FAKE suspension,
+synthetic integrity and never-executed code; not real scheduler/ABI/admission proof.
+Generated manifest pins63code envelopes/46690B/all15g0 wrappers including arity3,
+op49ordinal38 and tailcalls. Three self-CALL fields normalize only exact installed
+plans; no wildcard masking. Closure/source admission remainFALSE: external imports,
+constants, wider Async/Process calls, indirect targets and lifetime remain open.
+Worker startup406checks cover22refusals, one-shot cleanup, early thread completion
+and logger faults. Output directory is now an explicit existing absolute path.
+Build/Python576/CTest63 passed. No game/process/injection/pose capture or grip fix.
+NEXT: implement actual loaded-code preflight using this manifest and reviewed
+Win32 adapter with a proved quiescence/lifetime protocol. Do not treat one thread
+snapshot as an atomic barrier; no heap/loader/crypto/log work while suspended.
+Keep feature hardFALSE and old AFE/AGW disabled. See latest COOP_STATUS details.
+
+Previous STATIC / OWNED LIFECYCLE TESTS (2026-09-28, terminal report/arm/expiry):
 Dedicated wrist worker/report code now compiles but remains UNINSTALLED/unstarted.
 Separate tll_p99_wrist_arm uses PID+creation-bound Wrist-Arm-v1; old source event
 cannot arm it. Worker-only JSON export is CREATE_NEW, raw256B hex only on success,

@@ -37101,3 +37101,100 @@ Game not launched/injected; no tll process found. No visible repair claimed.
 NEXT: loaded-code preflight closure and distinct5-site transaction with startup/
 rollback fault fixtures; only then a written differentiating one-copy runtime
 prediction/manual scenario. Do not enable old AFE/AGW or weaken owner/source gates.
+
+## 2026-09-28 — STATIC: wrist code manifest and owned five-site transaction; not installed
+
+**Scope/status.** Added a DISTINCT value planner/transaction core, not a call to
+either old install_p99_group_package entry and not a production Win32 installer.
+No game launch, injection, pose capture or visible grip change. Runtime feature
+kEnableP99WristObservation=false/static_assert and ordinary SOURCE_OBSERVATION_EXAM=OFF
+remain unchanged. The already compiled route is still uninstalled/unstarted.
+
+**STATIC bounded code identity.** scripts/p99_wrist_code_manifest.py generates
+scanner/src/nadine_p99_wrist_code_manifest.h from the pinned retail PE SHA
+ed1371a4b47961abc160e92aa0b9bdfd787638fa1a39ba2403b423ab45c210be and Nadine asset
+2bf66e61fae156a41952d8d2659e06215dbe8f0c827a9f6a89cada0c9490b06b. It pins63 complete
+function envelopes/46690B, all15g0 opcode wrappers, full Async141A92A00/Process141AB97C0/
+executor14217B630, selected math/support bodies and six CRT import thunks. Whole
+covered extents are raw-backed executable sections; all PE DIR64 relocations are
+checked and NONE overlap those extents. Live loaded memory is not read by this script.
+
+Authored branch inventory differs from the older narrow wrist replay: op47ordinal12
+reaches arity3 worker142192FD0; ordinals1/10/11/12/25/26 use arities2/1/2/3/1/2, so
+arity4/generic alternatives are excluded by exact asset payload. op49ordinal38
+header(0,16,8) requires14218E120, whereas30/33/42 use(8,32,0) and14218D800. op50
+24/29/37 and op51 35/45/47 each have auxiliary count1. Followed tail JMPs as well as
+CALLs; linear Capstone edge inventory is explicitly NOT a reachability proof.
+Independent evidence is existing single-IDB MCP envelopes/callees/disassembly,
+pinned authored branch fields, and PE full-body/relocation audit. Existing IDB
+names were reused; no newly claimed semantic names and no new IDB write. Prior
+1923functions/80data/2types/save_database True remains the last label-save record.
+
+Only own CALLs141A92E78/141A932F8/141ABA973 may be canonicalized for hashing. The
+generated C++ and Python functions require all3 exact installer-provided E8 plans
+in Installed mode; every applicable full5B CALL is checked BEFORE any owned byte
+is changed, then only its4 displacement bytes return to canonical stock. Foreign
+opcode/target modifications refuse rather than being masked. Stock mode admits
+no installed plans. Other changed code stays changed for subsequent hash rejection.
+Canonicalization alone is NOT hashing or relay-target/lifetime admission.
+
+REJECTED completeness inference: hashes for those63regions do NOT close external
+CRT/QPC/FLS implementations or loaded IAT targets, profiler/global/FLS state,
+out-of-envelope numeric constants, assertion/cookie failure, unwind metadata,
+wider Async/Process callees or virtual/callback targets. Generated
+kTransitiveClosureComplete=false and kSourceAdmission=false are intentional.
+Do not call the manifest a complete native closure or a runtime permission.
+
+**Owned transaction proof, not OS quiescence.** nadine_p99_wrist_install.h plans
+exact5sites1417815B7(LEA)/141782B3A(JMP)/141A92E78/141A932F8/141ABA973(CALLs), on
+FIVE different pages. All native targets/stock bytes/rel32 reachability/overflow/
+relay non-aliasing are checked; full value plan reconstruction rejects tampering
+before any adapter call. Opcodes are preserved; leaves are FF25+absolute-qword.
+Required relays_ready preflight and fresh frozen checks include exact14B, sealed
+RX, prior flush, certified ABI entries and retained lifetime. This was added after
+an owned counterexample showed that valid patch arithmetic alone could point to
+uncommitted/nonexecutable relay memory. Non-RX/changed-leaf fixtures now refuse.
+
+The noexcept adapter transaction checks initial identity/stock/protection, freeze/
+quiescence, rechecks, page opening, each write AND instruction-cache flush, final
+bytes and restored protection. Failure attempts stock rollback only through
+verified writable pages, bounded restoration, then verifies bytes/protection and
+thaw. Installed/CleanRefusal/Uncertain are distinct; failed thaw cannot be success.
+Any write ATTEMPT retains relay/target/DLL lifetime even after clean rollback:
+verified restored bytes cannot recall a queued/fetched callback. Uncertain states
+also retain it. This is not actual lifetime allocation/pinning implementation.
+Core static_assert requires noexcept operations; adapter must additionally avoid
+heap, loader, crypto and logging while foreign threads are suspended.
+
+Tests exercise single faults at every baseline operation, partial writes, failed
+flush/restoration/reopen/thaw, malformed plans and generated C++ normalization.
+3344checks include real owned VirtualAlloc/VirtualProtect/VirtualQuery/Flush pages
+and real RX leaf bytes. No leaf or retail function is executed. freeze/quiescent/
+thaw and code-integrity admission are synthetic: no actual game threads suspended.
+REJECTED inference: a passing owned transaction does NOT prove atomic thread
+enumeration, safe thread creation during installation or native scheduler quiescence.
+
+**Worker startup now audited.** start_p99_wrist_worker requires an explicit existing
+absolute output directory; no hardcoded workstation/game path, directory creation
+or overwrite. Existing result/access failure/relative/oversize paths refuse before
+worker creation; final CREATE_NEW still handles races. Failure consumes the one-shot
+startup latch but clears setup/cost and balances owned event/DLL references. A
+successful CreateThread transfers resources even if the worker finishes immediately.
+ARM-WAIT logging moved into the worker; a logger exception and a second exception
+from its failure log cannot escape noexcept or skip release.406fixture checks use
+synthetic Win32 boundaries for22startup failures, repeat/early-finish and logger
+faults. This audits control flow, not real OS failure probability or thread scheduling.
+
+Verification: full MSVC runtime/inert build, Python576/576, CTest63/63, manifest
+--check PASS(63regions/46690B); new18Python manifest tests and C++ normalization
+cover installed/stock separation without executing game code. No tll process found.
+Pre-existing untracked tmp/ remains untouched; reports/build artifacts ignored.
+
+NEXT: a real preflight must checked-read and hash loaded regions, distinguish own
+installed call plans, admit dependencies/constants and retain immutable comparison
+buffers before suspension; while frozen only checked comparisons/no allocating
+hash APIs. Implement/review Win32 thread/relay/module lifecycle separately from
+this core. Establish a defensible native quiescence protocol before wiring the
+installer; old single Toolhelp snapshot plus unchecked ResumeThread is insufficient.
+Only after that write the differentiating one-copy observation prediction and
+manual scenario. No source/writer admission or repair claim follows from this turn.

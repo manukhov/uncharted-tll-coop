@@ -75,7 +75,7 @@ int main(int argc,char** argv) {
     Fixture data{}; fixture=&data;
     if(worker_case=="last-refusal") data.action=Action::owner_refuse;
     check(make_fixture_image() && g_p99_group_fiber.initialize());
-    check(!start_p99_wrist_worker(1000000) && !g_p99_wrist_worker_started.load());
+    check(!start_p99_wrist_worker(1000000, L"C:\\unused-disabled-fixture") && !g_p99_wrist_worker_started.load());
     g_p99_wrist_installed.store(true); g_p99_wrist_cost_limit=1000;
     P99WristWorkerSetup setup{}; setup.pid=GetCurrentProcessId(); setup.frequency=1000000;
     check(coop::p99_observation_arm::creation_stamp(GetCurrentProcess(),setup.creation));

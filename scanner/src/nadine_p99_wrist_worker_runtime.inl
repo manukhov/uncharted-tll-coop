@@ -1,6 +1,8 @@
 // Included after the route. OFF-THREAD lifecycle only, currently unreachable:
 // no installer sets installed and kEnableP99WristObservation remains false.
 std::atomic<bool> g_p99_wrist_installed{false};
+// One consumed startup attempt, including a pre-thread refusal. It is NOT a
+// statement that a thread exists, and a failure must never silently retry.
 std::atomic<bool> g_p99_wrist_worker_started{false};
 struct P99WristWorkerSetup {
     HANDLE arm_event = nullptr;
@@ -34,6 +36,11 @@ bool p99_wrist_export(const P99WristWorkerSetup& setup,
 DWORD p99_wrist_worker_body(P99WristWorkerSetup& setup) noexcept {
     std::uint64_t arm_ms = 0;
     try {
+        // Startup logging belongs to the worker, never the installer/callback.
+        char line[256]{};
+        std::snprintf(line, sizeof(line), "P99-WRIST ARM-WAIT pid=%lu creation=%llu; separate wrist event; no automatic arm",
+            static_cast<unsigned long>(setup.pid), static_cast<unsigned long long>(setup.creation));
+        boot_log_line(line);
         const auto waited = WaitForSingleObject(setup.arm_event, kP99WristArmWaitMs);
         CloseHandle(setup.arm_event); setup.arm_event = nullptr;
         coop::p99_wrist_report::Record result{};
@@ -80,7 +87,10 @@ DWORD p99_wrist_worker_body(P99WristWorkerSetup& setup) noexcept {
     } catch (...) {
         if (setup.arm_event) { CloseHandle(setup.arm_event); setup.arm_event = nullptr; }
         g_p99_wrist_ready.store(false, std::memory_order_release);
-        boot_log_line("P99-WRIST worker exception; no successful export claimed");
+        // Logging itself may have caused the exception. Do not let a second
+        // logging exception escape this noexcept worker and skip DLL release.
+        try { boot_log_line("P99-WRIST worker exception; no successful export claimed"); }
+        catch (...) {}
         return 4;
     }
 }
@@ -88,41 +98,82 @@ DWORD p99_wrist_worker_body(P99WristWorkerSetup& setup) noexcept {
 DWORD WINAPI await_p99_wrist_arm(void* argument) {
     auto& setup = *static_cast<P99WristWorkerSetup*>(argument);
     const auto result = p99_wrist_worker_body(setup);
-    FreeLibraryAndExitThread(setup.module_reference, result);
+    const auto reference = setup.module_reference;
+    setup.module_reference = nullptr;
+    FreeLibraryAndExitThread(reference, result);
 }
 
-bool start_p99_wrist_worker(std::uint64_t qpc_frequency) {
+bool p99_wrist_absolute_directory(const std::wstring& path) noexcept {
+    if (path.size() >= 3 &&
+        ((path[0] >= L'A' && path[0] <= L'Z') || (path[0] >= L'a' && path[0] <= L'z')) &&
+        path[1] == L':' && (path[2] == L'\\' || path[2] == L'/')) return true;
+    // Ordinary UNC server/share, not device namespaces or root-relative paths.
+    if (path.size() < 5 || path[0] != L'\\' || path[1] != L'\\' ||
+        path[2] == L'?' || path[2] == L'.') return false;
+    const auto slash = path.find(L'\\', 2);
+    return slash != std::wstring::npos && slash > 2 && slash + 1 < path.size() &&
+        path[slash + 1] != L'\\';
+}
+
+// Caller supplies an existing absolute directory; no implicit game directory,
+// hardcoded workstation path, directory creation or pre-created report file.
+// CREATE_NEW in the worker remains the final no-clobber authority after this
+// advisory preflight. A refused startup consumes its one-shot latch.
+bool start_p99_wrist_worker(std::uint64_t qpc_frequency, const wchar_t* output_directory) {
     if (!kEnableP99WristObservation || !g_p99_wrist_installed.load(std::memory_order_acquire) ||
         g_p99_wrist_worker_started.exchange(true, std::memory_order_acq_rel)) return false;
-    auto& setup = g_p99_wrist_worker_setup;
-    setup.pid = GetCurrentProcessId(); setup.frequency = qpc_frequency;
-    if (qpc_frequency < 1000 ||
-        !coop::p99_observation_arm::creation_stamp(GetCurrentProcess(), setup.creation)) return false;
-    g_p99_wrist_cost_limit = coop::p99_group_budget::one_millisecond(qpc_frequency);
-    if (swprintf_s(setup.output_path,
-        L"C:\\Users\\Vladimir\\Desktop\\TLLCoopResearch\\reports\\p99-wrist-%lu-%llu.json",
-        static_cast<unsigned long>(setup.pid), static_cast<unsigned long long>(setup.creation)) < 0) return false;
-    std::wstring name;
-    try { name = coop::p99_observation_arm::wrist_event_name(setup.pid, setup.creation); }
-    catch (...) { return false; } // No OS handles acquired yet.
-    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-            reinterpret_cast<LPCWSTR>(&await_p99_wrist_arm), &setup.module_reference)) return false;
-    SetLastError(ERROR_SUCCESS);
-    setup.arm_event = CreateEventW(nullptr, FALSE, FALSE, name.c_str());
-    const auto error = GetLastError();
-    if (!setup.arm_event || error == ERROR_ALREADY_EXISTS) {
-        if (setup.arm_event) CloseHandle(setup.arm_event);
-        setup.arm_event = nullptr; FreeLibrary(setup.module_reference); return false;
+    g_p99_wrist_worker_setup = {};
+    g_p99_wrist_cost_limit = 0;
+    P99WristWorkerSetup setup{};
+    bool transferred = false;
+    const auto refuse = [&]() noexcept {
+        if (setup.arm_event) { CloseHandle(setup.arm_event); setup.arm_event = nullptr; }
+        if (setup.module_reference) { FreeLibrary(setup.module_reference); setup.module_reference = nullptr; }
+        g_p99_wrist_worker_setup = {};
+        g_p99_wrist_cost_limit = 0;
+        return false;
+    };
+    try {
+        if (qpc_frequency < 1000 || output_directory == nullptr) return refuse();
+        setup.pid = GetCurrentProcessId(); setup.frequency = qpc_frequency;
+        if (setup.pid == 0 || !coop::p99_observation_arm::creation_stamp(GetCurrentProcess(), setup.creation) ||
+            setup.creation == 0) return refuse();
+        const std::wstring directory(output_directory);
+        if (!p99_wrist_absolute_directory(directory)) return refuse();
+        const auto directory_attributes = GetFileAttributesW(directory.c_str());
+        if (directory_attributes == INVALID_FILE_ATTRIBUTES ||
+            (directory_attributes & FILE_ATTRIBUTE_DIRECTORY) == 0) return refuse();
+        auto output = directory;
+        if (output.back() != L'\\' && output.back() != L'/') output += L'\\';
+        output += L"p99-wrist-" + std::to_wstring(setup.pid) + L"-" +
+            std::to_wstring(setup.creation) + L".json";
+        if (output.size() >= sizeof(setup.output_path) / sizeof(setup.output_path[0])) return refuse();
+        SetLastError(ERROR_SUCCESS);
+        const auto output_attributes = GetFileAttributesW(output.c_str());
+        if (output_attributes != INVALID_FILE_ATTRIBUTES || GetLastError() != ERROR_FILE_NOT_FOUND) return refuse();
+        std::memcpy(setup.output_path, output.c_str(), (output.size() + 1) * sizeof(wchar_t));
+        const auto name = coop::p99_observation_arm::wrist_event_name(setup.pid, setup.creation);
+        HMODULE reference = nullptr;
+        if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                reinterpret_cast<LPCWSTR>(&await_p99_wrist_arm), &reference)) return refuse();
+        setup.module_reference = reference;
+        SetLastError(ERROR_SUCCESS);
+        setup.arm_event = CreateEventW(nullptr, FALSE, FALSE, name.c_str());
+        const auto error = GetLastError();
+        if (!setup.arm_event || error == ERROR_ALREADY_EXISTS) return refuse();
+        g_p99_wrist_worker_setup = setup;
+        g_p99_wrist_cost_limit = coop::p99_group_budget::one_millisecond(qpc_frequency);
+        const auto thread = CreateThread(nullptr, 0, &await_p99_wrist_arm, &g_p99_wrist_worker_setup, 0, nullptr);
+        if (!thread) return refuse();
+        transferred = true;
+        // Successful creation TRANSFERS the event and DLL reference to the
+        // worker, which may already be running. No further allocations/logging
+        // or failing operation may enter the pre-thread cleanup path.
+        (void)CloseHandle(thread);
+        return true;
+    } catch (...) {
+        // Keep this barrier even if later maintenance adds a throwing operation
+        // after creation. A live worker's resources can never be rolled back.
+        return transferred ? true : refuse();
     }
-    const auto thread = CreateThread(nullptr, 0, &await_p99_wrist_arm, &setup, 0, nullptr);
-    if (!thread) {
-        CloseHandle(setup.arm_event); setup.arm_event = nullptr;
-        FreeLibrary(setup.module_reference); return false;
-    }
-    CloseHandle(thread);
-    char line[256]{};
-    std::snprintf(line, sizeof(line), "P99-WRIST ARM-WAIT pid=%lu creation=%llu; separate wrist event; no automatic arm",
-        static_cast<unsigned long>(setup.pid), static_cast<unsigned long long>(setup.creation));
-    boot_log_line(line);
-    return true;
 }
