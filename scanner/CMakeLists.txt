@@ -18,6 +18,8 @@ add_executable(tll_dword_scanner src/dword_scanner.cpp)
 add_executable(tll_input_slot_dump src/input_slot_dump.cpp)
 add_executable(tll_crash_watch src/crash_watch.cpp)
 add_executable(tll_p99_observation_arm src/p99_observation_arm.cpp)
+add_executable(tll_p99_wrist_arm src/p99_observation_arm.cpp)
+target_compile_definitions(tll_p99_wrist_arm PRIVATE TLL_P99_WRIST_ARM=1)
 add_library(tll_coop_runtime SHARED src/coop_runtime.cpp
     src/nadine_p99_wrist_invoke.cpp
     $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
@@ -42,6 +44,7 @@ foreach(
     tll_input_slot_dump
     tll_crash_watch
     tll_p99_observation_arm
+    tll_p99_wrist_arm
     tll_coop_runtime
 )
     target_compile_features(${target} PRIVATE cxx_std_20)
@@ -130,6 +133,8 @@ if(BUILD_TESTING)
         "${CMAKE_CURRENT_BINARY_DIR}/crash-watch-tests")
     set_tests_properties(crash_watch PROPERTIES TIMEOUT 90)
     add_test(NAME p99_observation_arm COMMAND tll_p99_observation_arm --self-test)
+    add_test(NAME p99_wrist_arm COMMAND tll_p99_wrist_arm --self-test)
+    set_tests_properties(p99_wrist_arm PROPERTIES TIMEOUT 20)
     set_tests_properties(p99_observation_arm PROPERTIES TIMEOUT 20)
     add_executable(
         tll_nadine_back_frame_policy_tests
@@ -273,10 +278,26 @@ if(BUILD_TESTING)
     foreach(route_case normal owner-refuse process-refuse read-refuse callback-fault
             cmd16-fault process-fault async-fault budget-before budget-after expiry
             old-async wrapped-async old-process nested-cmd16 other-lease-fault
-            disable-ready disable-role poison-scope duplicate-g0)
+            disable-ready disable-role poison-scope duplicate-g0 entry-expiry owner-expiry probe-limit)
         add_test(NAME nadine_p99_wrist_route_${route_case}
             COMMAND tll_nadine_p99_wrist_route_tests ${route_case})
         set_tests_properties(nadine_p99_wrist_route_${route_case} PROPERTIES TIMEOUT 20)
+    endforeach()
+    add_executable(tll_nadine_p99_wrist_worker_tests
+        tests/nadine_p99_wrist_worker_tests.cpp
+        tests/nadine_p99_wrist_route_fixture.asm
+        tests/nadine_p99_process_native_frame_fixture.asm
+        src/nadine_p99_wrist_invoke.cpp
+        $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
+        $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
+    target_include_directories(tll_nadine_p99_wrist_worker_tests PRIVATE src)
+    target_compile_features(tll_nadine_p99_wrist_worker_tests PRIVATE cxx_std_20)
+    target_compile_definitions(tll_nadine_p99_wrist_worker_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(tll_nadine_p99_wrist_worker_tests PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/W4 /permissive- /EHsc>)
+    foreach(worker_case capture idle-expiry last-refusal active-timeout arm-timeout export-exists)
+        add_test(NAME nadine_p99_wrist_worker_${worker_case}
+            COMMAND tll_nadine_p99_wrist_worker_tests ${worker_case} "${CMAKE_CURRENT_BINARY_DIR}/wrist-worker-tests")
+        set_tests_properties(nadine_p99_wrist_worker_${worker_case} PROPERTIES TIMEOUT 20)
     endforeach()
     foreach(policy group_program_manifest group_admission group_scope group_readability group_memory group_entry group_budget group_ingress group_fiber group_native_frame source_read source_materialize operand_identity retarget_table_admission source_observation preselection_trace wrist_snapshot)
         add_executable(tll_nadine_p99_${policy}_tests tests/nadine_p99_${policy}_tests.cpp)

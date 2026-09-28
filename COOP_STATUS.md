@@ -62,6 +62,13 @@ that layout nor instrumented timing establishes game overhead. Exact pointer-fre
 refusal diagnostics preserve read order and owner gates. Route remains disabled;
 installer/arm/off-thread export and actual source evidence are still missing.
 
+Latest lifecycle implementation (2026-09-28): separate wrist arm protocol,
+idle-only expiry and owned terminal JSON export now compile and pass isolated
+worker/route tests. They remain uninstalled/unstarted. A delayed timestamp race
+was reproduced and fixed by sampling time after policy acquisition. Remaining
+admission work is the distinct5-site installer, loaded code integrity and startup/
+rollback fault audit; no new game test or visual grip correction has occurred.
+
 ## Historical priority snapshot (2026-08-27)
 
 Correct the holstered positions of all other weapons on local legacy Nadine's
@@ -37005,3 +37012,92 @@ write a prediction distinguishing same owner/frame capture from stale/foreign
 source, retain three independent static evidence kinds, then one copy only with
 all game actions performed by the user. Missing five actual source values and
 postpose/render caveats still prevent admitting a visual correction.
+
+### 2026-09-28 — STATIC / OWNED TESTS: wrist lifecycle, terminal ownership and installer separation
+
+The disabled post16 route now has an independently scoped worker and report
+mailbox. This is implementation/audit evidence, NOT a runtime pose capture.
+No installer starts it, kEnableP99WristObservation=false is still hard-asserted,
+the ordinary build cache has SOURCE_OBSERVATION_EXAM=OFF, and old writers stayOFF.
+
+**Terminal ownership.** Policy begin_probe_detailed/finish_probe_detailed return
+owned-terminal separately from already-stopped/released. Legacy APIs preserve
+their previous results. poll_expiry can claim only Idle with the same CAS lease;
+it cannot stop or inspect an active Probe/Preparation/Arming and consumes no quota.
+The last nonselected scalar diagnostic is written before releasing the lease and
+read only by a terminal idle claimant; a released probe cannot report another job's
+later reason. Selected native exceptions still propagate without retry; their
+private diagnostic is transferred in finally and published only after FLS cleanup,
+with zero payload. Normal publication still waits for complete stock Async, scope
+restoration and budget/expiry checks. Owned expiry before selection and probe600
+now publish the actual refusal instead of silently dropping it.
+
+REJECTED implementation alternative: sample GetTickCount64 before policy CAS.
+Deterministic schedule worker1001/preemption/callback1002..1003/release/workerCAS
+caused false kClock on healthy monotonic time. New begin_probe_clock/poll_expiry_clock
+sample once AFTER successful CAS; Busy/Stopped never call the clock. Tests preserve
+true regression rejection and numeric compatibility APIs, and cover the same
+schedule for worker and probe. Production wrist calls use the clock-entry APIs.
+
+**Owned export and protocol.** nadine_p99_wrist_report.h uses one lock-free CAS
+publication, then immutable value/release-acquire reads. It contains only enums,
+counts, last-diagnostic ordinal, overhead ticks and owned256B; no game pointers.
+Refusal/unwind sanitizes all payload bytes. JSON schema tll-p99-wrist-v1 serializes
+raw hex (JP24/26/49/51 thenW22), never float-normalizes NaN/padding and always keeps
+source_admitted/final_render_admitted=false. PID, creation FILETIME, arm tick and
+frequency bind the report to the run; a diagnostic_probe can intentionally refer
+to the last nonselected probe before an idle expiry, not the expiry itself.
+
+nadine_p99_wrist_worker_runtime.inl does all waits, formatting, logs and file I/O
+off the animation path. Separate Local\\TLL-P99-Wrist-Arm-v1-PID-CREATION event
+rejects pre-existing objects, waits up to300s, then grants120s from explicit arm.
+The separate tll_p99_wrist_arm CLI signals ONLY an existing wrist event after exact
+process creation and expected-image checks; the old source CLI/event is unchanged.
+Worker polls every10ms, expiring Idle even without game callbacks. After125s an
+unretired active owner disables readiness and yields explicit export-unavailable,
+without reading its data/aborting its lease/fabricating terminal success. This is
+bounded waiting, NOT native-call preemption; a process crash can prevent export.
+Worker holds a DLL reference through exit; a future installer must ALSO retain
+its reachable relay/FLS/DLL lifetime for queued callbacks after worker completion.
+Output reports/p99-wrist-PID-CREATION.json uses CREATE_NEW: an existing result is
+never overwritten; failed/partial output is not logged as successful. No files
+are created by this path in a current ordinary game build because it is unstarted.
+
+**Fresh installer audit; do not reuse old package entry.** MCP reconfirmed two
+Async ingress instructions1417815B7(LEA),141782B3A(JMP), normal Process calls
+141A92E78/141A932F8 and actual cmd16 CALL141ABA973. Separate installer must redirect
+exactly these5sites to wrist Async/process0/process1/two-argument cmd16 adapters.
+Old install_p99_group_package(true) installs AFE and leaves downstream calls alone;
+false installs shadow writers. Reuse only value planners/leaf FF25 relays and
+reviewed transaction machinery, never either old entry or stale Segment+08 guard.
+Preflight requires both complete Async43B/contextLEAs and Process33B/status/Segment
+LEAs; old12B Process push check is insufficient. Separate immutable-layout/code
+guards from stock/installed site expectations: a stock-E8 check must not reject
+our own rel32 patch during all_match(true). Exclude install_aim_joint_boundary_probes
+at141ABA973 and all other conflicting writer/census paths rather than chaining.
+
+Remaining code-integrity gap: pinned disk SHA and dispatch identities do not prove
+loaded executor/handler bytes after other hooks. Pin all15normal g0 opcode wrappers
+and actually reached workers, not only the narrow wrist scalar replay. Example:
+op47ordinal12 uses arity3 142192FD0, outside replay's arity1/2 subset. This is already
+named AnimJointProgram_ApplyScalarCoefficients_Arity3 in ida_apply_labels.py:5682
+and fresh MCP, size314; no new label/save needed. Current single-IDB prior save
+record remains1923functions/80data/2types/save_database True. Transaction review
+must also address snapshot/new-thread race, RIP exclusions, protection/rollback
+faults and retaining potentially reachable relays on any partial outcome.
+
+Verification: complete runtime/inert harness build; Python558/558, CTest61/61.
+Policy7281checks includes deterministic timing interleavings and concurrent terminal
+ownership; both arm CLIs75checks each with real process-bound isolated events.
+23actual-route cases cover native unwind and entry/owner expiry/probe-limit;6new
+worker-body cases exercise capture, idle expiry, last refusal, active drain timeout,
+unarmed timeout and no-clobber export. Fixtures use owned native bodies/data and
+fake wall time/waits, real FLS/SEH and owned Windows events/files. Worker CreateThread,
+module pinning/startup failure paths and actual installation are NOT covered yet.
+Produced fixture JSON parsed independently:256B/512hex digits on success, refusal
+payload absent, flagsfalse. Existingtmp/ preserved, generated outputs ignored.
+Game not launched/injected; no tll process found. No visible repair claimed.
+
+NEXT: loaded-code preflight closure and distinct5-site transaction with startup/
+rollback fault fixtures; only then a written differentiating one-copy runtime
+prediction/manual scenario. Do not enable old AFE/AGW or weaken owner/source gates.

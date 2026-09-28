@@ -11,6 +11,7 @@
 #include "nadine_p99_wrist_invoke.h"
 #include "nadine_p99_wrist_snapshot.h"
 #include "nadine_p99_wrist_read_diagnostic.h"
+#include "nadine_p99_wrist_report.h"
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -55,7 +56,8 @@ constexpr std::uintptr_t kAnimCmdExecuteJointProgramsRva=0x217B630;
 enum class Action { normal, owner_refuse, process_refuse, read_refuse, callback_fault,
     cmd16_fault, process_fault, async_fault, budget_before, budget_after, expiry,
     old_async, wrapped_async, old_process, nested_cmd16, other_lease_fault,
-    disable_ready, disable_role, poison_scope, duplicate_g0 };
+    disable_ready, disable_role, poison_scope, duplicate_g0,
+    entry_expiry, owner_expiry, probe_limit };
 struct Fixture {
     Action action=Action::normal;
     unsigned async_calls=0, process_calls=0, cmd16_calls=0, cmd16_completed=0;
@@ -93,9 +95,12 @@ bool seh_p99_wrist_owner(void* job,P99WristOwner* out,P99WristReadReject*,P99Wri
     out->token=17;
     if (diagnostic) {
         diagnostic->phase=coop::p99_wrist_read_diagnostic::Phase::Owner;
-        diagnostic->reason=fixture->action==Action::owner_refuse ? P99WristReadReject::Owner : P99WristReadReject::None;
+        diagnostic->reason=(fixture->action==Action::owner_refuse || fixture->action==Action::owner_expiry ||
+            fixture->action==Action::probe_limit) ? P99WristReadReject::Owner : P99WristReadReject::None;
     }
-    return fixture->action!=Action::owner_refuse && fixture->action!=Action::other_lease_fault;
+    if (fixture->action==Action::owner_expiry) fake_ms+=p99_observe::kLifetimeMs;
+    return fixture->action!=Action::owner_refuse && fixture->action!=Action::other_lease_fault &&
+        fixture->action!=Action::owner_expiry && fixture->action!=Action::probe_limit;
 }
 bool seh_p99_wrist_process(const std::uint32_t* commands,std::uint32_t words,
     const void* parent,std::uint32_t group,const void* callback,
@@ -257,9 +262,10 @@ void run_actual_route() {
     }
 }
 
+#if !defined(TLL_P99_WRIST_ROUTE_FIXTURE_ONLY)
 int main(int argc,char** argv) {
     // One fresh OS process per terminal policy case: no artificial policy/FLS reset.
-    constexpr std::array<std::pair<std::string_view,Action>,20> cases{{
+    constexpr std::array<std::pair<std::string_view,Action>,23> cases{{
         {"normal",Action::normal},{"owner-refuse",Action::owner_refuse},
         {"process-refuse",Action::process_refuse},{"read-refuse",Action::read_refuse},
         {"callback-fault",Action::callback_fault},{"cmd16-fault",Action::cmd16_fault},
@@ -269,7 +275,9 @@ int main(int argc,char** argv) {
         {"wrapped-async",Action::wrapped_async},{"old-process",Action::old_process},
         {"nested-cmd16",Action::nested_cmd16},{"other-lease-fault",Action::other_lease_fault},
         {"disable-ready",Action::disable_ready},{"disable-role",Action::disable_role},
-        {"poison-scope",Action::poison_scope},{"duplicate-g0",Action::duplicate_g0}}};
+        {"poison-scope",Action::poison_scope},{"duplicate-g0",Action::duplicate_g0},
+        {"entry-expiry",Action::entry_expiry},{"owner-expiry",Action::owner_expiry},
+        {"probe-limit",Action::probe_limit}}};
     if (argc!=2) { std::cerr << "one named case required\n"; return 2; }
     Fixture data{};
     bool found=false;
@@ -279,6 +287,12 @@ int main(int argc,char** argv) {
     if (!make_fixture_image()) return 3;
     check(g_p99_group_fiber.initialize());
     check(g_p99_wrist_policy.arm(fake_ms,1000000));
+    if (data.action==Action::entry_expiry) fake_ms+=p99_observe::kLifetimeMs;
+    if (data.action==Action::probe_limit) for(unsigned n=1;n<p99_observe::kMaximumProbes;++n) {
+        check(g_p99_wrist_policy.begin_probe(fake_ms)==p99_observe::Probe::kGranted);
+        check(!g_p99_wrist_policy.finish_probe(fake_ms,false));
+        fake_ms+=p99_observe::kProbeIntervalMs;
+    }
     g_p99_wrist_cost_limit=1000;
     g_p99_wrist_ready.store(true);
     run_actual_route();
@@ -295,15 +309,17 @@ int main(int argc,char** argv) {
     const bool fault=data.action==Action::cmd16_fault || data.action==Action::process_fault ||
         data.action==Action::async_fault || data.action==Action::other_lease_fault;
     check(data.caught==(fault?1u:0u));
-    // Only our own terminal attempt, after normal outer return, can publish.
-    // Native unwind and a released/nonselected probe have no diagnostic writer.
-    const bool diagnostic_expected=!fault && data.action!=Action::owner_refuse;
+    // Own terminal unwind publishes a refusal after FLS cleanup; released
+    // nonselected/foreign leases must never publish on a later stock fault.
+    const bool diagnostic_expected=data.action!=Action::owner_refuse && data.action!=Action::other_lease_fault;
     check(g_p99_wrist_diagnostic_ready.load(std::memory_order_acquire)==diagnostic_expected);
     if (diagnostic_expected) {
-        check(data.async_body_finished);
+        check(data.async_body_finished || fault);
         check(g_p99_wrist_policy.reason()!=p99_observe::Reason::kNone);
         const auto expected_reason=data.action==Action::process_refuse ? P99WristReadReject::Commands :
-            data.action==Action::read_refuse ? P99WristReadReject::Snapshot : P99WristReadReject::None;
+            data.action==Action::read_refuse ? P99WristReadReject::Snapshot :
+            data.action==Action::owner_expiry || data.action==Action::probe_limit ? P99WristReadReject::Owner :
+            P99WristReadReject::None;
         check(g_p99_wrist_diagnostic.reason==expected_reason);
         if (data.action==Action::process_refuse)
             check(g_p99_wrist_diagnostic.phase==coop::p99_wrist_read_diagnostic::Phase::Process);
@@ -312,6 +328,17 @@ int main(int argc,char** argv) {
     } else {
         check(g_p99_wrist_diagnostic.reason==P99WristReadReject::None);
         check(g_p99_wrist_diagnostic.phase==coop::p99_wrist_read_diagnostic::Phase::None);
+    }
+    coop::p99_wrist_report::Record report{};
+    check(g_p99_wrist_report.read(report)==diagnostic_expected);
+    if (diagnostic_expected) {
+        check(report.reason==g_p99_wrist_policy.reason());
+        check(report.normal_return==!fault && report.captured==success);
+        const unsigned expected_probe=data.action==Action::entry_expiry ? 0u :
+            data.action==Action::probe_limit ? p99_observe::kMaximumProbes : 1u;
+        check(report.diagnostic_probe==expected_probe && report.diagnostic_available==(expected_probe!=0));
+        if (!success) for (const auto b:report.payload.bytes) check(b==std::byte{});
+        else check(report.payload.bytes==g_p99_wrist_payload.bytes);
     }
     if (data.action==Action::other_lease_fault) {
         check(data.foreign_lease && g_p99_wrist_policy.reason()==p99_observe::Reason::kNone);
@@ -323,8 +350,10 @@ int main(int argc,char** argv) {
         check(g_p99_wrist_policy.attempts()==0 && data.process_calls==8 && data.cmd16_calls==8);
     } else if (data.action==Action::budget_before || data.action==Action::budget_after)
         check(g_p99_wrist_policy.reason()==p99_observe::Reason::kBudget);
-    else if (data.action==Action::expiry)
+    else if (data.action==Action::expiry || data.action==Action::entry_expiry || data.action==Action::owner_expiry)
         check(g_p99_wrist_policy.reason()==p99_observe::Reason::kExpired);
+    else if (data.action==Action::probe_limit)
+        check(g_p99_wrist_policy.reason()==p99_observe::Reason::kProbeLimit);
     else if (fault) check(g_p99_wrist_policy.reason()==p99_observe::Reason::kException);
     else if (!success) check(g_p99_wrist_policy.reason()==p99_observe::Reason::kRefused);
     if (data.action==Action::old_async || data.action==Action::wrapped_async)
@@ -353,3 +382,4 @@ int main(int argc,char** argv) {
     std::cout << argv[1] << ": " << checks << " checks, " << failures << " failures\n";
     return failures?1:0;
 }
+#endif

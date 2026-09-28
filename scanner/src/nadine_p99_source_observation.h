@@ -10,6 +10,12 @@ inline constexpr std::uint64_t kProbeIntervalMs = 100;
 inline constexpr std::uint64_t kLifetimeMs = 120000;
 
 enum class Probe { kGranted, kBusy, kThrottled, kStopped };
+// Detailed transition results carry reporting ownership. kTerminal means THIS
+// invocation acquired Idle->Probe and stopped it; kStopped only observed an
+// unarmed/already-stopped policy and must not report somebody else's outcome.
+enum class ProbeDetailed { kGranted, kBusy, kThrottled, kStopped, kTerminal };
+enum class ProbeFinish { kReleased, kSelected, kTerminal };
+enum class ExpiryPoll { kIdle, kBusy, kStopped, kTerminal };
 enum class Reason {
     kNone, kSuccess, kRefused, kBudget, kClock, kExpired, kProbeLimit,
     kException, kProtocol
@@ -30,7 +36,9 @@ inline constexpr const char* reason_name(Reason reason) noexcept {
 }
 
 // Value-only one-shot admission, not lifetime/owner authority. No game pointers,
-// waits, callbacks, allocations or spin loop. Only a caller receiving kGranted
+// waits, allocations or spin loop. Clock-entry APIs invoke only one cheap
+// noexcept scalar clock callback under the acquired lease, not arbitrary work.
+// Only a caller receiving kGranted
 // owns the lease and may finish/abort it; use its stack flag in __finally.
 // begin_probe is after the cheap retained-identity gate, before owner preselect.
 // A selected probe keeps its lease through preparation and consumes the sole
@@ -53,42 +61,99 @@ public:
         return true;
     }
 
-    [[nodiscard]] Probe begin_probe(std::uint64_t now_ms) noexcept {
+    // Sample only AFTER acquiring the lease. A timestamp captured before CAS
+    // can become stale while preempted behind a later callback, producing a
+    // false clock-regression terminal even though the system clock is sound.
+    template<class Now>
+    [[nodiscard]] ProbeDetailed begin_probe_clock(Now&& now) noexcept {
+        static_assert(noexcept(now()), "The lease clock must be a cheap noexcept scalar callback");
         auto expected = Phase::kIdle;
         if (!phase_.compare_exchange_strong(expected, Phase::kProbe,
                 std::memory_order_acq_rel)) {
             return expected == Phase::kProbe || expected == Phase::kPreparation ||
-                expected == Phase::kArming ? Probe::kBusy : Probe::kStopped;
+                expected == Phase::kArming ? ProbeDetailed::kBusy : ProbeDetailed::kStopped;
         }
-        if (!within_lifetime(now_ms)) return Probe::kStopped;
+        const std::uint64_t now_ms = now();
+        if (!within_lifetime(now_ms)) return ProbeDetailed::kTerminal;
         const auto probes = probes_.load(std::memory_order_relaxed);
-        if (probes == kMaximumProbes) { stop(Reason::kProbeLimit); return Probe::kStopped; }
+        if (probes == kMaximumProbes) { stop(Reason::kProbeLimit); return ProbeDetailed::kTerminal; }
         if (probes != 0 && now_ms - last_probe_ms_ < kProbeIntervalMs) {
             phase_.store(Phase::kIdle, std::memory_order_release);
-            return Probe::kThrottled;
+            return ProbeDetailed::kThrottled;
         }
         last_probe_ms_ = now_ms;
         probes_.store(probes + 1, std::memory_order_relaxed);
-        return Probe::kGranted;
+        return ProbeDetailed::kGranted;
     }
 
-    [[nodiscard]] bool finish_probe(std::uint64_t now_ms, bool selected) noexcept {
-        if (phase_.load(std::memory_order_acquire) != Phase::kProbe) {
-            stop(Reason::kProtocol); return false;
+    // Value-only compatibility/test API: supplied timestamps retain their
+    // original semantics. Concurrent production callers use *_clock instead.
+    [[nodiscard]] ProbeDetailed begin_probe_detailed(std::uint64_t now_ms) noexcept {
+        return begin_probe_clock([now_ms]() noexcept { return now_ms; });
+    }
+
+    [[nodiscard]] Probe begin_probe(std::uint64_t now_ms) noexcept {
+        switch (begin_probe_detailed(now_ms)) {
+        case ProbeDetailed::kGranted: return Probe::kGranted;
+        case ProbeDetailed::kBusy: return Probe::kBusy;
+        case ProbeDetailed::kThrottled: return Probe::kThrottled;
+        default: return Probe::kStopped; // Historical terminal/unarmed mapping.
         }
-        if (!within_lifetime(now_ms)) return false;
+    }
+
+    // Granted lease-owner only, exactly like the legacy finish_probe. Decide
+    // the outcome while still owning the lease: after publishing Idle another
+    // invocation may stop the policy before this caller even returns. Reading
+    // reason() then cannot tell whose transition it was. Invalid invocations
+    // retain the historical protocol-stop behavior; they are not a poll API.
+    [[nodiscard]] ProbeFinish finish_probe_detailed(std::uint64_t now_ms, bool selected) noexcept {
+        if (phase_.load(std::memory_order_acquire) != Phase::kProbe) {
+            stop(Reason::kProtocol); return ProbeFinish::kTerminal;
+        }
+        if (!within_lifetime(now_ms)) return ProbeFinish::kTerminal;
         if (selected) {
             if (attempts_.load(std::memory_order_relaxed) != 0) {
-                stop(Reason::kProtocol); return false;
+                stop(Reason::kProtocol); return ProbeFinish::kTerminal;
             }
             attempts_.store(kMaximumPreparations, std::memory_order_relaxed);
             phase_.store(Phase::kPreparation, std::memory_order_release);
-            return true;
+            return ProbeFinish::kSelected;
         }
-        if (probes_.load(std::memory_order_relaxed) == kMaximumProbes)
+        if (probes_.load(std::memory_order_relaxed) == kMaximumProbes) {
             stop(Reason::kProbeLimit);
-        else phase_.store(Phase::kIdle, std::memory_order_release);
-        return false;
+            return ProbeFinish::kTerminal;
+        }
+        const auto result = ProbeFinish::kReleased;
+        phase_.store(Phase::kIdle, std::memory_order_release);
+        return result;
+    }
+
+    [[nodiscard]] bool finish_probe(std::uint64_t now_ms, bool selected) noexcept {
+        return finish_probe_detailed(now_ms, selected) == ProbeFinish::kSelected;
+    }
+
+    // A worker can expire an idle policy when no game callback arrives. The
+    // exact same CAS lease protects all non-atomic clocks. Never abort a Probe,
+    // Preparation or Arming owned by another invocation, even past expiry.
+    // This is not a probe: it changes neither counters nor the probe throttle.
+    template<class Now>
+    [[nodiscard]] ExpiryPoll poll_expiry_clock(Now&& now) noexcept {
+        static_assert(noexcept(now()), "The lease clock must be a cheap noexcept scalar callback");
+        auto expected = Phase::kIdle;
+        if (!phase_.compare_exchange_strong(expected, Phase::kProbe,
+                std::memory_order_acq_rel)) {
+            return expected == Phase::kProbe || expected == Phase::kPreparation ||
+                expected == Phase::kArming ? ExpiryPoll::kBusy : ExpiryPoll::kStopped;
+        }
+        const std::uint64_t now_ms = now();
+        if (!within_lifetime(now_ms)) return ExpiryPoll::kTerminal;
+        const auto result = ExpiryPoll::kIdle;
+        phase_.store(Phase::kIdle, std::memory_order_release);
+        return result;
+    }
+
+    [[nodiscard]] ExpiryPoll poll_expiry(std::uint64_t now_ms) noexcept {
+        return poll_expiry_clock([now_ms]() noexcept { return now_ms; });
     }
 
     Reason finish_preparation(std::uint64_t begin_ticks, std::uint64_t end_ticks,
@@ -147,7 +212,8 @@ private:
     std::atomic<Phase> phase_{Phase::kUnarmed};
     std::atomic<Reason> reason_{Reason::kNone};
     std::atomic<std::uint32_t> probes_{0}, attempts_{0};
-    // Written before publication by arm, or exclusively by the granted lease.
+    // Written before publication by arm, or exclusively under the shared CAS
+    // lease (a granted probe or one lexical poll_expiry invocation).
     std::uint64_t install_ms_ = 0, last_probe_ms_ = 0, last_observed_ms_ = 0, limit_ticks_ = 0;
 };
 } // namespace coop::p99_source_observation

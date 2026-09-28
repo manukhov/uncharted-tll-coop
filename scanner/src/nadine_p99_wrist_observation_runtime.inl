@@ -2,8 +2,8 @@
 // Included after wrist_read_runtime.inl. No old writer/preparation authority,
 // log/file/network I/O, heap allocation or game-buffer substitution here.
 // Owned production-data fault tests exist, not live timing/lifetime evidence.
-// Live admission still needs pinned installer preflight, external arm/expiry
-// and off-thread owned-result export.
+// An uninstalled worker supplies separate arm/expiry and owned-result export;
+// live admission still needs pinned installer preflight and startup auditing.
 namespace p99_wrist_call = coop::p99_wrist_invoke;
 namespace p99_process_frame = coop::p99_process_native_frame;
 
@@ -34,10 +34,13 @@ struct P99WristPending {
     bool leased = false;
     bool captured = false;
     bool terminal_report = false;
+    bool diagnostic_available = false;
+    std::uint32_t diagnostic_probe = 0;
 };
 
 // Separate value-only policy; AFE's selected/prepared state cannot authorize
-// this route. Ready is never set and this payload has no runtime consumer yet.
+// this route. The dedicated worker can arm only after a future installer; no
+// current build installs this route or starts that worker.
 p99_observe::Policy g_p99_wrist_policy;
 std::atomic<bool> g_p99_wrist_ready{false};
 std::atomic<bool> g_p99_wrist_payload_ready{false};
@@ -45,6 +48,44 @@ p99_wrist_snapshot::Payload g_p99_wrist_payload{};
 P99WristReadDiagnostic g_p99_wrist_diagnostic{};
 std::atomic<bool> g_p99_wrist_diagnostic_ready{false};
 std::uint64_t g_p99_wrist_cost_limit = 0;
+coop::p99_wrist_report::Mailbox g_p99_wrist_report;
+// Written ONLY before releasing a granted policy lease; read ONLY by the owner
+// of a terminal idle->probe transition. Never read speculatively by the worker.
+coop::p99_wrist_report::Record g_p99_wrist_last_probe{};
+
+void p99_wrist_publish(const P99WristPending& pending, bool normal_return) noexcept {
+    if (!pending.terminal_report) return;
+    coop::p99_wrist_report::Record value{};
+    value.reason = g_p99_wrist_policy.reason();
+    value.probes = g_p99_wrist_policy.probes();
+    value.attempts = g_p99_wrist_policy.attempts();
+    value.spent_ticks = pending.cost.spent;
+    value.normal_return = normal_return;
+    value.captured = pending.captured;
+    value.diagnostic_available = pending.diagnostic_available;
+    value.diagnostic_probe = pending.diagnostic_probe;
+    value.diagnostic = pending.diagnostic;
+    if (normal_return && pending.captured) value.payload = pending.payload;
+    if (g_p99_wrist_report.publish(value)) {
+        g_p99_wrist_diagnostic = value.diagnostic;
+        g_p99_wrist_diagnostic_ready.store(true, std::memory_order_release);
+    }
+}
+
+// Worker-only deadline poll. It never steals an active probe or touches game
+// memory; terminal ownership grants access to the preceding private diagnostic.
+bool p99_wrist_poll_expiry() noexcept {
+    if (g_p99_wrist_policy.poll_expiry_clock([]() noexcept { return GetTickCount64(); }) !=
+            p99_observe::ExpiryPoll::kTerminal) return false;
+    g_p99_wrist_ready.store(false, std::memory_order_release);
+    auto report = g_p99_wrist_last_probe;
+    report.reason = g_p99_wrist_policy.reason();
+    report.probes = g_p99_wrist_policy.probes();
+    report.attempts = g_p99_wrist_policy.attempts();
+    // An idle timeout did not observe a successful Async completion.
+    report.normal_return = false; report.captured = false; report.payload = {};
+    return g_p99_wrist_report.publish(report);
+}
 
 bool p99_wrist_charge(P99WristJob& job, P99CostStamp begin) noexcept {
     const auto end = p99_group_cost_start();
@@ -209,7 +250,15 @@ __declspec(noinline) void p99_wrist_candidate(void* native_job,
     const auto stock = reinterpret_cast<coop::p99_group_native_frame::Native>(
         g_module + kAnimManagerAsyncObjectUpdateJointBlendJobRva);
     const DWORD entry_error = GetLastError();
-    if (g_p99_wrist_policy.begin_probe(GetTickCount64()) != p99_observe::Probe::kGranted) {
+    const auto grant = g_p99_wrist_policy.begin_probe_clock([]() noexcept { return GetTickCount64(); });
+    if (grant != p99_observe::ProbeDetailed::kGranted) {
+        if (grant == p99_observe::ProbeDetailed::kTerminal) {
+            pending.terminal_report = true;
+            pending.diagnostic = g_p99_wrist_last_probe.diagnostic;
+            pending.diagnostic_available = g_p99_wrist_last_probe.diagnostic_available;
+            pending.diagnostic_probe = g_p99_wrist_last_probe.diagnostic_probe;
+            pending.cost.spent = g_p99_wrist_last_probe.spent_ticks;
+        }
         if (g_p99_wrist_policy.reason() != p99_observe::Reason::kNone)
             g_p99_wrist_ready.store(false, std::memory_order_release);
         SetLastError(entry_error);
@@ -220,6 +269,7 @@ __declspec(noinline) void p99_wrist_candidate(void* native_job,
     P99WristJob job{};
     job.native_job = native_job;
     job.cost.limit = g_p99_wrist_cost_limit;
+    pending.diagnostic_probe = g_p99_wrist_policy.probes();
     bool returned = false;
     DWORD native_error = entry_error;
     __try {
@@ -227,21 +277,28 @@ __declspec(noinline) void p99_wrist_candidate(void* native_job,
         const bool selected = begin.valid &&
             seh_p99_wrist_owner(native_job, &job.owner, nullptr, &job.diagnostic) &&
             g_p99_group_fiber.owns(frame) && !frame.entry.reentered;
-        const bool within_cost = p99_wrist_charge(job, begin);
         pending.diagnostic = job.diagnostic;
+        pending.diagnostic_available = job.diagnostic.phase != coop::p99_wrist_read_diagnostic::Phase::None;
+        g_p99_wrist_last_probe.diagnostic = pending.diagnostic;
+        g_p99_wrist_last_probe.diagnostic_available = pending.diagnostic_available;
+        g_p99_wrist_last_probe.diagnostic_probe = pending.diagnostic_probe;
+        const bool within_cost = p99_wrist_charge(job, begin);
+        pending.cost = job.cost;
+        g_p99_wrist_last_probe.spent_ticks = job.cost.spent;
         if (within_cost) {
-            if (g_p99_wrist_policy.finish_probe(GetTickCount64(), selected)) {
+            const auto finish = g_p99_wrist_policy.finish_probe_detailed(GetTickCount64(), selected);
+            if (finish == p99_observe::ProbeFinish::kSelected) {
                 pending.leased = true; // Outer wrapper owns final policy/commit.
                 pending.terminal_report = true;
                 frame.wrist = &job;
             }
+            if (finish == p99_observe::ProbeFinish::kTerminal) pending.terminal_report = true;
             leased = false; // Either transferred or nonselected probe closed.
             if (g_p99_wrist_policy.reason() != p99_observe::Reason::kNone)
                 g_p99_wrist_ready.store(false, std::memory_order_release);
         }
-        // Only the still-owned (aborted before selection) lease may publish a
-        // terminal diagnostic here. After finish_probe(false) another thread
-        // can already own/finish a new probe; its reason is NOT ours to report.
+        // A preselection budget abort still owns its lease. A released finish
+        // has already recorded kReleased, so a later global reason is NOT ours.
         if (leased) pending.terminal_report = true;
         SetLastError(entry_error);
         coop::p99_group_native_frame::p99_group_invoke_native(native_job, stock,
@@ -257,10 +314,16 @@ __declspec(noinline) void p99_wrist_candidate(void* native_job,
             pending.diagnostic = job.diagnostic;
         }
     } __finally {
+        if (leased || pending.leased) {
+            pending.diagnostic = job.diagnostic;
+            pending.diagnostic_available = job.diagnostic.phase != coop::p99_wrist_read_diagnostic::Phase::None;
+            pending.cost = job.cost;
+        }
         frame.native_return_slot = 0;
         frame.wrist_process = nullptr;
         frame.wrist = nullptr;
         if (leased || (!returned && pending.leased)) {
+            pending.terminal_report = true;
             pending.captured = false;
             (void)g_p99_wrist_policy.abort();
             g_p99_wrist_ready.store(false, std::memory_order_release);
@@ -319,6 +382,9 @@ void __fastcall hooked_p99_wrist_async(void* native_job) {
             pending.captured = false;
             (void)g_p99_wrist_policy.abort();
         }
+        // Publish a refusal even on native unwind, only after FLS cleanup.
+        // No exception is caught/retried and no partially copied payload escapes.
+        if (!returned) p99_wrist_publish(pending, false);
     }
     if (pending.leased) {
         // Includes copying the private value and expiring/restoring FLS after
@@ -346,9 +412,6 @@ void __fastcall hooked_p99_wrist_async(void* native_job) {
     // after its lease was handed to another job. No partial payload is logged
     // or exported here. An off-thread consumer may read this scalar value only
     // after the release flag; the policy is terminal, so no future writer exists.
-    if (pending.terminal_report && g_p99_wrist_policy.reason() != p99_observe::Reason::kNone) {
-        g_p99_wrist_diagnostic = pending.diagnostic;
-        g_p99_wrist_diagnostic_ready.store(true, std::memory_order_release);
-    }
+    p99_wrist_publish(pending, returned);
     SetLastError(native_error);
 }

@@ -9,6 +9,11 @@ namespace coop::p99_observation_arm {
     return L"Local\\TLL-P99-Source-Arm-v1-" + std::to_wstring(pid) +
         L"-" + std::to_wstring(creation);
 }
+// Separate protocol: an old source/preparation signal must not arm post16 reads.
+[[nodiscard]] inline std::wstring wrist_event_name(DWORD pid, std::uint64_t creation) {
+    return L"Local\\TLL-P99-Wrist-Arm-v1-" + std::to_wstring(pid) +
+        L"-" + std::to_wstring(creation);
+}
 
 [[nodiscard]] inline bool creation_stamp(HANDLE process, std::uint64_t& creation) noexcept {
     creation = 0;

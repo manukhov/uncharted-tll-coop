@@ -11,7 +11,29 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / OWNED DATA TESTS (2026-09-28, production read faults/diagnostics):
+Latest STATIC / OWNED LIFECYCLE TESTS (2026-09-28, terminal report/arm/expiry):
+Dedicated wrist worker/report code now compiles but remains UNINSTALLED/unstarted.
+Separate tll_p99_wrist_arm uses PID+creation-bound Wrist-Arm-v1; old source event
+cannot arm it. Worker-only JSON export is CREATE_NEW, raw256B hex only on success,
+with no source pointers or source/final-render admission. No animation-path I/O.
+Policy detailed transitions distinguish OWN terminal from observed stopped state;
+worker expires only Idle, never an active probe/attempt. Both new clock-entry APIs
+sample AFTER CAS: fixes reproducible stale1001 vs callback1002/1003 false-Clock race.
+Native unwind now publishes zero-payload refusal after FLS cleanup; last nonselected
+diagnostic is copied only under lease and read only by terminal ownership. A125s
+drain timeout disables readiness and reports export-unavailable without stealing
+an active owner. Startup thread/module-reference failures remain unaudited in fixtures.
+Verification: runtime/inert harness built; Python558/558, CTest61/61; policy7281,
+both arm CLIs75each.23actual-route cases +6worker-body cases use owned fixtures,
+fake time/data/native bodies and real FLS/SEH/events/files, not the game.
+NEXT: implement a DISTINCT5-site installer with both native layouts and loaded
+executor/operator-code integrity, not old package(true/false); audit patch rollback
+and worker startup faults. Pin all15g0 handlers and reached workers, including
+op47arity3 142192FD0. Existing aim joint-boundary hook at141ABA973 is a conflict,
+not a chain target. Full contract is at latest COOP_STATUS section. No game launched,
+no pose values captured, no visible grip repair; observation flag hard-FALSE.
+
+Previous STATIC / OWNED DATA TESTS (2026-09-28, production read faults/diagnostics):
 The actual coop_runtime.cpp owner/process/snapshot functions now pass an inert
 owned-memory fixture:1074checks, pinned Nadine PAK, real VirtualQuery/volatile
 copy/SEH, PAGE_READONLY sources, all198 copy-boundary partial failures, page loss

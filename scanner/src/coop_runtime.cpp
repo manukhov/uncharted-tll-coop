@@ -50,6 +50,7 @@
 #include "nadine_p99_preselection_trace.h"
 #include "nadine_p99_wrist_snapshot.h"
 #include "nadine_p99_wrist_read_diagnostic.h"
+#include "nadine_p99_wrist_report.h"
 #include "nadine_p99_wrist_invoke.h"
 #include "nadine_p99_process_native_frame.h"
 #include "nadine_pistol_grip_policy.h"
@@ -64041,6 +64042,7 @@ bool install_legacy_nadine_p99_chloe_grip_transfer() {
 #include "nadine_p99_group_runtime.inl"
 #include "nadine_p99_wrist_read_runtime.inl"
 #include "nadine_p99_wrist_observation_runtime.inl"
+#include "nadine_p99_wrist_worker_runtime.inl"
 
 void clear_local_nadine_mazur_weapon_palette_census_target() {
     g_nadine_mazur_weapon_palette_census_fg.store(

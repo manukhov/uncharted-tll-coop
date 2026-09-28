@@ -264,6 +264,281 @@ void concurrent_nonspinning_admission() {
           "eight simultaneous candidates perform exactly one preselect");
 }
 
+void detailed_transition_ownership() {
+    o::Policy unarmed;
+    check(unarmed.begin_probe_detailed(0)==o::ProbeDetailed::kStopped &&
+        unarmed.poll_expiry(UINT64_MAX)==o::ExpiryPoll::kStopped &&
+        unarmed.reason()==o::Reason::kNone,"unarmed stopped does not own terminal reporting");
+    for(bool clock:{false,true}) {
+        o::Policy p; check(p.arm(100,10000000),"detailed terminal arm");
+        check(p.begin_probe_detailed(clock?99:100+o::kLifetimeMs)==o::ProbeDetailed::kTerminal,
+            "successful CAS distinguishes its own expiry/clock terminal");
+        check(p.reason()==(clock?o::Reason::kClock:o::Reason::kExpired) && p.probes()==0 && p.attempts()==0,
+            "terminal before selection consumes no quota");
+        check(p.begin_probe_detailed(200000)==o::ProbeDetailed::kStopped &&
+            p.poll_expiry(200000)==o::ExpiryPoll::kStopped &&
+            p.begin_probe(200000)==o::Probe::kStopped,"later observers cannot claim somebody else's terminal");
+    }
+    o::Policy p; check(p.arm(0,10000000),"detailed released arm");
+    check(p.begin_probe_detailed(0)==o::ProbeDetailed::kGranted &&
+        p.begin_probe_detailed(0)==o::ProbeDetailed::kBusy,"detailed begin owns exactly one lease");
+    check(p.finish_probe_detailed(0,false)==o::ProbeFinish::kReleased,"ordinary nonselection explicitly releases");
+    check(p.begin_probe_detailed(99)==o::ProbeDetailed::kThrottled,"detailed throttle unchanged");
+    check(p.begin_probe_detailed(100)==o::ProbeDetailed::kGranted &&
+        p.finish_probe_detailed(100,true)==o::ProbeFinish::kSelected && p.attempts()==1,
+        "selected detailed finish retains sole preparation lease");
+    check(p.poll_expiry(o::kLifetimeMs)==o::ExpiryPoll::kBusy && p.reason()==o::Reason::kNone,
+        "worker cannot expire another preparation even at deadline");
+    check(p.finish_observation(o::kLifetimeMs,{10000},true)==o::Reason::kExpired,
+        "actual preparation owner handles expiry");
+
+    for(bool selected:{false,true}) {
+        o::Policy ended; check(ended.arm(100,10000000),"detailed finish expiry arm");
+        check(ended.begin_probe_detailed(100)==o::ProbeDetailed::kGranted &&
+            ended.finish_probe_detailed(100+o::kLifetimeMs,selected)==o::ProbeFinish::kTerminal,
+            "finish owns expiry before release or preparation");
+        check(ended.attempts()==0 && ended.reason()==o::Reason::kExpired,"expired finish consumes no preparation");
+        o::Policy backwards; check(backwards.arm(100,10000000),"detailed finish clock arm");
+        check(backwards.begin_probe_detailed(101)==o::ProbeDetailed::kGranted &&
+            backwards.finish_probe_detailed(100,selected)==o::ProbeFinish::kTerminal &&
+            backwards.reason()==o::Reason::kClock,"finish clock error remains own terminal");
+    }
+    o::Policy limited; check(limited.arm(0,10000000),"detailed quota arm");
+    for(std::uint32_t index=0;index<o::kMaximumProbes;++index) {
+        const auto now=index*o::kProbeIntervalMs;
+        check(limited.begin_probe_detailed(now)==o::ProbeDetailed::kGranted,"detailed quota begin");
+        check(limited.finish_probe_detailed(now,false)==(index+1==o::kMaximumProbes?
+            o::ProbeFinish::kTerminal:o::ProbeFinish::kReleased),"600th finish owns quota terminal");
+    }
+    check(limited.reason()==o::Reason::kProbeLimit&&limited.poll_expiry(60000)==o::ExpiryPoll::kStopped,
+        "worker cannot claim the last probe's limit result");
+    o::Policy misuse; check(misuse.arm(0,10000000),"detailed misuse arm");
+    check(misuse.finish_probe_detailed(0,true)==o::ProbeFinish::kTerminal &&
+        misuse.reason()==o::Reason::kProtocol,"invalid finish keeps legacy protocol-stop (not observer authority)");
+}
+
+void idle_expiry_without_callbacks() {
+    for(const auto origin:{0ull,999ull,UINT64_MAX-o::kLifetimeMs}) {
+        o::Policy p; check(p.arm(origin,10000000),"poll deadline arm");
+        check(p.poll_expiry(origin)==o::ExpiryPoll::kIdle &&
+            p.poll_expiry(origin+o::kLifetimeMs-1)==o::ExpiryPoll::kIdle,
+            "valid worker poll returns lease to idle without callback");
+        check(p.probes()==0&&p.attempts()==0&&p.reason()==o::Reason::kNone,"poll not counted as probe/preparation");
+        check(p.poll_expiry(origin+o::kLifetimeMs)==o::ExpiryPoll::kTerminal &&
+            p.reason()==o::Reason::kExpired,"worker owns exact idle expiry including high uint64");
+        check(p.poll_expiry(origin+o::kLifetimeMs)==o::ExpiryPoll::kStopped &&
+            p.probes()==0&&p.attempts()==0,"repeated worker cannot duplicate owned report");
+    }
+    o::Policy clock; check(clock.arm(100,10000000),"poll clock arm");
+    check(clock.poll_expiry(200)==o::ExpiryPoll::kIdle && clock.poll_expiry(199)==o::ExpiryPoll::kTerminal &&
+        clock.reason()==o::Reason::kClock,"worker checks monotonic lifetime under own lease");
+    o::Policy shared_clock; check(shared_clock.arm(100,10000000),"shared monotonic clock arm");
+    check(shared_clock.poll_expiry(200)==o::ExpiryPoll::kIdle &&
+        shared_clock.begin_probe_detailed(199)==o::ProbeDetailed::kTerminal &&
+        shared_clock.reason()==o::Reason::kClock,"later probe respects time already observed by worker");
+    o::Policy throttle; check(throttle.arm(0,10000000),"poll throttle arm");
+    check(throttle.poll_expiry(10)==o::ExpiryPoll::kIdle &&
+        throttle.begin_probe_detailed(10)==o::ProbeDetailed::kGranted &&
+        throttle.finish_probe_detailed(10,false)==o::ProbeFinish::kReleased,"poll does not delay first actual probe");
+    for(std::uint64_t now=11;now<110;++now)
+        check(throttle.poll_expiry(now)==o::ExpiryPoll::kIdle,"poll independent of probe interval");
+    check(throttle.begin_probe_detailed(109)==o::ProbeDetailed::kThrottled &&
+        throttle.begin_probe_detailed(110)==o::ProbeDetailed::kGranted &&
+        throttle.probes()==2 && throttle.attempts()==0,"many polls neither consume quota nor reset throttle");
+    check(throttle.poll_expiry(0)==o::ExpiryPoll::kBusy &&
+        throttle.poll_expiry(UINT64_MAX)==o::ExpiryPoll::kBusy &&
+        throttle.reason()==o::Reason::kNone,"busy poll cannot stop foreign probe on clock or expiry");
+    check(throttle.finish_probe_detailed(110,false)==o::ProbeFinish::kReleased,"busy polls leave foreign clock intact");
+}
+
+void worker_probe_and_release_races() {
+    // All contenders are at the deadline. Exactly ONE successful Idle->Probe
+    // CAS owns the terminal result; losers return Busy or Stopped, never infer
+    // ownership by observing the winner's shared terminal reason.
+    for(unsigned run=0;run<32;++run) {
+        o::Policy p; check(p.arm(0,10000000),"worker/callback terminal race arm");
+        std::barrier start(8); std::array<std::thread,8> threads;
+        std::array<o::ProbeDetailed,4> probes{}; std::array<o::ExpiryPoll,4> polls{};
+        for(std::size_t i=0;i<threads.size();++i) threads[i]=std::thread([&,i] {
+            start.arrive_and_wait();
+            if(i<4) probes[i]=p.begin_probe_detailed(o::kLifetimeMs);
+            else polls[i-4]=p.poll_expiry(o::kLifetimeMs);
+        });
+        for(auto&thread:threads) thread.join();
+        unsigned owners=0;
+        for(auto result:probes) {
+            owners+=result==o::ProbeDetailed::kTerminal;
+            check(result==o::ProbeDetailed::kTerminal||result==o::ProbeDetailed::kBusy||
+                result==o::ProbeDetailed::kStopped,"callback race result distinguishes owned terminal");
+        }
+        for(auto result:polls) {
+            owners+=result==o::ExpiryPoll::kTerminal;
+            check(result==o::ExpiryPoll::kTerminal||result==o::ExpiryPoll::kBusy||
+                result==o::ExpiryPoll::kStopped,"worker race result distinguishes owned terminal");
+        }
+        check(owners==1&&p.reason()==o::Reason::kExpired&&p.probes()==0&&p.attempts()==0,
+            "exactly one reporting owner and no selection at deadline");
+    }
+    // The worker can win immediately AFTER the callback releases. The callback
+    // must still return Released, even if the global reason is terminal before
+    // the calling code resumes. No reason() read can reconstruct this outcome.
+    for(unsigned run=0;run<64;++run) {
+        o::Policy p; check(p.arm(0,10000000)&&p.begin_probe(0)==o::Probe::kGranted,"finish race owns original probe");
+        std::barrier start(2); o::ProbeFinish finished{}; o::ExpiryPoll polled{};
+        std::thread callback([&]{start.arrive_and_wait();finished=p.finish_probe_detailed(0,false);});
+        std::thread worker([&]{start.arrive_and_wait();polled=p.poll_expiry(o::kLifetimeMs);});
+        callback.join(); worker.join();
+        check(finished==o::ProbeFinish::kReleased &&
+            (polled==o::ExpiryPoll::kBusy||polled==o::ExpiryPoll::kTerminal),"finish outcome fixed before worker can acquire released lease");
+        if(polled==o::ExpiryPoll::kBusy) polled=p.poll_expiry(o::kLifetimeMs);
+        check(polled==o::ExpiryPoll::kTerminal&&p.reason()==o::Reason::kExpired&&
+            finished==o::ProbeFinish::kReleased&&p.probes()==1&&p.attempts()==0,
+            "later worker-owned terminal cannot be attributed to earlier released probe");
+    }
+    for(unsigned run=0;run<32;++run) {
+        o::Policy p; check(p.arm(0,10000000)&&p.begin_probe(0)==o::Probe::kGranted,"selection race owns probe");
+        std::barrier start(2); o::ProbeFinish finished{}; o::ExpiryPoll polled{};
+        std::thread callback([&]{start.arrive_and_wait();finished=p.finish_probe_detailed(0,true);});
+        std::thread worker([&]{start.arrive_and_wait();polled=p.poll_expiry(UINT64_MAX);});
+        callback.join(); worker.join();
+        check(finished==o::ProbeFinish::kSelected&&polled==o::ExpiryPoll::kBusy&&p.attempts()==1&&
+            p.reason()==o::Reason::kNone,"Probe->Preparation never exposes an idle gap to worker");
+        check(p.finish_preparation(0,0,true,true)==o::Reason::kSuccess,"selected owner still completes after racing expired worker");
+    }
+    for(unsigned run=0;run<32;++run) {
+        o::Policy p; std::barrier start(2); bool armed=false; o::ExpiryPoll polled{};
+        std::thread armer([&]{start.arrive_and_wait();armed=p.arm(100,10000000);});
+        std::thread worker([&]{start.arrive_and_wait();polled=p.poll_expiry(100);});
+        armer.join(); worker.join();
+        check(armed&&p.reason()==o::Reason::kNone&&p.probes()==0&&p.attempts()==0,
+            "worker racing arm never mutates another arming lease");
+        check(polled==o::ExpiryPoll::kStopped||polled==o::ExpiryPoll::kBusy||polled==o::ExpiryPoll::kIdle,
+            "arming race has no worker-owned terminal");
+        check(p.begin_probe_detailed(100)==o::ProbeDetailed::kGranted&&
+            p.finish_probe_detailed(100,false)==o::ProbeFinish::kReleased,"concurrent arm publishes intact usable state");
+    }
+}
+
+void clocks_sample_only_under_owned_lease() {
+    o::Policy p; unsigned samples=0;
+    const auto clock=[&]() noexcept {++samples;return std::uint64_t{1000};};
+    check(p.begin_probe_clock(clock)==o::ProbeDetailed::kStopped&&
+        p.poll_expiry_clock(clock)==o::ExpiryPoll::kStopped&&samples==0,
+        "unarmed clock APIs do not sample time or claim a terminal");
+    check(p.arm(1000,10000000)&&p.begin_probe_clock(clock)==o::ProbeDetailed::kGranted&&samples==1,
+        "successful probe samples clock exactly once");
+    check(p.begin_probe_clock(clock)==o::ProbeDetailed::kBusy&&
+        p.poll_expiry_clock(clock)==o::ExpiryPoll::kBusy&&samples==1,
+        "foreign probe lease suppresses both clock callbacks");
+    check(p.finish_probe_detailed(1000,true)==o::ProbeFinish::kSelected,
+        "clock-based probe can retain selected lease");
+    check(p.begin_probe_clock(clock)==o::ProbeDetailed::kBusy&&
+        p.poll_expiry_clock(clock)==o::ExpiryPoll::kBusy&&samples==1,
+        "foreign preparation suppresses both clock callbacks");
+    check(p.abort(o::Reason::kRefused)==o::Reason::kRefused,"actual owner terminates selected lease");
+    check(p.begin_probe_clock(clock)==o::ProbeDetailed::kStopped&&
+        p.poll_expiry_clock(clock)==o::ExpiryPoll::kStopped&&samples==1,
+        "already stopped clock APIs never resample or own another report");
+
+    o::Policy throttled; check(throttled.arm(0,10000000)&&
+        throttled.begin_probe(0)==o::Probe::kGranted&&!throttled.finish_probe(0,false),"clock throttle setup");
+    samples=0;
+    const auto soon=[&]() noexcept {++samples;return std::uint64_t{99};};
+    check(throttled.begin_probe_clock(soon)==o::ProbeDetailed::kThrottled&&samples==1,
+        "owned throttle decision still samples only once");
+    check(throttled.poll_expiry_clock(soon)==o::ExpiryPoll::kIdle&&samples==2&&
+        throttled.probes()==1&&throttled.attempts()==0,"worker clock sample does not consume probe quota");
+}
+
+void preempted_clock_caller_resamples_after_acquiring() {
+    for(bool delayed_probe:{false,true}) {
+        // Reproduce the dangerous schedule without sleeping: a would-be worker
+        // or probe has observed1001, then a callback fully advances the policy
+        // through1002..1003. Only after that release may the delayed caller try
+        // its CAS. Its clock callback must observe1004 under the NEW lease.
+        o::Policy p; check(p.arm(1000,10000000),"delayed clock caller arm");
+        std::atomic<std::uint64_t> clock{1001};
+        std::barrier preempted(2), prior_callback_finished(2);
+        std::uint64_t stale=0,sampled=0; unsigned samples=0;
+        o::ProbeDetailed probe{},nested{}; o::ExpiryPoll poll{};
+        std::thread delayed([&] {
+            stale=clock.load(); // Explicitly NOT passed to the new API.
+            preempted.arrive_and_wait();
+            prior_callback_finished.arrive_and_wait();
+            const auto read_clock=[&]() noexcept {
+                ++samples;
+                // Test-only scalar reentry proves the outer CAS already owns
+                // Probe when this callback is invoked. It must be harmless Busy.
+                nested=p.begin_probe_detailed(1004);
+                sampled=clock.load(); return sampled;
+            };
+            if(delayed_probe) probe=p.begin_probe_clock(read_clock);
+            else poll=p.poll_expiry_clock(read_clock);
+        });
+        preempted.arrive_and_wait();
+        clock.store(1002);
+        check(p.begin_probe_clock([&]() noexcept {return clock.load();})==o::ProbeDetailed::kGranted,
+            "intervening callback acquires and samples1002");
+        clock.store(1003);
+        check(p.finish_probe_detailed(clock.load(),false)==o::ProbeFinish::kReleased,
+            "intervening callback releases at1003");
+        clock.store(1004); prior_callback_finished.arrive_and_wait(); delayed.join();
+        check(stale==1001&&sampled==1004&&samples==1&&nested==o::ProbeDetailed::kBusy,
+            "delayed caller samples fresh time once, only after successful lease CAS");
+        check((delayed_probe?probe==o::ProbeDetailed::kThrottled:poll==o::ExpiryPoll::kIdle)&&
+            p.reason()==o::Reason::kNone&&p.probes()==1&&p.attempts()==0,
+            "scheduler delay is not a false clock error or a consumed probe");
+        clock.store(1102);
+        check(p.begin_probe_clock([&]() noexcept {return clock.load();})==o::ProbeDetailed::kGranted&&
+            p.finish_probe_detailed(1102,false)==o::ProbeFinish::kReleased,
+            "subsequent actual probe remains usable with original throttle");
+
+        // Compatibility methods intentionally still treat a supplied stale
+        // number as regression. Production must call the new sampling API.
+        o::Policy numeric; check(numeric.arm(1000,10000000)&&
+            numeric.begin_probe(1002)==o::Probe::kGranted&&!numeric.finish_probe(1003,false),
+            "numeric compatibility schedule setup");
+        check((delayed_probe?numeric.begin_probe_detailed(stale)==o::ProbeDetailed::kTerminal:
+            numeric.poll_expiry(stale)==o::ExpiryPoll::kTerminal)&&numeric.reason()==o::Reason::kClock,
+            "numeric compatibility clock semantics unchanged");
+    }
+}
+
+void true_clock_fault_and_terminal_reporting() {
+    for(bool probe:{false,true}) {
+        for(bool regression:{false,true}) {
+            o::Policy p; check(p.arm(1000,10000000)&&
+                p.poll_expiry_clock([]() noexcept {return std::uint64_t{1003};})==o::ExpiryPoll::kIdle,
+                "clock-based terminal fixture observes valid time");
+            unsigned samples=0;
+            const auto clock=[&]() noexcept {++samples;return regression?std::uint64_t{1002}:1000+o::kLifetimeMs;};
+            check(probe?p.begin_probe_clock(clock)==o::ProbeDetailed::kTerminal:
+                p.poll_expiry_clock(clock)==o::ExpiryPoll::kTerminal,"clock-sampling CAS owner alone gets terminal result");
+            check(samples==1&&p.reason()==(regression?o::Reason::kClock:o::Reason::kExpired)&&
+                p.probes()==0&&p.attempts()==0,"true regression/expiry still stops before counters change");
+            check(p.begin_probe_clock(clock)==o::ProbeDetailed::kStopped&&
+                p.poll_expiry_clock(clock)==o::ExpiryPoll::kStopped&&samples==1,
+                "later terminal observers neither sample clock nor acquire reporting ownership");
+        }
+    }
+    for(unsigned run=0;run<32;++run) {
+        o::Policy p; check(p.arm(0,10000000),"clock terminal race arm");
+        std::atomic<unsigned> samples{0}; std::barrier start(2);
+        o::ProbeDetailed probe{}; o::ExpiryPoll poll{};
+        const auto clock=[&]() noexcept {samples.fetch_add(1);return o::kLifetimeMs;};
+        std::thread callback([&]{start.arrive_and_wait();probe=p.begin_probe_clock(clock);});
+        std::thread worker([&]{start.arrive_and_wait();poll=p.poll_expiry_clock(clock);});
+        callback.join(); worker.join();
+        const auto owners=static_cast<unsigned>(probe==o::ProbeDetailed::kTerminal)+
+            static_cast<unsigned>(poll==o::ExpiryPoll::kTerminal);
+        check(owners==1&&samples.load()==1&&p.reason()==o::Reason::kExpired,
+            "racing worker/callback have one clock sample and one terminal reporting owner");
+        check((probe==o::ProbeDetailed::kTerminal||probe==o::ProbeDetailed::kBusy||probe==o::ProbeDetailed::kStopped)&&
+            (poll==o::ExpiryPoll::kTerminal||poll==o::ExpiryPoll::kBusy||poll==o::ExpiryPoll::kStopped)&&
+            p.probes()==0&&p.attempts()==0,"losing clock entry never runs clock or quota logic");
+    }
+}
+
 // Value-only composition model of source_observation_runtime.inl. It invokes
 // the REAL policy with injected selection/preparation/stock callbacks. C++
 // scope cleanup models the wrapper's __finally control flow, not Windows SEH
@@ -410,6 +685,12 @@ int main() {
     deadline_clock_and_abort();
     concurrent_nonspinning_admission();
     concurrent_first_arm_after_unarmed_calls();
+    detailed_transition_ownership();
+    idle_expiry_without_callbacks();
+    worker_probe_and_release_races();
+    clocks_sample_only_under_owned_lease();
+    preempted_clock_caller_resamples_after_acquiring();
+    true_clock_fault_and_terminal_reporting();
     composed_normal_paths();
     composed_exception_paths();
     std::cout << checks << " checks, " << failures << " failures\n";
