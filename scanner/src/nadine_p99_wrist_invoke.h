@@ -31,6 +31,9 @@ struct State {
 // phase is captured. Callback reentry or a fault can leave partial bytes there.
 // No native addresses, FLS, allocation, pose changes, owner admission or I/O.
 // The original native result and post-native Windows last-error are preserved.
+#if defined(TLL_P99_WRIST_ABI_ARTIFACT)
+extern "C" // Versioned .def alias names this exact body, without an extra call.
+#endif
 __declspec(noinline) std::uint32_t* invoke(State& state, Native native,
     std::uint32_t* status, const void* original_context,
     Capture capture, void* cookie);

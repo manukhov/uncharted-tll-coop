@@ -55,6 +55,10 @@
 #include "nadine_p99_wrist_prepare_windows.h"
 #include "nadine_p99_process_native_frame.h"
 #include "nadine_pistol_grip_policy.h"
+#if defined(TLL_P99_WRIST_ABI_ARTIFACT) && (defined(TLL_P99_PREPARATION_AUDIT) || \
+    defined(TLL_P99_WRIST_READ_AUDIT) || defined(TLL_P99_SOURCE_OBSERVATION_EXAM))
+#error The inert ABI artifact must retain production bodies without audit or exam seams.
+#endif
 #if defined(TLL_P99_PREPARATION_AUDIT)
 #include "../tests/p99_preparation_audit.h"
 #endif
@@ -81203,7 +81207,11 @@ DWORD WINAPI install_hook(void*) {
 
 }  // namespace
 
-#if !defined(TLL_P99_PREPARATION_AUDIT)
+#if defined(TLL_P99_WRIST_ABI_ARTIFACT)
+// Offline build artifact ONLY: no module discovery, worker, preparation, patch,
+// logging, network or arm. Exported native adapters must never be called here.
+BOOL WINAPI DllMain(HINSTANCE, DWORD, void*) { return TRUE; }
+#elif !defined(TLL_P99_PREPARATION_AUDIT)
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, void*) {
     if (reason == DLL_PROCESS_ATTACH) {
         g_self_module = reinterpret_cast<std::uintptr_t>(instance);

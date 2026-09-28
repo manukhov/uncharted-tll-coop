@@ -1,0 +1,11 @@
+; Explicit retention roots and versioned locators. These aliases name ACTUAL
+; bodies, not forwarding wrappers. Helpers are NOT valid game patch targets.
+LIBRARY tll_p99_wrist_abi
+EXPORTS
+    TllP99WristAsyncV1=hooked_p99_wrist_async
+    TllP99WristProcess0V1=hooked_p99_wrist_process0
+    TllP99WristProcess1V1=hooked_p99_wrist_process1
+    TllP99WristCmd16V1=hooked_p99_wrist_cmd16
+    TllP99WristAsyncBridgeV1=p99_group_invoke_native
+    TllP99WristProcessBridgeV1=p99_process_invoke_native
+    TllP99WristInvokeV1=invoke

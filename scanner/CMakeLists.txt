@@ -93,6 +93,22 @@ target_link_libraries(tll_crash_watch PRIVATE dbghelp)
 target_compile_options(tll_coop_runtime PRIVATE /Zi)
 target_link_options(tll_coop_runtime PRIVATE /DEBUG:FULL /OPT:REF /OPT:ICF)
 
+# Separate, inert final-image artifact for offline ABI/relocation/unwind audits.
+# Excluded from default builds; never replaces or enables the ordinary game DLL. No
+# exam/audit macro, initialization, installation or arm entry is exposed here.
+add_library(tll_p99_wrist_abi SHARED EXCLUDE_FROM_ALL src/coop_runtime.cpp
+    src/nadine_p99_wrist_invoke.cpp src/nadine_p99_wrist_code_windows.cpp
+    src/nadine_p99_wrist_prepare_windows.cpp src/nadine_p99_wrist_abi.def
+    $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
+    $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
+target_compile_features(tll_p99_wrist_abi PRIVATE cxx_std_20)
+target_compile_definitions(tll_p99_wrist_abi PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN
+    NOMINMAX TLL_P99_WRIST_ABI_ARTIFACT=1)
+target_compile_options(tll_p99_wrist_abi PRIVATE /W4 /permissive- /EHsc /O2 /Zi)
+target_link_options(tll_p99_wrist_abi PRIVATE /DEBUG:FULL /OPT:REF /OPT:ICF)
+target_link_libraries(tll_p99_wrist_abi PRIVATE ws2_32 bcrypt)
+set_target_properties(tll_p99_wrist_abi PROPERTIES PREFIX "")
+
 include(CTest)
 if(BUILD_TESTING)
     # Complete production preparation in an inert, explicitly bound offline DLL.

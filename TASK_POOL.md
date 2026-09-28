@@ -11,7 +11,29 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / OWNED DEBUG LIFECYCLE (2026-09-28, hold vs release uncertainty):
+Latest STATIC / INERT ABI ARTIFACT (2026-09-28, retained actual bodies):
+Added separate EXCLUDE_FROM_ALL tll_p99_wrist_abi target. Its dedicated macro
+provides inert DllMain and versioned .def aliases to the ACTUAL four adapters,
+two assembly bridges and invoke; no extra forwarding wrappers or fixture seams.
+Default runtime remains unchanged, observation/preparation/source exam stay OFF.
+Final artifact SHA256 a81ba7f43c543c731942c999f8b6aa9ed8f2bc0cda96c41ab96882257e22aae5;
+image 0x64000; exports Async E3F0, Process0 F080, Process1 F0C0, cmd16 EEA0,
+helpers 1410/1440/F100, prepared zero-RW page 61000. Reviewed final call edges
+retain candidate 7CC0, process_call 8BC0 and post16 89C0. Important: cmd16 has
+FOUR chained .pdata fragments EEA0..F07B, not just its first 0x45-byte range.
+scripts/p99_wrist_abi_manifest.py requires independently trusted SHA256; records
+all raw section hashes, complete .pdata list, all chained role fragments, DIR64
+relocations and bounded imports/IAT. Exact export/permission/zero-page failures
+refuse. Manifest explicitly says install=false, loaded_image_verified=false.
+This artifact deliberately supplies NO game context/initialization; do not inject
+or call its exports. No game launch, no visual grip claim. NEXT: independent
+mapped-image comparison with relocation/IAT handling and module lifetime, then
+external write transaction/recovery and ACK/manual-arm integration. Current disk
+manifest does not replace any of these. AGENTS.md translated without rule changes.
+Verification: full MSVC default+artifact build, Python 603/603 (27 new disk-parser
+tests), CTest 77/77, exact local manifest round-trip; no game/leftover fixture process.
+
+Previous STATIC / OWNED DEBUG LIFECYCLE (2026-09-28, hold vs release uncertainty):
 Added one-shot Session + WindowsOps (production static library, not wired to game).
 Acquisition requires fresh PID/creation/image + no existing debugger, successful
 attach/KillOnExit(FALSE), and held matching synthetic CREATE_PROCESS with null

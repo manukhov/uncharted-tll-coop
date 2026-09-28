@@ -134,6 +134,11 @@ bool __fastcall p99_wrist_post16(void* cookie, const void* segment) {
 
 // This is the actual TWO-argument adapter. The six-argument invoke helper is
 // called normally, never installed as if it matched the game's call signature.
+#if defined(TLL_P99_WRIST_ABI_ARTIFACT)
+} // TU-private implementation; export the actual body, not an extra wrapper.
+extern "C" {
+__declspec(noinline)
+#endif
 std::uint32_t* __fastcall hooked_p99_wrist_cmd16(std::uint32_t* status, const void* segment) {
     const auto stock = reinterpret_cast<p99_wrist_call::Native>(
         g_module + kAnimCmdExecuteJointProgramsRva);
@@ -168,6 +173,12 @@ std::uint32_t* __fastcall hooked_p99_wrist_cmd16(std::uint32_t* status, const vo
     return p99_wrist_call::invoke(job.invocation, stock, status, segment,
         &p99_wrist_post16, process);
 }
+#if defined(TLL_P99_WRIST_ABI_ARTIFACT)
+} // extern "C"
+namespace {
+#endif
+
+static_assert(std::is_same_v<decltype(&hooked_p99_wrist_cmd16), p99_wrist_call::Native>);
 
 std::uint32_t p99_wrist_process_call(bool first_site, const std::uint32_t* commands,
     std::uint32_t words, const void* context, std::uint32_t group,
@@ -236,14 +247,29 @@ std::uint32_t p99_wrist_process_call(bool first_site, const std::uint32_t* comma
     SetLastError(native_error);
     return result;
 }
+#if defined(TLL_P99_WRIST_ABI_ARTIFACT)
+} // namespace
+extern "C" {
+__declspec(noinline)
+#endif
 std::uint32_t __fastcall hooked_p99_wrist_process0(const std::uint32_t* c,
     std::uint32_t n, const void* p, std::uint32_t g, const void* a5, const void* a6, const void* a7) {
     return p99_wrist_process_call(true, c, n, p, g, a5, a6, a7);
 }
+#if defined(TLL_P99_WRIST_ABI_ARTIFACT)
+__declspec(noinline)
+#endif
 std::uint32_t __fastcall hooked_p99_wrist_process1(const std::uint32_t* c,
     std::uint32_t n, const void* p, std::uint32_t g, const void* a5, const void* a6, const void* a7) {
     return p99_wrist_process_call(false, c, n, p, g, a5, a6, a7);
 }
+#if defined(TLL_P99_WRIST_ABI_ARTIFACT)
+} // extern "C"
+namespace {
+#endif
+
+static_assert(std::is_same_v<decltype(&hooked_p99_wrist_process0), p99_process_frame::Native>);
+static_assert(std::is_same_v<decltype(&hooked_p99_wrist_process1), p99_process_frame::Native>);
 
 __declspec(noinline) void p99_wrist_candidate(void* native_job,
     P99FiberFrame& frame, P99WristPending& pending, P99CostStamp preparation_begin) {
@@ -332,6 +358,11 @@ __declspec(noinline) void p99_wrist_candidate(void* native_job,
     SetLastError(native_error);
 }
 
+#if defined(TLL_P99_WRIST_ABI_ARTIFACT)
+} // namespace
+extern "C" {
+__declspec(noinline)
+#endif
 void __fastcall hooked_p99_wrist_async(void* native_job) {
     const auto stock = reinterpret_cast<coop::p99_group_native_frame::Native>(
         g_module + kAnimManagerAsyncObjectUpdateJointBlendJobRva);
@@ -415,3 +446,8 @@ void __fastcall hooked_p99_wrist_async(void* native_job) {
     p99_wrist_publish(pending, returned);
     SetLastError(native_error);
 }
+#if defined(TLL_P99_WRIST_ABI_ARTIFACT)
+} // extern "C"
+namespace {
+#endif
+static_assert(std::is_same_v<decltype(&hooked_p99_wrist_async), coop::p99_group_native_frame::Native>);

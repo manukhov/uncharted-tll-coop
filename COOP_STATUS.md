@@ -37594,3 +37594,92 @@ established; single IDB unchanged. NEXT: retain and certify the actual ABI roles
 a separate intentional build; external manifest/export/loaded-image verifier;
 then connect real remote page transaction + RIP/native ownership checks and an
 explicit persistent uncertainty-recovery owner before ACK/manual-arm integration.
+
+### 2026-09-28 — Retain actual P99 ABI bodies in a separate inert DLL (STATIC)
+
+**Scope.** Built an offline ABI artifact, not a game installer or visual repair.
+`tll_p99_wrist_abi` is a separately named EXCLUDE_FROM_ALL target, compiled from
+the production TU/helpers with TLL_P99_WRIST_ABI_ARTIFACT only. Its DllMain returns
+TRUE without discovering the game, starting workers, preparing resources, logging,
+patching, networking or arming. The ordinary runtime's startup path is unchanged;
+all wrist preparation/observation flags remain hardFALSE. Artifact combinations
+with preparation/read audit seams or source exam are compile-time errors. No DLL
+was loaded for export discovery; no exported callback was executed; no game ran.
+
+**Alternatives rejected.** /OPT:NOREF cannot restore callbacks already removed
+by compilation and would retain unrelated code. MASM PUBLIC and an address table
+are not independent complete-route retention proofs. Exported forwarding wrappers
+would introduce different bodies/frames, especially incorrect for bridge identity.
+Instead, the actual four adapters have external C linkage in the artifact only;
+the .def file supplies versioned aliases directly to those bodies and three actual
+helpers. No export wrapper was added. Static assertions enforce original callback
+function-pointer types. The shared invoke helper receives C linkage only in this
+build. Preparation-audit macros were NOT reused to suppress DllMain, because they
+also alter production data paths. See [Microsoft export alias semantics](https://learn.microsoft.com/en-us/cpp/build/reference/exports?view=msvc-170).
+
+**Final optimized artifact.** After full rebuild, DLL SHA256 is
+`a81ba7f43c543c731942c999f8b6aa9ed8f2bc0cda96c41ab96882257e22aae5`, AMD64
+SizeOfImage 0x64000. Build output alone was not accepted: optimized OBJ references,
+final PE exports/disassembly and unwind entries were independently inspected.
+RVA map (these are DLL RVAs, not new game addresses):
+
+- Async E3F0: CALL E779 -> candidate 7CC0 -> CALL 82AB -> actual Async bridge 1410.
+- Process0 F080 / Process1 F0C0: distinct true/false adapters; CALL F0B5/F0F5 ->
+  common process_call 8BC0 -> CALL 8F68 -> actual Process bridge 1440.
+- cmd16 EEA0: LEA EFE0 -> post16 89C0; CALL F001 -> actual six-argument invoke F100.
+- Helpers: Async bridge 1410..1434, unwind 5A950; Process bridge 1440..149C,
+  unwind 5A958; invoke F100..F20B, unwind 5B6C0. They are NOT game patch targets.
+- Prepared page export 61000: dedicated 4096 bytes, zero/RW, not published.
+- Actual inert DllMain E3E0 is `mov eax,1; ret`; CRT entry remains distinct.
+
+**STATIC split-body correction.** cmd16 is NOT fully described by its first
+`.pdata` entry EEA0..EEE5 / unwind 5B4CC. Three secondary CHAININFO records cover
+EEE5..F01C / 5B4DC, F01C..F064 / 5B4F4, F064..F07B / 5B50C. All chain back to
+the first entry; the invoke CALL is in a secondary fragment. A primary-envelope
+hash alone would omit it. The new manifest includes all owned chained fragments
+and whole raw code/readonly sections, including SEH funclets/handler bytes outside
+individual role envelopes. See [Microsoft x64 unwind layout](https://learn.microsoft.com/en-us/cpp/build/exception-handling-x64?view=msvc-170).
+
+**Disk manifest, not loaded-image admission.** Added
+`scripts/p99_wrist_abi_manifest.py`: explicit independently reviewed SHA256 is
+required BEFORE parsing. It rejects wrong machine/type, section overlap/truncation,
+RWX, unsupported loader/TLS/delay directories, incomplete/forwarded/aliased or
+unexpected exports, interior/secondary-fragment entry points, malformed/cyclic
+or over-depth unwind chains, nonzero/nonisolated publication page, bad DIR64
+relocations and partial/ordinal/bound imports. Import descriptors and all thunk/IAT
+entries are parsed with bounds, not a silently partial convenience-parser result.
+Review exposed and fixed a too-short declared export directory and unbounded
+chain-walk depth. Matching chain frame bytes are checked, but complete unwind
+opcode/frame/handler semantics are explicitly NOT claimed.
+
+The manifest pins the complete file and headers, seven raw sections, eight role
+exports, 207 runtime-function entries, 62 DIR64 fixups and 36 named imports.
+Local full JSON: reports/p99_wrist_abi_manifest_20260928.json; generation and exact
+`--check` round-trip passed. Source/test schema is durable, raw report stays ignored.
+`admitted_for_install=false` and `loaded_image_verified=false` are unconditional.
+The SHA must come from reviewed build provenance, NEVER from an arbitrary remote
+DLL or a self-reported Offer. PE exports are locators only; declared role signatures
+come from reviewed source, not from PE metadata. [PE format reference](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format).
+
+The current ordinary runtime DLL is refused by the artifact contract (first
+failure is its unsupported TLS directory; it also lacks the seven ABI exports).
+The inert artifact is ALSO NOT an injection candidate: it supplies neither
+g_module context nor FLS/preparation/ACK/arm, and its native adapters must not be
+called for discovery. Whole disk section hashes cannot be compared blindly with
+loaded .rdata (DIR64 and IAT changes), and do not prove loaded imports, module
+lifetime, native quiescence, source/closure admission or absence of later mutation.
+
+NEXT: build independent mapped-image verification using the trusted file/role
+manifest, accounting for exact relocations and separately bound IAT targets;
+then connect external transaction/RIP ownership checks and persistent uncertain
+recovery before ACK/manual-arm. Do not enable the inert artifact as a game exam.
+No new game-function semantics or IDB labels were established; single IDB unchanged.
+AGENTS.md was translated fully into English with identical inline commands/paths/
+addresses and preserved rules; translation committed/pushed separately as a5ad77e.
+
+Verification: full MSVC build of default targets plus explicit ABI artifact;
+Python 603/603 including 27 new owned synthetic-PE tests; CTest 77/77. Tests cover
+trust mismatch, exact export roles, aliases/forwarders/interior entries, chained
+fragments, missing/cyclic/deep chains, malformed headers/sections/permissions,
+publication bytes, relocations and incomplete imports. No tll or fixture process
+left running; pre-existing untracked tmp/ preserved. No visual-result claim.
