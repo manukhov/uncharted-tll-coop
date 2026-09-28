@@ -11,7 +11,28 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / INERT ABI ARTIFACT (2026-09-28, retained actual bodies):
+Latest STATIC / OWNED MAPPED COMPARISON (2026-09-28):
+Added p99_wrist_mapped_image.py (trusted file -> immutable plan) and separate
+borrowed-handle Windows RO/RX reader; existing C++ RX reader is unchanged.
+Exact DIR64 values and exact independent DLL/name IAT bindings replace ONLY
+known slots. No observed-byte masks. Full metadata reads must fit compared
+VirtualSize, including CHAININFO tails/ILT/names; raw padding is not virtual data.
+Owned fixed-artifact loader fixture passed 376071 bytes across five immutable
+ranges, 36 IAT entries and 58 DIR64 fixups; four mutable .data fixups are excluded.
+Headers/.text/.rdata/.pdata/.rsrc compared; .data/.p99prep/.reloc and padding are
+explicitly unverified. CFG/XFG defaults compared exactly; unknown overrides refuse.
+REJECTED on this host: disk-preferred ImageBase header equality. Windows rewrites
+RVA138 to actual loaded base. Explicit LOADED policy expects the independently
+selected base, not observed header contents; PREFERRED remains separate/default.
+Fixture holds deny-write/delete file handle, hashes its snapshot before load,
+resolves only dependency exports and checks artifact unload; no native adapter
+called. Three repeated passes. Python627/627, CTest77/77, MSVC no work required.
+Comparison is NOT atomic, dependency integrity, lifetime or installation admission.
+NEXT: bind remote OS/CRT providers/API-set/forwarder chains independently and prove
+module lifetime; then integrate with the external hold/transaction/recovery/ACK.
+No game, no hook, no visual grip change. All live flags and DLL hash unchanged.
+
+Previous STATIC / INERT ABI ARTIFACT (2026-09-28, retained actual bodies):
 Added separate EXCLUDE_FROM_ALL tll_p99_wrist_abi target. Its dedicated macro
 provides inert DllMain and versioned .def aliases to the ACTUAL four adapters,
 two assembly bridges and invoke; no extra forwarding wrappers or fixture seams.

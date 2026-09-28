@@ -37683,3 +37683,108 @@ trust mismatch, exact export roles, aliases/forwarders/interior entries, chained
 fragments, missing/cyclic/deep chains, malformed headers/sections/permissions,
 publication bytes, relocations and incomplete imports. No tll or fixture process
 left running; pre-existing untracked tmp/ preserved. No visual-result claim.
+
+### 2026-09-28 — Compare mapped P99 immutable bytes with exact loader expectations (STATIC / OWNED)
+
+**Scope and alternatives.** Added an external Python comparison component and
+Windows read-only transport, not a game-side hook or an admitted installer.
+Reject comparing raw file offsets as RVAs, treating MEM_IMAGE as integrity,
+masking all relocated/IAT bytes, learning expected imports from the observed IAT,
+accepting writable readonly sections, or treating comparison as a module lease.
+Existing C++ RemoteImageReader remains strict RX and was not weakened for metadata.
+
+**STATIC implementation.** p99_wrist_mapped_image.py owns the trusted file bytes,
+checks SHA256 through the prior disk manifest, constructs nonoverlapping frozen
+header/immutable-section expectations and reports every exclusion. DIR64 expected
+qwords are loaded_base + (preferred_value - preferred_base), with checked user
+address bounds. Expected IAT addresses come from a complete, exact, duplicate-free
+(case-insensitive DLL name, case-sensitive symbol) binding set supplied independently
+by the caller. Only named IAT slots change; terminating qwords remain exact zero.
+Overlapping IAT/relocation transformations are rejected. No callback address is
+learned from a remote PE export/Offer. Bindings are inputs, not independently
+certified dependency provenance in this component.
+
+VirtualSize is the comparison extent; virtual zero-fill is compared, file/page
+padding is explicitly not. The artifact's .rsrc raw padding contains nonzero
+PADDINGXX, so forcing raw padding to zero would be wrong. Mutable .data/.p99prep
+and discardable .reloc are excluded; relocation instructions are taken only from
+the trusted file. All compared runtime code, exports, import names/ILT/IAT,
+unwind prefixes and CHAININFO tails must fit wholly inside compared extents.
+Review reproduced a gap with synthetic .rdata VirtualSize904: a four-byte unwind
+header at2900 was covered but its twelve-byte chain tail at2904 was not. Fixed by
+tracking the disk parser's COMPLETE metadata reads and requiring coverage, with
+a regression for that exact case and an ILT moved outside VirtualSize.
+[PE format](https://learn.microsoft.com/en-us/windows/win32/debug/pe-format).
+
+p99_wrist_mapped_windows.py borrows a caller-owned HANDLE plus PID/creation/base/
+size. It does not discover/open processes, load target DLLs, attach a debugger,
+resolve imports, change protection, write memory, mutate contexts or send input.
+The HANDLE must support query/read/synchronization. Process identity is checked
+before and after comparison. Each bounded read requires exact RO or RX,
+MEM_COMMIT/MEM_IMAGE and expected AllocationBase; exact VQ metadata is checked
+before and after RPM. FALSE with full count, TRUE with short count, guard/COW/
+writable protection, malformed ranges and observable metadata changes refuse.
+These checks cannot eliminate ABA, guarantee atomic bytes or pin a module.
+[VQ semantics](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualqueryex),
+[RPM semantics](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-readprocessmemory).
+
+**STATIC loader-state boundary.** This artifact's load config166D0/size140 points
+to CFG slots11148/11158, XFG11150/11160/11168, CastGuard11170, GuardMemcpy11178,
+volatile metadata16A74, and security cookie5F000 in mutable .data. These are not
+all ordinary IAT entries. They are not masked: the compared immutable slots must
+match their exact relocated file values; unsupported loader overrides refuse.
+No CFG-slot change was observed in the successful owned run on this host. This
+is NOT a universal assertion about Windows configurations/versions.
+[Load-config layout](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-image_load_config_directory64).
+
+**Owned prediction and result.** Preconditions were the previously reviewed
+inert DllMain, final optimized retained body/call graph, and exact disk artifact
+manifest. Prediction before fixture execution: known loader transformations match,
+or the first unsupported change is rejected at a concrete offset; never infer a
+new accepted mask from a mismatch. The fixed-path p99_wrist_mapped_fixture.py
+loads ONLY the reviewed artifact into its own short-lived process; no external
+PID, game or exported adapter/native helper is executed. A read handle denying
+writes/deletion is retained from snapshot/hash through load/compare/unload.
+Artifact module must not already be loaded and must disappear after FreeLibrary;
+all acquired dependency references and the file handle are released.
+
+REJECTED (owned host): unchanged preferred ImageBase in the mapped PE header.
+First run rejected RVA13A, within header qword138: disk0000000180000000 versus
+mapped00007FFA3FFC0000, exactly the independently returned load base. Bounded
+diagnostics found no other immutable differences after DIR64/IAT handling.
+Added explicit HeaderBase.PREFERRED and HeaderBase.LOADED policies. LOADED writes
+ONLY that known header qword in owned expected bytes using the independently
+selected base; it never reads a replacement from the remote header or accepts
+arbitrary/either values. Preferred remains the default; fixture selects LOADED.
+Tests reject a wrong header base and an unknown policy.
+
+This is deliberately narrower than the earlier p99_image_query_audit registry:
+its nonexecuting SEC_IMAGE_NO_EXECUTE views had header metadata7FF7084F0000 that
+matched NEITHER actual view nor preferred140000000. That equality remains
+REJECTED; its opaque-eight-byte exception was authorized only for the query-only
+nonexecuting control and is NOT reused here. Today's normal LoadLibrary artifact
+observation does not establish a universal header-base rule. A third value refuses.
+
+CONFIRMED (owned fixture ONLY): unchanged artifact SHA256
+a81ba7f43c543c731942c999f8b6aa9ed8f2bc0cda96c41ab96882257e22aae5 matches376071 bytes
+in five ranges (headers/.text/.rdata/.pdata/.rsrc), with36 independently resolved
+local IAT bindings and58 DIR64 adjustments. Four additional relocations target
+excluded mutable .data. Repeat load/compare/unload passed three times after the
+final cleanup checks. Local GetProcAddress is used ONLY on named OS/CRT dependency
+modules, never to discover/call artifact adapters. This local resolver is NOT a
+cross-process API-set/forwarder/provider-code/lifetime proof.
+
+Result fields always deny installation, atomic snapshot, dependency integrity
+and module-lifetime verification. The comparison helper is not yet connected to
+the external C++ install transaction. No initialization/FLS/preparation/ACK/arm
+path, source admission or game-visible grip was enabled. No new game semantics
+or IDB names; single IDB unchanged. NEXT: independent remote provider identity,
+export/forwarder/API-set binding and module lifetime, then external hold/transaction
+integration and persistent recovery before ACK/manual arm.
+
+Validation: Python627/627 (24 new mapped-reader/plan tests), CTest77/77, full
+default MSVC build up to date. Tests cover exact/positive/negative base deltas,
+unknown CFG slot changes, chained code and metadata corruption, incomplete imports,
+header/section overlap, padding/zero-fill, unchanged excluded-state limits, process
+identity changes, and low-level Windows BOOL/count/query failures. No game or
+leftover fixture process; existing untracked tmp/ preserved.
