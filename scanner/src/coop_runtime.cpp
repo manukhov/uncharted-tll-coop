@@ -52,6 +52,7 @@
 #include "nadine_p99_wrist_read_diagnostic.h"
 #include "nadine_p99_wrist_report.h"
 #include "nadine_p99_wrist_invoke.h"
+#include "nadine_p99_wrist_prepare_windows.h"
 #include "nadine_p99_process_native_frame.h"
 #include "nadine_pistol_grip_policy.h"
 #if defined(TLL_P99_PREPARATION_AUDIT)
@@ -61832,6 +61833,9 @@ std::atomic<bool> g_p99_source_observation_ready{false};
 // No installer/arm route may publish it before the complete production-route
 // fixture and fresh preflight have been audited. Neither old exam enables it.
 constexpr bool kEnableP99WristObservation = false;
+constexpr bool kEnableP99WristPreparation = false;
+static_assert(!kEnableP99WristPreparation,
+    "PREPARED-only route is not an admitted game exam or an installed observer");
 static_assert(!kEnableP99WristObservation,
     "Post-cmd16 observer integration is not admitted to a live exam yet");
 enum class P99SourcePurpose { kPersistentJointCache, kOwnedGroupValues };
@@ -64043,6 +64047,7 @@ bool install_legacy_nadine_p99_chloe_grip_transfer() {
 #include "nadine_p99_wrist_read_runtime.inl"
 #include "nadine_p99_wrist_observation_runtime.inl"
 #include "nadine_p99_wrist_worker_runtime.inl"
+#include "nadine_p99_wrist_prepare_runtime.inl"
 
 void clear_local_nadine_mazur_weapon_palette_census_target() {
     g_nadine_mazur_weapon_palette_census_fg.store(
@@ -80385,6 +80390,12 @@ DWORD WINAPI install_hook(void*) {
     if (g_module == 0) {
         log_line("tll.exe module not found");
         return 1;
+    }
+    if constexpr (kEnableP99WristPreparation) {
+        // Mandatory early return on BOTH outcomes: no ordinary hook/network/
+        // appearance installer may run after the immutable preparation snapshot.
+        // Loader must retain its original LoadLibrary reference until PIN occurs.
+        return prepare_p99_wrist_runtime() ? 0 : 2;
     }
     if (g_self_module != 0) {
         const auto* const dos =

@@ -1,5 +1,6 @@
 #pragma once
 #include "nadine_p99_wrist_code_snapshot.h"
+#include "nadine_p99_wrist_handshake.h"
 #include <Windows.h>
 
 namespace coop::p99_wrist_code {
@@ -39,4 +40,12 @@ public:
     // return TRUE AND the exact requested count. No remote span is over-read.
     bool equal(std::uintptr_t address, std::span<const std::uint8_t> owned) const noexcept;
 };
+
+// Separate NONEXECUTABLE publication channel: code reader's RX admission must
+// not be weakened to accommodate it. Address must be independently resolved from
+// the expected DLL export; PID/creation/build/ABI admission is caller-owned.
+// Requires the entire 4096B page RO/MEM_IMAGE before and after one exact RPM,
+// zero reserved tail and an exact Offer matching the expected DLL extent.
+std::optional<p99_wrist_handshake::Offer> read_prepared_offer(HANDLE borrowed,
+    std::uintptr_t dll,std::uint64_t dll_bytes,std::uintptr_t exported_page) noexcept;
 } // namespace coop::p99_wrist_code

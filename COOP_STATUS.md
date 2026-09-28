@@ -37394,3 +37394,105 @@ NEXT: real one-owner inert DLL preparation (native identity, FLS, retained DLL/R
 relays, immutable Snapshot/plan), owned IPC publication and concrete local Ops;
 then external patch/debug lifecycle with held uncertain-state recovery and explicit
 Continue/detach failure fixtures. Protocol classes are NOT that implementation.
+
+### 2026-09-28 — P99 inert preparation resources and readonly publication (STATIC / OWNED OS TESTS)
+
+**Scope and alternatives.** Implemented the next preparation component for the
+read-only wrist route at141ABA973, not the grip writer or a game exam. Rejected
+reusing allocate_executable_near (it allocates RWX) and publishing midway through
+ordinary install_hook (later installers could change certified code). Rejected
+treating the observation worker's temporary DLL ref as hook lifetime. Chosen path:
+a separate kEnableP99WristPreparation hardFALSE branch immediately after g_module
+resolution, BEFORE self-PE legacy parsing/log/alias/ordinary installers. Both success
+and failure return from that branch; no fallthrough. Neither this branch nor
+kEnableP99WristObservation/source exam was enabled. No tll launch/injection/input.
+
+**Actual source implementation, still disabled.** nadine_p99_wrist_prepare_runtime.inl
+owns one-shot preparation Resources/Snapshot/Gate and consumes the shared old group
+installation gate before doing anything irreversible. It refuses initialized FLS,
+old package readiness, installed/ready wrist or started worker. It supplies the
+actual compiled Async/Process0/Process1/cmd16 entry addresses, with both producer
+sites sharing Async. Resources verifies main==GetModuleHandle(NULL), distinct DLL,
+PE64 extents, real PID/creation/QPC and fresh BCrypt random128-bit nonce. Hooks must
+belong to that DLL's RX image allocation. GetModuleHandleEx FROM_ADDRESS|PIN then
+retains the DLL through process termination, independently of worker refs.
+The initial LoadLibrary reference MUST remain held until the prep-thread pins;
+the old DllMain/CreateThread design does not itself provide a bootstrap reference.
+[PIN contract](https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulehandleexw).
+
+Dedicated bounded symmetric near allocation uses4096B pages/65536B granularity,
+VirtualAlloc RESERVE|COMMIT/PAGE_READWRITE, not existing RWX allocator. It builds
+the exact five existing leaf/rel32 plans, writes14B FF25 absolute stubs, changes
+each whole relay page to PAGE_EXECUTE_READ, checks prior protection and flushes
+the instruction cache. Fresh VQ/exact leaf checks follow. Relay allocations have
+NO freeing destructor/reset; at most five are retained per single owner, including
+prepublication failure. One unexpected-address allocation can be freed only while
+unpublished. [Allocation](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualalloc),
+[protection/flush responsibility](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotect).
+
+After Resources, actual body prepares the existing63region/46690B stock Snapshot,
+initializes the shared two-slot FLS once, bootstraps this worker's empty slot, then
+Gate checks fresh identity/resources/stock sites/code before publication. It never
+calls a retail function, patches the five sites, accepts an ACK, sets installed/ready,
+starts a worker or arms an event. Initialized FLS is now inspectable as a bool;
+indices never leave Slot and poison never revokes lifetime. A final Resources
+verification failure now clears its local ready flag without freeing anything.
+
+**Immutable image-page channel.** Export TllP99WristPreparedV1 is a separate aligned
+4096B Page in non-executable .p99prep. The export exists from DLL load with zero/RW
+contents, NOT proof of readiness. Producer requires zero image data page, copies
+the canonical240B Offer, issues a memory barrier and seals the page READONLY.
+Initial image WRITECOPY is accepted as well as RW; RX/WX is never accepted for data.
+DLL/relay/FLS lifetime is already irreversible before the first visible wire store.
+No failure erases or frees it. False-after-effect seal can leave a complete RO page
+visible even though publish returned false and the local Gate expired: it is still
+safe for the lifetime contract and is NOT an observer arm. Do not use returned false
+as proof that metadata never escaped. Readonly is not authentication or protection
+against another privileged writer changing page protections later.
+
+External transport now has separate read_prepared_offer, not a relaxed code reader.
+It takes an independently resolved expected DLL/export address and DLL extent,
+requires a full aligned committed MEM_IMAGE/READONLY page before/after exact4096B
+RPM, zero reserved tail, valid Offer and matching DLL bounds. No allocation/hash/
+write/debugger action is performed. PID/creation/build/ABI identity still belongs
+to the external caller. Partial/short reads and changed allocation/protection fail.
+
+**OWNED tests, exact limits.** New Windows fixture148checks normal +23seal-before +
+23seal-after uses only its own EXE image, inert fixture DLL and uncommitted synthetic
+main extent; no retail bytes are mapped/executed and no relay is executed. It checks
+five real RW->RX allocations/flushes, each of5 protect/flush failure positions,
+before/after-effect failures, retained allocations after owner destruction, actual
+PIN survival after releasing the initial fixture-DLL ref, and actual FLS enter/leave.
+Publication checks export/4096B section isolation, whole immutable wire, nonretry,
+and matching reads through actual VQEx/RPM. A false-after-effect seal is directly
+observed in the owned fixture. The first fixture run correctly refused when synthetic
+relays overlapped its unreserved declared main image; fixed fixture by reserving an
+uncommitted NOACCESS main extent, without weakening production overlap validation.
+
+Extended remote tests now112checks including fullRO data-page success, pre/post
+query failure, all RPM status/count failures, modifiers, malformed header/tail,
+allocation replacement and image-bound mismatch. A separate inert full-production-
+TU DLL fixture calls the actual prepare body against its small non-retail EXE and
+verifies refusal/no retry/no publication/no FLS init/no network/no observers, with
+shared install gate consumed. It has no DllMain installer. This is only the actual
+negative entry path; complete positive63region preparation on a real game image,
+cross-process export resolution, ACK reception and patch/debug lifecycle are NOT
+tested or implemented by these cases.
+
+Production DLL built and inspected with dumpbin: TllP99WristPreparedV1 at current
+RVA1E5000, .p99prep virtual/raw size1000, separate from .data and .rsrc, RW/nonexec.
+RVA is build-specific: resolve export, do not hardcode it. Runtime defaults leave
+that page zero/RW. Local Resources checks extents and RX availability of entries,
+NOT full self-DLL/ABI/bridge-byte identity. Actual callbacks are compiled references
+and retained by PIN; future external writer must independently certify its expected
+DLL build and those entries/bridges. Regional retail Snapshot remains NOT full
+transitive closure/source admission. PREP-only early return also skips appearance/
+network, so it is NOT normal Nadine gameplay or a ready observation exam.
+
+Verification: full MSVC build; Python576/576; CTest71/71. No game or fixture processes
+left running; pre-existing tmp/ unchanged. No new game-function semantics/names:
+existing single IDB labels remain unchanged, no headless rewrite was needed.
+NEXT: independently resolve/certify external target DLL/export/ABI entries; implement
+owned debug-event hold + external transaction with real quiescence/safe-hold recovery,
+then ACK reception after verified Continue/detach and separate manual arm. Current
+source supplies preparation/publication, not this complete installer or grip repair.

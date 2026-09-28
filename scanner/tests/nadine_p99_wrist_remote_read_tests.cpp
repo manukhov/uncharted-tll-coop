@@ -248,9 +248,49 @@ void real_current_process_tests() {
     wc::Snapshot empty;
     check(!empty.matches(coop::p99_wrist_code_manifest::Stage::Stock, reader), "Snapshot accepts transport API and rejects unprepared evidence");
 }
+void publication_tests() {
+    namespace wh=coop::p99_wrist_handshake;
+    Fake f;AuditScope scope(f);wh::Offer o{};
+    o.pid=12;o.creation=34;o.nonce={56,78};o.frequency=10000000;
+    o.module=0x140000000;o.image_bytes=0x8000000;o.dll=Fake::module;o.dll_bytes=0x10000;
+    o.originals={o.module+0x1A92A00,o.module+0x1AB97C0,o.module+0x217B630};
+    o.hooks={o.dll+0x2000,o.dll+0x2000,o.dll+0x3000,o.dll+0x4000,o.dll+0x5000};
+    for(unsigned i=0;i<5;++i)o.relays[i]=o.module+0x10000000+i*0x1000;
+    const auto wire=wh::encode(o);
+    f.bytes.fill(0);std::copy(wire.begin(),wire.end(),f.bytes.begin());
+    f.region(0,f.origin,4096,PAGE_READONLY);
+    const auto read_offer=[&]{return wc::read_prepared_offer(f.handle,o.dll,o.dll_bytes,f.origin);};
+    check(read_offer()==o && f.queries==2 && f.reads==1 && f.requested_total==4096,"publication uses exact full RO page and both metadata checks");
+    for(unsigned mode=1;mode<=4;++mode) {
+        f.reset_counts();f.fail_read=1;f.read_fault=mode;
+        check(!read_offer(),"publication rejects each partial/count/read failure");
+    }
+    f.fail_read=0;
+    for(auto protection:{DWORD(PAGE_READWRITE),DWORD(PAGE_WRITECOPY),DWORD(PAGE_EXECUTE_READ),
+        DWORD(PAGE_READONLY|PAGE_GUARD),DWORD(PAGE_READONLY|PAGE_NOCACHE)}) {
+        f.regions[0].Protect=protection;f.reset_counts();
+        check(!read_offer() && !f.reads,"publication accepts ONLY plain RO; never code or guard");
+    }
+    f.regions[0].Protect=PAGE_READONLY;
+    for(std::size_t at:{std::size_t{1},std::size_t{2}}) {
+        f.reset_counts();f.fail_query=at;check(!read_offer(),"publication query failure before or after RPM");
+    }
+    f.fail_query=0;f.reset_counts();f.mutation=3;
+    check(!read_offer(),"publication allocation replaced after metadata refuses");
+    f.mutation=0;f.region(0,f.origin,4096,PAGE_READONLY);
+    for(const auto byte:{std::size_t{0},wh::kOfferBytes,std::size_t{4095}}) {
+        f.bytes[byte]^=1;check(!read_offer(),"publication header or reserved tail corruption refuses");f.bytes[byte]^=1;
+    }
+    f.regions[0].RegionSize=4095;check(!read_offer(),"full-page contract required");
+    f.regions[0].RegionSize=4096;
+    check(!wc::read_prepared_offer(f.handle,o.dll,o.dll_bytes+4096,f.origin),"offer DLL extent must match caller identity");
+    check(!wc::read_prepared_offer(f.handle,o.dll,o.dll_bytes,f.origin+1),"export page must be aligned");
+    check(!wc::read_prepared_offer(f.handle,o.dll,4096,f.origin),"export page outside declared image refuses");
+    check(!wc::read_prepared_offer(nullptr,o.dll,o.dll_bytes,f.origin),"missing process handle refuses");
+}
 } // namespace
 int main() {
-    fake_tests(); whitelist_tests(); real_current_process_tests();
+    fake_tests(); whitelist_tests(); real_current_process_tests();publication_tests();
     std::cout << checks << " checks, " << failures << " failures; READ_ONLY_OWN_IMAGE_AND_SYNTHETIC_FAULTS\n";
     return failures ? 1 : 0;
 }

@@ -5,6 +5,16 @@ namespace coop::p99_wrist_code {
 const RemoteReadAudit* g_remote_read_audit = nullptr;
 #endif
 namespace {
+bool read_exact(HANDLE process,std::uintptr_t address,std::uint8_t* out,std::size_t size) noexcept {
+    SIZE_T actual=0;BOOL okay=FALSE;
+#if defined(TLL_P99_WRIST_REMOTE_READ_AUDIT)
+    if(g_remote_read_audit && g_remote_read_audit->read)
+        okay=g_remote_read_audit->read(process,reinterpret_cast<LPCVOID>(address),out,size,&actual);
+    else
+#endif
+        okay=ReadProcessMemory(process,reinterpret_cast<LPCVOID>(address),out,size,&actual);
+    return okay!=FALSE && actual==size;
+}
 SIZE_T query(HANDLE process, std::uintptr_t address, MEMORY_BASIC_INFORMATION& result) noexcept {
 #if defined(TLL_P99_WRIST_REMOTE_READ_AUDIT)
     if (g_remote_read_audit && g_remote_read_audit->query)
@@ -72,15 +82,7 @@ bool RemoteImageReader::accessible(std::uintptr_t address, std::size_t size) con
 }
 
 bool RemoteImageReader::read_exact(std::uintptr_t address, std::uint8_t* out, std::size_t size) const noexcept {
-    SIZE_T actual = 0;
-    BOOL okay = FALSE;
-#if defined(TLL_P99_WRIST_REMOTE_READ_AUDIT)
-    if (g_remote_read_audit && g_remote_read_audit->read)
-        okay = g_remote_read_audit->read(process_, reinterpret_cast<LPCVOID>(address), out, size, &actual);
-    else
-#endif
-        okay = ReadProcessMemory(process_, reinterpret_cast<LPCVOID>(address), out, size, &actual);
-    return okay != FALSE && actual == size;
+    return p99_wrist_code::read_exact(process_,address,out,size);
 }
 
 bool RemoteImageReader::copy(std::uintptr_t address, std::span<std::uint8_t> owned) const noexcept {
@@ -103,5 +105,28 @@ bool RemoteImageReader::equal(std::uintptr_t address, std::span<const std::uint8
         offset += count;
     }
     return accessible(address, owned.size());
+}
+
+std::optional<p99_wrist_handshake::Offer> read_prepared_offer(HANDLE borrowed,
+    std::uintptr_t dll,std::uint64_t dll_bytes,std::uintptr_t exported_page) noexcept {
+    namespace wh=p99_wrist_handshake;
+    if(!borrowed || !wh::range(dll,dll_bytes) || (dll&0xFFFF) || (dll_bytes&0xFFF) ||
+        (exported_page&0xFFF) || exported_page<dll || dll_bytes<4096 || exported_page-dll>dll_bytes-4096)return {};
+    const auto readonly=[&]() noexcept {
+        MEMORY_BASIC_INFORMATION m{};
+        if(query(borrowed,exported_page,m)!=sizeof(m) || m.Type!=MEM_IMAGE || m.State!=MEM_COMMIT ||
+            m.Protect!=PAGE_READONLY || reinterpret_cast<std::uintptr_t>(m.AllocationBase)!=dll)return false;
+        const auto base=reinterpret_cast<std::uintptr_t>(m.BaseAddress);
+        const auto end=p99_group_ingress::add(base,m.RegionSize);
+        return base<=exported_page && end && *end>=exported_page+4096;
+    };
+    if(!readonly())return {};
+    after_metadata(exported_page,4096);
+    std::array<std::uint8_t,4096> page{};
+    if(!read_exact(borrowed,exported_page,page.data(),page.size()) || !readonly())return {};
+    for(std::size_t i=wh::kOfferBytes;i<page.size();++i)if(page[i])return {};
+    const auto offer=wh::decode(std::span(page).first(wh::kOfferBytes));
+    if(!offer || offer->dll!=dll || offer->dll_bytes!=dll_bytes)return {};
+    return offer;
 }
 } // namespace coop::p99_wrist_code

@@ -30,6 +30,7 @@ target_compile_options(tll_p99_wrist_remote_read PRIVATE /W4 /permissive- /EHsc)
 add_library(tll_coop_runtime SHARED src/coop_runtime.cpp
     src/nadine_p99_wrist_invoke.cpp
     src/nadine_p99_wrist_code_windows.cpp
+    src/nadine_p99_wrist_prepare_windows.cpp
     $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
     $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
 option(TLL_P99_SOURCE_OBSERVATION_EXAM "Enable one writer-disabled source observation in an explicit exam build" OFF)
@@ -322,6 +323,31 @@ if(BUILD_TESTING)
     target_link_libraries(tll_nadine_p99_wrist_code_tests PRIVATE bcrypt)
     add_test(NAME nadine_p99_wrist_code COMMAND tll_nadine_p99_wrist_code_tests
         "C:/UNCHARTED Legacy of Thieves Collection (2016-2017-2022)/Uncharted Legacy of Thieves Collection/tll.exe")
+    add_library(tll_nadine_p99_wrist_pin_fixture SHARED tests/nadine_p99_wrist_pin_fixture.cpp)
+    add_library(tll_nadine_p99_wrist_prepare_runtime_fixture SHARED tests/nadine_p99_wrist_prepare_runtime_fixture.cpp
+        src/nadine_p99_wrist_prepare_windows.cpp src/nadine_p99_wrist_code_windows.cpp
+        src/nadine_p99_wrist_invoke.cpp $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
+        $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
+    target_include_directories(tll_nadine_p99_wrist_prepare_runtime_fixture PRIVATE src tests)
+    target_compile_features(tll_nadine_p99_wrist_prepare_runtime_fixture PRIVATE cxx_std_20)
+    target_compile_definitions(tll_nadine_p99_wrist_prepare_runtime_fixture PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(tll_nadine_p99_wrist_prepare_runtime_fixture PRIVATE /W4 /permissive- /EHsc)
+    target_link_libraries(tll_nadine_p99_wrist_prepare_runtime_fixture PRIVATE bcrypt ws2_32)
+    add_executable(tll_nadine_p99_wrist_prepare_runtime_tests tests/nadine_p99_wrist_prepare_runtime_tests.cpp)
+    target_link_libraries(tll_nadine_p99_wrist_prepare_runtime_tests PRIVATE tll_nadine_p99_wrist_prepare_runtime_fixture)
+    add_test(NAME nadine_p99_wrist_prepare_runtime COMMAND tll_nadine_p99_wrist_prepare_runtime_tests)
+    add_executable(tll_nadine_p99_wrist_prepare_windows_tests tests/nadine_p99_wrist_prepare_windows_tests.cpp
+        src/nadine_p99_wrist_prepare_windows.cpp src/nadine_p99_wrist_code_windows.cpp)
+    target_include_directories(tll_nadine_p99_wrist_prepare_windows_tests PRIVATE src)
+    target_compile_features(tll_nadine_p99_wrist_prepare_windows_tests PRIVATE cxx_std_20)
+    target_compile_definitions(tll_nadine_p99_wrist_prepare_windows_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX TLL_P99_WRIST_PREPARE_AUDIT=1)
+    target_compile_options(tll_nadine_p99_wrist_prepare_windows_tests PRIVATE /W4 /permissive- /EHsc)
+    target_link_libraries(tll_nadine_p99_wrist_prepare_windows_tests PRIVATE bcrypt tll_p99_wrist_remote_read)
+    foreach(prepare_case normal seal-before seal-after)
+        add_test(NAME nadine_p99_wrist_prepare_${prepare_case} COMMAND tll_nadine_p99_wrist_prepare_windows_tests
+            ${prepare_case} "$<TARGET_FILE:tll_nadine_p99_wrist_pin_fixture>")
+        set_tests_properties(nadine_p99_wrist_prepare_${prepare_case} PROPERTIES TIMEOUT 30)
+    endforeach()
     add_executable(tll_nadine_p99_wrist_remote_read_tests tests/nadine_p99_wrist_remote_read_tests.cpp
         src/nadine_p99_wrist_remote_read.cpp)
     target_include_directories(tll_nadine_p99_wrist_remote_read_tests PRIVATE src)

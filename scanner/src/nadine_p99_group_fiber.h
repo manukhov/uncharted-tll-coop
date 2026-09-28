@@ -88,6 +88,9 @@ public:
         return true;
     }
     bool failed() const noexcept { return failed_.load(std::memory_order_acquire); }
+    bool initialized() const noexcept {
+        return index_.load(std::memory_order_acquire) != FLS_OUT_OF_INDEXES;
+    }
     void poison() noexcept { failed_.store(true, std::memory_order_release); }
 
     Frame* current() noexcept {

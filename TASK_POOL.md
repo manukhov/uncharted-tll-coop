@@ -11,7 +11,30 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / OWNED TRANSPORT TESTS (2026-09-28, preparation value protocol):
+Latest STATIC / OWNED PREPARATION TESTS (2026-09-28, real resources and RO publication):
+Implemented hardFALSE PREPARED-only branch BEFORE all ordinary installers; return
+on success AND refusal, no game code/patch/network/appearance/observer arm. Actual
+body gathers self/process identity, permanently PINs DLL, allocates5RW near leaves,
+sealsRX+flushes, prepares63region Snapshot, initializes shared FLS once and publishes
+the240B Offer in a dedicated4096B exported .p99prep page sealedREADONLY. Resources
+are never freed after exposure, even if sealing reports false-after-effect.
+Separate VQEx/RPM publication reader requires fullRO image page before/after read,
+zero tail and matching DLL extent. Existing code reader remains strictRX.
+Owned OS fixtures148+23+23 checks cover5x seal/flush failures, actual DLL PIN and
+reference release, FLS, export isolation and after-effect publication. Remote
+reader112checks. Inert full production TU also exercises wrong-main/refusal path;
+complete positive retail preparation has NOT run. Default DLL export is zero/RW;
+dumpbin confirmed isolated4096B non-executable section (current RVA1E5000; do not
+hardcode). Local checks are not external DLL build/ABI/bridge-byte certification.
+NEXT: external helper must independently resolve/certify loaded DLL and exported
+page/ABI entries, own debug-event hold + actual patch transaction/uncertain-state
+recovery, then deliver ACK only after checked Continue/detach. No ACK receiver or
+worker connection yet. Loader must retain its initial DLL reference until PIN.
+PREP-only skips appearance/network and is NOT a usable Nadine exam configuration;
+do not enable it as normal gameplay. All live flags stayFALSE; no game/grip claim.
+Full build; Python576/576; CTest71/71. Existingtmp/ untouched; see latest registry.
+
+Previous STATIC / OWNED TRANSPORT TESTS (2026-09-28, preparation value protocol):
 Added read-only external RemoteImageReader (VQEx/RPM, exact counts, allocation/RX
 checks before and after reads, 512B stack comparison scratch). Production static
 library has no audit seam;91 checks use ONLY own image/read handles + fake faults.
