@@ -11,7 +11,28 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / OWNED CODE+OS TESTS (2026-09-28, verifier and debug-event barrier):
+Latest STATIC / OWNED TRANSPORT TESTS (2026-09-28, preparation value protocol):
+Added read-only external RemoteImageReader (VQEx/RPM, exact counts, allocation/RX
+checks before and after reads, 512B stack comparison scratch). Production static
+library has no audit seam;91 checks use ONLY own image/read handles + fake faults.
+Added 240B LE Offer/248B ACK protocol and local one-shot Gate. Identity includes
+PID/creation/nonce/image/DLL/originals/hooks/relays/QPC; decode reconstructs our
+five exact sites. PREPARED is not INSTALLED; a full matching ACK still requires
+fresh local identity/resources/installed-sites/code checks and no-debugger checks.
+No automatic arm/worker/free.1130 checks include concurrent prepare/ACK/expiry/
+publication; mock Ops, not OS resource admission. Both remain UNWIRED to game.
+Code audit: wrist originals are module+1A92A00/+1AB97C0/+217B630 directly, not old
+group pointers. Even ready=false accesses FLS current(); bootstrap can allocate.
+FLS initialization must have one owner; route DLL/relay lifetime must outlive the
+worker's temporary module ref and all timeout/refusal/rollback outcomes.
+NEXT: implement real inert preparation/publication and local Ops, with permanent
+resource ownership; then external patch/debug lifecycle safe-hold + Continue/
+detach failure tests. Current install_hook is NOT inert and must not be mistaken
+for such a preparation entry. No game until integrated static proof/prediction.
+Feature hardFALSE, source examOFF, code-closure/source admissionFALSE. Full build;
+Python576/576; CTest67/67. No grip improvement claimed; pre-existing tmp/ untouched.
+
+Previous STATIC / OWNED CODE+OS TESTS (2026-09-28, verifier and debug-event barrier):
 Do NOT use animation phase drain as five-site install exclusion. Strongest return
 140167800 follows SubmitSingleJobAndWait1415B5210(UpdateProcessBuckets14015F020),
 but producers remain open and package-login independently reaches shared Process

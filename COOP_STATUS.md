@@ -37309,3 +37309,88 @@ Feature hardFALSE, source observation examOFF, old writers unchanged. Existingtm
 preserved. NEXT: implement external read/patch/lifecycle transport and immutable
 DLL preparation handshake; test safe-hold and Continue/detach failures before any
 game exam. Do not revive native phase-drain or startup sleeps as substitute gates.
+
+### 2026-09-28 — P99 external read transport and preparation value protocol (STATIC / OWNED TESTS ONLY)
+
+**Scope:** continued the read-only post16 wrist observation route at141ABA973;
+no game launch/injection/patch, no source pose write, no visual grip repair claim.
+New components remain UNWIRED to the live DLL. Regional code closure and source
+admission remain false; no runtime admission follows from these fixture passes.
+
+**Implemented external READ transport.** RemoteImageReader in
+scanner/src/nadine_p99_wrist_remote_read.{h,cpp} accepts a borrowed process handle
+and one image AllocationBase. VirtualQueryEx requires committed MEM_IMAGE/exactRX;
+only an explicit subset of the five planned patch pages admits RXW/EXECUTE_WRITECOPY.
+Metadata is checked before and after reads. Every ReadProcessMemory call requires
+nonzero result AND exactly requested bytes. copy may leave partial rejected data;
+equal uses512B stack scratch, at most64KiB/64 metadata regions, no heap/hash/log.
+No OpenProcess/debugger/remote write/native execution/handle close is in the reader.
+The caller owns PROCESS_QUERY_INFORMATION|PROCESS_VM_READ rights, identity,
+resource lifetime and a real exclusion boundary. Double metadata checks do not
+prevent ABA or concurrent code changes; MEM_IMAGE is not byte identity.
+API basis: [ReadProcessMemory](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-readprocessmemory)
+and [VirtualQueryEx](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualqueryex).
+
+Production static library tll_p99_wrist_remote_read compiles without fixture seams.
+91checks cover real own nonexecuted image data and own borrowed/read-right handles,
+plus synthetic short TRUE/full FALSE/partial FALSE/overcount RPM, chunk failures,
+wrong allocation/protection/modifiers, malformed/short VQ, overflow and metadata
+changes. This is NOT a real external-child Snapshot/patch integration test; the
+Snapshot interface is compatible, but its prepared63region proof remains separate.
+
+**Implemented local protocol/gate, NOT IPC or resource preparation.**
+nadine_p99_wrist_handshake.h defines240B explicit little-endian Offer and248B ACK;
+no native C++ layout, HANDLE, atomic or FLS index crosses the proposed boundary.
+PID/creation,128-bit nonce, EXE/DLL extents, QPC, three original addresses, five ABI
+entries and five relay allocations are immutable owned values. Headers/version/
+reserved bytes, image/relay overflow and overlap, exact original RVAs, duplicate
+leaf entries and rel32 reachability are checked. Planner reconstructs only the
+existing five exact replacements; wire never supplies arbitrary patch opcodes.
+Both ingress sites require the same Async entry, Process0/1 and cmd16 are distinct.
+The wire requires independent page-aligned relay allocations outside both images.
+Frequency minimum1000 matches actual worker startup (caught during code audit).
+Nonce/declared addresses are NOT authentication or independent module/build/ABI
+certification; those remain concrete adapter responsibilities, not trusted fields.
+
+Gate is a LOCAL one-shot state machine: Empty->Preparing->Prepared->Verifying->
+Installed or terminal Refused. Preparation Ops must certify local identity,
+retained resources, stock sites and stock regional code before value publication.
+Only an exact full-offer success ACK can attempt verification; stale/truncated ACK
+does not consume the current offer. A matching failure/unknown outcome is terminal.
+Success still performs fresh identity, no-debugger, retained resource, exact
+installed-sites and installed regional-code checks, then another no-debugger check.
+These are necessary checks, NOT an exclusion lease against later foreign changes.
+Installed only permits later worker startup; there is no READY/ARMED setter or
+automatic event/worker here. expire cannot steal a Verifying owner. Publication
+returns a value copy and never exposes mutable internal state. After publication,
+timeout/refusal/worker exit/verified rollback never authorizes freeing route
+resources: metadata may already have escaped or a callback address been fetched.
+1130checks cover wire bounds and malformed values, each local proof failure,
+stale identity byte changes, partial ACKs, refusal/hold/detach-failure outcomes,
+and controlled/concurrent prepare/ACK/expiry/publication schedules. Ops are mocks;
+no kernel IPC, resource pin, real detach check or live gate has been implemented.
+
+**STATIC actual glue audit / rejected integration shortcuts.** The actual wrist
+adapters compute native targets directly from g_module+1A92A00/+1AB97C0/+217B630;
+old g_p99_group_async/g_anim_cmd_execute_joint_programs are irrelevant. Even with
+ready=false all adapters call shared FLS current() before stock. WindowsApi::read
+may bootstrap FlsSetValue/lazy per-fiber storage; do not claim zero allocation or
+zero overhead before arm. The shared FLS Slot initialize() is one-owner, not a
+concurrent/idempotent API. Never call old install_p99_group_package for wrist prep:
+it owns that FLS too and patches the same two/five sites. Aim boundary shares
+141ABA973. Exact fresh stock checks and explicit mode exclusion remain mandatory.
+Worker FreeLibraryAndExitThread releases its temporary ref even after active-owner
+timeout; that ref is NOT permanent route/bridge/relay/FLS lifetime protection.
+Ordinary DllMain->install_hook also installs unrelated hooks, so it is NOT an
+inert preparation entry. Future inert mode must branch before legacy installs
+after module/self identity and exit that chain, or explicitly document full normal
+installation before prep. Do not publish in the middle of a changing hook chain.
+
+Verification: complete MSVC build including production no-seam reader; Python576/
+576; CTest67/67. Wrist feature remains hardFALSE, source observation examOFF; no
+tll or leftover barrier fixture child found. Pre-existing untracked tmp/ preserved.
+No new game function semantics/names were established; no IDB mutation needed.
+NEXT: real one-owner inert DLL preparation (native identity, FLS, retained DLL/RX
+relays, immutable Snapshot/plan), owned IPC publication and concrete local Ops;
+then external patch/debug lifecycle with held uncertain-state recovery and explicit
+Continue/detach failure fixtures. Protocol classes are NOT that implementation.
