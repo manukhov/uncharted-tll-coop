@@ -91,26 +91,31 @@ inline bool valid(const Plan& p) noexcept {
 }
 
 enum class Outcome { Installed, CleanRefusal, Uncertain };
+enum class CodeStage {Stock, Installed};
 struct Result {
     Outcome outcome=Outcome::CleanRefusal;
     bool wrote=false, retain_relays=false, resumed=true, protections_restored=true;
 };
 
 // Adapter requirements (all noexcept):
-// integrity(): compare independently certified immutable code, no masked changes;
+// integrity(stage): compare independently certified stock/own-installed code;
+// no unverified displacement masking or acceptance of a mixture of stages;
 // relays_ready(plan): exact leaf bytes, committed immutable RX, flushed before
 // publication, certified ABI targets AND retained relay/target/module lifetime;
 // match(addr,bytes), inspect(page), writable(page), original(page): reject-only;
-// freeze()/quiescent(plan)/thaw(): own and recover every suspended-thread handle;
+// freeze()/quiescent(plan)/thaw(safe_to_resume): own every suspended-thread handle;
+// thaw(false) MUST preserve the stop, never resume/detach an uncertain target.
+// On failure the adapter must outlive Result and expose explicit recovery; an
+// auto-detach destructor is not allowed to release such a safety hold.
 // open(page)/restore(page): only the captured original RX page contract;
 // write(addr,bytes): may partially write even when returning false; flush(addr,n).
 // No heap/loader/crypto/log operations while frozen. This core is NOT itself
 // proof that a thread snapshot is atomic or that new threads cannot appear.
 template<class Ops>
 Result apply(const Plan& p, Ops& ops) noexcept {
-    static_assert(noexcept(ops.integrity()) && noexcept(ops.relays_ready(p)) &&
+    static_assert(noexcept(ops.integrity(CodeStage::Stock)) && noexcept(ops.relays_ready(p)) &&
         noexcept(ops.match(std::uintptr_t{},Bytes{})) && noexcept(ops.inspect(std::uintptr_t{})) &&
-        noexcept(ops.freeze()) && noexcept(ops.quiescent(p)) && noexcept(ops.thaw()) &&
+        noexcept(ops.freeze()) && noexcept(ops.quiescent(p)) && noexcept(ops.thaw(false)) &&
         noexcept(ops.writable(std::uintptr_t{})) && noexcept(ops.original(std::uintptr_t{})) &&
         noexcept(ops.open(std::uintptr_t{})) && noexcept(ops.restore(std::uintptr_t{})) &&
         noexcept(ops.write(std::uintptr_t{},Bytes{})) && noexcept(ops.flush(std::uintptr_t{},std::size_t{})),
@@ -127,10 +132,10 @@ Result apply(const Plan& p, Ops& ops) noexcept {
         }
         return okay;
     };
-    if(!ops.integrity() || !ops.relays_ready(p) || !match(false)) return result;
+    if(!ops.integrity(CodeStage::Stock) || !ops.relays_ready(p) || !match(false)) return result;
     for(std::size_t i=0;i<p.page_count;++i) if(!ops.inspect(p.pages[i])) return result;
     const bool frozen=ops.freeze();
-    bool okay=frozen && ops.quiescent(p) && ops.integrity() && ops.relays_ready(p) && match(false);
+    bool okay=frozen && ops.quiescent(p) && ops.integrity(CodeStage::Stock) && ops.relays_ready(p) && match(false);
     bool touched_protection=false;
     if(okay) for(std::size_t i=0;i<p.page_count;++i) {
         touched_protection=true;
@@ -142,7 +147,7 @@ Result apply(const Plan& p, Ops& ops) noexcept {
             okay=false; break;
         }
     }
-    if(okay) okay=match(true) && ops.integrity() && ops.relays_ready(p);
+    if(okay) okay=match(true) && ops.integrity(CodeStage::Installed) && ops.relays_ready(p);
     const auto restore=[&]() noexcept {
         bool restored=true;
         for(std::size_t i=0;i<p.page_count;++i) {
@@ -153,7 +158,7 @@ Result apply(const Plan& p, Ops& ops) noexcept {
         return restored;
     };
     bool restored=!touched_protection || restore();
-    if(okay) okay=restored && match(true) && ops.integrity() && ops.relays_ready(p);
+    if(okay) okay=restored && match(true) && ops.integrity(CodeStage::Installed) && ops.relays_ready(p);
     bool rollback_flush=true;
     if(!okay && result.wrote) {
         // Recover as much as possible without writing through an unproved page.
@@ -171,9 +176,15 @@ Result apply(const Plan& p, Ops& ops) noexcept {
         restored=false;
     }
     for(unsigned n=0;!restored && n<3;++n) restored=restore();
-    const bool clean=!okay && restored && rollback_flush && match(false);
+    // A queued/fetched relay may remain reachable even after all five sites are
+    // stock again. Restoring those bytes alone cannot cure a late code/leaf/RX/
+    // lifetime failure, so successful rollback must certify those dependencies.
+    const bool clean=!okay && restored && rollback_flush && match(false) &&
+        (!result.wrote || (ops.integrity(CodeStage::Stock) && ops.relays_ready(p)));
     result.protections_restored=restored;
-    result.resumed=ops.thaw(); // Also owns partial-freeze failure cleanup.
+    // Release only verified installed/stock state. A failed freeze may still
+    // own a partial stop; its adapter must also recover that ownership safely.
+    result.resumed=ops.thaw(okay || clean);
     result.outcome=okay && result.resumed ? Outcome::Installed :
         clean && result.resumed ? Outcome::CleanRefusal : Outcome::Uncertain;
     // Even verified rollback cannot recall a relay fetched by a racing/queued

@@ -22,6 +22,7 @@ add_executable(tll_p99_wrist_arm src/p99_observation_arm.cpp)
 target_compile_definitions(tll_p99_wrist_arm PRIVATE TLL_P99_WRIST_ARM=1)
 add_library(tll_coop_runtime SHARED src/coop_runtime.cpp
     src/nadine_p99_wrist_invoke.cpp
+    src/nadine_p99_wrist_code_windows.cpp
     $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
     $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
 option(TLL_P99_SOURCE_OBSERVATION_EXAM "Enable one writer-disabled source observation in an explicit exam build" OFF)
@@ -72,7 +73,7 @@ set_target_properties(
         OUTPUT_NAME "tll_coop_runtime"
 )
 
-target_link_libraries(tll_coop_runtime PRIVATE ws2_32)
+target_link_libraries(tll_coop_runtime PRIVATE ws2_32 bcrypt)
 target_link_libraries(tll_remote_input_client PRIVATE ws2_32)
 target_link_libraries(tll_crash_watch PRIVATE dbghelp)
 # Preserve matching optimized symbols for the next bounded crash capture.
@@ -305,6 +306,20 @@ if(BUILD_TESTING)
     target_compile_definitions(tll_nadine_p99_wrist_worker_start_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
     target_compile_options(tll_nadine_p99_wrist_worker_start_tests PRIVATE /W4 /permissive- /EHsc)
     add_test(NAME nadine_p99_wrist_worker_start COMMAND tll_nadine_p99_wrist_worker_start_tests)
+    add_executable(tll_nadine_p99_wrist_code_tests tests/nadine_p99_wrist_code_tests.cpp
+        src/nadine_p99_wrist_code_windows.cpp)
+    target_include_directories(tll_nadine_p99_wrist_code_tests PRIVATE src)
+    target_compile_features(tll_nadine_p99_wrist_code_tests PRIVATE cxx_std_20)
+    target_compile_definitions(tll_nadine_p99_wrist_code_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX TLL_P99_WRIST_CODE_AUDIT=1)
+    target_compile_options(tll_nadine_p99_wrist_code_tests PRIVATE /W4 /permissive- /EHsc)
+    target_link_libraries(tll_nadine_p99_wrist_code_tests PRIVATE bcrypt)
+    add_test(NAME nadine_p99_wrist_code COMMAND tll_nadine_p99_wrist_code_tests
+        "C:/UNCHARTED Legacy of Thieves Collection (2016-2017-2022)/Uncharted Legacy of Thieves Collection/tll.exe")
+    add_executable(tll_nadine_p99_debug_barrier_tests tests/nadine_p99_debug_barrier_tests.cpp)
+    target_compile_features(tll_nadine_p99_debug_barrier_tests PRIVATE cxx_std_20)
+    target_compile_options(tll_nadine_p99_debug_barrier_tests PRIVATE /W4 /permissive- /EHsc)
+    add_test(NAME nadine_p99_debug_barrier COMMAND tll_nadine_p99_debug_barrier_tests)
+    set_tests_properties(nadine_p99_debug_barrier PROPERTIES TIMEOUT 30)
     foreach(policy group_program_manifest group_admission group_scope group_readability group_memory group_entry group_budget group_ingress group_fiber group_native_frame source_read source_materialize operand_identity retarget_table_admission source_observation preselection_trace wrist_snapshot wrist_install)
         add_executable(tll_nadine_p99_${policy}_tests tests/nadine_p99_${policy}_tests.cpp)
         target_include_directories(tll_nadine_p99_${policy}_tests PRIVATE src)

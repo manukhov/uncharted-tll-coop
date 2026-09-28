@@ -11,7 +11,32 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / OWNED INSTALL TESTS (2026-09-28, distinct transaction/code manifest):
+Latest STATIC / OWNED CODE+OS TESTS (2026-09-28, verifier and debug-event barrier):
+Do NOT use animation phase drain as five-site install exclusion. Strongest return
+140167800 follows SubmitSingleJobAndWait1415B5210(UpdateProcessBuckets14015F020),
+but producers remain open and package-login independently reaches shared Process
+via SkelTablePackageObserver1406FBB40->1417CDDC0->AnimateObject->1418ABDF9.
+Four new STATIC phase-drain labels saved/read back in single IDB:1927/80/2, True.
+Loaded-code Snapshot now hashes all63regions BEFORE suspension, retains exact
+stock/own-installed buffers and uses only fresh checked comparisons thereafter.
+Windows reader enforces same MEM_IMAGE allocation/RX; only the five owned patch
+pages may be explicitly RXW/EXECUTE_WRITECOPY. Real owned image fixture reproduces
+COW metadata and post-query partial-read/compare faults.632checks; no retail execution.
+Fixed two transaction defects: thaw(false) must HOLD uncertain state, not resume;
+after any write, clean rollback also rechecks stock code+reachable relay lifetime.
+3374transaction checks, including persistent late integrity/relay faults.
+OWNED OS fixture38checks validates held DebugActiveProcess event on its own child:
+counter/request servicing stops, resumes after Continue/detach; no game, no patch.
+This is the next bounded candidate for EXTERNAL installer, not a production adapter
+or crash-atomic proof. Existing crash_watch auto-continue/detach cannot be reused.
+NEXT: prepublish immutable PID/creation/module/relay/FLS metadata from inert DLL;
+implement external reader/patch/debug lifecycle with safe-hold + Continue/detach
+failure fixtures and existing-debugger refusal. Hash/allocate before held interval;
+no target worker needed while stopped. Keep feature hardFALSE until integrated
+proof/prediction; code closure/source flags remainFALSE, no game/grip repair.
+Verification: complete build, Python576/576, CTest65/65. See latest COOP_STATUS.
+
+Previous STATIC / OWNED INSTALL TESTS (2026-09-28, distinct transaction/code manifest):
 Dedicated wrist5-site value planner/transaction is implemented and tested but NOT
 wired to a production OS installer. Exact sites1417815B7/141782B3A/141A92E78/
 141A932F8/141ABA973 span FIVE pages; stock-only planner, unchanged opcodes, rel32

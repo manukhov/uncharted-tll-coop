@@ -91,7 +91,9 @@ struct Ops {
         }
         rw[i]=writable; return true;
     }
-    bool integrity() noexcept { return !fault(Op::Integrity); }
+    bool integrity(wi::CodeStage stage) noexcept {
+        return !fault(Op::Integrity) && all(stage==wi::CodeStage::Installed);
+    }
     bool relays_ready(const wi::Plan& candidate) noexcept {
         if(fault(Op::Relays)) return false;
         if(!real) return candidate==p;
@@ -116,7 +118,10 @@ struct Ops {
     bool inspect(std::uintptr_t value) noexcept { return !fault(Op::Inspect) && protection(value,PAGE_EXECUTE_READ); }
     bool freeze() noexcept { suspended=true; return !fault(Op::Freeze); }
     bool quiescent(const wi::Plan&) noexcept { return suspended && !fault(Op::Quiescent); }
-    bool thaw() noexcept { if(fault(Op::Thaw)) return false; suspended=false; return true; }
+    bool thaw(bool safe_to_resume) noexcept {
+        if(fault(Op::Thaw) || !safe_to_resume) return false;
+        suspended=false;return true;
+    }
     bool writable(std::uintptr_t value) noexcept { return !fault(Op::Writable) && protection(value,PAGE_EXECUTE_READWRITE); }
     bool original(std::uintptr_t value) noexcept { return !fault(Op::Original) && protection(value,PAGE_EXECUTE_READ); }
     bool open(std::uintptr_t value) noexcept {
@@ -283,18 +288,28 @@ void transaction_tests(bool real) {
         Ops ops(real); ops.faults[0]={op,1,true,op!=Op::Restore};
         const auto result=wi::apply(ops.p,ops);
         check(result.outcome==wi::Outcome::Uncertain && result.retain_relays &&
-            !ops.unsafe_write,"persistent write/flush/protection uncertainty retained");
+            !result.resumed && ops.suspended && !ops.unsafe_write,
+            "persistent write/flush/protection uncertainty preserves the safety hold");
+    }
+    for(Op op:{Op::Integrity,Op::Relays}) {
+        Ops ops(real); ops.faults[0]={op,3,true,false};
+        const auto result=wi::apply(ops.p,ops);
+        check(result.wrote && ops.all(false) && ops.sealed() &&
+            result.outcome==wi::Outcome::Uncertain && !result.resumed && ops.suspended &&
+            result.retain_relays,"late persistent code/relay loss cannot resume after stock rollback");
     }
     Ops restore_fault(real); restore_fault.faults[0]={Op::Restore,1,true,false};
     const auto uncertain=wi::apply(restore_fault.p,restore_fault);
     check(uncertain.outcome==wi::Outcome::Uncertain && !uncertain.protections_restored &&
-        uncertain.retain_relays,"unrestored protection cannot be clean");
+        uncertain.retain_relays && !uncertain.resumed && restore_fault.suspended,
+        "unrestored protection cannot resume");
     Ops reopen_fault(real);
     reopen_fault.faults[0]={Op::Match,11,false,false}; // post-write match, after two stock passes
     reopen_fault.faults[1]={Op::Open,6,true,false}; // rollback cannot reopen restored pages
     const auto reopen=wi::apply(reopen_fault.p,reopen_fault);
     check(reopen.outcome==wi::Outcome::Uncertain && reopen.retain_relays &&
-        !reopen_fault.unsafe_write,"failed rollback reopen never writes RX");
+        !reopen.resumed && reopen_fault.suspended && !reopen_fault.unsafe_write,
+        "failed rollback reopen neither writes RX nor resumes");
     if(real) {
         Ops bad_leaf(true); DWORD old=0;
         auto* relay=reinterpret_cast<std::uint8_t*>(bad_leaf.p.sites[0].relay);

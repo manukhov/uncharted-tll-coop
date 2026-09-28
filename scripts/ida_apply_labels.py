@@ -8,6 +8,49 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-09-28: native animation phase drains, not installation gates ---
+    0x1415B5210: (
+        "Ndjob_SubmitSingleJobAndWait",
+        "STATIC: constructs one callback/data record, allocates a one-job "
+        "counter at0x1415B52A9, copies/submits at52C2/52CA, waits at52D7 "
+        "and releases at52E4. GameLoopUpdate passes UpdateProcesses "
+        "0x14015F020 at0x1401677FB; return0x140167800 is completion of "
+        "that submitted callback. Counter waiting can switch worker fibers; "
+        "no producer exclusion or global installer-quiescence gate is proven.",
+    ),
+    0x14015F020: (
+        "GameLoop_UpdateProcessBuckets",
+        "STATIC: counter creation at0x14015F117 records UpdateProcesses "
+        "source location common-game-loop.cpp:1524. Calls "
+        "GameLoop_RunAnimationUpdateBucket "
+        "for ordered buckets0..8 at0x14015F058..14015F35B. Bucket5 drains "
+        "the escaped bucket3 counter146AF2798 at0x14015EAA6/AAE; normal "
+        "manager spawner counters are waited separately. Submitted-and-waited "
+        "by0x1401677FB->0x1415B5210. Phase completion does not exclude "
+        "package-login AnimateObject/Process paths or stop future producers; "
+        "not an installer gate for the shared cmd16 callsite.",
+    ),
+    0x141782AB0: (
+        "AnimMgr_WaitEscapedDisabledObjectJobs",
+        "STATIC: reads counter146AF2798 at0x141782AB6, waits atAC5, "
+        "releases atACD, clears the counter atAD2 and byte1466D0C28 atADD. "
+        "AnimMgr async producer queues0x141A93EA0 at0x141782740 and "
+        "publishes its counter at0x141782820 through the bucket3 output. "
+        "No direct code caller of this helper found; bucket5 performs its "
+        "own drain inline. Requires a valid counter, does not close job "
+        "admission and is not a callable installer-quiescence API.",
+    ),
+    0x141A93EA0: (
+        "AnimManager_AnimateDisabledObjectJob",
+        "STATIC: exact AnimateDisabledObjectJob assertion at0x141A9410F, "
+        "anim-mgr-jobs.cpp:1775. Queued by0x141782740 with descriptor data; "
+        "atomic cursor+10 indexes the Fg pointer table+0/count+8. Invokes "
+        "optional Fg+298 callback at0x141A94054, otherwise builds identity "
+        "skinning matrices and publishes Fg+230/+238. Its escaped counter "
+        "146AF2798 is separate from normal joint-blend spawner counters. "
+        "Completion of this batch is only a phase drain, not global "
+        "producer exclusion or an installer gate.",
+    ),
     # --- 2026-09-18 AGW: bounded native-frame identity, not no-yield claims ---
     0x141BBDF20: (
         "NdGameObject_WaitUpdateCounter",

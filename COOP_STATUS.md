@@ -37198,3 +37198,114 @@ this core. Establish a defensible native quiescence protocol before wiring the
 installer; old single Toolhelp snapshot plus unchecked ResumeThread is insufficient.
 Only after that write the differentiating one-copy observation prediction and
 manual scenario. No source/writer admission or repair claim follows from this turn.
+
+## 2026-09-28 — STATIC/OWNED: loaded code verifier, phase-drain rejection, external stop candidate
+
+**Competing installation boundaries.** REJECTED as sufficient: one Toolhelp
+thread snapshot; animation-phase counter completion; CREATE_SUSPENDED plus the
+existing injector. A received, held debugger event after inert preparation is
+the remaining bounded EXTERNAL candidate, not an implemented game installer.
+No game launched/injected and no game-memory patch or pose capture performed.
+
+**STATIC native phase evidence.** 1401677FB calls1415B5210 with14015F020 as callback;
+1415B5210 submits at52CA, waits at52D7 and releases at52E4. Return140167800 is
+completion of that callback, which sequences animation buckets0..8. Manager
+1417816B0 waits six spawner counters (1417829B9/C6/D4, two sets). Bucket3 also
+publishes146AF2798; bucket5 waits/releases at14015EAA6/AAE. Helper141782AB0 does
+wait/release/clear atAC5/ACD/AD2, but has no direct code callers. Its counter belongs
+to disabled-object job141A93EA0, not normal Async; that job permits Fg+298 callback.
+Evidence includes caller/callee graph, exact counter/descriptor data flow and
+source assertions UpdateProcesses/common-game-loop.cpp:1524 and
+AnimateDisabledObjectJob/anim-mgr-jobs.cpp:1775. Main rechecked MCP bodies/xrefs.
+
+REJECTED installer inference: phase completion neither closes producers nor
+excludes all ten direct Process141AB97C0 calls. Independent concrete path:
+package-login stateC -> SkelTablePackageObserver slot0=1406FBB40 ->1406FBC8B ->
+1417CDDC0 ->1417CE068 AnimateObject ->1418ABDF9 Process. Worker wait1415B5419
+enters1415D1BE0 and switches fiber1415D1E43, not a scheduler-wide stop. Actual
+worker stop/join/fiber/FLS teardown1415B3E00 is shutdown, not a reversible gate.
+
+Applied STATIC names Ndjob_SubmitSingleJobAndWait1415B5210,
+GameLoop_UpdateProcessBuckets14015F020, AnimMgr_WaitEscapedDisabledObjectJobs141782AB0,
+AnimManager_AnimateDisabledObjectJob141A93EA0. All comments explicitly deny install
+admission. MCP stopped; headless labels saved the sole ida/tll.i64; status file
+reports/ida_apply_p99_phase_drain_20260928_status.txt records1927functions/80data/
+2types/save_database True. MCP restarted; all four names and expected xrefs verified.
+
+**STATIC early-start alternative not admitted.** Existing launcher starts normally
+and sleeps; injector waits for LoadLibrary, whereas DllMain starts install_hook on
+another thread without an installation handshake. PE entry1424EBDA0 ->CRT1424EBBC4
+->WinMain140175F50 ->140174CA0 has9813 C++ initializer pointer slots before main
+(1425D77E0..1425EAA88). TLS callback1424EBE30 calls1400C5F80 on reason2; the small
+leaf zeros TLS+100/+108/+10C, but this does not close imported DLL/initializer work.
+Main-loop submit140175EE2/wait140175EEF is too late to prove no earlier workers.
+No new semantic claim is made for the untraced initializer graph.
+
+**Implemented regional code evidence, still unwired.** Snapshot in
+nadine_p99_wrist_code_snapshot.h prepares all63regions/46690B with actual BCrypt
+SHA256 against the pinned manifest. It accepts only a validated five-site plan,
+rejects every partial read/hash error/mismatch and stores separate private stock
+and exact own-installed byte arrays (~94KB). Any repeated prepare invalidates it.
+matches(stage,reader) cannot allocate/hash/log/normalize or learn a new baseline;
+it performs fresh comparisons with an explicit Stock/Installed stage. This remains
+regional byte identity, NOT complete dependency/source/final-render admission.
+
+Production-compiled nadine_p99_wrist_code_windows.cpp checks every source region
+with VirtualQuery: committed MEM_IMAGE, same AllocationBase and exact RX. Only
+explicitly whitelisted five patch pages may be RXW/EXECUTE_WRITECOPY. The owned
+image fixture observed VirtualProtect(RXW) reported as EXECUTE_WRITECOPY before
+the first write; do not assume requested protection equals queried protection.
+MEM_IMAGE also persists after COW, so it cannot replace byte verification.
+See [Microsoft VirtualQuery](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualquery).
+POD volatile-byte SEH leaves catch access/in-page/guard faults, not unrelated
+exceptions. No widened memcpy/memcmp read. A test-only seam absent from production
+changes the owned test image's second page AFTER metadata checks: partial copy
+and compare refuse. Guard checks preserve the alarm; no game/retail code executed.
+632checks also cover each of63 prepare-read/hash/digest and comparison failures,
+all15 self-CALL bytes, source mutation, stage isolation and no hash during compare.
+
+**Two transaction defects fixed.** The previous core called thaw unconditionally
+after an uncertain rollback. It now passes safe_to_resume only for fully verified
+installed/stock state. Adapter thaw(false) MUST preserve the stop; an auto-detach
+destructor is forbidden for uncertain ownership. Further, after a write attempt,
+clean rollback requires fresh STOCK-stage integrity and live relay/RX/target/
+lifetime certification: restoring five instruction bytes cannot repair a relay
+already fetched/queued. Persistent late integrity/relay failures now leave stock
+sites but hold the target, Outcome::Uncertain/retain_relays/resumed=false.
+3374owned transaction checks include these schedules. No real target is paused
+by this abstract core yet; future adapter must actually implement that contract.
+
+**OWNED OS proof, not game admission.** Microsoft documents that a delivered
+debug event stops all target threads until ContinueDebugEvent, and a new thread's
+event precedes user-mode execution. [Debug events](https://learn.microsoft.com/en-us/windows/win32/debug/debugging-events).
+DebugActiveProcess gives a synthetic process event with null start address; it
+is not an early-entrypoint guarantee. [Attach](https://learn.microsoft.com/en-us/windows/win32/api/debugapi/nf-debugapi-debugactiveprocess).
+New nadine_p99_debug_barrier_tests.cpp launches ONLY itself as a hidden child,
+verifies PID/creation/image, uses a child-only kill-on-close job, proves a counter
+is running, then attaches and holds the received event. During150ms, the counter
+and servicing of an external request to create a thread remain stopped. After
+checked Continue/attach-event drain/detach, the old and newly requested thread
+counters advance and the child exits normally.38checks pass with real Windows
+debugging APIs. No PID/external-executable arguments, game input, injection, code
+patches or retail execution. This tests a queued child-thread request, NOT an
+external CreateRemoteThread/kernel injection race, active native frames or patch
+recovery. Cleanup termination authority applies ONLY to this owned fixture child.
+
+Proposed sequence: inert DLL fully publishes original targets/FLS/retained relays
+and immutable PID+creation+image contract BEFORE attach; dedicated external owner
+holds an actually received target event; performs fresh code/RIP/plan/protection
+checks and external patch transaction; Continue only verified-safe state, then
+checked detach. No in-process worker can run while held. Existing crash_watch
+continues attach events before READY and auto-detaches: not this barrier owner.
+Refuse an existing debugger instead of detaching/stealing it. Failure after a
+successful Continue is already-live cleanup failure, not permission to rollback.
+KillOnExit(FALSE) prevents default target killing but debugger-thread exit then
+auto-detaches; helper crash mid-transaction is NOT crash-atomic safety.
+[Exit contract](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-debugsetprocesskillonexit).
+
+Verification: full runtime/inert MSVC build; Python576/576; CTest65/65; manifest
+--check remains63regions/46690B/closureFALSE. No tll or leftover owned child found.
+Feature hardFALSE, source observation examOFF, old writers unchanged. Existingtmp/
+preserved. NEXT: implement external read/patch/lifecycle transport and immutable
+DLL preparation handshake; test safe-hold and Continue/detach failures before any
+game exam. Do not revive native phase-drain or startup sleeps as substitute gates.
