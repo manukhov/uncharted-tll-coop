@@ -1,251 +1,251 @@
 # AGENTS.md — TLL Co-op Research
 
-Это рабочее пространство для **реверс-инжиниринга** `tll.exe` (1.4.21058.0). Цель
-проекта описана в `COOP_STATUS.md`, `ROADMAP.md` и `TASK_POOL.md`. Подтверждённые
-находки и отклонённые гипотезы фиксируются в `COOP_STATUS.md`;
-`FINDINGS_ARCHIVE.md` хранит подробный исторический реестр до 2026-07-16, а
-`reports/` — только локальные временные дампы и диагностические артефакты. Перед
-тем как что-либо предлагать, прочитай соответствующий раздел этих файлов — не
-переоткрывай то, что уже записано.
+This workspace is for **reverse engineering** `tll.exe` (1.4.21058.0). The project
+goal is described in `COOP_STATUS.md`, `ROADMAP.md`, and `TASK_POOL.md`. Confirmed
+findings and rejected hypotheses are recorded in `COOP_STATUS.md`;
+`FINDINGS_ARCHIVE.md` preserves the detailed historical registry through 2026-07-16,
+while `reports/` contains only local temporary dumps and diagnostic artifacts.
+Before proposing anything, read the relevant sections of these files — do not
+reopen investigations that have already been recorded.
 
-Единственная база IDA — `ida/tll.i64` (IDA Professional 9.3, headless
-`idat.exe`). Скрипты анализа в `scripts/`, рантайм-инструменты в `scanner/`. В
-конце каждого хода оставляй репозиторий в чистом, закоммиченном и размеченном
-состоянии (см. «Передача хода»).
-
----
-
-## Главная директива: сначала реверсь как следует, потом запускай
-
-Запускать игру и делать инъекцию можно самому — разрешения спрашивать не нужно. Но
-запуск игры — это **экзамен, подтверждающий гипотезу, которую ты уже доказал на
-бумаге.** Это НЕ способ исследовать и НЕ способ проверить догадку.
-
-Режим работы, который этот файл призван убить: взять первую попавшуюся
-правдоподобную функцию, объявить её гипотезой и тут же побежать запускать/инъектить
-«чтобы посмотреть, работает ли». Этот цикл тратит полный запуск игры на догадку и
-почти всегда выдаёт ложную теорию. **Так делать нельзя.** Право на запуск
-зарабатывается статическим анализом, а не используется вместо него.
-
-Установка по умолчанию для любой задачи: считай, что ответ находится статически в
-`tll.i64`, и что ты ещё недостаточно копнул.
-
-### Игровым вводом управляет только пользователь
-
-Агенту разрешено запускать/перезапускать экземпляры игры и выполнять инъекцию,
-когда рантайм-тест уже заслужен статикой или пользователь прямо попросил запуск.
-Как только такой тест полностью подготовлен и свежая DLL успешно собрана, агент
-сразу сам запускает необходимое число копий и выполняет инъекцию, не запрашивая
-отдельного подтверждения на запуск. Пока ведётся работа над **внешним видом 1**,
-разрешена только одна копия `tll.exe`; второй экземпляр не запускать.
-После запуска агенту **запрещено управлять игрой**: нельзя посылать клавиатурный,
-мышиный, RawInput/XInput или виртуальный геймпадный ввод, переключать игровые окна
-ради управления персонажем, нажимать меню, выбирать сохранение/оружие и выполнять
-за пользователя сценарий теста. Все игровые действия делает пользователь. Агент
-только заранее даёт короткий точный сценарий, читает логи/состояние процессов и
-анализирует сообщённый пользователем визуальный результат.
+The only IDA database is `ida/tll.i64` (IDA Professional 9.3, headless
+`idat.exe`). Analysis scripts live in `scripts/`; runtime tools live in `scanner/`.
+At the end of every turn, leave the repository clean, committed, and labeled
+(see “Handoff”).
 
 ---
 
-## Жизненный цикл гипотезы (обязательно)
+## Primary directive: reverse engineer thoroughly first, then run
 
-Каждое утверждение о том, как работает игра, проходит эти стадии по порядку.
+You may launch the game and inject on your own — no permission request is needed.
+However, launching the game is **an exam that validates a hypothesis you have
+already established on paper.** It is NOT an exploration method and NOT a way to
+test a guess.
 
-1. **Точно сформулируй гипотезу** — функция/адрес/смещение, что она делает, какое
-   наблюдаемое поведение должна давать. «Похоже на обработчик выстрела» — это не
-   гипотеза. «`0x1409FBA60` пишет событие выстрела в per-slot блок ввода по
-   `+0xNNN`, достигается из кампанийного пути прицеливания» — гипотеза.
+The workflow this file is intended to eliminate: pick the first plausible
+function, call it a hypothesis, and immediately launch/inject “to see whether it
+works.” That cycle spends an entire game launch on a guess and almost always
+produces a false theory. **Do not do this.** Earn the right to launch through
+static analysis; do not use a launch as a substitute for it.
 
-2. **Перечисли конкурирующие гипотезы.** Почти всегда кандидатов больше одного —
-   выпиши их. Единственный кандидат означает, что ты слишком рано перестал искать.
+For every task, assume by default that the answer can be found statically in
+`tll.i64` and that you have not yet investigated deeply enough.
 
-3. **Собирай статические доказательства, пока не выполнена квота (ниже).** Используй
-   их, чтобы **отсеять альтернативы**, а не только подтвердить любимую. Отбросить
-   остальных по самой конкретной доступной детали — намного сильнее, чем
-   накапливать поддержку предпочтительного ответа.
+### Only the user controls game input
 
-4. **Напиши фальсифицируемый прогноз.** Перед запуском: «Если верно, то когда я
-   сделаю X в рантайме, я увижу Y, и конкретно НЕ увижу Z (который дал бы
-   отброшенный кандидат)». Рантайм-тест без письменного прогноза, различающего
-   кандидатов, бессмысленен — не запускай его.
-
-5. **Запусти нужные экземпляры сам**, но игровой сценарий выполняет пользователь;
-   сверь логи и его визуальный результат с прогнозом.
-
-6. **Запиши результат** в реестр находок независимо от исхода.
-
----
-
-## Квота доказательств перед любым рантайм-тестом
-
-Гипотеза **не** готова к игре, пока не подкреплена минимум **тремя независимыми**
-доказательствами — разных *видов*, а не тремя кусками одного дампа. Допустимые
-виды:
-
-- перекрёстные ссылки (вызывающие/вызываемые), подтверждающие, что граф вызовов
-  сходится;
-- дизасм / псевдокод, показывающий, что функция читает/пишет заявленные поля по
-  заявленным смещениям;
-- идентичность слота vtable (имя RTTI + индекс слота) для виртуальных вызовов;
-- xref на строки/данные, привязывающие функцию к известной подсистеме;
-- структурная согласованность с подтверждённой находкой в
-  `FINDINGS_ARCHIVE.md` или `COOP_STATUS.md`;
-- второй независимый путь, ведущий к тому же выводу.
-
-Не набирается трёх? **Скажи об этом и продолжай копать статикой.** Не повышай
-слабый статический довод до запуска игры, «чтобы узнать быстрее». Это ровно тот
-анти-паттерн, который мы убиваем.
+The agent may launch/restart game instances and inject once a runtime test has
+been justified by static analysis or the user has explicitly requested a launch.
+As soon as such a test is fully prepared and a fresh DLL has built successfully,
+the agent must launch the required number of instances and inject immediately,
+without asking for separate launch confirmation. While working on **appearance 1**,
+only one `tll.exe` instance is allowed; do not launch a second instance.
+After launch, the agent **must not control the game**: do not send keyboard,
+mouse, RawInput/XInput, or virtual gamepad input; switch game windows to control
+the character; operate menus; select a save/weapon; or perform the test scenario
+on the user's behalf. The user performs all game actions. The agent only provides
+a short, precise scenario beforehand, reads logs/process state, and analyzes the
+visual result reported by the user.
 
 ---
 
-## Реверсь глубоко — ожидания по глубине
+## Hypothesis lifecycle (mandatory)
 
-Это тяжёлая, многошаговая работа; быстро прийти к выводу — не цель. Единственная
-цель — прийти к выводу, который переживёт рантайм-тест.
+Every claim about how the game works must pass through these stages in order.
 
-- Разделяя кандидатов, явно прорассуждай альтернативы (используй расширенное
-  мышление), прежде чем называть победителя.
-- Иди по графу вызовов в **обе** стороны — и вызывающие, и вызываемые — прежде чем
-  делать вывод о роли функции. В изоляции функция редко имеет смысл.
-- Резолви виртуальные вызовы в конкретные слоты vtable и имена RTTI; не оставляй
-  гипотезу опирающейся на нерезолвленный косвенный вызов.
-- Трассируй данные, а не только код: где поле структуры пишется, где читается, кто
-  им владеет, какое у него время жизни.
-- Одна подтверждённая функция стоит десяти «возможно» функций. Глубина важнее
-  охвата.
+1. **State the hypothesis precisely** — function/address/offset, what it does,
+   and the observable behavior it should produce. “Looks like a firing handler”
+   is not a hypothesis. “`0x1409FBA60` writes a firing event into the per-slot
+   input block at `+0xNNN` and is reached from the campaign aiming path” is one.
 
----
+2. **List competing hypotheses.** There is almost always more than one candidate
+   — write them down. A single candidate means you stopped searching too early.
 
-## База IDA — это общее состояние, держи её актуальной
+3. **Collect static evidence until the quota below is met.** Use it to
+   **eliminate alternatives**, not merely to support your favorite. Rejecting
+   other candidates on the most specific available detail is much stronger than
+   accumulating support for the preferred answer.
 
-`ida/tll.i64` в .gitignore (слишком большая) и является **единственной IDB** в
-рабочем пространстве: не создавай постоянные копии `tll_mcp.i64`,
-`tll_*_temp.i64` или другие параллельные базы. Именно `tll.i64` — источник истины
-для имён, комментариев и структур. База, забитая `sub_140XXXXXX`, тратит время
-следующего хода.
+4. **Write a falsifiable prediction.** Before launch: “If this is correct, doing
+   X at runtime will produce Y, and specifically will NOT produce Z (which the
+   rejected candidate would produce).” A runtime test without a written
+   prediction that distinguishes the candidates is pointless — do not launch it.
 
-- Когда функция, глобал или поле структуры **CONFIRMED** (или сильный случай
-  `STATIC`) — **дай ей имя** и **примени метку к IDB.** Используй устоявшийся
-  конвейер: добавь в / перегенерируй `scripts/ida_apply_labels.py`, прогони его
-  headless через `idat.exe -A -S...` и убедись, что `save_database returned True`
-  (ожидаемый вид вывода сохраняй локально в `.codex/` или `reports/`).
-- Используй единообразные имена с префиксом подсистемы, согласованные с
-  существующими (например `InputManager_NormalizeStick`,
-  `InputManager_PollPads_SingleActivePad`).
-- Перед headless-записью останови MCP через
-  `scripts/ida_mcp_server.ps1 -Action Stop`. После применения проверь, что цель
-  резолвится в новое имя и её xref выглядят верно, затем снова запусти MCP.
-- Для чтения функций, xref, псевдокода, строк, глобалов и структур используй IDA
-  MCP. Новый headless-скрипт оправдан только для пакетной проверки, которой нет в
-  MCP; разовые дамперы для уже поддержанных запросов не добавляй.
+5. **Launch the required instances yourself**, but let the user perform the game
+   scenario; compare the logs and the user's visual result with the prediction.
+
+6. **Record the result** in the findings registry, regardless of the outcome.
 
 ---
 
-## Git — коммить свои находки
+## Evidence quota before any runtime test
 
-Коммить после каждой осмысленной единицы работы — подтверждённая находка,
-отброшенная гипотеза, рабочее изменение мода, новый скрипт анализа. Не давай ходу
-закончиться с незакоммиченной работой.
+A hypothesis is **not** ready for the game until it has at least **three
+independent** supporting pieces of evidence — of different *kinds*, not three
+pieces of the same dump. Acceptable kinds include:
 
-- **Императивные, конкретные сообщения с находкой и адресами**, в стиле
-  существующего лога, например:
+- cross-references (callers/callees) confirming that the call graph converges;
+- disassembly/pseudocode showing that the function reads/writes the claimed
+  fields at the claimed offsets;
+- vtable slot identity (RTTI name + slot index) for virtual calls;
+- string/data xrefs tying the function to a known subsystem;
+- structural consistency with a confirmed finding in `FINDINGS_ARCHIVE.md` or
+  `COOP_STATUS.md`;
+- a second independent path leading to the same conclusion.
+
+Cannot reach three? **Say so and keep investigating statically.** Do not promote
+a weak static argument into a game launch “to find out faster.” That is exactly
+the anti-pattern we are eliminating.
+
+---
+
+## Reverse engineer deeply — expected depth
+
+This is difficult, multi-step work; reaching a conclusion quickly is not the goal.
+The only goal is to reach a conclusion that survives a runtime test.
+
+- When distinguishing candidates, explicitly reason through the alternatives
+  (use extended reasoning) before declaring a winner.
+- Follow the call graph in **both** directions — callers and callees — before
+  concluding what a function does. A function rarely makes sense in isolation.
+- Resolve virtual calls to specific vtable slots and RTTI names; do not base a
+  hypothesis on an unresolved indirect call.
+- Trace data, not just code: where a structure field is written, where it is
+  read, who owns it, and how long it lives.
+- One confirmed function is worth ten “possibly” functions. Depth matters more
+  than breadth.
+
+---
+
+## The IDA database is shared state — keep it current
+
+`ida/tll.i64` is in .gitignore (too large) and is the **only IDB** in the workspace:
+do not create persistent copies such as `tll_mcp.i64`, `tll_*_temp.i64`, or other
+parallel databases. `tll.i64` is the source of truth for names, comments, and
+structures. A database full of `sub_140XXXXXX` wastes time on the next turn.
+
+- When a function, global, or structure field is **CONFIRMED** (or a strong
+  `STATIC` case), **name it** and **apply the label to the IDB.** Use the established
+  pipeline: add to / regenerate `scripts/ida_apply_labels.py`, run it headlessly
+  via `idat.exe -A -S...`, and verify `save_database returned True` (keep the
+  expected output locally in `.codex/` or `reports/`).
+- Use consistent subsystem-prefixed names aligned with existing names (for
+  example, `InputManager_NormalizeStick`, `InputManager_PollPads_SingleActivePad`).
+- Before a headless write, stop MCP with
+  `scripts/ida_mcp_server.ps1 -Action Stop`. After applying labels, check that the
+  target resolves to its new name and its xrefs look correct, then restart MCP.
+- Use IDA MCP to read functions, xrefs, pseudocode, strings, globals, and
+  structures. A new headless script is justified only for a batch check that MCP
+  does not support; do not add one-off dumpers for already supported queries.
+
+---
+
+## Git — commit your findings
+
+Commit after each meaningful unit of work — a confirmed finding, a rejected
+hypothesis, a working mod change, or a new analysis script. Do not end a turn with
+uncommitted work.
+
+- **Use imperative, specific messages stating the finding and addresses**, in
+  the style of the existing log, for example:
   - `Locate enemy HP: HealthSystem at enemy+0x4a8, current HP int@+0x3c`
   - `Disprove Player+0x1A8 bone path: it's a 32-byte effect table, not transforms`
-- Коммить `scripts/`, код и долговечные доки находок/статуса. Каталог `reports/`
-  локальный и целиком игнорируется: нужный для продолжения вывод переноси в
-  `COOP_STATUS.md` или `TASK_POOL.md`. **Никогда** не коммить игнорируемые
-  артефакты (`ida/*.i64`, `scanner/build/`, `*.bin`, `*.dll`, `*.exe`, `*.log`).
-- **После каждого успешного коммита немедленно выполняй `git push` текущей ветки.**
-  Не накапливай локальные неопубликованные коммиты и не заканчивай ход, пока push
-  не подтверждён удалённым репозиторием.
-- Проваленный рантайм-тест — тоже коммит: запиши как REJECTED-находку, чтобы её
-  больше не переисследовали.
+- Commit `scripts/`, code, and durable findings/status documentation. The
+  `reports/` directory is local and entirely ignored: move information needed
+  for continuation into `COOP_STATUS.md` or `TASK_POOL.md`. **Never** commit
+  ignored artifacts (`ida/*.i64`, `scanner/build/`, `*.bin`, `*.dll`, `*.exe`,
+  `*.log`).
+- **Immediately run `git push` for the current branch after every successful
+  commit.** Do not accumulate unpublished local commits or end the turn until
+  the remote repository has confirmed the push.
+- A failed runtime test also deserves a commit: record it as a REJECTED finding
+  so it will not be investigated again.
 
 ---
 
-## Реестр находок
+## Findings registry
 
-- `COOP_STATUS.md` = долговечный реестр **подтверждённых** фактов и отклонённых
-  гипотез, с адресами; `reports/` хранит только локальные исходные дампы.
-- `FINDINGS_ARCHIVE.md` = сохранённый подробный реестр до 2026-07-16. Не добавляй
-  туда новые результаты: продолжение хронологии веди в `COOP_STATUS.md`.
-- Помечай каждую находку: `CONFIRMED` (прошла рантайм-прогноз), `STATIC` (сильный
-  статический довод, ещё не проверен в рантайме), `HYPOTHESIS` (неполная),
-  `REJECTED`.
-- Записывай отклонения с адресом и причиной. В проекте это уже делается хорошо
-  (например отклонённый путь `Player+0x1A8` с таблицей эффектов) — держи планку.
-
----
-
-## Гигиена контекста и инструментов
-
-- Отчёты здесь большие (некоторые > 300 КБ). **Никогда не `cat` большой отчёт в
-  контекст** — только `grep`, `sed -n 'A,Bp'` или точечное чтение. Затягивание
-  файла xref на 600 КБ целиком ухудшает рассуждение и как раз заставляет хвататься
-  за первое совпадение и сбегать.
-- Для глубокого прохода по многим функциям отправляй **субагента** (Task tool),
-  который вернёт сжатую сводку с адресами, вместо того чтобы заваливать основной
-  поток.
-- Типовые точечные IDA-запросы выполняй через MCP. Headless-скрипт оставляй
-  только для воспроизводимого пакетного аудита или записи меток в единственную
-  IDB.
+- `COOP_STATUS.md` is the durable registry of **confirmed** facts and rejected
+  hypotheses, with addresses; `reports/` stores only local raw dumps.
+- `FINDINGS_ARCHIVE.md` preserves the detailed registry through 2026-07-16. Do not
+  add new results there: continue the chronology in `COOP_STATUS.md`.
+- Label every finding: `CONFIRMED` (passed its runtime prediction), `STATIC`
+  (strong static evidence, not yet tested at runtime), `HYPOTHESIS` (incomplete),
+  or `REJECTED`.
+- Record rejections with an address and reason. The project already does this
+  well (for example, the rejected `Player+0x1A8` effect-table path) — maintain
+  that standard.
 
 ---
 
-## Передача хода
+## Context and tool hygiene
 
-Прежде чем остановиться, оставь репозиторий чистым для следующего агента:
-
-1. **Реестр находок обновлён** — записаны новые записи CONFIRMED/STATIC/REJECTED.
-2. **IDB размечен и сохранён** — имена для всего вновь подтверждённого применены к
-   `ida/tll.i64`, `save_database returned True`.
-3. **Git чист** — вся отслеживаемая работа закоммичена с описательными
-   сообщениями, каждый коммит успешно отправлен через `git push`; `git status`
-   показывает только игнорируемые артефакты.
-4. **Заметка о состоянии** — если что-то в процессе исследования, впиши текущую
-   гипотезу, собранные доказательства и следующий конкретный шаг в `COOP_STATUS.md`
-   или `TASK_POOL.md`, чтобы следующий ход продолжился без угадывания.
+- Reports here are large (some exceed 300 KB). **Never `cat` a large report into
+  context** — use `grep`, `sed -n 'A,Bp'`, or targeted reads. Loading a whole
+  600 KB xref file impairs reasoning and encourages grabbing the first match
+  and moving on.
+- For a deep pass through many functions, send a **sub-agent** (Task tool) to
+  return a concise summary with addresses instead of flooding the main thread.
+- Use MCP for routine, targeted IDA queries. Reserve headless scripts for
+  reproducible batch audits or writing labels to the only IDB.
 
 ---
 
-## Анти-паттерны (так не делать)
+## Handoff
 
-- «Это, наверное, оно, давай запустим и посмотрим.» → Сначала набери квоту
-  доказательств и напиши прогноз.
-- Назвать одного кандидата, не перечислив, чем ещё это могло быть.
-- Принять один поддерживающий дамп за подтверждение.
-- Прочитать большой отчёт в контекст целиком вместо grep.
-- Подтвердить функцию, но оставить её как `sub_XXXX` в IDB.
-- Закончить ход с незакоммиченной работой или несохранённой базой.
-- Переисследовать то, что уже помечено REJECTED.
+Before stopping, leave the repository clean for the next agent:
+
+1. **Findings registry updated** — new CONFIRMED/STATIC/REJECTED entries recorded.
+2. **IDB labeled and saved** — names for every newly confirmed item applied to
+   `ida/tll.i64`, with `save_database returned True`.
+3. **Git clean** — all tracked work committed with descriptive messages, every
+   commit successfully sent via `git push`; `git status` shows only ignored
+   artifacts.
+4. **State note** — if an investigation is in progress, record the current
+   hypothesis, collected evidence, and next specific step in `COOP_STATUS.md` or
+   `TASK_POOL.md` so the next turn can continue without guessing.
+
 ---
 
-## MCP «ida-tll»: быстрый доступ к IDA
+## Anti-patterns (do not do these)
 
-MCP-сервер **`ida-tll`** — IDA Pro через headless **idalib**; единственная база
-`ida/tll.i64` уже загружена в память (быстрее, чем каждый раз запускать
-`idat.exe`-скрипт с загрузкой 764 МБ). Для точечных запросов по графу используй
-MCP, а не разовый headless-`idat`.
+- “This is probably it; let's launch and see.” → Meet the evidence quota and
+  write the prediction first.
+- Name a single candidate without listing what else it could be.
+- Treat one supporting dump as confirmation.
+- Read an entire large report into context instead of using grep.
+- Confirm a function but leave it as `sub_XXXX` in the IDB.
+- End a turn with uncommitted work or an unsaved database.
+- Reinvestigate something already marked REJECTED.
 
-**Работает (ЧТЕНИЕ):** `get_function_by_address` / `get_function_by_name`,
+---
+
+## MCP “ida-tll”: fast access to IDA
+
+The **`ida-tll`** MCP server runs IDA Pro through headless **idalib**; the only
+database, `ida/tll.i64`, is already loaded into memory (faster than loading 764 MB
+with an `idat.exe` script each time). Use MCP for targeted graph queries, not a
+one-off headless `idat` run.
+
+**Working (READ):** `get_function_by_address` / `get_function_by_name`,
 `get_xrefs_to`, `get_xrefs_to_field`, `get_callers`, `get_callees`,
-`disassemble_function` (аргумент — `start_address`), `list_functions`,
+`disassemble_function` (argument: `start_address`), `list_functions`,
 `list_strings` / `list_strings_filter`, `list_globals`, `get_entry_points`,
-`decompile_function`, `get_stack_frame_variables`, структуры (`get_defined_structures`,
-`analyze_struct_detailed`, `search_structures` …).
+`decompile_function`, `get_stack_frame_variables`, and structures
+(`get_defined_structures`, `analyze_struct_detailed`, `search_structures`, …).
 
-**Декомпиляция:** `decompile_function` РАБОТАЕТ (фикс в обёртке: is_window_active
-обходит IDA-шный PyQt5-стаб, который в headless бросал NotImplementedError).
+**Decompilation:** `decompile_function` WORKS (wrapper fix: is_window_active
+bypasses IDA's PyQt5 stub, which raised NotImplementedError in headless mode).
 
-**⚠ КРИТИЧНО — MCP открывает единственную `ida/tll.i64`:**
-- MCP используется только для **ЧТЕНИЯ**; `rename_function` / `set_comment` через
-  MCP не применять.
-- Для меток останови MCP, прогони `scripts/ida_apply_labels.py` headless на
-  `ida/tll.i64`, проверь `save_database returned True`, затем запусти MCP снова.
-  Одновременное открытие базы сервером и `idat.exe` запрещено.
+**⚠ CRITICAL — MCP opens the only `ida/tll.i64`:**
 
-**Сервер:** endpoint `http://172.21.144.1:8745/mcp` (streamable-http, только на
-WSL-адаптере). Не отвечает — `scripts/ida_mcp_server.ps1` (идемпотентный запуск;
-загрузка БД ~1–2 мин). `-Action Stop` освобождает IDB для записи, `-Action Restart`
-перезапускает сервер после сохранения меток, `-Action Status` показывает состояние.
-`scripts/ida_mcp_server.py` — обёртка Windows Python 3.12 + idalib.
+- MCP is for **READING** only; do not use MCP `rename_function` / `set_comment`.
+- To apply labels, stop MCP, run `scripts/ida_apply_labels.py` headlessly on
+  `ida/tll.i64`, verify `save_database returned True`, then restart MCP. Opening
+  the database in the server and `idat.exe` simultaneously is forbidden.
+
+**Server:** endpoint `http://172.21.144.1:8745/mcp` (streamable-http, WSL adapter
+only). If it does not respond, use `scripts/ida_mcp_server.ps1` (idempotent startup;
+database loading takes ~1–2 minutes). `-Action Stop` releases the IDB for writing,
+`-Action Restart` restarts the server after labels have been saved, and
+`-Action Status` reports its state. `scripts/ida_mcp_server.py` is the Windows
+Python 3.12 + idalib wrapper.
