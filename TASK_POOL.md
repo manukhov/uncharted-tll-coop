@@ -11,7 +11,29 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / OWNED MAPPED COMPARISON (2026-09-28):
+Latest STATIC / OWNED IMPORT GRAPH (2026-09-28):
+Expected IAT values now come from pinned provider files + explicit selected bases
+and exact (importer, API-set contract) routes, not from GetProcAddress or target IAT.
+Added bounded AMD64 export/forwarder reader (separate from inert artifact parser),
+ordinal/alias/cycle/RO-RX/VirtualSize checks and local-only file/hash profile.
+Owned fixture holds deny-write/delete file handles and full-path loader refs;
+GetProcAddress is ONLY a local equality oracle. All36 expected bindings and376071
+artifact bytes passed, repeated3x. Terminal providers:11kernel32,1ntdll,13ucrtbase,
+10Python VCRUNTIME140,1System32 VCRUNTIME140_1. Only reached EAT forwarder:
+KERNEL32.InitializeSListHead -> NTDLL.RtlInitializeSListHead. Machine-code thunks
+and provider dependencies are NOT traversed or certified.
+REJECTED: automatically identifying VCRUNTIME140 as System32 by DLL basename.
+Python already uses its own copy; explicit wrong-System32 profile refused and
+artifact unloaded. Correct-profile reruns passed. Python683/683 (56new), CTest77/77,
+both MSVC targets up to date; unchanged artifact hash a81ba7f4...22aae5.
+API-set routes remain CONDITIONAL caller inputs, not verified schema. Provider
+mapped bytes/identity, remote lifetime and installation admission remain FALSE.
+NEXT: bind the same provider records to target process/module identity and a
+retained target-side lifetime; verify mapped provider evidence under external
+hold before transaction/recovery/ACK integration. Never copy local bases/refs
+or this Python profile into the game. No game, hook, IDB change or visual repair.
+
+Previous STATIC / OWNED MAPPED COMPARISON (2026-09-28):
 Added p99_wrist_mapped_image.py (trusted file -> immutable plan) and separate
 borrowed-handle Windows RO/RX reader; existing C++ RX reader is unchanged.
 Exact DIR64 values and exact independent DLL/name IAT bindings replace ONLY

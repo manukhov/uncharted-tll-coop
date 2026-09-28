@@ -37788,3 +37788,121 @@ unknown CFG slot changes, chained code and metadata corruption, incomplete impor
 header/section overlap, padding/zero-fill, unchanged excluded-state limits, process
 identity changes, and low-level Windows BOOL/count/query failures. No game or
 leftover fixture process; existing untracked tmp/ preserved.
+
+## 2026-09-28 — P99 141ABA973: independent conditional OS/CRT import graph
+
+STATIC / infrastructure only. Added scripts/p99_wrist_import_graph.py and
+scripts/p99_wrist_import_profile.py; updated the OWNED mapped fixture. The actual
+grip adapters, native game code, hardFALSE gates and preparation/observation/arm
+paths are unchanged. There is no new game finding or IDB label in this unit.
+
+Competing sources of expected IAT values:
+
+- Trusted provider file exports + independently selected bases + explicit API-set
+  routes: retained as a CONDITIONAL calculation, with assumptions exposed.
+- GetProcAddress alone: valid local loader observation, NOT independent remote
+  expected values, provider provenance or lifetime. Now only a separate oracle.
+- Observed target IAT/EAT: circular as an expected-value source; not used.
+- System32 copy selected by basename: REJECTED for the actual owned Python host.
+
+The separate provider reader verifies explicit SHA256 before PE parsing and owns
+the bytes. It requires AMD64 executable-image DLL headers, bounded/disjoint raw
+and virtual sections, complete file-backed persistent-RO export directory, exact
+name case, full EAT and unbiased ordinal table. Named aliases and ordinal-only
+exports are supported; reached holes, non-RX/data/discardable/padding/zero-fill
+targets refuse. Forwarders are recognized only inside the declared export
+directory; their complete ASCII/NUL must fit. The deliberately narrow grammar is
+NAME.symbol or NAME.#ordinal (one dot); ambiguous/dotted variants refuse.
+Certificate directory4 is a FILE offset, not an RVA. Provider certificate overlays
+are included in the file hash; signatures are not authenticated and TLS/other
+directories are not granted load admission by this export-only parser.
+Reference: https://learn.microsoft.com/en-us/windows/win32/debug/pe-format
+
+Graph limits:32providers,128explicit API routes,16steps/import,65536EAT/name-count
+bound (with16-bit ordinal-range validation),512byte string bound,4MiB metadata
+work,64MiB/provider and128MiB aggregate. Iterables are consumed only up to the
+count bound+1. Resolver reparses canonical immutable provider records rather than
+trusting dataclass type, checks all derived fields, and rejects overlapping bases.
+DLL identifiers are strictly ASCII; export names stay case-sensitive. Cycles are
+checked with module/symbol/importer context. Every forwarder and API-set edge is
+retained in the output; concrete provider hops retain SHA256, terminal base/RVA.
+
+API-set routes are keyed by EXACT (importer, contract), with no guessed default
+or host inference from observed function pointers. Initial importer is
+tll_p99_wrist_abi.dll; after an EAT forwarder it is the forwarding DLL. Missing,
+duplicate or unknown routes refuse. These inputs do NOT certify the target's
+API-set schema, namespace or activation context; device-specific mapping remains
+an explicit boundary. Reference:
+https://learn.microsoft.com/en-us/windows/win32/apiindex/api-set-loader-operation
+
+OWNED fixture now requires --provider-profile. Strict JSON scope is
+p99-owned-import-profile-v1 / owned-python-fixture-only, with explicit absolute
+file paths, hashes and API routes. Duplicate JSON keys, paths, names and routes,
+relative/UNC/device/stream paths, wildcard importers and unknown fields refuse.
+All provider and artifact files are locked deny-write/delete BEFORE artifact
+load, and each snapshot comes from its held handle. Every provider is retained
+by full-path GetModuleHandleExW and its returned module filename checked. Source
+DLL/API contract lookup must equal the explicitly selected provider base.
+Expected addresses are then disk graph base+RVA; GetProcAddress only compares
+against them. No expected value is copied from GetProcAddress or the mapped IAT.
+The artifact is unloaded while all provider references and file handles remain
+held, then every owned reference/handle is released; cleanup failure rejects.
+
+REJECTED (owned host): a generic basename/System32 VCRUNTIME140 identity. Before
+artifact loading, Python3.12 already has the provider at
+C:\Users\Vladimir\AppData\Local\Programs\Python\Python312\VCRUNTIME140.dll,
+SHA256052ad6a20d375957e82aa6a3c441ea548d89be0981516ca7eb306e063d5027f4.
+This differs from System32/vcruntime140.dll SHA256
+d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7.
+The negative exam supplied that real System32 path/hash; it refused at
+"selected dependency not loaded", and the artifact was verified unloaded.
+The fixture never loads an arbitrary profile provider to make a mismatch pass.
+Full-path handles and local refcounts cannot be transferred to another process:
+https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulehandleexw
+
+Other explicit owned-host file pins (all under C:\Windows\System32):
+
+- kernel32.dll:7db088338b81ad0a5030ae73adb3202004ccedd79d92a87ceb91483ba09e6728
+- ntdll.dll:3063ca9a91d64bfb319c805def6c7f89158d4f33a3167b728c7421cd26b90a5b
+- vcruntime140_1.dll:a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e
+- ucrtbase.dll:185b56b4f32ee97a308471bf0e4a7615f861958b2d1231386d7ef07193db9808
+
+The two explicit API routes, importer=tll_p99_wrist_abi.dll, host=ucrtbase.dll:
+api-ms-win-crt-heap-l1-1-0.dll and api-ms-win-crt-runtime-l1-1-0.dll.
+These hashes are reproducibility pins for reviewed local bytes, NOT Authenticode
+or proof that every byte in an already-loaded provider equals its current file.
+
+Written pre-exam prediction: all36 graph-derived addresses must equal the owned
+loader and mapped artifact IAT. Exactly one reached EAT forwarder is
+KERNEL32.InitializeSListHead -> NTDLL.RtlInitializeSListHead;13 CRT contract imports
+terminate in ucrtbase. A different selected provider/address must refuse, not
+rewrite expectations. Offline export parsing, negative/unit tests and explicit
+loaded-module path selection precede this bounded OWNED test; no game was run.
+
+CONFIRMED (owned fixture ONLY): all36 imports matched their independent graph:
+11terminal kernel32,1ntdll,13ucrtbase,10Python VCRUNTIME140,1VCRUNTIME140_1. Full
+artifact comparison still passed376071bytes in5ranges,58DIR64 adjustments;
+four mutable.data relocations remain excluded. After the wrong-provider refusal,
+three consecutive correct-profile load/compare/unload runs passed. Artifact SHA
+unchanged:a81ba7f43c543c731942c999f8b6aa9ed8f2bc0cda96c41ab96882257e22aae5.
+Local profile/report: reports/p99_owned_import_profile_20260928.json and
+reports/p99_owned_import_graph_exam_20260928.json (ignored, never committed).
+
+Validation:56new Python tests; full Python683/683, CTest77/77, default and retained
+ABI MSVC targets up to date. Regression cases include aliases/ordinal-only/hole,
+non-one ordinal base, forwarder exact boundary/NUL, certificate/file offset,
+raw padding, forged Provider records, Unicode DLL identifiers, metadata/count/
+aggregate/depth bounds, cycles, wrong importer, source handle/filename mismatch,
+oracle disagreement, profile ambiguity, short file reads and retained cleanup
+handles. Independent read-only review found no remaining concrete blocker.
+
+LIMITS / NEXT: graph output still denies mapped provider verification, API-set
+schema verification, remote module lifetime and installation admission. The owned
+fixture's retained local references do not prove a target-process lease. Full
+provider bodies, code thunks (including kernel32 machine-code jumps), dependency
+closure, target loaded-file identity and target API-set namespace are unverified.
+Next bind provider evidence to exact target PID/creation/base/image identity and
+retained target-side lifetime, then perform mapped checks under external hold
+before write transaction/recovery/ACK integration. Do not promote this local
+Python profile or these local pointers into a game installer. No game, hook,
+initialization gate, IDB change or visual grip repair; existing tmp/ preserved.
