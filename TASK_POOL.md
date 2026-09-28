@@ -11,7 +11,36 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC (2026-09-27, exact post-cmd16 source boundary): all five missing
+Latest STATIC / OWNED TESTS (2026-09-28, read-only snapshot building blocks):
+nadine_p99_wrist_snapshot.h copies ONLY JP24/26/49/51 andW22 (five reads/256B),
+checks fresh supplied Segment/allocator value contracts, stages privately and
+publishes nothing on partial failure. Attempt is terminal on success/refusal;
+no raw pointers escape. Source/final-render admission staysFALSE even in tests.
+Segment+08 must be ZERO: dormant shadow helper still has the old rejected
+parent-pointer guard and must NOT be enabled/reused. Existing AFE observer has
+no job/process capture scope alive over stock; AGW depends on full retarget
+preparation and substitutes context; its two-group completion state is unsuitable.
+nadine_p99_wrist_invoke.cpp separately tests stock-once/postread/SEH/reentry,
+191 checks incl.actual unwind/alignment/nonvolatile GPR+XMM; snapshot86checks.
+The SIX-argument helper is NOT a direct target for the game's TWO-argument CALL;
+an independently bound two-argument entry adapter is still missing.
+Normal cmd16 ABI is two arguments, originalRCX/RDX, stock once then post-read;
+never move native prologue or catch/retry a stock fault. Compiler unwind and
+exact-once isolated fixture verification are separate from game admission.
+Controller+120 is correctly DWORD; native inventory0..22 is broader than the
+unchanged conservative project0..17 gate. Ordinary P99 Give class0 selects0;
+the old refusal logged neither read-success nor value, so its cause is UNKNOWN.
+NEXT: join these independently tested components to a dedicated default-OFF
+observer with its OWN retained-owner/P99 scope, first Process/native-return-slot
+epoch, exact normal g0 grammar/program/import bindings, fresh post-return checks,
+arm/expiry and split overhead budget. Do not reuse AFE/AGW capture authority,
+weaken gates, enable either writer or launch the old preparation exam. No live
+observer is wired or runtime test admitted; no actual source pose captured.
+Verification: Python557/557, CTest29/29. New code is test-target-only, not linked
+into runtime. Single IDB saved1923functions/80data/2types; two-arg executor type
+and WeaponArtDef_GetCampaignNormalizedClass141094420 verified after restart.
+
+Previous STATIC (2026-09-27, exact post-cmd16 source boundary): all five missing
 inputs coexist immediately at141ABA978 after CALL141ABA973 ->14217B630 in
 normal Async group0 Process141A92E78. CORRECTION:141AB9B3D is custom-table LEA,
 not this call. No runtime hook used that recent mistaken frontier address.

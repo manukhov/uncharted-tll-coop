@@ -3017,6 +3017,16 @@ FUNCTIONS = {
         "(runtime-proven 2026-07-10: RequestInteract hook installed but never fires).",
     ),
     # --- 2026-07-07: weapon give / slot placement (pickup display root) ---
+    0x141094420: (
+        "WeaponArtDef_GetCampaignNormalizedClass",
+        "STATIC reads signed32 WeaponArtDef+8 at141094427. When NetModeFlags+3 "
+        "is zero, aliases16->0 and17/22->1; otherwise returns raw class. "
+        "GiveWeapon calls1410A5BF4 and passes EAX as slot argumentR9D into "
+        "vslot130 CreateAndAddWeapon1410A8920 at1410A5C3E. Pinned P99 art "
+        "8075397D has rawclass0, so ordinary Give selects slot0. Does not "
+        "prove all scripted slot-placement routes or explain a historical "
+        "controller-slot refusal without the actual captured value.",
+    ),
     0x1410A8920: (
         "PlayerWeaponController_CreateAndAddWeapon",
         "vtable +0x130. Resolves WeaponArtDef by art, creates ProcessWeapon, "
@@ -5473,7 +5483,13 @@ FUNCTIONS = {
         "also called at141AB7F74/14217DE27; C39 identity alone does not admit "
         "retained local Nadine. Normal Async group0 call141A92E78 and actual "
         "cmd16 return141ABA978 define the candidate procedural read window; "
-        "command suffix, owner callbacks and render palette selection remain.",
+        "command suffix, owner callbacks and render palette selection remain. "
+        "STATIC ABI: exactly two input arguments RCX=status,RDX=Segment; "
+        "entry overwrites R9 at217B64F and R8 at217B66D before using either. "
+        "Returns original status pointer at217B7A5 and zeros *status at7A8. "
+        "Process reloads R10/R11 aftercall then parser reloads EDX/R8/R9. "
+        "Ordinary compiled two-argument wrapper can preserve the call ABI; "
+        "do not move native prologue or treat this as live capture admission.",
     ),
     0x14217BF30: (
         "AnimCmdEvaluator_ExpandJointParamsToTargetWorkspaceCount",
@@ -14678,7 +14694,10 @@ INSTRUCTION_COMMENTS = {
     0x141ABA973: (
         "STATIC actual cmd16 CALL14217B630; RDX=stack Segment from141ABA96B. "
         "Return141ABA978 is the candidate source window only for admitted "
-        "normal Async g0 from Process141A92E78, not arbitrary C39 contexts."
+        "normal Async g0 from Process141A92E78, not arbitrary C39 contexts. "
+        "Two-arg ABI; original RCX/RDX must be forwarded once. Caller reloads "
+        "R10/R11 at978/97D and parser reloads EDX/R8/R9; no inherited volatile "
+        "argument is a source of authority. Stock faults must propagate, not retry."
     ),
     0x141ABA978: (
         "STATIC pinned g0 post16: untouched JP24/26/49/51 and newly computed "
@@ -14690,6 +14709,10 @@ INSTRUCTION_COMMENTS = {
 
 
 FUNCTION_TYPES = {
+    0x14217B630: (
+        "unsigned int *__fastcall AnimCmdEvaluator_ExecuteSkeletonJointPrograms("
+        "unsigned int *status, const void *segment);"
+    ),
     0x141ED1380: (
         "unsigned __int8 __fastcall "
         "NdAttachableObject_UpdateSelectedAttachmentTransform(void *object);"

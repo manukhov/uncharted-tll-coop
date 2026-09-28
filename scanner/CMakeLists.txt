@@ -213,7 +213,19 @@ if(BUILD_TESTING)
         target_compile_options(tll_local_appearance_observation_tests PRIVATE -Wall -Wextra -Wpedantic)
     endif()
     add_test(NAME local_appearance_observation COMMAND tll_local_appearance_observation_tests)
-    foreach(policy group_program_manifest group_admission group_scope group_readability group_memory group_entry group_budget group_ingress group_fiber group_native_frame source_read source_materialize operand_identity retarget_table_admission source_observation preselection_trace)
+    # Isolated original-call/SEH/ABI proof. This code is NOT linked into runtime.
+    add_executable(tll_nadine_p99_wrist_invoke_tests
+        tests/nadine_p99_wrist_invoke_tests.cpp
+        src/nadine_p99_wrist_invoke.cpp
+        tests/nadine_p99_wrist_invoke_fixture.asm)
+    target_include_directories(tll_nadine_p99_wrist_invoke_tests PRIVATE src)
+    target_compile_features(tll_nadine_p99_wrist_invoke_tests PRIVATE cxx_std_20)
+    target_compile_definitions(tll_nadine_p99_wrist_invoke_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(tll_nadine_p99_wrist_invoke_tests PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX>:/W4;/permissive-;/EHsc>")
+    add_test(NAME nadine_p99_wrist_invoke COMMAND tll_nadine_p99_wrist_invoke_tests)
+    set_tests_properties(nadine_p99_wrist_invoke PROPERTIES TIMEOUT 20)
+    foreach(policy group_program_manifest group_admission group_scope group_readability group_memory group_entry group_budget group_ingress group_fiber group_native_frame source_read source_materialize operand_identity retarget_table_admission source_observation preselection_trace wrist_snapshot)
         add_executable(tll_nadine_p99_${policy}_tests tests/nadine_p99_${policy}_tests.cpp)
         target_include_directories(tll_nadine_p99_${policy}_tests PRIVATE src)
         target_compile_features(tll_nadine_p99_${policy}_tests PRIVATE cxx_std_20)

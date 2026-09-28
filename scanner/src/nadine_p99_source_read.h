@@ -354,6 +354,10 @@ template<class R>
         !reader.read(value.controller, 0, pointer) || pointer != c.controller_vtable ||
         !mark(OwnerCheck::ControllerOwner) ||
         !reader.read(value.controller, 0x108, pointer) || pointer != value.player ||
+        // Conservative P99 admission, not the native inventory extent. Native
+        // GetWeaponBySlot accepts0..22; ordinary P99 Give class0 selects slot0.
+        // Keep this gate unchanged: historical controller-slot refusal did not
+        // capture read-success/value and cannot justify a wider admission.
         !mark(OwnerCheck::ControllerSlot) ||
         !reader.read(value.controller, 0x120, value.slot) || value.slot < 0 || value.slot >= 18 ||
         !mark(OwnerCheck::ControllerState) ||

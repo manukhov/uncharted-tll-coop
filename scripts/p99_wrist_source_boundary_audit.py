@@ -37,6 +37,9 @@ INSTRUCTIONS = {
     CMD16_RETURN: bytes.fromhex('448b542454'),
     0x141A92E78: bytes.fromhex('e843690200'),     # normal Async g0
     0x141A932F8: bytes.fromhex('e8c3640200'),     # later groups, not g0
+    0x14217B64F: bytes.fromhex('4c8b4a28'),       # overwrite incoming r9
+    0x14217B66D: bytes.fromhex('440fb74006'),     # overwrite incoming r8
+    0x14217B7A5: bytes.fromhex('498bc445892c24'), # return status; store zero
 }
 
 
@@ -74,6 +77,9 @@ def verify_boundary_instructions(read):
         'post_cmd16_boundary': f'{CMD16_RETURN:X}',
         'normal_async_g0_Process_call': '141A92E78',
         'later_groups_Process_call': '141A932F8',
+        'native_input_arguments': ['RCX=status', 'RDX=original SegmentContext'],
+        'native_return': 'RAX=original status pointer; *status=0 is not program coverage',
+        'incoming_R8_R9_are_not_extra_arguments': True,
     }
 
 

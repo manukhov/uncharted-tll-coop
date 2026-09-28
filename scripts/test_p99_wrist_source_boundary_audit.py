@@ -50,6 +50,14 @@ class BoundaryInstructionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Async Process call'):
             audit.verify_boundary_instructions(self.reader({0x141A92E78: b'\xe8\x00\x00\x00\x00'}))
 
+    def test_native_two_argument_boundary_pinned(self):
+        result = audit.verify_boundary_instructions(self.reader())
+        self.assertEqual(result['native_input_arguments'], ['RCX=status', 'RDX=original SegmentContext'])
+        self.assertTrue(result['incoming_R8_R9_are_not_extra_arguments'])
+        for address in (0x14217B64F,0x14217B66D,0x14217B7A5):
+            with self.subTest(address=address), self.assertRaisesRegex(ValueError, 'boundary bytes'):
+                audit.verify_boundary_instructions(self.reader({address: b'\x90'*7}))
+
 
 class SourceOperandBoundaryTests(unittest.TestCase):
     @classmethod

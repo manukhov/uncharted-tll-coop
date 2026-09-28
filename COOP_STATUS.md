@@ -47,6 +47,14 @@ selection prevent calling this a final-render snapshot. Existing pre-stock
 observer cannot supply these inputs. Next is a separately scoped one-shot
 read-only source capture design, not the unchanged old preparation exam.
 
+Latest 2026-09-28 implementation: an isolated read-only256B snapshot building
+block now exists, with fresh context/allocator value checks and all-or-nothing
+owned output. It is NOT wired into the game. Audit identified stale dormant
+Segment+08 guard and incompatible old observer/shadow lifecycles; none was
+enabled. Native cmd16 ABI is two arguments, original context forwarded once.
+Controller+120 width/offset is correct;0..17 is conservative, not native extent.
+Next is a dedicated owner/epoch-bound observer integration, not a visual fix.
+
 ## Historical priority snapshot (2026-08-27)
 
 Correct the holstered positions of all other weapons on local legacy Nadine's
@@ -36700,3 +36708,109 @@ false. Runtime/scanner untouched, no new game process. Single IDB saved with
 1922functions/80data/1type and save_database returned True; new global and its
 Async use read back through restarted MCP. Existing untrackedtmp/ preserved. This is a
 source-boundary finding, not a visual grip correction.
+
+### 2026-09-28 STATIC / OWNED TESTS read-only wrist snapshot and cmd16 ABI
+
+No runtime test/launch, pose writer or attachment change. The source-boundary
+proof from1a6b16e is reused, not rediscovered as a repaired grip. Hypothesis:
+a compiled two-argument wrapper can call original14217B630 once with the exact
+original status/context and, after normal return, copy the five established
+operands into independent256B storage. Alternatives: reuse AFE preparation,
+reuse AGW shadow handler, pre16 copy, or relocated prologue. Those are excluded
+respectively by missing poststock scope, context substitution/two-group writer
+state, unproducedW22 and the previously rejected unwind defect.
+
+**Read-only building block.** nadine_p99_wrist_snapshot.h has no installer,
+native call, retarget evaluator, logging, file I/O, global arm or pose write.
+Its caller must supply fresh OWNED post16 context/allocator snapshots and a
+bounded Reader. It validates raw/custom-table/scratch/group/processing identities,
+zero reserved Segment+08/+20, group0/flags0/scalarsnull, then reuses complete
+validate_group_allocations exact-start/tag/free-list checks. It requests only
+JP+480/4E0/930/990 each48B and workspace+5C0 64B. All bytes, including negative
+zero and uninterpreted S.w/T.w/workspace padding, are preserved without numeric
+normalization; numeric acceptance is a later step. No whole arena payload copy.
+Result is staged privately; any failed read (including a callback that wrote
+partial destination bytes) yields an empty payload, and the attempt cannot retry.
+Success also consumes the attempt. Published payload contains no borrowed pointer.
+Its source_admitted/final_render_admitted methods ALWAYS returnfalse; successful
+synthetic bindings/phase/storage checks are not a native epoch or owner lease.
+The helper does not enforce a global one-shot, budget, FLS, live program bytes,
+identity revalidation or callback lifetime: those belong to the future adapter.
+
+**Existing runtime code is not that adapter.** AFE candidate stack owns its
+selection/Reader/prepared rows only BEFORE stock Async. Only FLS binding,
+reentered bit and native_return_slot survive; frame.job/process staynull. AFE
+installer deliberately does not patch Process/cmd16. AGW publishes frame.job only
+after full prepare_p99_group_values and calls stock with copied.data(), not the
+original Segment. Its scope expects both g0/g1. Dormant
+seh_prepare_p99_group_shadow also still requires Segment+08==parent, contradicting
+the recorded native-zero field. It remains OFF/unchanged; the new helper rejects
+that nonzero field instead. Copying or enabling that dormant handler is not an
+implementation shortcut for a read-only snapshot.
+
+**Native ABI checked in both directions.** CALL141ABA973 receives
+RCX=RBP+58 status and RDX=RBP-80 Segment. Executor14217B630 overwrites inputR9 at
+217B64F andR8 at217B66D before reading either, and returns original status pointer
+at217B7A5 while writing zero at217B7A8. True signature is two arguments; IDB type
+is corrected rather than preserving spurious decompiler R8/R9 arguments. Caller
+reloadsR10/R11 at141ABA978/97D and EDX/R8/R9 at141AB9A0D..19. Rel32 CALL to a
+register-neutral FF25 leaf relay then a normal compiled wrapper need not move
+any game instructions. Process pdata spans1AB97C0..1ABB20C, xdata2EE1F08;
+executor pdata217B630..67A, xdata2F85008 with chained67A..7A2/7A2..7C7 regions.
+Keep original functions/prologues untouched and retain compiled wrapper unwind
+metadata. This does not re-admit the old43B Async prologue splice.
+Reserve an in-flight one-shot before stock, prevent nested capture inheritance,
+and publish only after normal return/postchecks. Stock exceptions must propagate,
+not be swallowed/retried by read-fault protection. Measure admission and postread
+overhead separately: a QPC interval around stock would charge the game's cost.
+
+**Owner guard audit, not a proposed relaxation.** Controller+120 is DWORD
+current index (commit store1410AAF89; signed sentinels-1/-2/-3), not an incorrect
+offset/width. GetWeaponBySlot bounds0..22 using cmp1410A1F90/unsignedja1F93;
+CommitDrawn scans23 records at1410AAF65/69. Project0..17 remains deliberately
+conservative. Newly named WeaponArtDef_GetCampaignNormalizedClass141094420 reads
+definition+8: when NetModeFlags+3==0,16->0 and17/22->1; otherwise unchanged.
+GiveWeapon call1410A5BF4 moves result toR9D at5C01 and vslot130 CreateAndAddWeapon
+call5C3E writes the caller-supplied weak slot. The existing pinned P99 art8075397D
+has rawclass0, so its ordinary Give path selects0. This does not prove every
+scripted/override placement. Historical controller-slot diagnostic recorded
+neither read-success nor numeric value; its specific rejection cause remains
+UNKNOWN. No gate was weakened and no retail getter was executed (GetWeaponBySlot
+would itself write weapon+72, so it is not a read-only diagnostic primitive).
+
+NEXT: implement a separate default-OFF observation route binding current retained
+Nadine/P99 identity, normal-job shape, first Process context and native return-slot
+epoch, exact grammar/import/program and fresh post-return storage. Old readable
+pages and old selection cannot be reused across stock. Preserve one-shot expiry,
+split1ms mod-overhead budget and both writersOFF. Integrating these components
+requires its own written falsifiable prediction before any game exam. Actual
+pose inputs, final frame/weapon correspondence and visual grip remain unverified.
+
+**Compiled fixture result.** nadine_p99_wrist_invoke.h/.cpp provides a SIX-argument
+helper, NOT an installable entry for the game's TWO-argument callsite. It is
+linked only into its new isolated test executable. A separately audited
+two-argument game adapter still needs current state/owner/epoch resolution.
+The helper reserves one attempt, forwards original status/context once, preserves
+stock-result and poststock LastError, calls capture only after normal return and
+invalidates the outer capture on same-state nested native/callback entry. Stock
+SEH propagates through finally cleanup; callback SEH is contained without stock
+retry. Callback storage stays unpublished and can be partial after fault/reentry;
+only terminal captured permits the caller to use it, and even that does NOT
+establish game-source admission. Terminal states never recapture on later calls,
+while each later invocation still performs its stock call once.
+MASM fixture clobbers all four home slots and checks entryRSP%16==8, all8
+nonvolatile GPR andXMM6..15. RtlLookupFunctionEntry and RtlVirtualUnwind exercise
+real compiled metadata/active wrapper-to-caller frames. Cases cover normal,
+callbackfalse/null/fault, nativefault, nestednative/nestedcallback/nestedfault,
+owned256B copying and untouched source/guard values.191 checks/0failures;
+snapshot tests86checks/0failures. No retail executable code or game memory was
+called/read by these fixtures. Live installer/thread snapshot race limits,
+FLS/native epoch, lifecycle and budget remain outside this test's proof.
+
+Final verification: Python557/557, CTest29/29; read-only retail/asset boundary CLI
+also passes with new register-overwrite/return byte guards. Compiler artifacts
+remain ignored. Both P99 writers and ordinary observer remainOFF; old exam not
+launched; no production hook wiring or installed DLL changes. IDA labels/type
+saved1923functions/80data/2types with save_database returned True, then new helper
+name/callers and executor's two-argument pseudocode read back via MCP. Existing
+untrackedtmp/ is preserved. No visual repair or actual-pose capture claimed.
