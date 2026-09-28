@@ -11,7 +11,33 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / OWNED ROUTE TESTS (2026-09-28, Process-bound read-only route):
+Latest STATIC / OWNED DATA TESTS (2026-09-28, production read faults/diagnostics):
+The actual coop_runtime.cpp owner/process/snapshot functions now pass an inert
+owned-memory fixture:1074checks, pinned Nadine PAK, real VirtualQuery/volatile
+copy/SEH, PAGE_READONLY sources, all198 copy-boundary partial failures, page loss
+and closing-owner turnover. No retail code or game process is executed.
+The256B payload needs22532B total copying/198copies/13VirtualQuery calls in this
+post16 fixture INCLUDING admission. This is NOT full-route cost or game timing;
+the preparation build instruments queries with QPC and the private graph packs
+objects differently. Do not infer that256B means cheap, or weaken owner gates.
+Pointer-free refusal detail records phase, nested owner check, numeric check,
+original slot read-success/value and command/allocation status. No extra reads;
+partially failed slot copies never produce valid values. Source-reader1413checks
+compare exact observed/plain transcripts. Actual-route20cases verify only own
+normal-return terminal diagnostics publish; native unwind/nonselected probes do
+not. Ordinary nonselected refusal/expiry still has no detailed export; finish that
+lifecycle safely, do not borrow a later probe's terminal reason.
+Runtime rebuilt; Python558/558; CTest51/51. Observation flag remainsFALSE/asserted;
+NO installer/arm/exporter, actual source values or visible repair. No game launched
+or injected; no tll process at handoff. Existing untrackedtmp/ is untouched.
+NEXT: pinned read-only installer preflight (actual operator code and both frame
+layouts), PID/creation-bound arm/expiry and off-thread owned export, including
+nonselected/exception reporting ownership. Then written discriminating runtime
+prediction and one-copy manual scenario. No automatic game inputs.
+No new game symbols this turn; previous single-IDB1923functions/80data/2types save
+record was checked, not rerun. Full detail at latest COOP_STATUS section.
+
+Previous STATIC / OWNED ROUTE TESTS (2026-09-28, Process-bound read-only route):
 Dedicated wrist_read_runtime.inl + wrist_observation_runtime.inl now compile in
 the runtime TU, but kEnableP99WristObservation remainsFALSE with a hard assertion;
 there is NO installer, arm publisher or live payload exporter for this route.

@@ -55,6 +55,13 @@ enabled. Native cmd16 ABI is two arguments, original context forwarded once.
 Controller+120 width/offset is correct;0..17 is conservative, not native extent.
 Next is a dedicated owner/epoch-bound observer integration, not a visual fix.
 
+Latest owned-data audit (2026-09-28): production owner/process/snapshot now pass
+1074isolated checks, including each of198partial-copy failures and owner turnover.
+The256B payload costs22532B of copying including admission in the fixture; neither
+that layout nor instrumented timing establishes game overhead. Exact pointer-free
+refusal diagnostics preserve read order and owner gates. Route remains disabled;
+installer/arm/off-thread export and actual source evidence are still missing.
+
 ## Historical priority snapshot (2026-08-27)
 
 Correct the holstered positions of all other weapons on local legacy Nadine's
@@ -36915,3 +36922,86 @@ MCP restarted and Process name/prologue verified. No live process/game test or
 deployment took place. Existing untrackedtmp/ preserved, generated artifacts
 remain ignored. NEXT is production-data fault/turnover/cost fixture plus scalar
 refusal diagnostics, then separately reviewed installer/arm/owned export.
+
+### 2026-09-28 — STATIC / OWNED TESTS: production post16 data faults and exact refusal detail
+
+**Scope and competing failure explanations.** The remaining postcmd16 boundary
+is still141ABA978, after CALL141ABA973. No new live hook, game fact or bone edit.
+The prior coarse OwnerIdentity/ClosingOwner reason overwrote nested owner failure,
+so it could not distinguish unreadable Controller+120 from a readable inadmissible
+slot, numeric Player failure, or a successful fresh owner differing from the token.
+OwnerObservation now records only the ORIGINAL opening/closing DWORD read's
+attempt/read_ok/value, with value zero/unavailable after any failed/partial copy.
+The conservative0..17 gate, field order, numeric checks and reader count are
+unchanged. Optional phase/owner/numeric/command/snapshot/allocation enums carry no
+pointers, string addresses or authority; fresh nested failure is not overwritten
+by identity comparison. Output/diagnostic arguments MUST be distinct private
+caller-owned objects, as they are in the actual route. This internal API does not
+promise safety for an arbitrary output alias into source memory.
+
+**Actual data code, synthetic owned graph.** New nadine_p99_wrist_read_tests.cpp
+includes the entire production TU under inert PREPARATION_AUDIT, with a second
+test-only pre-copy fault hook forbidden outside that build mode. Real VirtualQuery,
+volatile copies and SEH run against fixture-owned allocations. Source allocations
+are PAGE_READONLY; only data pages of a reserved synthetic module are committed,
+so game executor/dispatch identities cannot execute. PAK length732928 and full SHA
+2bf66e61fae156a41952d8d2659e06215dbe8f0c827a9f6a89cada0c9490b06b are independently
+pinned before copying raw skeleton bytes at53FE0/8F40. Normal and optional sphere
+command grammars and native allocator metadata are independently constructed;
+dispatch table identities use the existing binding manifest, so this is not a
+new independent proof of those addresses. Fixture setup initially used a generic
+look1 instead ofD27C074F and loaded values where sphere/palette require Fg+1C0/
+Fg+220 addresses; only fixture data was corrected, never production guards.
+
+Positive cases copy the exact JP24/26/49/51 andW22 bytes, including uninterpreted
+NaN/negative-zero/padding lanes; all committed source bytes remain unchanged and
+later source mutation cannot change the owned result. Negative cases cover role,
+normal mode, owner/weak generations/IDs, conservative slot endpoints and invalid
+values, native numeric validators, changed valid command padding vs old token,
+manifest/dispatch/grammar, Segment reserved+08, exact allocation starts, extent,
+metadata table/types/counts/free-list and owner changes after private payload copy.
+Fresh phase checks reject PAGE_NOACCESS even after an earlier phase admitted the
+allocation. Protection loss after range approval causes contained real copy SEH.
+Each of the198actual copy positions is separately forced to partially fill its
+private destination then raise SEH: every case rejects, leaves the entire caller
+payload zero, does not retry, and leaves all source bytes unchanged. This is not
+a proof of arbitrary concurrent ABA or native lifetime safety.
+
+**Cost boundary, not a live performance claim.** One post16 snapshot in the
+synthetic graph performs198copies and13VirtualQuery calls; only5copies/256B are
+payload, while total bytes copied including admission are22532. Initial owner
+selection and pre-stock Process admission are additional work outside this count.
+The PREPARATION_AUDIT query wrapper itself uses QPC; no timing from it is promoted
+to ordinary DLL/game timing, and real page topology may differ. Existing1ms split
+budget is still post-call cancellation, not preemption or proof of no lag.
+Do not remove owner/manifest checks merely to meet the budget.
+
+**Diagnostic publication ownership.** Pending/job diagnostic values are private.
+Only a selected terminal attempt, or its still-owned preselection budget abort,
+publishes a scalar diagnostic after normal outer Async return with a release flag.
+After a nonselected probe releases its lease it must NOT infer ownership from a
+later non-None global policy reason: another job may have finished by then.
+The20actual-route fixture cases now assert publication on normal terminal paths,
+exact process/read refusal phase, and no publication on native unwind or released
+owner-refused/foreign-lease paths. Deliberate remaining gap: ordinary nonselected
+probe expiry/limit/refusal and native unwind do not yet publish detailed results.
+Off-thread reporting/arming design must handle these without adding callback I/O,
+stale evidence or a second writer racing terminal publication.
+
+Verification: full MSVC/Ninja build passed; Python558/558, CTest51/51. New actual
+data fixture1074checks/0; source-reader1413checks/0 includes null-vs-observed exact
+query/copy transcripts, partial slot copies and2-to3closing changes. Runtime and
+inert harness compile; only test target defines WRIST_READ_AUDIT. Game not launched
+or injected and no tll process found at handoff. kEnableP99WristObservation remains
+false with static_assert; old P99 writers/observer remainOFF. No grip/attachment/
+animation behavior was changed or verified. No new IDA symbols: checked the prior
+single-IDB save record1923functions/80data/2types/save_database True, no new save.
+Untrackedtmp/ preserved; generated binaries/assets remain ignored.
+
+NEXT: pin installer preflight against actual operator code and both native frame
+layouts; implement/review PID+creation-bound one-shot arm/expiry and off-thread
+owned export, including terminal reporting ownership above. Before any game exam,
+write a prediction distinguishing same owner/frame capture from stale/foreign
+source, retain three independent static evidence kinds, then one copy only with
+all game actions performed by the user. Missing five actual source values and
+postpose/render caveats still prevent admitting a visual correction.

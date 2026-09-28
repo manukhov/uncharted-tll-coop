@@ -42,6 +42,7 @@ struct Fixture {
     std::uint32_t turn_value = 0;
     unsigned turn_on = 0, hits = 0, copies = 0, queries = 0;
     unsigned fail_query_at = 0, fail_copy_at = 0;
+    std::size_t fail_copy_bytes = 0, failed_bytes_written = 0;
     std::vector<Access> accesses;
     explicit Fixture(std::uintptr_t origin = 0x100000) : base(origin), slot(base), retained(base+0x1000),
         player(base+0x2000), fg(base+0x8000), art(base+0x9000), raw(base+0xA000), pose(base+0xB000),
@@ -80,19 +81,30 @@ struct Fixture {
     bool copy(std::uintptr_t address, void* output, std::size_t bytes) {
         ++copies;
         accesses.push_back({'c', address, bytes});
-        if (copies == fail_copy_at) return false;
+        if (copies == fail_copy_at) {
+            // A generic Copy may alter part (or all) of the destination and
+            // still report failure. These are owned fake bytes, not a game probe.
+            if (address >= base && bytes <= data.size() && address-base <= data.size()-bytes) {
+                failed_bytes_written = std::min(fail_copy_bytes, bytes);
+                if (failed_bytes_written != 0)
+                    std::memcpy(output, data.data()+(address-base), failed_bytes_written);
+            }
+            return false;
+        }
         if (address < base || bytes > data.size() || address-base > data.size()-bytes) return false;
         if (address == turn_address && ++hits == turn_on) put(turn_address, turn_value);
         std::memcpy(output, data.data()+(address-base), bytes);
         return true;
     }
     bool capture(s::Owner& result, s::OwnerCheck expected = s::OwnerCheck::Count,
-                 std::uintptr_t expected_player = 0) {
+                 std::uintptr_t expected_player = 0,
+                 s::OwnerObservation* observed_out = nullptr) {
         // All fixture captures, including the pre-existing mutation tests, run
         // the exact same initial bytes twice with only the optional pointer varied.
         Fixture observed = *this;
         s::Owner instrumented = result;
-        s::OwnerObservation observation{s::OwnerCheck::Complete};
+        s::OwnerObservation observation = observed_out == nullptr
+            ? s::OwnerObservation{s::OwnerCheck::Complete} : *observed_out;
         const auto expected_address = expected_player == 0 ? player : expected_player;
         s::Reader reader([&](auto address, auto& out){ return query(address,out); },
                          [&](auto address, auto* out, auto bytes){ return copy(address,out,bytes); });
@@ -107,7 +119,8 @@ struct Fixture {
         check(accesses == observed.accesses && queries == observed.queries &&
               copies == observed.copies && reader.query_count() == observed_reader.query_count(),
               "optional owner observation preserves exact ordered query/copy transcript");
-        check(data == observed.data && hits == observed.hits,
+        check(data == observed.data && hits == observed.hits &&
+              failed_bytes_written == observed.failed_bytes_written,
               "optional owner observation preserves turnover and source bytes");
         check(plain ? observation.check == s::OwnerCheck::Complete :
               observation.check != s::OwnerCheck::NotStarted &&
@@ -116,6 +129,7 @@ struct Fixture {
               "owner observation records completion or a reached first-failure group");
         if (expected != s::OwnerCheck::Count)
             check(observation.check == expected, "owner first-failure group is exact");
+        if (observed_out != nullptr) *observed_out = observation;
         return plain;
     }
 };
@@ -215,6 +229,115 @@ void owner_observation_boundaries() {
     check(std::string(s::owner_check_name(C::Count)) == "unknown" &&
           std::string(s::owner_check_name(static_cast<C>(255))) == "unknown",
           "invalid owner diagnostic values are safely named unknown");
+}
+
+// This proves diagnostic values and unchanged guard behavior in owned fixtures;
+// it does not establish a live owner, native slot admission or runtime readiness.
+void owner_slot_observation_values() {
+    using C = s::OwnerCheck;
+    using Slot = s::OwnerObservation::Slot;
+    const auto unavailable = [](const Slot& slot) {
+        return !slot.attempted && !slot.read_ok && slot.value == 0;
+    };
+    const auto failed_read = [](const Slot& slot) {
+        return slot.attempted && !slot.read_ok && slot.value == 0;
+    };
+    const auto read_value = [](const Slot& slot, std::int32_t value) {
+        return slot.attempted && slot.read_ok && slot.value == value;
+    };
+    const auto count_copies = [](const Fixture& fixture, std::uintptr_t address) {
+        return std::count_if(fixture.accesses.begin(), fixture.accesses.end(),
+            [address](const Access& access) { return access.kind == 'c' && access.address == address; });
+    };
+    const auto stale = [] {
+        return s::OwnerObservation{C::Complete, {true, true, -99}, {true, true, 777}};
+    };
+    constexpr unsigned opening_copy = 25, closing_copy = 62;
+    s::Owner output{};
+    s::OwnerObservation observation = stale();
+    Fixture valid;
+    check(valid.capture(output, C::Complete, 0, &observation) &&
+          read_value(observation.initial_slot, 2) && read_value(observation.closing_slot, 2),
+          "successful slot diagnostics retain both original signed values");
+    check(count_copies(valid, valid.controller+0x120) == 2,
+          "successful diagnostics do not reread either slot");
+    unsigned ordinal = 0, slot_copies = 0;
+    for (const auto& access : valid.accesses) {
+        if (access.kind != 'c') continue;
+        ++ordinal;
+        if (access.address != valid.controller+0x120) continue;
+        check(access.bytes == sizeof(std::int32_t) &&
+              ordinal == (slot_copies == 0 ? opening_copy : closing_copy),
+              "slot observations remain at the two original DWORD read boundaries");
+        ++slot_copies;
+    }
+    check(slot_copies == 2, "slot copy ordinal inventory is complete");
+
+    // Reuse an actual completed observation: neither value may survive a call
+    // that short-circuits before the first slot field.
+    Fixture before_slot;
+    before_slot.put(before_slot.controller+0x108, std::uintptr_t{0});
+    check(!before_slot.capture(output, C::ControllerOwner, 0, &observation) &&
+          unavailable(observation.initial_slot) && unavailable(observation.closing_slot) &&
+          count_copies(before_slot, before_slot.controller+0x120) == 0 &&
+          same_owner(output, s::Owner{}),
+          "before-field refusal resets both previously completed observations without a slot read");
+    Fixture before_reads;
+    before_reads.contract.retained_slot = 0;
+    observation = stale();
+    check(!before_reads.capture(output, C::Contract, 0, &observation) &&
+          unavailable(observation.initial_slot) && unavailable(observation.closing_slot) &&
+          before_reads.accesses.empty(),
+          "contract refusal clears stale observations before any source access");
+
+    for (const auto value : std::array<std::int32_t, 3>{-1, -2, 18}) {
+        Fixture rejected;
+        rejected.put(rejected.controller+0x120, value);
+        observation = stale();
+        check(!rejected.capture(output, C::ControllerSlot, 0, &observation) &&
+              read_value(observation.initial_slot, value) && unavailable(observation.closing_slot) &&
+              same_owner(output, s::Owner{}),
+              "a read-success out-of-guard slot retains its exact signed value but is not admitted");
+        check(count_copies(rejected, rejected.controller+0x120) == 1 &&
+              count_copies(rejected, rejected.controller+0x134) == 0 &&
+              rejected.copies == opening_copy,
+              "out-of-guard slot stops before controller state without diagnostic rereads");
+    }
+
+    for (const auto copied : std::array<std::size_t, 3>{0, 2, sizeof(std::int32_t)}) {
+        for (const bool closing : {false, true}) {
+            Fixture rejected;
+            rejected.fail_copy_at = closing ? closing_copy : opening_copy;
+            rejected.fail_copy_bytes = copied;
+            observation = stale();
+            check(!rejected.capture(output, closing ? C::ClosingControllerSlot : C::ControllerSlot,
+                                    0, &observation) && same_owner(output, s::Owner{}),
+                  "slot read-false rejects even after partial or complete fake destination copy");
+            check(rejected.failed_bytes_written == copied,
+                  "the generic fake reader exercised the requested failed-copy prefix");
+            check(closing ? read_value(observation.initial_slot, 2) && failed_read(observation.closing_slot)
+                          : failed_read(observation.initial_slot) && unavailable(observation.closing_slot),
+                  "failed slot read publishes unavailable zero, never copied or stale bytes");
+            check(count_copies(rejected, rejected.controller+0x120) == (closing ? 2 : 1) &&
+                  count_copies(rejected, rejected.controller+0x134) == (closing ? 1 : 0) &&
+                  rejected.copies == rejected.fail_copy_at,
+                  "failed slot read stops at the original copy with no retry or later state read");
+        }
+    }
+
+    Fixture changed;
+    changed.turn_address = changed.controller+0x120;
+    changed.turn_on = 2;
+    changed.turn_value = 3;
+    observation = stale();
+    check(!changed.capture(output, C::ClosingControllerSlot, 0, &observation) &&
+          read_value(observation.initial_slot, 2) && read_value(observation.closing_slot, 3) &&
+          same_owner(output, s::Owner{}),
+          "closing mismatch reports the original successful 2-to-3 reads without admission");
+    check(changed.hits == 2 && changed.copies == closing_copy &&
+          count_copies(changed, changed.controller+0x120) == 2 &&
+          count_copies(changed, changed.controller+0x134) == 1,
+          "closing mismatch makes exactly two slot reads and no closing state read");
 }
 
 void owner_observation_shared_scopes() {
@@ -569,6 +692,7 @@ int main(int argc,char** argv) {
     range_batch_scopes();
     owner_phase_scopes();
     owner_observation_boundaries();
+    owner_slot_observation_values();
     owner_observation_shared_scopes();
     Fixture valid;
     const auto untouched=valid.data;

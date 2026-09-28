@@ -1,18 +1,20 @@
 // Included inside coop_runtime.cpp's anonymous namespace after group runtime
 // helpers. Data phase ONLY: no installer, native evaluator, logging, global
-// grant, retarget preparation or pose write. All outputs are caller-owned.
+// grant, retarget preparation or pose write. Outputs MUST be distinct private
+// caller-owned storage, as in the actual route; this internal API does not
+// accept arbitrary source-aliasing output/diagnostic pointers.
 // The adapter separately proves FLS/native Async AND Process invocation, stock
 // return, one-shot and budget. Integer identities below are not lifetime leases.
 namespace p99_wrist_snapshot = coop::p99_wrist_snapshot;
 
-enum class P99WristReadReject : std::uint8_t {
-    None, Output, Gate, NormalJob, Retained, Owner, OwnerIdentity,
-    ProcessShape, ProcessIdentity, Program, Commands, ProcessChanged,
-    Segment, WorkBuffer, Metadata, Snapshot, ClosingOwner, Exception,
-};
+using P99WristReadReject = coop::p99_wrist_read_diagnostic::Reject;
+using P99WristReadDiagnostic = coop::p99_wrist_read_diagnostic::Diagnostic;
+using P99WristReadPhase = coop::p99_wrist_read_diagnostic::Phase;
 
-bool p99_wrist_read_refuse(P99WristReadReject* reason, P99WristReadReject value) noexcept {
+bool p99_wrist_read_refuse(P99WristReadReject* reason, P99WristReadReject value,
+    P99WristReadDiagnostic* diagnostic = nullptr) noexcept {
     if (reason != nullptr) *reason = value;
+    if (diagnostic != nullptr) diagnostic->reason = value;
     return false;
 }
 
@@ -38,31 +40,33 @@ bool p99_wrist_owner_same(const P99WristOwner& a, const P99WristOwner& b) noexce
 }
 
 bool seh_p99_wrist_owner(void* native_job, P99WristOwner* out,
-    P99WristReadReject* reason = nullptr) {
+    P99WristReadReject* reason = nullptr, P99WristReadDiagnostic* diagnostic = nullptr) {
+    if (diagnostic) { *diagnostic = {}; diagnostic->phase = P99WristReadPhase::Owner; }
     if (reason != nullptr) *reason = P99WristReadReject::None;
-    if (out == nullptr) return p99_wrist_read_refuse(reason, P99WristReadReject::Output);
+    if (out == nullptr) return p99_wrist_read_refuse(reason, P99WristReadReject::Output, diagnostic);
     *out = {};
     __try {
         if (!g_net_role_b || !g_state_net.enabled || g_module == 0 || native_job == nullptr)
-            return p99_wrist_read_refuse(reason, P99WristReadReject::Gate);
+            return p99_wrist_read_refuse(reason, P99WristReadReject::Gate, diagnostic);
         P99SourceReader reader(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
         P99WristOwner staged{};
         if (!seh_p99_group_normal_job(native_job, &staged.normal, reader))
-            return p99_wrist_read_refuse(reason, P99WristReadReject::NormalJob);
+            return p99_wrist_read_refuse(reason, P99WristReadReject::NormalJob, diagnostic);
         void* const player = p99_source_retained_player(P99SourcePurpose::kOwnedGroupValues, &reader);
         if (player == nullptr)
-            return p99_wrist_read_refuse(reason, P99WristReadReject::Retained);
+            return p99_wrist_read_refuse(reason, P99WristReadReject::Retained, diagnostic);
         IdleArmPoseOwnerScope scope{};
         if (!seh_resolve_p99_source_owner_scope(player, &scope,
-                P99SourcePurpose::kOwnedGroupValues, &staged.owner, &reader))
-            return p99_wrist_read_refuse(reason, P99WristReadReject::Owner);
+                P99SourcePurpose::kOwnedGroupValues, &staged.owner, &reader, nullptr,
+                diagnostic ? &diagnostic->owner : nullptr, diagnostic ? &diagnostic->numeric : nullptr))
+            return p99_wrist_read_refuse(reason, P99WristReadReject::Owner, diagnostic);
         if (!scope.valid || staged.owner.fg != staged.normal.fg ||
             staged.owner.art != staged.normal.art || staged.owner.raw != staged.normal.raw)
-            return p99_wrist_read_refuse(reason, P99WristReadReject::OwnerIdentity);
+            return p99_wrist_read_refuse(reason, P99WristReadReject::OwnerIdentity, diagnostic);
         *out = staged;
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return p99_wrist_read_refuse(reason, P99WristReadReject::Exception);
+        return p99_wrist_read_refuse(reason, P99WristReadReject::Exception, diagnostic);
     }
 }
 
@@ -108,20 +112,21 @@ bool p99_wrist_program_exact(P99SourceReader& reader, std::uintptr_t raw) {
 bool seh_p99_wrist_process(const std::uint32_t* commands, std::uint32_t words,
     const void* parent, std::uint32_t group, const void* callback,
     const P99WristOwner& owner, P99WristProcessValues* out,
-    P99WristReadReject* reason = nullptr) {
+    P99WristReadReject* reason = nullptr, P99WristReadDiagnostic* diagnostic = nullptr) {
+    if (diagnostic) { *diagnostic = {}; diagnostic->phase = P99WristReadPhase::Process; }
     if (reason != nullptr) *reason = P99WristReadReject::None;
-    if (out == nullptr) return p99_wrist_read_refuse(reason, P99WristReadReject::Output);
+    if (out == nullptr) return p99_wrist_read_refuse(reason, P99WristReadReject::Output, diagnostic);
     *out = {};
     __try {
         if (!g_net_role_b || !g_state_net.enabled || g_module == 0 || group != 0 ||
             words == 0 || words > p99_admit::kMaxCommandWords)
-            return p99_wrist_read_refuse(reason, P99WristReadReject::ProcessShape);
+            return p99_wrist_read_refuse(reason, P99WristReadReject::ProcessShape, diagnostic);
         P99SourceReader reader(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
         const auto& normal = owner.normal;
         if (normal.fg == 0 || normal.art == 0 || normal.raw == 0 ||
             normal.fg != owner.owner.fg || normal.art != owner.owner.art || normal.raw != owner.owner.raw ||
             !reader.range(normal.fg, 0x2A8) || !reader.range(normal.art, 0x48))
-            return p99_wrist_read_refuse(reason, P99WristReadReject::ProcessIdentity);
+            return p99_wrist_read_refuse(reason, P99WristReadReject::ProcessIdentity, diagnostic);
         std::uintptr_t art = 0, cached_art = 0, override_callback = 0, raw = 0;
         std::uint8_t mode = 0, cached_override = 0;
         if (!reader.read(normal.fg, 0x18, art) || art != normal.art ||
@@ -130,20 +135,20 @@ bool seh_p99_wrist_process(const std::uint32_t* commands, std::uint32_t words,
             !reader.read(normal.fg, 6, mode) || mode != 2 ||
             !reader.read(normal.art, 0x40, raw) || raw != normal.raw ||
             !reader.read(g_module, 0x3682F4B, cached_override) || cached_override != 0)
-            return p99_wrist_read_refuse(reason, P99WristReadReject::ProcessIdentity);
+            return p99_wrist_read_refuse(reason, P99WristReadReject::ProcessIdentity, diagnostic);
         const auto parent_address = reinterpret_cast<std::uintptr_t>(parent);
         std::array<std::byte, 0x28> context{};
         if (!reader.bytes(parent_address, 0, context.data(), context.size()))
-            return p99_wrist_read_refuse(reason, P99WristReadReject::ProcessIdentity);
+            return p99_wrist_read_refuse(reason, P99WristReadReject::ProcessIdentity, diagnostic);
         P99WristProcessValues staged{};
         staged.scratch = p99_group_load<std::uintptr_t>(context.data(), 0x18);
         if (p99_group_load<std::uintptr_t>(context.data()) != normal.art ||
             p99_group_load<std::uintptr_t>(context.data(), 0x10) != normal.fg + 0x1C0 ||
             p99_group_load<std::uint32_t>(context.data(), 0x20) != 0 ||
             (staged.scratch & 15) != 0 || !reader.range(staged.scratch, 6480))
-            return p99_wrist_read_refuse(reason, P99WristReadReject::ProcessIdentity);
+            return p99_wrist_read_refuse(reason, P99WristReadReject::ProcessIdentity, diagnostic);
         if (!p99_wrist_program_exact(reader, normal.raw))
-            return p99_wrist_read_refuse(reason, P99WristReadReject::Program);
+            return p99_wrist_read_refuse(reason, P99WristReadReject::Program, diagnostic);
         p99_admit::CommandBindings binding{};
         binding.image_base = g_module;
         binding.postpose_callback = reinterpret_cast<std::uintptr_t>(callback);
@@ -155,14 +160,17 @@ bool seh_p99_wrist_process(const std::uint32_t* commands, std::uint32_t words,
             !reader.read(normal.fg, 0x200, binding.sphere_arguments[0]) ||
             !reader.read(normal.fg, 0x230, binding.palette_arguments[0]) ||
             !reader.read(normal.fg, 0x240, binding.palette_arguments[1]))
-            return p99_wrist_read_refuse(reason, P99WristReadReject::Commands);
+            return p99_wrist_read_refuse(reason, P99WristReadReject::Commands, diagnostic);
         binding.sphere_arguments[1] = normal.fg + 0x1C0;
         binding.sphere_arguments[2] = normal.fg;
         binding.palette_arguments[2] = normal.fg + 0x220;
         if (!reader.bytes(reinterpret_cast<std::uintptr_t>(commands), 0,
-                staged.commands.data(), words * sizeof(std::uint32_t)) ||
-            !p99_admit::validate_commands(0, {staged.commands.data(), words}, binding).accepted())
-            return p99_wrist_read_refuse(reason, P99WristReadReject::Commands);
+                staged.commands.data(), words * sizeof(std::uint32_t)))
+            return p99_wrist_read_refuse(reason, P99WristReadReject::Commands, diagnostic);
+        const auto command = p99_admit::validate_commands(0, {staged.commands.data(), words}, binding);
+        if (diagnostic) { diagnostic->command_checked = true; diagnostic->command = command.reason; }
+        if (!command.accepted())
+            return p99_wrist_read_refuse(reason, P99WristReadReject::Commands, diagnostic);
         staged.words = words;
         staged.commands_address = reinterpret_cast<std::uintptr_t>(commands);
         staged.parent = parent_address;
@@ -170,41 +178,45 @@ bool seh_p99_wrist_process(const std::uint32_t* commands, std::uint32_t words,
         *out = staged;
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return p99_wrist_read_refuse(reason, P99WristReadReject::Exception);
+        return p99_wrist_read_refuse(reason, P99WristReadReject::Exception, diagnostic);
     }
 }
 
 bool seh_p99_wrist_snapshot(void* native_job, const P99WristOwner& expected,
     const P99WristProcessValues& process, const void* segment,
-    p99_wrist_snapshot::Result* out, P99WristReadReject* reason = nullptr) {
+    p99_wrist_snapshot::Result* out, P99WristReadReject* reason = nullptr,
+    P99WristReadDiagnostic* diagnostic = nullptr) {
+    if (diagnostic) *diagnostic = {};
     if (reason != nullptr) *reason = P99WristReadReject::None;
-    if (out == nullptr) return p99_wrist_read_refuse(reason, P99WristReadReject::Output);
+    if (out == nullptr) return p99_wrist_read_refuse(reason, P99WristReadReject::Output, diagnostic);
     *out = {};
     __try {
         P99WristOwner before{};
-        if (!seh_p99_wrist_owner(native_job, &before, reason) || !p99_wrist_owner_same(expected, before))
-            return p99_wrist_read_refuse(reason, P99WristReadReject::OwnerIdentity);
+        if (!seh_p99_wrist_owner(native_job, &before, reason, diagnostic)) return false;
+        if (!p99_wrist_owner_same(expected, before))
+            return p99_wrist_read_refuse(reason, P99WristReadReject::OwnerIdentity, diagnostic);
         P99WristProcessValues current{};
         if (!seh_p99_wrist_process(reinterpret_cast<const std::uint32_t*>(process.commands_address),
                 process.words, reinterpret_cast<const void*>(process.parent), 0,
-                reinterpret_cast<const void*>(process.callback), before, &current, reason)) return false;
+                reinterpret_cast<const void*>(process.callback), before, &current, reason, diagnostic)) return false;
         if (current.scratch != process.scratch || current.parent != process.parent ||
             current.callback != process.callback || current.commands_address != process.commands_address ||
             current.words != process.words || std::memcmp(current.commands.data(), process.commands.data(),
                 process.words * sizeof(std::uint32_t)) != 0)
-            return p99_wrist_read_refuse(reason, P99WristReadReject::ProcessChanged);
+            return p99_wrist_read_refuse(reason, P99WristReadReject::ProcessChanged, diagnostic);
         p99_wrist_snapshot::Result staged{};
+        if (diagnostic) diagnostic->phase = P99WristReadPhase::Payload;
         {
             // This Reader dies before the separate closing owner observation.
             P99SourceReader reader(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
             p99_wrist_snapshot::Context context{};
             if (!reader.bytes(reinterpret_cast<std::uintptr_t>(segment), 0, context.data(), context.size()))
-                return p99_wrist_read_refuse(reason, P99WristReadReject::Segment);
+                return p99_wrist_read_refuse(reason, P99WristReadReject::Segment, diagnostic);
             p99_admit::WorkBuffer work{};
             work.address = p99_wrist_snapshot::load<std::uintptr_t>(context, 0);
             std::array<std::byte, 88> work_bytes{};
             if (!reader.bytes(work.address, 0, work_bytes.data(), work_bytes.size()))
-                return p99_wrist_read_refuse(reason, P99WristReadReject::WorkBuffer);
+                return p99_wrist_read_refuse(reason, P99WristReadReject::WorkBuffer, diagnostic);
             const auto* w = work_bytes.data();
             work.arena = p99_group_load<std::uint64_t>(w, 0);
             work.arena_bytes = p99_group_load<std::uint64_t>(w, 8);
@@ -223,22 +235,36 @@ bool seh_p99_wrist_snapshot(void* native_job, const P99WristOwner& expected,
                 !reader.range(work.arena, p99_admit::kArenaBytes) ||
                 !reader.bytes(work.metadata, 0, records.data(), sizeof(records)) ||
                 !reader.bytes(work.metadata, p99_admit::kTableOffset, table.data(), sizeof(table)))
-                return p99_wrist_read_refuse(reason, P99WristReadReject::Metadata);
+                return p99_wrist_read_refuse(reason, P99WristReadReject::Metadata, diagnostic);
             const p99_admit::Metadata metadata{work, records, table};
             p99_wrist_snapshot::Attempt attempt;
             staged = attempt.capture(p99_wrist_snapshot::Phase::AfterProgram, context,
                 {g_module, before.normal.raw, current.scratch}, metadata, reader);
-            if (!staged.copied()) return p99_wrist_read_refuse(reason, P99WristReadReject::Snapshot);
+            if (diagnostic) {
+                diagnostic->snapshot_attempted = true;
+                diagnostic->snapshot = staged.reason;
+                diagnostic->allocation = staged.allocation_reason;
+            }
+            if (!staged.copied()) return p99_wrist_read_refuse(reason, P99WristReadReject::Snapshot, diagnostic);
         }
         P99WristOwner after{};
         // seh_p99_wrist_owner constructs a DISTINCT fresh Reader. No old page
         // certificate or selection is promoted to authority for the closing read.
-        if (!seh_p99_wrist_owner(native_job, &after, reason) || !p99_wrist_owner_same(expected, after) ||
+        P99WristReadDiagnostic closing{};
+        const bool closed = seh_p99_wrist_owner(native_job, &after, reason, diagnostic ? &closing : nullptr);
+        if (diagnostic) {
+            diagnostic->phase = P99WristReadPhase::ClosingOwner;
+            diagnostic->reason = closing.reason;
+            diagnostic->owner = closing.owner;
+            diagnostic->numeric = closing.numeric;
+        }
+        if (!closed) return false; // Preserve the actual nested check/failure.
+        if (!p99_wrist_owner_same(expected, after) ||
             !p99_wrist_owner_same(before, after))
-            return p99_wrist_read_refuse(reason, P99WristReadReject::ClosingOwner);
+            return p99_wrist_read_refuse(reason, P99WristReadReject::ClosingOwner, diagnostic);
         *out = staged;
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        return p99_wrist_read_refuse(reason, P99WristReadReject::Exception);
+        return p99_wrist_read_refuse(reason, P99WristReadReject::Exception, diagnostic);
     }
 }

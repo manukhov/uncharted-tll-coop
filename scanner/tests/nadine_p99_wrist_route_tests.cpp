@@ -10,6 +10,7 @@
 #include "nadine_p99_source_observation.h"
 #include "nadine_p99_wrist_invoke.h"
 #include "nadine_p99_wrist_snapshot.h"
+#include "nadine_p99_wrist_read_diagnostic.h"
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -24,6 +25,8 @@ void check(bool value, std::source_location where=std::source_location::current(
 }
 namespace p99_observe=coop::p99_source_observation;
 namespace p99_wrist_snapshot=coop::p99_wrist_snapshot;
+using P99WristReadReject=coop::p99_wrist_read_diagnostic::Reject;
+using P99WristReadDiagnostic=coop::p99_wrist_read_diagnostic::Diagnostic;
 struct P99GroupJob;
 struct P99GroupProcess;
 struct P99WristJob;
@@ -84,23 +87,31 @@ bool seh_p99_group_entry_observations(void* job,
     out->slot_before=out->fg=out->slot_after={0xA000,7};
     return true;
 }
-bool seh_p99_wrist_owner(void* job,P99WristOwner* out) {
+bool seh_p99_wrist_owner(void* job,P99WristOwner* out,P99WristReadReject*,P99WristReadDiagnostic* diagnostic) {
     ++fixture->owners;
     check(job==fixture);
     out->token=17;
+    if (diagnostic) {
+        diagnostic->phase=coop::p99_wrist_read_diagnostic::Phase::Owner;
+        diagnostic->reason=fixture->action==Action::owner_refuse ? P99WristReadReject::Owner : P99WristReadReject::None;
+    }
     return fixture->action!=Action::owner_refuse && fixture->action!=Action::other_lease_fault;
 }
 bool seh_p99_wrist_process(const std::uint32_t* commands,std::uint32_t words,
     const void* parent,std::uint32_t group,const void* callback,
-    const P99WristOwner& owner,P99WristProcessValues* out) {
+    const P99WristOwner& owner,P99WristProcessValues* out,P99WristReadReject*,P99WristReadDiagnostic* diagnostic) {
     ++fixture->process_admissions;
     check(commands==fixture->commands.data() && words==4 && group==0);
     check(callback==&fixture->stack_args[1] && owner.token==17);
     out->parent=reinterpret_cast<std::uintptr_t>(parent);
+    if (diagnostic) {
+        diagnostic->phase=coop::p99_wrist_read_diagnostic::Phase::Process;
+        diagnostic->reason=fixture->action==Action::process_refuse ? P99WristReadReject::Commands : P99WristReadReject::None;
+    }
     return fixture->action!=Action::process_refuse;
 }
 bool seh_p99_wrist_snapshot(void*,const P99WristOwner&,
-    const P99WristProcessValues&,const void*,p99_wrist_snapshot::Result*);
+    const P99WristProcessValues&,const void*,p99_wrist_snapshot::Result*,P99WristReadReject*,P99WristReadDiagnostic*);
 
 // Only time is substituted. Route function bodies themselves are included,
 // not rewritten as a state-machine model. Windows FLS/SEH are not mocked.
@@ -110,7 +121,7 @@ bool seh_p99_wrist_snapshot(void*,const P99WristOwner&,
 
 bool seh_p99_wrist_snapshot(void* job,const P99WristOwner& owner,
     const P99WristProcessValues& process,const void* segment,
-    p99_wrist_snapshot::Result* out) {
+    p99_wrist_snapshot::Result* out,P99WristReadReject*,P99WristReadDiagnostic* diagnostic) {
     ++fixture->snapshots;
     check(job==fixture && owner.token==17 && fixture->current_group==0);
     check(segment==fixture->expected_segment && fixture->cmd16_completed>=1);
@@ -118,6 +129,10 @@ bool seh_p99_wrist_snapshot(void* job,const P99WristOwner& owner,
     check(!g_p99_wrist_payload_ready.load() && !fixture->async_body_finished);
     auto* frame=g_p99_group_fiber.current();
     check(frame && frame->wrist && frame->wrist_process && frame->job==nullptr && frame->process==nullptr);
+    if (diagnostic) {
+        diagnostic->phase=coop::p99_wrist_read_diagnostic::Phase::Payload;
+        diagnostic->reason=fixture->action==Action::read_refuse ? P99WristReadReject::Snapshot : P99WristReadReject::None;
+    }
     if (fixture->action==Action::callback_fault) {
         std::memset(out->payload.bytes.data(),0xA5,19); // Unpublished partial read.
         RaiseException(kCaptureFault,0,0,nullptr);
@@ -280,6 +295,24 @@ int main(int argc,char** argv) {
     const bool fault=data.action==Action::cmd16_fault || data.action==Action::process_fault ||
         data.action==Action::async_fault || data.action==Action::other_lease_fault;
     check(data.caught==(fault?1u:0u));
+    // Only our own terminal attempt, after normal outer return, can publish.
+    // Native unwind and a released/nonselected probe have no diagnostic writer.
+    const bool diagnostic_expected=!fault && data.action!=Action::owner_refuse;
+    check(g_p99_wrist_diagnostic_ready.load(std::memory_order_acquire)==diagnostic_expected);
+    if (diagnostic_expected) {
+        check(data.async_body_finished);
+        check(g_p99_wrist_policy.reason()!=p99_observe::Reason::kNone);
+        const auto expected_reason=data.action==Action::process_refuse ? P99WristReadReject::Commands :
+            data.action==Action::read_refuse ? P99WristReadReject::Snapshot : P99WristReadReject::None;
+        check(g_p99_wrist_diagnostic.reason==expected_reason);
+        if (data.action==Action::process_refuse)
+            check(g_p99_wrist_diagnostic.phase==coop::p99_wrist_read_diagnostic::Phase::Process);
+        if (success || data.action==Action::read_refuse)
+            check(g_p99_wrist_diagnostic.phase==coop::p99_wrist_read_diagnostic::Phase::Payload);
+    } else {
+        check(g_p99_wrist_diagnostic.reason==P99WristReadReject::None);
+        check(g_p99_wrist_diagnostic.phase==coop::p99_wrist_read_diagnostic::Phase::None);
+    }
     if (data.action==Action::other_lease_fault) {
         check(data.foreign_lease && g_p99_wrist_policy.reason()==p99_observe::Reason::kNone);
         check(g_p99_wrist_policy.begin_probe(fake_ms)==p99_observe::Probe::kBusy);

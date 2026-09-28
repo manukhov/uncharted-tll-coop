@@ -98,6 +98,21 @@ if(BUILD_TESTING)
     target_link_libraries(tll_p99_preparation_bridge_tests PRIVATE tll_p99_preparation_bridge)
     add_test(NAME p99_preparation_bridge COMMAND tll_p99_preparation_bridge_tests)
     set_tests_properties(p99_preparation_bridge PROPERTIES TIMEOUT 30)
+    # Full production TU data-phase checks on a read-only owned graph. The
+    # test alone defines the inert audit/fault seam; no retail code is mapped.
+    add_executable(tll_nadine_p99_wrist_read_tests
+        tests/nadine_p99_wrist_read_tests.cpp
+        src/nadine_p99_wrist_invoke.cpp
+        $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
+        $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
+    target_include_directories(tll_nadine_p99_wrist_read_tests PRIVATE src tests)
+    target_compile_features(tll_nadine_p99_wrist_read_tests PRIVATE cxx_std_20)
+    target_compile_definitions(tll_nadine_p99_wrist_read_tests PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(tll_nadine_p99_wrist_read_tests PRIVATE /W4 /permissive- /EHsc)
+    target_link_libraries(tll_nadine_p99_wrist_read_tests PRIVATE ws2_32 bcrypt)
+    add_test(NAME nadine_p99_wrist_read COMMAND tll_nadine_p99_wrist_read_tests
+        "${CMAKE_CURRENT_SOURCE_DIR}/../reports/actor_packages/nadine-dlc-base.pak")
+    set_tests_properties(nadine_p99_wrist_read PROPERTIES TIMEOUT 30)
     # Isolated numerical audit helper, not a deployable/injected runtime DLL.
     add_library(tll_p99_native_math_bridge SHARED tests/p99_native_math_bridge.cpp)
     target_include_directories(tll_p99_native_math_bridge PRIVATE src)

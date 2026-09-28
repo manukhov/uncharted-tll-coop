@@ -49,6 +49,7 @@
 #include "nadine_p99_observation_arm.h"
 #include "nadine_p99_preselection_trace.h"
 #include "nadine_p99_wrist_snapshot.h"
+#include "nadine_p99_wrist_read_diagnostic.h"
 #include "nadine_p99_wrist_invoke.h"
 #include "nadine_p99_process_native_frame.h"
 #include "nadine_pistol_grip_policy.h"
@@ -61851,8 +61852,21 @@ static_assert(kPlayerFgAnimDataOffset == 0x1A8 && kPlayerQuatOffset == 0x140 &&
     "Re-audit the owned P99 source layout when the shared Player offsets change");
 // Exact copied payload only, after Reader range admission. Volatile byte loads
 // make the before/after identity observations real reads, not an atomic lease.
+#if defined(TLL_P99_WRIST_READ_AUDIT)
+#if !defined(TLL_P99_PREPARATION_AUDIT)
+#error Wrist read fault instrumentation requires the inert audit translation unit
+#endif
+// Test-only deterministic fault/turnover boundary. Absent from ordinary DLLs.
+// The fixture owns every affected allocation and still performs the real
+// VirtualQuery and volatile copy, unless its hook explicitly fails that copy.
+using P99WristCopyAudit = void(*)(std::uintptr_t, void*, std::size_t);
+P99WristCopyAudit g_p99_wrist_copy_audit = nullptr;
+#endif
 bool p99_source_copy(std::uintptr_t address, void* output, std::size_t count) noexcept {
     __try {
+#if defined(TLL_P99_WRIST_READ_AUDIT)
+        if (g_p99_wrist_copy_audit) g_p99_wrist_copy_audit(address, output, count);
+#endif
         const auto* source = reinterpret_cast<const volatile std::byte*>(address);
         auto* target = static_cast<std::byte*>(output);
         for (std::size_t i = 0; i < count; ++i) target[i] = source[i];
@@ -61949,7 +61963,11 @@ void* p99_source_retained_player(P99SourcePurpose purpose, P99SourceReader* phas
 
 bool seh_resolve_p99_source_owner_scope(void* player, IdleArmPoseOwnerScope* output,
     P99SourcePurpose purpose, p99_source::Owner* captured_out = nullptr,
-    P99SourceReader* phase = nullptr, p99_preselect::Trace* trace = nullptr) {
+    P99SourceReader* phase = nullptr, p99_preselect::Trace* trace = nullptr,
+    p99_source::OwnerObservation* observation = nullptr,
+    p99_source::OwnerNumericCheck* numeric = nullptr) {
+    if (observation) *observation = {};
+    if (numeric) *numeric = p99_source::OwnerNumericCheck::NotStarted;
     if (trace) trace->detail = "owner-output";
     if (output == nullptr) return false;
     if (captured_out != nullptr) *captured_out = {};
@@ -61971,16 +61989,20 @@ bool seh_resolve_p99_source_owner_scope(void* player, IdleArmPoseOwnerScope* out
     P99SourceReader reader(&P99_SOURCE_QUERY_FUNCTION, &p99_source_copy);
     p99_source::Owner captured{};
     p99_source::OwnerObservation owner_observation{};
+    auto* observed = observation ? observation : (trace ? &owner_observation : nullptr);
     if (!p99_source::owner(phase != nullptr ? *phase : reader,
             contract, reinterpret_cast<std::uintptr_t>(player), captured,
-            trace ? &owner_observation : nullptr)) {
-        if (trace) trace->detail = p99_source::owner_check_name(owner_observation.check);
+            observed)) {
+        if (trace) trace->detail = p99_source::owner_check_name(observed->check);
         return false;
     }
     if (trace) trace->detail = "owner-position";
+    if (numeric) *numeric = p99_source::OwnerNumericCheck::Position;
     if (!valid_network_position(captured.position.data())) return false;
     if (trace) trace->detail = "owner-orientation";
+    if (numeric) *numeric = p99_source::OwnerNumericCheck::Orientation;
     if (!valid_network_orientation(captured.orientation.data())) return false;
+    if (numeric) *numeric = p99_source::OwnerNumericCheck::Complete;
     output->player = reinterpret_cast<void*>(captured.player);
     output->fg_anim_data = reinterpret_cast<std::byte*>(captured.fg);
     output->local_pose = reinterpret_cast<std::byte*>(captured.local_pose);

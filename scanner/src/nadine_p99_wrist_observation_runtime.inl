@@ -1,8 +1,9 @@
 // Read-only integration route, intentionally NOT installed/armed by any build.
 // Included after wrist_read_runtime.inl. No old writer/preparation authority,
 // log/file/network I/O, heap allocation or game-buffer substitution here.
-// Live admission still requires the full production-data fault fixture, pinned
-// installer preflight, external arm/expiry and off-thread owned-result export.
+// Owned production-data fault tests exist, not live timing/lifetime evidence.
+// Live admission still needs pinned installer preflight, external arm/expiry
+// and off-thread owned-result export.
 namespace p99_wrist_call = coop::p99_wrist_invoke;
 namespace p99_process_frame = coop::p99_process_native_frame;
 
@@ -12,6 +13,7 @@ struct P99WristJob {
     coop::p99_group_budget::Budget cost{};
     p99_wrist_call::State invocation{};
     p99_wrist_snapshot::Result result{};
+    P99WristReadDiagnostic diagnostic{};
     bool refused = false;
     bool process_seen = false;
 };
@@ -28,8 +30,10 @@ struct P99WristPending {
     p99_wrist_snapshot::Payload payload{};
     coop::p99_group_budget::Budget cost{};
     P99CostStamp finish_begin{};
+    P99WristReadDiagnostic diagnostic{};
     bool leased = false;
     bool captured = false;
+    bool terminal_report = false;
 };
 
 // Separate value-only policy; AFE's selected/prepared state cannot authorize
@@ -38,6 +42,8 @@ p99_observe::Policy g_p99_wrist_policy;
 std::atomic<bool> g_p99_wrist_ready{false};
 std::atomic<bool> g_p99_wrist_payload_ready{false};
 p99_wrist_snapshot::Payload g_p99_wrist_payload{};
+P99WristReadDiagnostic g_p99_wrist_diagnostic{};
+std::atomic<bool> g_p99_wrist_diagnostic_ready{false};
 std::uint64_t g_p99_wrist_cost_limit = 0;
 
 bool p99_wrist_charge(P99WristJob& job, P99CostStamp begin) noexcept {
@@ -73,7 +79,8 @@ bool __fastcall p99_wrist_post16(void* cookie, const void* segment) {
             reinterpret_cast<std::uintptr_t>(segment), process.native_return_slot) &&
         coop::p99_group_native_frame::owns(true, process.values.parent,
             frame.native_return_slot) &&
-        seh_p99_wrist_snapshot(job.native_job, job.owner, process.values, segment, &staged);
+        seh_p99_wrist_snapshot(job.native_job, job.owner, process.values, segment, &staged,
+            nullptr, &job.diagnostic);
     const bool within_cost = p99_wrist_charge(job, begin);
     if (!accepted || !within_cost || !p99_wrist_live(frame, job) ||
         frame.wrist_process != &process) {
@@ -152,7 +159,7 @@ std::uint32_t p99_wrist_process_call(bool first_site, const std::uint32_t* comma
             job.process_seen = true;
             const bool admitted = first && begin.valid &&
                 seh_p99_wrist_process(commands, words, context, group, a6,
-                    job.owner, &process.values);
+                    job.owner, &process.values, nullptr, &job.diagnostic);
             if (!admitted) job.refused = true;
             else {
                 process.frame = frame;
@@ -217,18 +224,25 @@ __declspec(noinline) void p99_wrist_candidate(void* native_job,
     DWORD native_error = entry_error;
     __try {
         const auto begin = preparation_begin; // Includes frame/job initialization.
-        const bool selected = begin.valid && seh_p99_wrist_owner(native_job, &job.owner) &&
+        const bool selected = begin.valid &&
+            seh_p99_wrist_owner(native_job, &job.owner, nullptr, &job.diagnostic) &&
             g_p99_group_fiber.owns(frame) && !frame.entry.reentered;
         const bool within_cost = p99_wrist_charge(job, begin);
+        pending.diagnostic = job.diagnostic;
         if (within_cost) {
             if (g_p99_wrist_policy.finish_probe(GetTickCount64(), selected)) {
                 pending.leased = true; // Outer wrapper owns final policy/commit.
+                pending.terminal_report = true;
                 frame.wrist = &job;
             }
             leased = false; // Either transferred or nonselected probe closed.
             if (g_p99_wrist_policy.reason() != p99_observe::Reason::kNone)
                 g_p99_wrist_ready.store(false, std::memory_order_release);
         }
+        // Only the still-owned (aborted before selection) lease may publish a
+        // terminal diagnostic here. After finish_probe(false) another thread
+        // can already own/finish a new probe; its reason is NOT ours to report.
+        if (leased) pending.terminal_report = true;
         SetLastError(entry_error);
         coop::p99_group_native_frame::p99_group_invoke_native(native_job, stock,
             &frame.native_return_slot);
@@ -240,6 +254,7 @@ __declspec(noinline) void p99_wrist_candidate(void* native_job,
                 job.invocation.phase == p99_wrist_call::Phase::captured && job.result.copied();
             if (pending.captured) pending.payload = job.result.payload;
             pending.cost = job.cost;
+            pending.diagnostic = job.diagnostic;
         }
     } __finally {
         frame.native_return_slot = 0;
@@ -326,6 +341,14 @@ void __fastcall hooked_p99_wrist_async(void* native_job) {
             g_p99_wrist_payload_ready.store(true, std::memory_order_release);
         }
         g_p99_wrist_ready.store(false, std::memory_order_release);
+    }
+    // Own terminal probe/attempt only; never publish from a nonselected probe
+    // after its lease was handed to another job. No partial payload is logged
+    // or exported here. An off-thread consumer may read this scalar value only
+    // after the release flag; the policy is terminal, so no future writer exists.
+    if (pending.terminal_report && g_p99_wrist_policy.reason() != p99_observe::Reason::kNone) {
+        g_p99_wrist_diagnostic = pending.diagnostic;
+        g_p99_wrist_diagnostic_ready.store(true, std::memory_order_release);
     }
     SetLastError(native_error);
 }

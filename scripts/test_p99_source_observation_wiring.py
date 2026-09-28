@@ -94,10 +94,12 @@ class ObservationWiringTests(unittest.TestCase):
             "struct P99ChloeTransferArtSkeleton", 1)[0]
         self.assert_in_order(owner,
             "if (g_module == 0)", "if (!g_state_net.enabled)", "if (player == nullptr)",
-            "p99_source::owner(", "trace ? &owner_observation : nullptr",
-            "p99_source::owner_check_name(owner_observation.check)",
-            'trace->detail = "owner-position"', "!valid_network_position(",
-            'trace->detail = "owner-orientation"', "!valid_network_orientation(",
+            "auto* observed = observation ? observation : (trace ? &owner_observation : nullptr)",
+            "p99_source::owner(", "observed))",
+            "p99_source::owner_check_name(observed->check)",
+            'trace->detail = "owner-position"', "OwnerNumericCheck::Position", "!valid_network_position(",
+            'trace->detail = "owner-orientation"', "OwnerNumericCheck::Orientation", "!valid_network_orientation(",
+            "OwnerNumericCheck::Complete",
             "output->valid = true;")
         self.assertEqual(owner.count("p99_source::owner("), 1)
         for forbidden in ("boot_log_line", "QueryPerformanceCounter", "query_count()"):

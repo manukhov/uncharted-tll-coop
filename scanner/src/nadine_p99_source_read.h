@@ -204,7 +204,15 @@ enum class OwnerCheck : std::uint8_t {
 };
 struct OwnerObservation {
     OwnerCheck check = OwnerCheck::NotStarted;
+    struct Slot {
+        bool attempted = false;
+        bool read_ok = false;
+        std::int32_t value = 0; // Meaningful only when read_ok; no inferred zero.
+    } initial_slot{}, closing_slot{};
 };
+// The runtime caller applies these numeric checks after owner() has completed;
+// this tag is evidence of the reached check, never an extra acceptance rule.
+enum class OwnerNumericCheck : std::uint8_t { NotStarted, Position, Orientation, Complete };
 static_assert(std::is_trivially_copyable_v<OwnerObservation>);
 static_assert(std::is_trivially_destructible_v<OwnerObservation>);
 
@@ -291,11 +299,26 @@ template<class R>
 [[nodiscard]] bool owner(R& reader, const Contract& c, std::uintptr_t expected_player,
                          Owner& output, OwnerObservation* observation = nullptr) noexcept {
     output = {};
+    if (observation != nullptr) *observation = {};
     // A marker is sequenced immediately before its original field group. It
     // cannot read game memory, alter a condition or advance after a refusal.
     const auto mark = [observation](OwnerCheck check) noexcept {
         if (observation != nullptr) observation->check = check;
         return true;
+    };
+    // Observe the result of the ORIGINAL read, including a failed copy. Never
+    // reread a slot just for diagnostics or change the existing numeric gate.
+    const auto read_slot = [&](std::uintptr_t controller, std::int32_t& slot,
+                               bool closing) noexcept {
+        auto* seen = observation == nullptr ? nullptr :
+            (closing ? &observation->closing_slot : &observation->initial_slot);
+        if (seen != nullptr) seen->attempted = true;
+        const bool okay = reader.read(controller, 0x120, slot);
+        if (seen != nullptr) {
+            seen->read_ok = okay;
+            seen->value = okay ? slot : 0;
+        }
+        return okay;
     };
     Owner value{};
     std::uintptr_t pointer = 0, selected_record = 0;
@@ -359,7 +382,7 @@ template<class R>
         // Keep this gate unchanged: historical controller-slot refusal did not
         // capture read-success/value and cannot justify a wider admission.
         !mark(OwnerCheck::ControllerSlot) ||
-        !reader.read(value.controller, 0x120, value.slot) || value.slot < 0 || value.slot >= 18 ||
+        !read_slot(value.controller, value.slot, false) || value.slot < 0 || value.slot >= 18 ||
         !mark(OwnerCheck::ControllerState) ||
         !reader.read(value.controller, 0x134, value.state) || value.state != 2 ||
         !mark(OwnerCheck::GrenadePointerAndRange) ||
@@ -431,7 +454,7 @@ template<class R>
         !mark(OwnerCheck::ClosingControllerOwner) ||
         !reader.read(value.controller, 0x108, pointer) || pointer != value.player ||
         !mark(OwnerCheck::ClosingControllerSlot) ||
-        !reader.read(value.controller, 0x120, slot) || slot != value.slot ||
+        !read_slot(value.controller, slot, true) || slot != value.slot ||
         !mark(OwnerCheck::ClosingControllerState) ||
         !reader.read(value.controller, 0x134, word) || word != value.state ||
         !mark(OwnerCheck::ClosingGrenadeVtable) ||
