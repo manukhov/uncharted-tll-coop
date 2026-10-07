@@ -32,6 +32,12 @@ target_include_directories(tll_p99_debug_windows PUBLIC src)
 target_compile_features(tll_p99_debug_windows PUBLIC cxx_std_20)
 target_compile_definitions(tll_p99_debug_windows PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(tll_p99_debug_windows PRIVATE /W4 /permissive- /EHsc)
+add_library(tll_p99_provider_windows STATIC src/nadine_p99_provider_windows.cpp)
+target_include_directories(tll_p99_provider_windows PUBLIC src)
+target_compile_features(tll_p99_provider_windows PUBLIC cxx_std_20)
+target_compile_definitions(tll_p99_provider_windows PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX PSAPI_VERSION=2)
+target_compile_options(tll_p99_provider_windows PRIVATE /W4 /permissive- /EHsc)
+# Not linked into tll_coop_runtime or tll_p99_wrist_abi. No startup/publication enabled.
 add_library(tll_coop_runtime SHARED src/coop_runtime.cpp
     src/nadine_p99_wrist_invoke.cpp
     src/nadine_p99_wrist_code_windows.cpp
@@ -111,6 +117,25 @@ set_target_properties(tll_p99_wrist_abi PROPERTIES PREFIX "")
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(tll_p99_provider_owner_tests tests/nadine_p99_provider_owner_tests.cpp)
+    target_include_directories(tll_p99_provider_owner_tests PRIVATE src)
+    target_compile_features(tll_p99_provider_owner_tests PRIVATE cxx_std_20)
+    target_compile_options(tll_p99_provider_owner_tests PRIVATE /W4 /permissive- /EHsc)
+    add_test(NAME nadine_p99_provider_owner COMMAND tll_p99_provider_owner_tests)
+    add_library(tll_p99_provider_fixture SHARED tests/nadine_p99_provider_fixture.cpp)
+    target_compile_features(tll_p99_provider_fixture PRIVATE cxx_std_20)
+    add_executable(tll_p99_provider_windows_tests tests/nadine_p99_provider_windows_tests.cpp)
+    target_compile_features(tll_p99_provider_windows_tests PRIVATE cxx_std_20)
+    target_compile_definitions(tll_p99_provider_windows_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX PSAPI_VERSION=2)
+    target_compile_options(tll_p99_provider_windows_tests PRIVATE /W4 /permissive- /EHsc)
+    target_link_libraries(tll_p99_provider_windows_tests PRIVATE tll_p99_provider_windows bcrypt)
+    add_dependencies(tll_p99_provider_windows_tests tll_p99_provider_fixture)
+    foreach(provider_case normal writable-rw acquire-before-1 acquire-after-1 acquire-before-2 acquire-after-2
+            pin-before-1 pin-after-1 pin-before-2 pin-after-2 partial-write seal-before seal-after
+            wrong-prefix wrong-path wrong-size wrong-session)
+        add_test(NAME nadine_p99_provider_${provider_case} COMMAND tll_p99_provider_windows_tests ${provider_case})
+        set_tests_properties(nadine_p99_provider_${provider_case} PROPERTIES TIMEOUT 20)
+    endforeach()
     # Complete production preparation in an inert, explicitly bound offline DLL.
     # Its private macro cannot change the separately compiled runtime target.
     add_library(tll_p99_preparation_bridge SHARED tests/p99_preparation_bridge.cpp

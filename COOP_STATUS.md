@@ -38009,3 +38009,137 @@ with selected fullpath references held before checking anchors and irreversible
 retention before any exposure. Bind held external verification to that same
 PID/creation/session, then connect transaction/recovery/ACK. Do not widen OfferV1
 reserved fields or inject the inert artifact. No game or visual grip repair.
+
+## 2026-10-08 — P99 141ABA973: retain selected providers before versioned claims
+
+STATIC / infrastructure only. Added scanner/src/nadine_p99_provider_owner.h,
+nadine_p99_provider_windows.h/.cpp and an isolated fixed-DLL Windows fixture.
+The new static library is NOT linked to tll_coop_runtime or tll_p99_wrist_abi;
+neither live gate, preparation/ACK protocol nor retained artifact changed.
+No game launch/injection, game bytes, new game semantics or IDB labels. Existing
+untracked tmp/ preserved. AGENTS.md remains English; ROADMAP.md is still absent.
+
+Alternatives distinguished before implementation:
+
+- An observer-side ref or matching remote snapshots cannot prevent target unload:
+  already rejected as a lifetime certificate on2026-10-07; do not revisit.
+- PIN by an unretained discovered address permits selecting stale/reused memory:
+  acquire selected FULLPATH references first, then validate selected identities.
+- Releasing references on preparation refusal/destruction is not the chosen
+  process-life contract. FALSE can follow a side effect; partial PIN is permanent.
+  This implementation deliberately keeps ALL acquired/ambiguous refs even before
+  exposure, never invokes FreeLibrary/reset/unpin, and has no automatic retry.
+- Reinterpreting OfferV1 reserved words26..29 would change the240B protocol:
+  rejected. P9PROV01 is a separate canonical versioned4096B claims transport,
+  not a capability or automatic admission extension to the old offer.
+
+Source/API evidence: existing Resources pins only the self DLL; previous owned
+child unload/PIN exam distinguishes target retention from coincidental reads;
+documented GetModuleHandleEx fullpath reference/FROM_ADDRESS|PIN semantics give
+the process-local retention mechanism. These support isolated infrastructure,
+NOT a new hypothesis ready for a game test. Reference:
+https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulehandleexw
+
+Owner is noncopyable/nonmovable, owner-thread-only, off loader lock/callbacks and
+debugger hold. Initial executing artifact reference must remain held on entry.
+It copies at most32 Selections before any OS action: full DOS/native path arrays,
+base/size, selected anchor RVA, independent32-byte prefix and expected file hash.
+All fullpath references are acquired before ANY validation/PIN, and ALL records
+are validated before the first PIN. Index0 MUST match the publication artifact
+base/size and is retained/PINned just like every other selection. Exact identity
+checks surround validation/PIN. Publication binds the same Ops object/thread and
+rechecks all selected records; it cannot follow failed or uncertain preparation.
+
+Acquisition preserves the returned module even on reported FALSE. Each PIN is
+preceded by PinUnknown; successful references and partial pins are intentionally
+never undone. Publication moves to PublishUnknown BEFORE its first possible
+store; FALSE remains unknown, no erase/retry/destructor cleanup. Process exit
+reclaims resources. This conservative leak-on-refusal policy is deliberate and
+requires a bounded, once-per-process integration, not a retrying worker loop.
+
+Claims format: magic0x3130564F52503950 (P9PROV01), version1, page4096, header128,
+record64, contract1. Header binds count/PID/creation/nonzero128-bit session nonce/
+artifact base/extent. Up to32 records contain one-based index, base, extent,
+anchor RVA and32-byte EXPECTED file hash. All header reserved words, unused
+records and remainder of page must beZERO. Decode reconstructs canonical bytes
+and compares the entire page. Bounded canonical addresses,64K image bases,4K
+sizes <=64MiB, contained32-byte anchors and disjoint extents are mandatory.
+Path inputs require fully terminated/zero-tailed fixed arrays and strict DOS or
+native Device syntax; duplicate full/native paths refuse. No path discovery,
+alias normalization, basename fallback or target-observed expected bytes.
+
+WindowsOps acquires GetModuleHandleExW(0,fullpath), requires exact selected base,
+and checks exact mapped native spelling, bounded AMD64 PE32+ headers/SizeOfImage
+and independent32-byte anchor under strict MEM_IMAGE RX before PIN. Header reads
+are RO. Every bounded read has exact byte count and before/after allocation/state/
+protection checks; this is NOT atomic tuple equality or ABA exclusion. Matching
+path/header/prefix is PARTIAL evidence, not full provider code/mapped-file identity.
+The published hash is only the caller's expected profile identifier: backend does
+not compute or certify the whole mapped/file hash. Public WindowsOps::publish is
+only a transport backend, not an unforgeable proof that Owner ran.
+
+Publication requires an aligned dedicated complete image page inside the
+selected artifact, initially allZERO RW or WRITECOPY. It stores the canonical
+wire, rechecks complete bytes/current writable protection, then seals RO.
+Borrowed-handle read_claims checks fresh PID/creation, complete RO MEM_IMAGE page
+at expected allocation, canonical contents/session and two identical full reads.
+It never opens/discovers a process, invokes native code, certifies PIN, sends ACK
+or grants installation. It does not independently attest actual artifact extent,
+all provider hashes, file objects, API-set routes, closure or post-return lifetime.
+
+Owned test prediction, encoded in assertions before its runs: fixed test EXE
+and fixed test DLL must both be retained/PINned before any publication attempt;
+wrong identity/path/extent/prefix must refuse before stores. Acquire/PIN failures
+before AND after effects must retain exactly acquired resources and never retry.
+Partial stores/full unsealed pages must refuse reads. An actual successful seal
+followed by reported FALSE must leave readable canonical RO claims while local
+Owner remains PublishUnknown. Dropping only the fixture's initial DLL reference
+after Owner destruction must leave an acquired DLL mapped; without an acquired
+DLL reference it must unload. This lifecycle test alone does not distinguish PIN
+from the intentionally unreleased references (the prior child exam does).
+
+Fixture has no external PID/DLL-path input: it loads only adjacent built
+tll_p99_provider_fixture.dll. Its RX anchor is independent literal DATA, located
+by exported name but NEVER called or copied into expectations from loaded memory.
+The EXE uses the same fixed literal for artifact anchor. Own files are opened
+deny-write/delete; disk snapshots supply hashes, native path and image extent.
+These just-built fixture hashes are not a pinned production-provider profile.
+Wrong-thread publication is exercised in an owned thread; if joining fails, only
+that fixture process exits immediately rather than letting borrowed stack objects
+expire. Wrong-native-path changes filename spelling while keeping valid syntax,
+so it reaches backend mismatch with2 retained refs/0 pins, not preflight refusal.
+
+REJECTED (owned host): comparing VirtualProtect's previous protection with the
+snapshot from BEFORE the page write. Initial normal test returned publication
+failure despite readable RO claims: diagnostic observed initial8/WRITECOPY,
+previous4/READWRITE, seal TRUE. The write materialized a private writable page.
+Fix re-reads complete wire with freshly checked allowed writable protection and
+compares VirtualProtect previous value to THIS pre-seal value. Temporary tracing
+removed. Both initial loader WRITECOPY and explicitly set READWRITE modes now pass.
+Reference: https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualprotect
+
+CONFIRMED (owned fixture ONLY):17 actual Windows cases pass, all in separate
+processes: normal/RW,4 acquire faults,4 PIN faults, partial-write, seal-before,
+seal-after, wrong-prefix/path/size/session. New18CTest cases including core were
+repeated3x with no failures. Core3984checks cover canonical fields/tails, input
+copy ownership, stage ordering, every fault position, no destructor/retry effects,
+wrong Ops/thread/session and false-after-effect claims. Independent read-only
+review found the join-timeout/invalid-path-test issues above; both were corrected
+before final repeated validation. No remaining concrete review blocker reported.
+
+Validation: full MSVC default+inert ABI targets, CTest95/95, Python705/705; no game
+or fixture processes left. Existing artifact SHA256 remains
+a81ba7f43c543c731942c999f8b6aa9ed8f2bc0cda96c41ab96882257e22aae5.
+Reproduce: ctest --test-dir scanner/build -R nadine_p99_provider_
+--repeat until-fail:3 --output-on-failure (single command).
+
+LIMITS / NEXT: this isolated owner/transport is not yet connected to PREPARED.
+Next bind independently trusted provider selections and the SAME session to
+isolated full preparation, with provider retention/publication required before
+the old offer can appear. Keep OfferV1 reserved wordsZERO; independently locate
+the separate versioned page or explicitly design a new offer version. Test
+provider refusal before PREPARED, stale/cross-session claims and external reads
+in the owned harness first. External held provider/artifact verification and
+actual write transaction/uncertain recovery/ACK/manual-arm remain absent. Do not
+inject the inert ABI artifact, equate readable claims with lifetime admission,
+or claim this step fixed the visible Nadine pistol grip.

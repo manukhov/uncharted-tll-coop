@@ -11,7 +11,34 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / OWNED CROSS-PROCESS PROVIDER EVIDENCE (2026-10-07):
+Latest STATIC / OWNED PROVIDER OWNER AND CLAIMS (2026-10-08):
+Added isolated C++ provider owner + Windows backend, NOT linked into either game
+DLL target. Copy selected full/native paths, base/size, independent32-byte RX
+anchor and expected hash; acquire ALL fullpath refs, validate ALL, then PIN ALL
+including publication artifact at index0. One-shot, same Ops/thread/session;
+all successful/ambiguous refs and partial pins intentionally survive refusal and
+destruction until process exit. No release/reset/automatic retry.
+Separate P9PROV01/v1 claims page4096B (128B header, max32x64B records, zero tail),
+not an extension of OfferV1. Expected hashes are profile identifiers, NOT local
+hash certificates. Seal dedicated image page RO and double-read with fresh
+PID/creation/session. Readable claims alone do NOT prove PIN or installation.
+Owned EXE+fixed literal-data DLL:17 actual Windows modes pass, plus3984 core
+checks; new18CTest cases repeated3x. False-after-seal may expose valid claims
+while local state remains PublishUnknown, with all resources retained/no retry.
+REJECTED: comparing VirtualProtect old protection with pre-WRITE protection;
+observed image WRITECOPY8 -> READWRITE4 after store. Recheck full stored bytes and
+current writable protection before RO sealing; normal and explicit-RW both pass.
+Full CTest95/95, Python705/705, MSVC default+ABI builds; same ABI hash a81ba7f4...22aae5.
+No game, IDB changes, live flag changes or visual grip repair. Existing tmp/ kept.
+NEXT: connect this owner/claims as a precondition to isolated preparation, with
+explicit independently trusted provider selection and same session binding.
+Keep OfferV1's four reserved qwords ZERO; use a separately located/versioned
+claims page or an explicit new protocol version. Test refusal before PREPARED
+and cross-session/stale claims in the owned harness before any game integration.
+External held verification, API-set/dependency closure, actual write transaction,
+uncertain recovery and ACK/manual-arm still remain; these claims are not a lease.
+
+Previous STATIC / OWNED CROSS-PROCESS PROVIDER EVIDENCE (2026-10-07):
 Added borrowed-handle p99_provider_evidence.py and fixed owned-child exam. Bind
 fresh PID/creation/base/size, native mapped-file path and trusted disk metadata;
 compare full export directory and exact32-byte reached entry prefixes. This is
