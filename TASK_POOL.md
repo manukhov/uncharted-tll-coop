@@ -11,7 +11,30 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / OWNED IMPORT GRAPH (2026-09-28):
+Latest STATIC / OWNED CROSS-PROCESS PROVIDER EVIDENCE (2026-10-07):
+Added borrowed-handle p99_provider_evidence.py and fixed owned-child exam. Bind
+fresh PID/creation/base/size, native mapped-file path and trusted disk metadata;
+compare full export directory and exact32-byte reached entry prefixes. This is
+PARTIAL provider evidence, not whole provider code/file-object/lifetime proof.
+Parent independently locks/hashes files and derives36IAT bindings from child
+provider base candidates + explicit API routes; never copies local pointers.
+Actual cross-process comparison passed195825provider bytes across5OS/CRT images
+and376071immutable artifact bytes with36IAT/58DIR64. Same artifact SHA a81ba7f4...22aae5.
+Owned lifecycle control: initial+extra fullpath reference -> drop initial still
+readable -> drop final reference gives MEM_FREE and refusal. Separate child PIN
+variant remains readable after both drops; child exit refuses in both. Repeated
+each mode3x. The reader ALWAYS says lifetime=false/atomic=false/install=false:
+matching bytes/path cannot provide a post-return lease or detect all ABA.
+Python705/705 (22new), CTest77/77; both MSVC targets up to date. No game or IDB
+change, no ordinary runtime/preparation/arm change, no visual grip repair.
+NEXT: versioned target-side provider publication/owner BEFORE PREPARED. Acquire
+selected fullpath refs before checking anchors, retain/PIN before exposure, bind
+external checks to same PID/creation/session. OfferV1 is240B and reserves words
+26..29 asZERO: do not repurpose them or claim provider lifetime from V1. Then
+connect held verification to transaction/recovery/ACK. This child/Python profile
+is NOT a game installation candidate or proof of complete provider dependency closure.
+
+Previous STATIC / OWNED IMPORT GRAPH (2026-09-28):
 Expected IAT values now come from pinned provider files + explicit selected bases
 and exact (importer, API-set contract) routes, not from GetProcAddress or target IAT.
 Added bounded AMD64 export/forwarder reader (separate from inert artifact parser),

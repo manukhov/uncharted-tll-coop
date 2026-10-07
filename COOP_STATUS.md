@@ -37906,3 +37906,106 @@ retained target-side lifetime, then perform mapped checks under external hold
 before write transaction/recovery/ACK integration. Do not promote this local
 Python profile or these local pointers into a game installer. No game, hook,
 initialization gate, IDB change or visual grip repair; existing tmp/ preserved.
+
+## 2026-10-07 — P99 141ABA973: cross-process provider evidence and unload refusal
+
+STATIC / infrastructure only. Added scripts/p99_provider_evidence.py,
+scripts/p99_provider_evidence_fixture.py and22tests. No C++/ordinary runtime,
+preparation/arm flags, game bytes or ABI artifact changed. No new game semantics
+or IDB labels; the single IDB is unchanged. Existing untracked tmp/ preserved.
+
+Narrow contract: a borrowed process handle, exact PID/creation, immutable provider
+bytes with explicit SHA256, independently selected base/size, independently
+expected native mapped-file path, and a bounded set of selected export RVAs.
+The reader validates the Provider again, performs process/path checks before and
+after, and uses existing strict VQEx/RPM RO/RX reader for every byte range. It
+does not discover/open a PID, load/pin anything, call target exports, write target
+memory, change protection, acquire a debugger or claim an unload exclusion lease.
+
+Compared ranges: DOS64bytes, NT/COFF/optional/section metadata excluding the
+ImageBase qword, complete trusted export-directory range, and exactly32bytes at
+each unique selected direct RX export. Entry selection must be a direct export
+RVA, with full file-backed nondiscardable RX prefix. No observed bytes become
+expectations; no relocation/hook mask is learned. Prefix32 is NOT a function
+body/control-flow/dependency certificate. The ImageBase omission is explicitly
+reported as header_image_base_compared=false in this PARTIAL evidence API; it
+does not change the separate full artifact comparer or its exact LOADED policy.
+
+K32GetMappedFileNameW observes the target mapping's native path. Expected path in
+the owned exam comes from GetFinalPathNameByHandleW(VOLUME_NAME_NT) on the parent's
+independently opened, deny-write/delete file handle, not from the child or target
+mapping. Equality is exact spelling (no DOS/device alias or case-fold guessing).
+A matching path plus current disk hash is still NOT mapped file-object identity.
+Reference: https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-getmappedfilenamew
+
+Competing lifetime models:
+
+- Local observer HMODULE/refcount transferred to target: REJECTED; handles and
+  references are process-local. Parent now uses only its own child process HANDLE.
+- Equal pre/post byte/metadata snapshots: insufficient; unload/reload ABA or
+  unload after return remains possible. Reader always denies atomic/lifetime.
+- Target-side fullpath reference: retained as reversible prepublication lease;
+  acquire before validating an address, then hold through external reads.
+- Target-side FROM_ADDRESS|PIN: matches process-life PREPARED resource rule, but
+  must follow selected-module retention/validation and precede publication.
+  PIN cannot be rolled back; partial pin failure must not free exposed resources.
+Reference: https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulehandleexw
+
+Source audit: prepare_windows.cpp::pin_image currently checks RX allocation,
+PINs by address and compares base. This is appropriate for self hooks while the
+initial mod reference is held, NOT a general provider identity/ABA proof without
+a prior selected reference. Resources::prepare currently pins only self DLL.
+Handshake OfferV1 is240bytes; reserved words26..29 must remainZERO. It carries no
+provider inventory or lifetime certificate. Do not silently extend/reinterpret V1.
+
+Written pre-exam prediction: owned child loads only fixed inert ABI artifact,
+acquires an extra fullpath reference, then parent reads it independently. After
+dropping initial LoadLibrary ref, evidence must still match. Dropping final ref
+must make the module MEM_FREE and reject the same addresses. In a separate PIN
+child, both drops must leave evidence readable until process exit; exit must
+reject in both modes. This differentiates retention from coincidental successful
+reads. No exported adapter or game scenario is called by either process.
+
+CONFIRMED (owned child ONLY): both predicted lifecycles passed, repeated3x each
+after final implementation. Child process identity is checked against the exact
+Popen-created process HANDLE/PID/creation, never a discovered PID. Parent independently
+locks/hashes the five reviewed OS/CRT files (all2026-09-28 pins still match), derives
+all36 import addresses with its own Resolver and caller-supplied API routes from
+reported base candidates, then validates mapped paths/export evidence. Child
+GetProcAddress is only its local oracle; its pointers are not parent expectations.
+
+Actual remote provider comparison totals (metadata/export/prefix scope ONLY):
+kernel32:58224bytes; ntdll:78289; PythonVCRUNTIME140:3060;
+System32VCRUNTIME140_1:732; ucrtbase:55520; total195825bytes.
+Separately, the existing full immutable artifact comparison passed376071bytes,
+36IAT entries and58DIR64 adjustments in the CHILD, initially and after initial
+reference release. The artifact's partial identity probe adds952bytes of evidence.
+Artifact SHA256 remains
+a81ba7f43c543c731942c999f8b6aa9ed8f2bc0cda96c41ab96882257e22aae5.
+
+Owned harness corrections before final repeated passes: initial extended-child
+attempt refused at EOF before held publication; added missing64-bit ctypes
+GetModuleFileNameW/GetProcAddress signatures and bounded child error diagnostics.
+Independent review caught parent cleanup exceptions skipping file-handle closure;
+cleanup_parent now attempts every child/stream/file cleanup and reports failures.
+Fault tests cover poll/kill/wait/each stream/each file failures and no release retry.
+
+Validation: full Python705/705, CTest77/77; MSVC default and inert artifact targets
+up to date.22new tests cover process/path/base/protection mismatch, corruption of
+each range, short reads, stale post-unload evidence, explicit prefix/header limits,
+forged Provider records, bounded entry sets, path truncation and cleanup failures.
+Each of lease/PIN owned modes passed3consecutive final runs and exited normally.
+Local ignored report: reports/p99_provider_lifetime_exam_20261007.json. Reproduce:
+py -3.12 scripts/p99_provider_evidence_fixture.py --sha256 <artifact hash above>
+--provider-profile reports/p99_owned_import_profile_20260928.json
+
+LIMITS / NEXT: every result still denies full provider bytes, mapped file-object
+identity, API-set schema, complete dependency closure, atomic snapshot, module
+lifetime and installation admission. Documented OS APIs expose no remotely
+readable PIN certificate. Owned child lifecycle observations do not upgrade these
+flags or allow replaying evidence after process/module state changes. Next design
+an explicit versioned target-side provider owner/publication BEFORE PREPARED,
+with selected fullpath references held before checking anchors and irreversible
+retention before any exposure. Bind held external verification to that same
+PID/creation/session, then connect transaction/recovery/ACK. Do not widen OfferV1
+reserved fields or inject the inert artifact. No game or visual grip repair.
