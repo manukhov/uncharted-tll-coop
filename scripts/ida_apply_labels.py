@@ -256,6 +256,15 @@ FUNCTIONS = {
         "Exact DoJointRetarget source assertion. Decodes the source/target "
         "reference locators and selects correction by the single byte at "
         "record+0x2C; record+0x2D is not read. "
+        "STATIC 2026-10-08 mode2 (280E): absolute Q=conj(E)*Qin*A, "
+        "S=targetRef.S, T=f32(f32(source.T-half3(record+1C))+targetRef.T). "
+        "Half loads2862/2873/2885, S286A, sub/add28C0/28C4, "
+        "Relative28CA then Compose28DE yield Q at28E3; their T is discarded. "
+        "BoneScale+22 is not used by mode2. Additive mode2 (281B..285D) "
+        "uses S=1,T=0,Q=conj(A)*Qin*A. Additive is R9B captured2151, "
+        "not the mode byte or group-first-index context+68. Native ANIM "
+        "+20 bit2 reaches descriptor+0E at141936923, read141AE2AB3 then "
+        "passed141AE2E70; pinned NPC UP/DOWN flags0 select absolute. "
         "Mode 1 includes relative-reference composition (Transform_Compose "
         "at 0x141AE27FE), not a raw quaternion copy; mode 3 copies source "
         "S/T/Q at 0x141AE28F3. Player and Chloe finger/palm maps can therefore "
@@ -609,9 +618,27 @@ FUNCTIONS = {
     ),
     0x1418209F0: (
         "JointSet_RefreshWorldLocatorsThroughOrdinal",
-        "Concrete LegIkChain vtable slot +0x38 used by JointSet_GetJointLocWs. "
+        "Concrete LegIkChain and ArmIkChain vtable slot +0x38 used by JointSet_GetJointLocWs. "
         "Composes local 32-byte locators through the chain and advances the "
         "valid world-prefix cursor at JointSet+0x38.",
+    ),
+    0x141820870: (
+        "JointChain_GetPreviousParentOrdinal",
+        "ArmIkChain RTTI vtable 0x142B0FF58 slot3/+0x18. Returns ordinal-1 "
+        "for the linear chain parent; no body collision or pole-vector logic.",
+    ),
+    0x141820AA0: (
+        "JointChain_InvalidateWorldPrefixFromOrdinal",
+        "ArmIkChain RTTI vtable 0x142B0FF58 slot9/+0x48. Lowers the cached "
+        "world-valid prefix at +0x38 to the changed ordinal so dependent world "
+        "locators are rebuilt. It does not alter arm bend-plane selection.",
+    ),
+    0x1418F0920: (
+        "ArmIkChain_Construct",
+        "Constructs the type3, 0x50-byte arm JointChain with RTTI vtable "
+        "0x142B0FF58. PlayerWeaponIKAction constructor calls it for both "
+        "embedded chains at 0x141094F08. Slot+0x20 frees transient work buffers "
+        "through JointSet_FreeWorkBuffersAndClear after commit.",
     ),
     0x141686CD0: (
         "JointCache_InitializeAndAllocatePoseBuffers",
@@ -1905,6 +1932,25 @@ FUNCTIONS = {
         "against a Player and resolves its paired arm-chain joint indices. "
         "The action constructor passes action+0x50 and the owning Player.",
     ),
+    0x14062AC40: (
+        "WeaponGripModifier_FillArmJointSelection",
+        "WeaponGripModifier RTTI vtable14296E2C0 slot+0x70. Enumerates eight "
+        "left/right shoulder, elbow, wrist and hand-prop joints for proximal "
+        "NPC IK. No finger joints are selected; this is not a distal-grip "
+        "animation source selector.",
+    ),
+    0x14062B2B0: (
+        "WeaponGripModifier_PublishNpcGripIkInputs",
+        "Shared WeaponGripModifier/AiWeaponGripModifier slot+0x28 in vtables "
+        "14296E2C0/14296E370. Publishes NPC anim-info+0xA0 grip IK selector/"
+        "weight and enable bit2. This does not supply a right-finger pose.",
+    ),
+    0x14062B710: (
+        "AiWeaponGripModifier_UpdateSmoothedWeight",
+        "AiWeaponGripModifier RTTI vtable14296E370 slot+0xA0. Updates a "
+        "smoothed scalar at modifier+0x20 for the proximal NPC grip IK path; "
+        "not evidence of a missing Player P99 finger clip.",
+    ),
     0x1418203D0: (
         "JointChain_BuildFromNamedAncestorToDescendant",
         "Builds a concrete joint-index path in the supplied FgAnimData skeleton "
@@ -1933,7 +1979,10 @@ FUNCTIONS = {
         "proximal ancestry cancels. Native NPC row149 endpoints 036F20E5/up "
         "and 5E67B1FA/down have the same palm27 but different prop29, hence "
         "different support constraints. This is not proof of Player state "
-        "selection, full overlay weight or a rendered P99 repair.",
+        "selection, full overlay weight or a rendered P99 repair. RUNTIME "
+        "REJECTED 2026-10-08 PID9504: DOWN endpoint was substituted at getter "
+        "1418F18B5, but the user reports no fix. Four APPLIED input logs do "
+        "not prove post-solver output or a correct rendered elbow plane.",
     ),
     0x1418F1E60: (
         "WeaponIKFeatherInfo_ConstructForPlayerLook",
@@ -5144,7 +5193,16 @@ FUNCTIONS = {
         "Source-asserted SolveArmIk. Validates shoulder, elbow and wrist offsets "
         "for one left/right arm and writes the elbow and shoulder JointParams "
         "through 0x14181F450; the wrist supplies the end target/reference. This "
-        "bounds HandFix to the selected arm hierarchy.",
+        "bounds HandFix to the selected arm hierarchy. STATIC 2026-10-08: "
+        "inherits n=normalize((elbow-shoulder) cross (wrist-elbow)) at "
+        "1418F116F..11FC, falling back to negative elbow-world Y at1418F1202. "
+        "Bends elbow at1418F1374, then shortest-arc aligns shoulder-to-wrist "
+        "with shoulder-to-target at1418F1442/1501. Request has set+0, arm+8, "
+        "targetP+10, outputP+20, weight+30, failUnreachable+34; no independent "
+        "elbow pole or torso-clearance input. Byte143684E64 bypasses solve. "
+        "Terminal WeaponIK passes failUnreachable=0, so reach is clamped, "
+        "not refused; changing only the wrist target does not independently "
+        "select an authored elbow roll.",
     ),
     0x14181DEA0: (
         "JointSet_HasAllJointsInValidBits",
@@ -14743,6 +14801,16 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x1418F116F: (
+        "STATIC arm bend plane: normalize((E-S) cross (W-E)) from incoming "
+        "joint positions. Degenerate fallback at1418F1202 is negative "
+        "elbow-world Y. No authored pole or torso collision test here."
+    ),
+    0x1418F1C43: (
+        "Terminal opposite/left SolveArmIk for selector1. Apply weight is "
+        "smoothstepped; request failUnreachable+34 was cleared at1418F1BC5. "
+        "Input-only getter APPLIED is not an observation of this solve output."
+    ),
     0x1418F18BD: (
         "STATIC 2026-10-08: first dereference after four stock getter calls "
         "1872(right wrist),1896(left wrist),18A6(right prop),18B5(left prop). "

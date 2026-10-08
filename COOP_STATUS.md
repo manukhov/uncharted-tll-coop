@@ -15,9 +15,11 @@ input substitution only, NOT a corrected arm, solved output or rendered pose.
 They closed the game themselves; this is NOT a reported crash. The experiment
 is now disabled in build2026-10-08p99-support-safe; do not repeat it unchanged.
 All previous right-grip writers, group shadows and the ordinary observer remain
-OFF. Attachments unchanged. NEXT statically trace the terminal solve/commit and
-later arm consumers, distinguish bad endpoint from rejected/later overwritten
-output before admitting another correction. Both hand defects remain open.
+OFF. Attachments unchanged. Fresh STATIC trace proves the solver inherits the
+incoming elbow plane; proximal NPC rows19..30 are now reconstructed, including
+retarget mode2. NEXT bind the authored plane to the live shoulder/target and
+validate an elbow-roll correction plus post-solve output, not another distal
+target-only swap. Both hand defects remain open; no new launch is admitted.
 
 The older unchanged PID18204 was also self-closed; no late-arm source exam ran.
 Do not repeat that diagnostic or resume its parked provider/loader work.
@@ -38990,3 +38992,128 @@ Safe rollback build completed with `scanner/build-release.cmd`; helper checks
 remain89/89. Fresh disabled runtime DLL SHA256 is
 `863FFAB48DEB4E4D1777A1039F9A7A5B87FC4E09B88D95B07D774F591F69ACF6`.
 No tll.exe process is running and no game was launched for this rollback.
+
+### 2026-10-08 STATIC: terminal arm solve inherits the elbow plane, not a torso-aware pole
+
+Fresh bidirectional MCP trace rules out cancellation of the getter substitution
+INSIDE terminal WeaponIK.1418F1AC9 reads the staged LW;1418F1AD6/1AFE/1B25 form
+RP*inverse(LP)*LW. With substituted LP=RP this yields the desired wrist target.
+At Apply1, smoothstep1 reaches left SolveArmIk1418F1C43, wrist rotation1418F1DE3,
+and commits1418F1DEE/1DF9. WeaponIKFeather returns after1418F2E0B; its immediate
+PlayerWeaponIKAction caller likewise returns after1410959AC. Neither immediate
+return tail is a pose overwrite; this does NOT exclude a different later phase.
+
+The important unresolved degree of freedom is the proximal arm plane. Let S/E/W
+be the incoming shoulder/elbow/wrist world positions. SolveArmIk1418F0B60 derives
+n=normalize((E-S) cross (W-E)) at1418F116F..11FC. Its degenerate fallback at
+1418F1202 is -Rotate(Q_elbow_WS,(0,1,0)), with constants14287FA20=(0,1,0,0) and
+142BED700=(2,2,2,2). It bends about that inherited plane at1418F1374, then
+shortest-arc aligns shoulder-to-wrist with shoulder-to-target at1418F1442/1501.
+There is no independent authored elbow-pole or torso-clearance operand: request
+set+0, arm+8, targetP+10, outputP+20, weight+30, failUnreachable+34. Byte143684E64
+can bypass the solve, but its live value was NOT observed. Terminal sets+34=0
+at1418F1BC5, so ordinary unreachable endpoints clamp rather than fail that gate.
+
+Resolved virtuals corroborate that this is a linear arm-chain solve, not hidden
+collision avoidance: RTTI ArmIkChain vtable142B0FF58 slot3/+18=141820870 returns
+ordinal-1, slot7/+38=1418209F0 refreshes world locators, slot4/+20=14181F330
+frees/resets transient buffers, and slot9/+48=141820AA0 invalidates world-prefix
+cursor. Constructor1418F0920 sets this vtable/type3; PlayerWeaponIKAction creates
+two0x50-byte chains through its141094F08 construction call.
+
+STATIC limitation, NOT a confirmed diagnosis: distal DOWN C supplies a wrist
+endpoint/orientation but cannot independently select an outward elbow roll.
+The bad-plane alternative is now precise, but input-only APPLIED cannot prove
+whether it, endpoint incompatibility or another phase caused the visible fault.
+The next correction must preserve live target/wrist orientation while addressing
+the proximal plane, then verify solved shoulder/elbow/wrist rather than merely
+logging the requested target. Do not rotate the entire gun/attachment to hide it.
+
+Authored donor gap: support._decode_clip pins source DOWN19..30, but
+support._target_pair evaluates only27/29. Shoulder ancestry19..22 uses retarget
+mode2; npc._retarget_local and the other admitted scalar helpers support only1/3.
+The known142191AE0 mode2 ADDITIVE BLEND is a different enum and cannot fill this
+gap. Trace DoJointRetarget141AE2100 mode2 before claiming a target-space proximal
+NPC plane. No bind-space shoulder may stand in for a live shoulder/target frame.
+
+Three chain function names, SolveArmIk/WeaponIK comments and exact callsite
+annotations were saved in sole ida/tll.i64. Local log
+`.codex/ida_apply_p99_support_reject_20261008.log` reports1930 functions,
+80data names,2types and save_database returned True. Restarted MCP readback
+resolves all new names, verifies the constructor/chain xrefs and reads the new
+SolveArmIk comment. Source audit now explicitly marks the DOWN visible-fix
+candidate REJECTED; its six asset/algebra/binding tests still pass.
+
+### 2026-10-08 STATIC: reconstruct the missing native proximal arm, not just the palm/prop
+
+The mode2 gap above is now closed with fresh instruction and caller/builder
+evidence. DoJointRetarget141AE2100 selects record BYTE+2C at141AE23CB; mode2
+starts141AE280E. For NONADDITIVE source S/Q/T, target reference Sr/Qr/Tr and
+normalized packed joint/parent bases A/E:
+
+    Sout = Sr
+    Qout = conjugate(E) * Q * A
+    T0 = nearest-even-half(source-reference-global.T)
+    Tout = f32(f32(T - T0) + Tr)
+
+Exact reads/writes: source-reference halves+1C/+1E/+20 at141AE2862/2873/2885;
+target S at141AE286A; translation sub/add141AE28C0/28C4; Relative(E,source) at
+141AE28CA and Compose(relative,A) at141AE28DE, taking only resulting Q at28E3.
+BoneScale+22 is NOT used by this mode (its multiplication belongs to mode0).
+Builder1417CF58B..5FF reads source-reference via SOURCE GLOBAL, then packs half
+with nearest-even imm0 at5A5/5CD/5F5. For pinned rows19..22 global==compressed
+reference index; the script asserts this rather than generalizing it to fingers.
+
+The additive flag is separate: raw ANIM+20 bit2 -> descriptor+0E at141936923 in
+AddJointRetargetCommands141936490 ->141AE2AB3 -> R9B at141AE2E70 ->141AE2151.
+Pinned UP/DOWN flags0 thus select absolute. Additive retarget mode2 instead uses
+S=1/T=0/Q=conjugate(A)*Q*A at141AE281B..285D. Neither is the additive-BLEND enum.
+ApplyJointRetargets context+68 is target group FIRST INDEX, not additive flags.
+
+`p99_npc_support_constraint.py` now evaluates all12 target rows19..30 instead of
+only27/29, retaining the original distal constant hashes unchanged. It composes
+the verified left19->21->23->25->27->29 and right20->22->24->26->28->30 chains
+under shared parent18, then reports shoulder/elbow/wrist and incoming left bend
+normal in the SAME authored clip's right-prop frame. It does NOT substitute
+bind-space ancestry for a live frame. Both modeled segment lengths are constant
+across UP/DOWN: upper0.2854321897, lower0.2455622852 asset units.
+
+UP incoming normal=(-.9095589575,-.1419556897,-.3905778860),
+DOWN=(-.4872866612,-.4954023494,-.7191162785). Packed target19..30 hashes:
+UP `0a4e2db6a66337f112e528febee2392b51562a14938253a9ede034081248cfb3`,
+DOWN `66e529eab863fdc195631d2182196d5867304f3aec88408de46ae66070140778`.
+Translation follows per-operation f32; quaternion/basis evaluation remains an
+approximate scalar model, NOT a new native numeric oracle. Live overlay weight,
+live shoulder/target binding, post-solve pose and skin clearance are not proven.
+
+Tests explicitly cover noncommuting bases, HALF source reference, target scale,
+per-operation f32 (distinguished from double algebra), nonfinite refusal,
+arbitrary common-ancestor cancellation, exact12-row hierarchy and degenerate
+plane rejection. This is actual proximal-pose groundwork, not an enabled fix.
+NEXT: compare/bind this authored plane to the current shoulder-to-target axis,
+derive a roll that preserves the wrist endpoint/orientation, and validate it on
+the same Nadine geometry with post-solve output observation before another exam.
+
+Right-hand source check remains separate. Nadine weapon/category99C2B773 set
+CF9A713E explicitly maps weapon-grip791687E5->4CAA7420 at overlay+E720. The
+31clips in anim-npc-weapon-grip-dlc.pak use skeletonBD7EEE2F; none of their IDs
+appeared in checked normal/net weapon-art or Nadine/female-buddy/simple-NPC
+overlays. This rejects that filename-only donor shortcut, not all selectors.
+Native WeaponGripModifier is also not a finger selector: RTTI14296E2C0 slot+70
+14062AC40 enumerates eight bilateral shoulder/elbow/wrist/prop joints. Shared
+slot+28 14062B2B0 publishes proximal NPC IK inputs; derived RTTI14296E370 slot+A0
+14062B710 updates a smoothed scalar. No finger-source correction follows.
+
+The existing NPC right candidate changes palm28 only0.011864deg but prop30 by
+15.474411deg and translation0.0217590; it couples prop placement and finger curl.
+Next right-side discriminator is live inverse(RW)*RP versus the modeled
+localPalm28*localProp30. All operands already exist in the stock getter capture;
+do not invent another loader or full-skeleton capture for this comparison.
+
+Verification: support tests10/10, combined candidate/contact/support19/19; the
+independent static reviewer found no formula/frame issue in the new diff. Local
+artifact: reports/p99-npc-support-proximal-20261008.json (ignored, reproducible).
+Final sole-IDB save log `.codex/ida_apply_p99_proximal_20261008.log` reports1933
+functions,80data names,2types and save_database returned True. Restarted MCP
+readback verifies the mode2 comment, three NPC modifier names and vtable xrefs.
+No game launched, injected or controlled during this rejected-result follow-up.

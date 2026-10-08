@@ -15,6 +15,10 @@ The cancellation is a rigid-transform identity: it does not import the donor
 wrist basis or proximal arm ancestry.  This report proves the asset constants
 and the algebra only.  It does not establish live clip selection, callback
 weight, a mutation boundary, runtime admission, or a visual fix.
+
+Recorded experiment outcome: PID9504 applied the DOWN endpoint on 2026-10-08,
+but the user reported no fix. The asset derivation stays valid; this endpoint
+alone is rejected as a sufficient visible correction (see COOP_STATUS.md).
 """
 from __future__ import annotations
 
@@ -121,6 +125,10 @@ SOURCE_ROWS_SHA256 = {
     "weapon_up": "e79559564e31290b937317d91037b78c1d5ca0ab5e7160876171ab4eac50e6be",
     "weapon_down": "729adf6c1254540f07071dbfa266625a67a6b242d884d2cb9ca48fb8e126b0a4",
 }
+TARGET_ARM_ROWS_SHA256 = {
+    "weapon_up": "0a4e2db6a66337f112e528febee2392b51562a14938253a9ede034081248cfb3",
+    "weapon_down": "66e529eab863fdc195631d2182196d5867304f3aec88408de46ae66070140778",
+}
 TARGET_PAIR_SHA256 = {
     "weapon_up": "31744c4a5f13fc7f33257f7020c9c3cdd1814eab5efd2c5f2c147103b152b1bc",
     "weapon_down": "bb960352195c153c36a061bda7543ef4a933c1dac7439150c073dcc91ea8f3f2",
@@ -200,6 +208,68 @@ def _f32_rows_sha256(rows) -> str:
 def _constraint_sha256(transform) -> str:
     # Inspection contract: translation P, then quaternion Q, all rounded to f32.
     return _sha256(struct.pack("<7f", *transform[8:11], *transform[4:8]))
+
+
+def retarget_mode2_absolute(source_row, reference, source_reference,
+                            joint_locator, parent_locator):
+    """Scalar nonadditive retarget mode2, NOT additive-blend mode2.
+
+    141AE2862..28E9: target-reference scale, source translation minus the
+    record's HALF source-reference translation plus target-reference translation,
+    and the same conjugate(E)*Q*A orientation as mode1. Builder1417CF58B..5FF
+    rounds source-reference T to half (nearest-even). BoneScale is not used.
+    Translation rounds each subtraction/addition to f32 like141AE28C0/28C4.
+    Quaternion composition remains a scalar model, not a native SIMD oracle.
+    """
+    for value, label in ((source_row, "source"), (reference, "target reference"),
+                         (source_reference, "source reference")):
+        if len(value) != 12 or not all(math.isfinite(x) for x in value):
+            raise ValueError(f"mode2 {label}: invalid row")
+    source_ref_half = struct.unpack("<3e", struct.pack("<3e", *source_reference[8:11]))
+    rotation = grip.qmul(
+        grip.qmul(grip.qconj(parent_locator.normalized), source_row[4:8]),
+        joint_locator.normalized)
+    f32 = lambda value: struct.unpack("<f", struct.pack("<f", value))[0]
+    translation = tuple(f32(f32(source_row[8 + i] - source_ref_half[i]) + reference[8 + i])
+                        for i in range(3))
+    return grip.row(reference[:3], rotation, translation)
+
+
+def authored_arm_geometry(local_rows, parents, common_ancestor=None):
+    """Weight1 authored geometry under a common ancestor, not a live solve.
+
+    Report the incoming left bend normal and S/E/W in the SAME clip's right-prop
+    frame. Common-ancestor cancellation avoids treating bind-space world axes as
+    live ones. Nothing here chooses a live pole or proves body/skin clearance.
+    """
+    expected = {19: 18, 20: 18, 21: 19, 22: 20, 23: 21, 24: 22,
+                25: 23, 26: 24, 27: 25, 28: 26, 29: 27, 30: 28}
+    if set(local_rows) != set(expected) or any(parents[j] != p for j, p in expected.items()):
+        raise ValueError("authored arm hierarchy changed")
+    world = {18: grip.row() if common_ancestor is None else common_ancestor}
+    for joint, parent in expected.items():
+        world[joint] = compose(world[parent], local_rows[joint])
+    inverse_prop = inverse(world[30])
+    frames = {name: compose(inverse_prop, world[joint])
+              for name, joint in (("shoulder", 21), ("elbow", 23), ("wrist", 25))}
+    s, e, w = (frames[name][8:11] for name in ("shoulder", "elbow", "wrist"))
+    upper = tuple(e[i] - s[i] for i in range(3))
+    lower = tuple(w[i] - e[i] for i in range(3))
+    normal = (upper[1]*lower[2] - upper[2]*lower[1],
+              upper[2]*lower[0] - upper[0]*lower[2],
+              upper[0]*lower[1] - upper[1]*lower[0])
+    normal_length = math.sqrt(sum(x*x for x in normal))
+    if normal_length <= 1e-10:
+        raise ValueError("authored bend plane is degenerate; no arbitrary fallback")
+    return {
+        "frame": "same_clip_right_prop30",
+        "left_shoulder_elbow_wrist": {name: list(row) for name, row in frames.items()},
+        "incoming_bend_normal": [x / normal_length for x in normal],
+        "upper_length_asset_units": math.sqrt(sum(x*x for x in upper)),
+        "lower_length_asset_units": math.sqrt(sum(x*x for x in lower)),
+        "live_anchor_or_pole_proven": False,
+        "post_solve_or_skin_clearance_proven": False,
+    }
 
 
 def _unit_rigid(transform, label: str):
@@ -344,6 +414,8 @@ def _target_pair(label: str, decoded: dict[int, tuple[float, ...]],
     target_pak = source.PagedPak(target_data)
     authored_rows = []
     target_rows = {}
+    all_target_rows = {}
+    source_inputs = authored.skeleton_inputs(source_data, source_skeleton)
     for source_joint in range(19, 31):
         semantic = source_skeleton.joint_ids[source_joint]
         record = source.one_record(records, semantic, "row149 support")
@@ -366,8 +438,6 @@ def _target_pair(label: str, decoded: dict[int, tuple[float, ...]],
             "retarget_map_index": record.map_index,
             "source_local_row": list(decoded[source_joint]),
         })
-        if source_joint not in (27, 29):
-            continue
         if record.mode == 3:
             local = tuple(decoded[source_joint])
         else:
@@ -379,18 +449,32 @@ def _target_pair(label: str, decoded: dict[int, tuple[float, ...]],
                 source_inverse[source_parent], target_inverse[target_parent])
             reference = npc._target_reference(
                 target_inputs, target_skeleton, record.target_global)
-            local = npc._retarget_local(
-                decoded[source_joint], reference, record.mode,
-                joint_locator, parent_locator)
-        key = "left_palm" if source_joint == 27 else "left_prop"
-        target_rows[key] = tuple(local)
+            if record.mode == 2:
+                # Native builder indexes sourceRef by GLOBAL joint. For these
+                # pinned g0 rows it equals the compressed reference parameter.
+                if authored.parameter_index(source_skeleton, source_joint) != source_joint:
+                    raise ValueError("mode2 source global/reference index differs")
+                source_reference = npc._target_reference(
+                    source_inputs, source_skeleton, source_joint)
+                local = retarget_mode2_absolute(
+                    decoded[source_joint], reference, source_reference,
+                    joint_locator, parent_locator)
+            else:
+                local = npc._retarget_local(
+                    decoded[source_joint], reference, record.mode,
+                    joint_locator, parent_locator)
+        all_target_rows[source_joint] = tuple(local)
+        authored_rows[-1]["target_local_row"] = list(local)
+        if source_joint in (27, 29):
+            key = "left_palm" if source_joint == 27 else "left_prop"
+            target_rows[key] = tuple(local)
 
     expected = EXPECTED_TARGET_ROWS[label]
     if target_rows != expected:
         raise ValueError(f"{label}: exact retargeted palm/prop rows changed")
     if _f32_rows_sha256((target_rows["left_palm"], target_rows["left_prop"])) != TARGET_PAIR_SHA256[label]:
         raise ValueError(f"{label}: target palm/prop pair hash changed")
-    return authored_rows, target_rows
+    return authored_rows, target_rows, all_target_rows
 
 
 def _constraint_record(label: str, decoded, target_rows):
@@ -505,11 +589,14 @@ def audit(actor_archive=DEFAULT_ACTOR_ARCHIVE, dc_archive=DEFAULT_DC_ARCHIVE):
     for label in ("weapon_up", "weapon_down"):
         resolution, decoded, programs = _decode_clip(
             label, animation_data, animation_pak, source_skeleton, parser)
-        authored_rows, target_rows = _target_pair(
+        authored_rows, target_rows, all_target_rows = _target_pair(
             label, decoded, source_skeleton, target_skeleton,
             source_inverse, target_inverse, source_parents, target_parents,
             records, target_inputs, parser, source_data, target_data)
         constraint = _constraint_record(label, decoded, target_rows)
+        arm_rows_sha = _f32_rows_sha256(all_target_rows[joint] for joint in range(19, 31))
+        if arm_rows_sha != TARGET_ARM_ROWS_SHA256[label]:
+            raise ValueError(f"{label}: retargeted arm rows changed")
         targets_by_label[label] = target_rows
         constraints[label] = constraint
         spec = ANIMATIONS[label]
@@ -535,6 +622,8 @@ def audit(actor_archive=DEFAULT_ACTOR_ARCHIVE, dc_archive=DEFAULT_DC_ARCHIVE):
             "source_rows_19_30_f32_sha256": SOURCE_ROWS_SHA256[label],
             "programs": programs,
             "authored_rows_19_30": authored_rows,
+            "retargeted_rows_19_30_f32_sha256": arm_rows_sha,
+            "authored_proximal_geometry": authored_arm_geometry(all_target_rows, target_parents),
             "retargeted_terminal_rows": {
                 key: list(row) for key, row in target_rows.items()
             },
@@ -564,7 +653,7 @@ def audit(actor_archive=DEFAULT_ACTOR_ARCHIVE, dc_archive=DEFAULT_DC_ARCHIVE):
     return {
         "schema": SCHEMA,
         "classification": CLASSIFICATION,
-        "candidate_fix_status": "HYPOTHESIS_NOT_RUNTIME_ADMITTED",
+        "candidate_fix_status": "DOWN_ENDPOINT_RUNTIME_REJECTED_AS_VISIBLE_FIX",
         "retail_executable_mapped": False,
         "native_routine_called": False,
         "game_launched_or_attached": False,
@@ -632,19 +721,20 @@ def audit(actor_archive=DEFAULT_ACTOR_ARCHIVE, dc_archive=DEFAULT_DC_ARCHIVE):
         "type5_weight_callback_14860": _audit_type5_callback(overlay, parser),
         "candidate": {
             "choice": (
-                "Use the Nadine-target-space up/down terminal constraint, "
-                "selected by a separately proven state boundary, rather than "
-                "copying a Chloe world wrist or raw Chloe arm chain."
+                "DOWN terminal-constraint-only repair is runtime rejected. "
+                "The reconstructed proximal plane is a new static input for "
+                "an arm-roll correction, not an admitted replacement."
             ),
             "proven_operands": (
-                "Nadine local palm27 reference plus retargeted/native mode3 "
-                "prop29 constants in clips 036F20E5 and 5E67B1FA"
+                "Nadine-target-space local rows19..30, including mode2 "
+                "shoulder ancestry and distal27/29, from pinned clips "
+                "036F20E5 and 5E67B1FA at modeled full weight"
             ),
             "missing_evidence": [
                 "Which live Player/Nadine state selects up versus down.",
                 "Whether callback 0x14860 reaches terminal weight 1.",
-                "A safe current-player writer for the terminal left target.",
-                "Runtime confirmation that this constraint fixes the visible support arm.",
+                "Live shoulder/target binding and compatible elbow-roll correction.",
+                "Post-solve arm/skin clearance and visible-fix validation, not just changed input.",
             ],
         },
         "limits": [

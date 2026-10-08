@@ -43,6 +43,16 @@ disable it in build2026-10-08p99-support-safe. APPLIED proves changed input, not
 post-solver/rendered output. NEXT statically trace1418F1C43 and1418F1DEE/1DF9 plus
 later arm consumers; distinguish endpoint mismatch, solver/commit gating, later
 overwrites and scope persistence. Do not repeat the same exam or guess offsets.
+Fresh STATIC trace: the getter formula is not cancelled in1418F1780 or either
+immediate caller return tail. SolveArmIk1418F0B60 inherits the current S/E/W
+bend plane (or negative elbow-world Y when degenerate), with no torso/pole input.
+Next precise correction target is proximal elbow roll with live wrist/target
+preserved, not another distal C.141AE2100 retarget mode2 is now closed and the
+existing support audit reconstructs target rows19..30 plus authored bend normal
+in right-prop space. NEXT bind this plane to live shoulder/target and validate
+roll/skin clearance and post-solve output; do not claim this scalar donor is an
+enabled fix. Right-side next check: live inverse(RW)*RP versus the two modeled
+palm28*prop30 frames, using existing getter operands, not loader infrastructure.
 Right-hand geometry candidates remain unadmitted. Tests:89 helper checks and
 133/133 scoped CTest pass;15 parked native-bootstrap fixtures have stale pins,
 so the full suite is not green. Exact artifact/evidence in latest COOP_STATUS.

@@ -20,6 +20,8 @@ inline constexpr std::size_t kLeftHandProp = 3;
 // elena-base D0B04A60/8592680F and evaluated through exact Elena-to-Nadine
 // retarget row 149 into nadine-dlc-base C67A06F1/C39CA709. This is the authored
 // left-wrist goal relative to the live right-hand prop, not a world-space pose.
+// PID9504 applied this endpoint on 2026-10-08 but the user reported no visible
+// fix. Keep it as a rejected experiment's exact input, not an enabled repair.
 inline constexpr Locator kNativeDownSupportConstraint{
     std::bit_cast<float>(0x3D90ED53u),
     std::bit_cast<float>(0xBC09CC1Cu),
