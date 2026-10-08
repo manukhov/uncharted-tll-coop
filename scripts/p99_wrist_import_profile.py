@@ -29,6 +29,12 @@ class Profile:
 
 
 def read_profile(text):
+    return _read_profile(text, schema=SCHEMA, scope='owned-python-fixture-only',
+                         importer=IMPORTER, max_providers=32)
+
+
+def _read_profile(text, *, schema, scope, importer, max_providers):
+    # Shared syntax only. Public readers fix their artifact/scope/count policy.
     require(isinstance(text, str) and len(text) <= 65536, 'profile text bound')
 
     def unique(rows):
@@ -40,14 +46,14 @@ def read_profile(text):
 
     doc = json.loads(text, object_pairs_hook=unique)
     require(isinstance(doc, dict) and set(doc) == {'schema', 'scope', 'providers', 'api_routes'} and
-            doc['schema'] == SCHEMA and doc['scope'] == 'owned-python-fixture-only', 'profile schema/scope')
-    require(isinstance(doc['providers'], list) and 0 < len(doc['providers']) <= 32 and
+            doc['schema'] == schema and doc['scope'] == scope, 'profile schema/scope')
+    require(isinstance(doc['providers'], list) and 0 < len(doc['providers']) <= max_providers and
             isinstance(doc['api_routes'], list) and len(doc['api_routes']) <= 128, 'profile rows')
     providers, names, paths = [], set(), set()
     for row in doc['providers']:
         require(isinstance(row, dict) and set(row) == {'name', 'path', 'sha256'}, 'provider profile fields')
         name = module_name(row['name'])
-        require(not api_contract(name) and name not in names and name != IMPORTER, 'provider profile name')
+        require(not api_contract(name) and name not in names and name != importer, 'provider profile name')
         require(isinstance(row['path'], str) and 0 < len(row['path']) < 32768 and
                 not any(ord(c) < 32 for c in row['path']), 'provider profile path')
         path = PureWindowsPath(row['path'])
@@ -63,9 +69,9 @@ def read_profile(text):
     routes, keys = [], set()
     for row in doc['api_routes']:
         require(isinstance(row, dict) and set(row) == {'importer', 'contract', 'host'}, 'route profile fields')
-        importer, contract, host = map(module_name, (row['importer'], row['contract'], row['host']))
-        require(importer in names | {IMPORTER} and api_contract(contract) and host in names and
-                (importer, contract) not in keys, 'route profile identity/duplicate')
-        routes.append(ApiRoute(importer, contract, host))
-        keys.add((importer, contract))
+        consumer, contract, host = map(module_name, (row['importer'], row['contract'], row['host']))
+        require(consumer in names | {importer} and api_contract(contract) and host in names and
+                (consumer, contract) not in keys, 'route profile identity/duplicate')
+        routes.append(ApiRoute(consumer, contract, host))
+        keys.add((consumer, contract))
     return Profile(tuple(providers), tuple(routes))

@@ -38450,3 +38450,118 @@ implementation trampolines or actual target API-set namespace; those remain
 separate admission obligations. Then real-target held checks, transaction,
 uncertain recovery, ACK/manual arm and positive real-main preparation remain.
 No installation or visible Nadine grip repair is established by this unit.
+
+## 2026-10-08 — P99 141ABA973: compare the loaded ten-export artifact with independent import expectations
+
+STATIC / separately scoped owned-loader fixture. Added
+scripts/p99_provider_preparation_profile.py and
+scripts/p99_provider_preparation_fixture.py. No scanner/flags/game code changes,
+game launch/input/injection, new game semantics or IDB labels. The only load is
+the fixed adjacent tll_p99_provider_preparation.dll inside a short-lived owned
+Python process. Windows performs normal loader startup/unload; the fixture NEVER
+calls any artifact export, preparation entry, adapter, bridge or relay. No PIN.
+
+Prediction stated before the actual owned run: independent expected59IAT values
+and428693immutable bytes must match the loaded artifact, BOTH publication pages
+must remain zero, and initial artifact release must unload it. Wrong file/hash
+or provider identity must refuse without adopting observed values. Synthetic
+tests separately distinguish pre-load hash refusal, missing late graph edge,
+wrong API source, wrong loader oracle, page mutation and cleanup failures.
+
+Alternatives rejected by the implementation/tests:
+
+- Reusing the old profile/importer silently changes its trust scope. New schema
+  p99-preparation-owned-import-profile-v1 has scope
+  owned-preparation-loader-fixture-only and importer
+  tll_p99_provider_preparation.dll. Old/new readers reject each other's document;
+  schema/scope is checked before constructing the OS API. No remote/game scope.
+- Thirty-two dependencies would overflow Owner's32 slots when adding artifact0.
+  New profile admits at most31 dependencies;31 passes and32 refuses before rows.
+  It is still NOT a C++ Request or target-side retention inventory.
+- Loading first and hashing afterward could execute an unchecked artifact. Lock
+  the artifact and each provider deny-write/delete, read each snapshot from that
+  same handle and verify all hashes BEFORE the sole fixed-path LoadLibraryExW.
+  No arbitrary provider file is loaded. Fullpath GetModuleHandleEx acquisitions
+  and GetModuleFileName comparisons select already loaded providers afterwards.
+- Expected addresses must not come from observed IAT/GetProcAddress. Resolve ALL
+  roots against independently hashed exports and explicit API-set routes first;
+  only then compare local loader export oracles and the actual artifact IAT.
+  Missing last symbol/route refuses before even the first GetProcAddress oracle.
+- Immutable comparison excludes mutable publications. A separate bounded reader
+  checks BOTH entire4096B pages before and after comparison: same PID/creation,
+  same MEM_IMAGE allocation/extent, exact before/after metadata, RW or WRITECOPY
+  without guard, and allZERO bytes. These observations are not a lifetime/ABA proof.
+
+All selected file handles, the initial artifact reference and EACH successful
+dependency acquisition remain held through both page reads and mapped comparison.
+Cleanup first releases the artifact and verifies absence while all dependencies
+and files are still held; then consumes provider refs and file handles one by one.
+Repeated HMODULE values are distinct reference tokens, never deduplicated. False
+or thrown release is recorded without retry, and every remaining token is still
+attempted. Cleanup failure prevents a success result. This is ONLY non-prepared
+owned-fixture cleanup, never permission to recall process-lifetime Owner resources.
+
+REJECTED during review: a two-pass binding helper over an unowned iterable.
+The first resolution pass consumed a generator, and the oracle pass could return
+an empty result silently. Fixed by owning a bounded1..4096-row dll/name inventory
+before callbacks; generator, empty and4097-row regressions pass. Old public
+profile/fixture policies remain fixed; shared private helpers take explicit
+importer/scope inputs, and old actual36IAT fixture still passes.
+
+Local reviewed profile: reports/p99_preparation_owned_profile_20261008.json
+(ignored temporary artifact; durable selection recorded here). All paths below
+are C:\Windows\System32\<name>, EXCEPT vcruntime140.dll at
+C:\Users\Vladimir\AppData\Local\Programs\Python\Python312\VCRUNTIME140.dll.
+Fresh disk SHA256 pins, obtained separately from target memory before the exam:
+
+- kernel32.dll:7db088338b81ad0a5030ae73adb3202004ccedd79d92a87ceb91483ba09e6728
+- ntdll.dll:3063ca9a91d64bfb319c805def6c7f89158d4f33a3167b728c7421cd26b90a5b
+- vcruntime140.dll:052ad6a20d375957e82aa6a3c441ea548d89be0981516ca7eb306e063d5027f4
+- vcruntime140_1.dll:a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e
+- ucrtbase.dll:185b56b4f32ee97a308471bf0e4a7615f861958b2d1231386d7ef07193db9808
+- bcrypt.dll:54ea6103870ed2799daa841a2103ce7b63146d0a66db326a16976549a7f53924
+- msvcp140.dll:7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca
+
+Explicit caller routes for NEW importer:api-ms-win-crt-heap-l1-1-0.dll and
+api-ms-win-crt-runtime-l1-1-0.dll both to ucrtbase.dll. Terminal export-graph
+owners:kernel32=28,ntdll=1,bcrypt=4,MSVCP140=1,VCRUNTIME140=11,
+VCRUNTIME140_1=1,ucrtbase=13. InitializeSListHead forwards to ntdll's
+RtlInitializeSListHead. These are EAT graph results, NOT implementation/provider
+dependency closure: code jumps to KernelBase/bcryptprimitives/other dependencies
+are not disproved by absence from this selected graph. Python's loaded CRT path
+must not be reused as a game-specific provider selection.
+
+CONFIRMED (owned fixture ONLY): final revised exam repeated3x in fresh processes
+PID3572/19080/20360, all passed428693immutable bytes across5regions and59IAT,
+121applied DIR64 and5excluded mutable fixups. Both pages observed ZERO with valid
+metadata, no artifact export called, seven selected providers held, and artifact
+unloaded after each comparison. Earlier initialPID16328 also passed. Result
+explicitly leaves install/atomic/dependency-integrity/provider-mapped-bytes/
+API-set-schema/module-lifetime/closure certificates FALSE. This was NOT a remote
+target exam, provider byte comparison, preparation success or retained Owner test.
+
+Validation:19new unit/fault tests cover profile scope/count, complete resolution
+before oracle, generator input, full-path/source/export mismatches, both page
+contents/metadata, all8 snapshots before load and failure at each load/bind/plan/
+page/compare stage. Every one of7 cleanup operations is tested false and throwing,
+including duplicate module refs. Independent review reran19new+13old tests and
+found no remaining blocker. Full Python748/748 and CTest132/132 pass; default and
+old ABI builds are up to date. Old owned loader exam passes376071bytes/36IAT.
+New DLL SHA remains8532ae918ef2c6d6f56dc2e3fe34318acd02d18b68b3a94a4f67e181ebbca3d1;
+old remainsa81ba7f43c543c731942c999f8b6aa9ed8f2bc0cda96c41ab96882257e22aae5.
+No game/fixture process remains; existing unrelated tmp/ preserved.
+
+Reproduce: py -3.12 scripts/p99_provider_preparation_fixture.py --sha256
+8532ae918ef2c6d6f56dc2e3fe34318acd02d18b68b3a94a4f67e181ebbca3d1
+--provider-profile reports/p99_preparation_owned_profile_20261008.json --summary
+(single command). Re-review file pins after environment changes; do not refresh
+them automatically from a mismatch or treat this local profile as a target one.
+
+LIMITS / NEXT: artifact loaded bytes now match, but provider loaded bytes have
+NOT been compared in this new exam. Extend the existing borrowed provider-evidence
+reader to these seven reached export sets with independently derived native paths,
+selected bases and file hashes. Compare headers/export directories/entry prefixes;
+keep full code/import dependency/API-set/ABA/lifetime limitations explicit. Then
+target-specific inventory, held verification, actual transaction/recovery/ACK and
+manual arm plus positive real-main preparation remain. No source capture or
+visible Nadine pistol-grip repair this turn.

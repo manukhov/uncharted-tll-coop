@@ -10,6 +10,7 @@ import argparse
 import ctypes as ct
 from dataclasses import asdict
 import json
+from itertools import islice
 from pathlib import Path, PureWindowsPath
 
 import p99_wrist_abi_manifest as disk
@@ -44,6 +45,14 @@ def reference(kernel, name, refs):
 
 
 def import_bindings(kernel, profile, snapshots, imports, refs):
+    return _import_bindings(kernel, profile, snapshots, imports, refs, importer=IMPORTER)
+
+
+def _import_bindings(kernel, profile, snapshots, imports, refs, *, importer):
+    # Own a bounded version before callbacks and before the two passes below.
+    # Iterators must not be exhausted into a silently empty binding result.
+    imports = tuple({'dll': row['dll'], 'name': row['name']} for row in islice(imports, 4097))
+    disk.require(0 < len(imports) <= 4096, 'owned import inventory count')
     providers = []
     for pin in profile.providers:
         base = reference(kernel, pin.path, refs)
@@ -53,13 +62,14 @@ def import_bindings(kernel, profile, snapshots, imports, refs):
                      'loaded provider path differs from reviewed profile')
         providers.append(read_provider(snapshots[pin.name], pin.sha256, pin.name, base))
     resolver = Resolver(providers, profile.api_routes)
+    # Resolve ALL expected addresses before using any observed export oracle.
+    resolved = [resolver.resolve(row['dll'], row['name'], importer=importer) for row in imports]
     bindings, resolutions, sources = [], [], {}
-    for row in imports:
-        resolution = resolver.resolve(row['dll'], row['name'], importer=IMPORTER)
+    for row, resolution in zip(imports, resolved):
         dll = module_name(row['dll'])
         if dll not in sources:
             sources[dll] = reference(kernel, dll, refs)
-            host = resolver.routes[(IMPORTER, dll)] if api_contract(dll) else dll
+            host = resolver.routes[(importer, dll)] if api_contract(dll) else dll
             disk.require(sources[dll] == resolver.providers[host].base,
                          'local loader source differs from explicit provider/API route')
         actual = kernel.GetProcAddress(sources[dll], row['name'].encode('ascii'))
@@ -70,9 +80,7 @@ def import_bindings(kernel, profile, snapshots, imports, refs):
     return bindings, resolutions
 
 
-def run(trusted_sha256, profile):
-    api = WindowsAPI()
-    kernel = api.kernel
+def configure_loader(kernel):
     for name, result, args in (
         ('LoadLibraryExW', ct.c_void_p, [ct.c_wchar_p, ct.c_void_p, ct.c_uint32]),
         ('GetModuleHandleExW', ct.c_int, [ct.c_uint32, ct.c_wchar_p, ct.POINTER(ct.c_void_p)]),
@@ -88,6 +96,12 @@ def run(trusted_sha256, profile):
         ('GetCurrentProcess', ct.c_void_p, [])):
         fn = getattr(kernel, name)
         fn.restype, fn.argtypes = result, args
+
+
+def run(trusted_sha256, profile):
+    api = WindowsAPI()
+    kernel = api.kernel
+    configure_loader(kernel)
     handles, refs, base = [], [], None
     try:
         raw = locked_snapshot(kernel, ARTIFACT, handles)

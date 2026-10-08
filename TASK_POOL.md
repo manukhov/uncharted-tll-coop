@@ -11,7 +11,30 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / OFFLINE TEN-EXPORT ARTIFACT CONTRACT (2026-10-08):
+Latest CONFIRMED / OWNED NEW-ARTIFACT LOADER COMPARISON (2026-10-08):
+Added separately scoped p99_provider_preparation_profile.py / fixture.py. Strict
+new importer/scope, at most31dependencies (artifact reserves slot32). Lock/hash
+artifact+ALL selected files before load; resolve ALL59 expected addresses from
+disk exports + caller routes and fullpath-selected bases BEFORE loader oracles.
+No artifact export/prepare/adapter calls, PIN, game process or game input.
+New actual loader/RPM exam repeated3x after review:428693immutable bytes and59IAT
+match,121DIR64 applied/5mutable excluded; both4096B publication pages separately
+observed ZERO with stable MEM_IMAGE/RW-or-WC metadata before/after comparison.
+Seven files cover this conditional EAT graph; Python's VCRUNTIME path is explicit,
+NOT a game profile. Cleanup unloads artifact while all dependency refs/files are
+held, then releases each acquisition once; duplicate HMODULE tokens stay distinct.
+Fixed iterable exhaustion in shared binding helper; input inventory is owned and
+bounded before callbacks. 19new fault/unit tests, full Python748/748, CTest132/132;
+old actual ABI exam also passes376071B/36IAT. Both DLL hashes/builds unchanged.
+NEXT: extend the existing borrowed provider-evidence verifier to these seven
+new-profile reached export sets, with independent native paths and selected file
+hashes; verify provider headers/export tables/entry prefixes in the owned exam.
+Do NOT call that full provider-code/dependency/API-set closure or a target lease.
+Then target-specific inventory (not Python paths), held checks, transaction/
+recovery/ACK/manual arm and positive real-main preparation remain outstanding.
+No source capture, installation or visible Nadine pistol-grip fix this turn.
+
+Previous STATIC / OFFLINE TEN-EXPORT ARTIFACT CONTRACT (2026-10-08):
 Added p99_provider_preparation_manifest.py and separate mapped-plan entry point.
 Exact ten exports, two distinct zero4096B RW/non-DISCARDABLE publication sections,
 primary unwind ownership plus ALL chained fragments, exact59 reviewed direct
