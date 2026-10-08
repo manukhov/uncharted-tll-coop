@@ -38261,3 +38261,103 @@ Snapshot/FLS finish/proofs, with empty-profile/wrong-main refusal intact. Do not
 reuse the synthetic predicates or parent supplied values as retail evidence.
 Then external held verification/actual write transaction/uncertain recovery/ACK
 and manual arm still require integration. No visual Nadine grip repair this turn.
+
+## 2026-10-08 — P99 141ABA973: connect actual full-TU preparation to selected-provider ownership
+
+STATIC / isolated explicit-entry integration, NOT a game patch. Added separate
+tll_p99_provider_preparation.dll target and nadine_p99_provider_preparation.*.
+The source includes the actual coop_runtime.cpp with TLL_P99_WRIST_ABI_ARTIFACT,
+not TLL_P99_PREPARATION_AUDIT: DllMain remains inert and source/native audit seams
+are absent. Original no-argument preparation is NOT called: it would publish
+Offer without the new provider coordinator. Instead the explicit entry uses the
+same actual Resources, Snapshot, FLS, hooks, original proof methods and publisher.
+Default runtime sources/startup, old eight-export ABI target/contract and live
+flags are unchanged. No game launch/input/injection, new game semantic claim or
+IDB labeling was required; existing tmp/ remains untouched.
+
+Alternatives distinguished before the owned test:
+
+- Merely linking the coordinator does not establish that actual preparation
+  invokes it. This entry feeds Resources::offer directly into Preparation;
+  finish uses the real code Snapshot and FLS, and inherited proofs check actual
+  identity/resources/sites/code. No fixture predicate can substitute for them.
+- Preparing automatically in DllMain would violate the off-loader-lock contract.
+  Prediction: loading the new DLL leaves BOTH pages allZERO/writable; only the
+  explicit entry starts one-shot preparation. No worker or automatic arm exists.
+- Testing only a small ordinary EXE proves early range refusal, not Snapshot.
+  Prediction: small EXE returns ResourcesRefused before self-PIN; an EXE with
+  sufficiently large RW BSS reaches SnapshotRefused after real Resources/Owner,
+  while its wrong-provider-prefix variant returns ProviderRefused. In every case
+  no publication occurs and no retail adapter/relay is executed.
+- Treating any refusal as permission to unload/free is invalid. ResourcesRefused
+  can occur after irreversible effects; the fixture's small-EXE bounds failure
+  is specifically before PIN. Later padded cases must remain MEM_IMAGE after
+  dropping ONLY the fixture's initial LoadLibrary reference.
+- A provider profile cannot be learned from the published page or claimed complete
+  because its selected entries validate. count1 is deliberately valid for this
+  refusal fixture. Prepared means selected-provider/local preparation only, not
+  complete imports/API-set/forwarders/dependencies or installation admission.
+
+The explicit TllP99PrepareProvidersV1 entry takes an exact133952B same-build x64
+Request (64B header plus32x4184B Selection), NOT an IPC wire format. Atomic
+one-shot is consumed before dereferencing caller memory or changing globals;
+a fixed bounded SEH copy owns the entire request, including all path/prefix/hash
+values. Wrong size/alignment/access/version/reserved/count/path/duplicates/tail
+refuse before resource preparation. Caller must keep input immutable/readable
+and the DLL loaded until the call returns, and run off loader lock/callback/hold.
+Actual self comes from entry address, main from GetModuleHandleW(nullptr); PID,
+creation and both PE extents must match the supplied values. Only then are module
+globals set and actual Resources prepared, producing the sole real Offer session.
+Syntax validation uses a dummy nonce that is never published or passed as a
+runtime session. Owner retains selected modules before real Snapshot/FLS finish,
+then the previous coordinator enforces both claims/readbacks/Gate/Offer ordering.
+Any retained refs/PINs/relays survive late refusal; there is no reset or cleanup.
+
+New exports are ten: old seven code aliases and Offer page, plus explicit entry
+and TllP99ProviderPreparedV1 in separate4096B .p99deps. The entry's return codes
+identify stages only; Prepared is not a lifetime/closure/install certificate.
+Expected file hashes are caller profile identifiers, not hashes computed by the
+entry. The old exact-eight-export artifact parser must NOT accept this new DLL
+by relaxing its contract. Neither artifact is currently an injection candidate.
+
+Owned fixture locks/hashes ONLY the fixed adjacent new DLL before LoadLibraryEx,
+derives entry/page RVAs and unrelocated32B RX entry prefix from that disk snapshot,
+then uses GetProcAddress only to compare locators. Test-only bounded PE reader
+checks ten exports, named locators, separate allZERO4096B RW sections and prefix
+relocation exclusion; it is NOT the complete artifact/import/unwind admission
+parser. The selected profile contains the artifact alone, not its dependencies.
+Two fixed EXEs are used: small, and .p99pad RW BSS extent0x2600000 (not retail
+bytes). VirtualQuery confirms the first required manifest region RVA0x14D7C0
+is owned MEM_IMAGE RW/WRITECOPY, so the actual strict RX Snapshot reader refuses
+before FLS initialization. Real code Snapshot still covers63regions/46690B;
+no positive complete stock-code check is claimed from this refusal test.
+
+CONFIRMED (owned fixture ONLY):23 scenarios passed, repeated3x. Small modes:
+empty/null/noaccess/partial/unaligned/short/version/reserved/oversize/tail/path/
+duplicate/wrong-self/wrong-main/wrong-creation/wrong-size/normal/prefix/race;
+padded modes:normal/prefix/empty/race. Partial input has only its last page
+inaccessible, exercising refusal after a partial copy. Two simultaneous callers
+produce exactly one Reused and one predicted refusal; both threads join before
+input or initial DLL reference is released. Repeated calls refuse before input
+access. Every tested path leaves both pages allZERO/writable. Padded normal/race
+return SnapshotRefused, padded wrong prefix ProviderRefused, with retained self
+mapping; small normal/prefix/race return early ResourcesRefused and can unload.
+No game functions, exported adapters, bridges or relay code are called.
+
+Validation: independent read-only review found no blocking defect and reran all
+23 cases. MSVC default and old ABI targets build; full CTest132/132 and Python
+705/705 pass. Final documentation-only header clarification was rebuilt and all
+132 CTests rerun. Final new artifact SHA256:
+8532ae918ef2c6d6f56dc2e3fe34318acd02d18b68b3a94a4f67e181ebbca3d1.
+Old inert ABI remains:
+a81ba7f43c543c731942c999f8b6aa9ed8f2bc0cda96c41ab96882257e22aae5.
+Reproduce owned cases: ctest --test-dir scanner/build -R nadine_p99_bootstrap_
+--repeat until-fail:3 --output-on-failure (single command).
+
+LIMITS / NEXT: full-TU preparation is now connected, but positive real-main
+Snapshot/FLS/two-page publication has NOT run. Independently validate the NEW
+ten-export artifact and complete explicit provider profile: disk/mapped code,
+imports, API-set/forwarder/dependency coverage, without changing old pinned ABI
+validation. Test locators/self-only input are insufficient. External held checks,
+actual write transaction, uncertain recovery, ACK and manual arm remain unwired.
+No successful install, source capture or visible Nadine pistol-grip fix is claimed.

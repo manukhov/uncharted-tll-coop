@@ -11,7 +11,33 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / OWNED COORDINATED PREPARED PAIR (2026-10-08):
+Latest STATIC / OWNED FULL-TU PROVIDER PREPARATION (2026-10-08):
+Added separate inert tll_p99_provider_preparation.dll with explicit local entry
+TllP99PrepareProvidersV1 and independently exported4096B provider page. It uses
+the actual full-TU hooks, Resources, Snapshot/FLS and original Gate proof methods
+through the coordinator; no synthetic stock predicates or source/native audit
+seams. Existing default runtime and pinned eight-export ABI target are unchanged.
+Exact same-build request133952B is copied once under SEH after atomic one-shot
+entry, validated before resource creation, and bound to actual PID/creation,
+main/self bases and PE extents. All selected providers are retained before real
+Snapshot/FLS; both existing page publishers remain behind the coordinator.
+23 owned refusal scenarios pass, including partially unreadable input and two
+concurrent callers. Small EXE stops at actual Resources extent check; padded
+non-RX BSS EXE reaches real Snapshot refusal (wrong prefix stops at Owner).
+Both pages remain ZERO/writable; later refusal keeps self-PIN. Result codes are
+stage diagnostics, NEVER release permission. Prepared would cover only selected
+providers, NOT complete IAT/API-set/forwarder/dependency coverage or admission.
+Full CTest132/132, Python705/705, MSVC default+old ABI builds. New DLL SHA
+8532ae918ef2c6d6f56dc2e3fe34318acd02d18b68b3a94a4f67e181ebbca3d1;
+old ABI remains a81ba7f4...22aae5. No game, injection, IDB or visual grip change.
+NEXT: independently validate this NEW ten-export artifact and a complete explicit
+provider profile (disk/mapped code/imports); keep the old exact-eight-export
+manifest intact. Test-only disk locators and self-only refusal profile are NOT
+retail admission. Then connect held external verification, write transaction,
+uncertain recovery and ACK/manual arm. Positive real-main preparation remains
+unverified; current tests establish refusal/integration only.
+
+Previous STATIC / OWNED COORDINATED PREPARED PAIR (2026-10-08):
 Added Preparation coordinator: exact immutable Offer -> provider Owner retention
 -> finish Snapshot/FLS callback -> provider publication + complete claims readback
 -> existing Gate proofs -> second inventory check + exact original Offer bytes
