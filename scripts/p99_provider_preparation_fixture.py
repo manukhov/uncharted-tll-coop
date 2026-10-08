@@ -6,6 +6,7 @@ Pre-reviewed provider snapshots and exact API routes produce expectations before
 GetProcAddress is used solely as a local loader oracle. No closure/admission.
 """
 import argparse
+from dataclasses import asdict
 import json
 from pathlib import Path
 
@@ -15,14 +16,20 @@ import p99_wrist_abi_manifest as abi
 import p99_wrist_mapped_image as mapped
 from p99_provider_preparation_profile import IMPORTER, read_profile
 from p99_wrist_import_graph import MAX_TOTAL_FILES
-from p99_wrist_mapped_fixture import configure_loader, locked_snapshot, _import_bindings
-from p99_wrist_mapped_windows import WindowsAPI, Reader
+from p99_wrist_mapped_fixture import configure_loader, locked_snapshot, _import_bindings, _import_inventory
+from p99_wrist_mapped_windows import Reader
+from p99_provider_evidence import ModuleAPI, file_native_path
+from p99_preparation_provider_evidence import compare_inventory
 
 ARTIFACT = Path(__file__).resolve().parents[1] / 'scanner/build/tll_p99_provider_preparation.dll'
 
 
 def import_bindings(kernel, profile, snapshots, imports, refs):
     return _import_bindings(kernel, profile, snapshots, imports, refs, importer=IMPORTER)
+
+
+def import_inventory(kernel, profile, snapshots, imports, refs):
+    return _import_inventory(kernel, profile, snapshots, imports, refs, importer=IMPORTER)
 
 
 def _zero_pages(api, handle, identity, base, manifest):
@@ -73,37 +80,44 @@ def _release_owned(kernel, base, refs, handles):
 def run(trusted_sha256, profile_text):
     # Validate strict scope BEFORE constructing any OS API or acquiring resources.
     profile = read_profile(profile_text)
-    api = WindowsAPI()
+    api = ModuleAPI()
     kernel = api.kernel
     configure_loader(kernel)
     handles, refs, base = [], [], None
     try:
         raw = locked_snapshot(kernel, ARTIFACT, handles)
         manifest = disk.manifest(raw, trusted_sha256)
-        snapshots = {}
+        snapshots, native_paths = {}, {}
         for pin in profile.providers:
             snapshot = locked_snapshot(kernel, pin.path, handles)
             abi.require(abi.digest(snapshot) == pin.sha256, 'provider hash changed before load: '+pin.name)
             snapshots[pin.name] = snapshot
+            native_paths[pin.name] = file_native_path(kernel, handles[-1])
             abi.require(sum(map(len, snapshots.values())) <= MAX_TOTAL_FILES, 'provider aggregate byte bound')
         abi.require(not kernel.GetModuleHandleW(str(ARTIFACT)), 'artifact already loaded in fixture')
         base = kernel.LoadLibraryExW(str(ARTIFACT), None, 0x100 | 0x800)
         abi.require(base, 'owned artifact load failed')
-        bindings, resolutions = import_bindings(kernel, profile, snapshots, manifest['imports'], refs)
-        plan = preparation.build_plan(raw, trusted_sha256, base, bindings, header_base=mapped.HeaderBase.LOADED)
+        inventory = import_inventory(kernel, profile, snapshots, manifest['imports'], refs)
+        plan = preparation.build_plan(raw, trusted_sha256, base, inventory.bindings, header_base=mapped.HeaderBase.LOADED)
         handle = kernel.GetCurrentProcess()
         identity = api.identity(handle)
         _zero_pages(api, handle, identity, base, manifest)
+        evidence_before = compare_inventory(handle, identity, inventory, manifest['imports'], native_paths, api=api)
         result = mapped.compare(plan, Reader(handle, identity, base, plan.size, api=api))
+        evidence_after = compare_inventory(handle, identity, inventory, manifest['imports'], native_paths, api=api)
         _zero_pages(api, handle, identity, base, manifest)
         result.update(schema='p99-preparation-owned-loader-exam-v1', fixture_only=True,
             pid=identity.pid, creation=identity.creation, base=hex(base),
-            exclusions=[vars(e) for e in plan.exclusions], import_resolutions=resolutions,
+            exclusions=[vars(e) for e in plan.exclusions], import_resolutions=[asdict(r) for r in inventory.resolutions],
             provider_files=len(profile.providers), owned_provider_refs_held_during_comparison=True,
             expected_bindings_from_disk_graph=True, api_set_routes_are_caller_inputs=True,
             both_publication_pages_observed_zero=True, preparation_entry_called=False,
             artifact_exports_called=False, dependency_closure_verified=False,
-            provider_mapped_bytes_verified=False, api_set_schema_verified=False)
+            provider_mapped_bytes_verified=False, api_set_schema_verified=False,
+            partial_provider_evidence_matched=True,
+            provider_evidence_bytes_per_pass=evidence_after['compared_bytes'],
+            provider_entry_prefixes=evidence_after['entry_prefixes'],
+            provider_evidence_before=evidence_before, provider_evidence_after=evidence_after)
     finally:
         # Only this fixed non-prepared owned fixture may release its initial ref.
         # This is NOT cleanup guidance for the process-lifetime preparation Owner.
@@ -122,7 +136,8 @@ def main():
     abi.require(args.provider_profile.stat().st_size <= 65536, 'profile file bound')
     result = run(args.sha256, args.provider_profile.read_text(encoding='utf-8-sig'))
     if args.summary:
-        result = {k: v for k, v in result.items() if k not in ('exclusions', 'import_resolutions')}
+        result = {k: v for k, v in result.items() if k not in
+                  ('exclusions', 'import_resolutions', 'provider_evidence_before', 'provider_evidence_after')}
     print(json.dumps(result, indent=2))
 
 

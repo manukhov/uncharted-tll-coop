@@ -235,7 +235,7 @@ class PagesTests(unittest.TestCase):
 
 class RunTests(unittest.TestCase):
     def test_invalid_scope_precedes_any_os_api(self):
-        with patch.object(exam, 'WindowsAPI') as create:
+        with patch.object(exam, 'ModuleAPI') as create:
             with self.assertRaises(ValueError):
                 exam.run('a'*64, '{}')
             create.assert_not_called()
@@ -254,7 +254,7 @@ class RunTests(unittest.TestCase):
                 self.assertIsNone(base)
                 self.assertEqual(refs, [])
                 closed.extend(files)
-            with self.subTest(fault=fault), patch.object(exam, 'WindowsAPI', return_value=SimpleNamespace(kernel=kernel)), \
+            with self.subTest(fault=fault), patch.object(exam, 'ModuleAPI', return_value=SimpleNamespace(kernel=kernel)), \
                 patch.object(exam, 'configure_loader'), patch.object(exam, 'locked_snapshot', side_effect=snapshot), \
                 patch.object(exam.disk, 'manifest', side_effect=ValueError('artifact') if fault == 'artifact' else lambda *_: {}), \
                 patch.object(exam, '_release_owned', side_effect=release):
@@ -303,6 +303,11 @@ class RunTests(unittest.TestCase):
             events.append(('snapshot', str(path)))
             handles.append(100+len(handles))
             return b'artifact' if path == exam.ARTIFACT else snapshots[path]
+        def native(_, handle):
+            events.append(('native', handle))
+            if fault == 'last_native' and handle == 107:
+                raise ValueError('native path')
+            return '\\Device\\Fixture\\p'+str(handle)+'.dll'
         def bind(_, parsed, raw, imports, refs):
             events.append('bind')
             self.assertEqual(len(parsed.providers), 7)
@@ -310,7 +315,7 @@ class RunTests(unittest.TestCase):
             refs.extend([7, 7])
             if fault == 'bind':
                 raise ValueError('bind')
-            return [], []
+            return SimpleNamespace(bindings=(), resolutions=())
         def plan(*_, **kwargs):
             events.append('plan')
             self.assertIs(kwargs['header_base'], exam.mapped.HeaderBase.LOADED)
@@ -326,14 +331,23 @@ class RunTests(unittest.TestCase):
             if fault == 'compare':
                 raise ValueError('compare')
             return {'comparison_passed': True, 'admitted_for_install': False}
+        def evidence(_, identity, inventory, imports, paths, *, api):
+            events.append('evidence')
+            self.assertEqual(len(paths), 7)
+            self.assertEqual(paths['p6.dll'], '\\Device\\Fixture\\p107.dll')
+            if fault == 'evidence_before' or fault == 'evidence_after' and events.count('evidence') == 2:
+                raise ValueError('evidence')
+            return {'compared_bytes': 1234, 'entry_prefixes': 59}
         with ExitStack() as stack:
             for target, attr, kwargs in (
-                (exam, 'WindowsAPI', {'return_value': api}), (exam, 'configure_loader', {}),
+                (exam, 'ModuleAPI', {'return_value': api}), (exam, 'configure_loader', {}),
                 (exam, 'locked_snapshot', {'side_effect': snapshot}),
+                (exam, 'file_native_path', {'side_effect': native}),
                 (exam.disk, 'manifest', {'return_value': {'imports': []}}),
-                (exam, 'import_bindings', {'side_effect': bind}),
+                (exam, 'import_inventory', {'side_effect': bind}),
                 (exam.preparation, 'build_plan', {'side_effect': plan}),
                 (exam, '_zero_pages', {'side_effect': pages}),
+                (exam, 'compare_inventory', {'side_effect': evidence}),
                 (exam.mapped, 'compare', {'side_effect': compare})):
                 stack.enter_context(patch.object(target, attr, **kwargs))
             if fault:
@@ -350,20 +364,24 @@ class RunTests(unittest.TestCase):
     def test_complete_order_keeps_files_and_each_ref_through_both_page_reads(self):
         events = self.flow()
         self.assertEqual([e for e in events if isinstance(e, str)],
-            ['query', 'load', 'bind', 'plan', 'pages', 'compare', 'pages', 'query'])
+            ['query', 'load', 'bind', 'plan', 'pages', 'evidence', 'compare', 'evidence', 'pages', 'query'])
+        self.assertEqual([e for e in events if isinstance(e, tuple) and e[0] == 'native'],
+                         [('native', i) for i in range(101, 108)])
+        self.assertLess(events.index(('native', 107)), events.index('load'))
         self.assertEqual(events[-12:], [('free', BASE), 'query', ('free', 7), ('free', 7),
             *[('close', i) for i in range(107, 99, -1)]])
 
     def test_each_pre_and_post_load_failure_has_only_owned_cleanup(self):
-        for fault in ('last_hash', 'already_loaded', 'load', 'bind', 'plan', 'pages_before', 'compare', 'pages_after'):
+        for fault in ('last_hash', 'last_native', 'already_loaded', 'load', 'bind', 'plan',
+                      'pages_before', 'evidence_before', 'compare', 'evidence_after', 'pages_after'):
             with self.subTest(fault=fault):
                 events = self.flow(fault)
                 self.assertEqual([e for e in events if isinstance(e, tuple) and e[0] == 'close'],
                                  [('close', i) for i in range(107, 99, -1)])
-                loaded = fault not in ('last_hash', 'already_loaded', 'load')
+                loaded = fault not in ('last_hash', 'last_native', 'already_loaded', 'load')
                 self.assertEqual(events.count(('free', BASE)), int(loaded))
                 self.assertEqual(events.count(('free', 7)), 2 if loaded else 0)
-                if fault in ('last_hash', 'already_loaded'):
+                if fault in ('last_hash', 'last_native', 'already_loaded'):
                     self.assertNotIn('load', events)
 
 

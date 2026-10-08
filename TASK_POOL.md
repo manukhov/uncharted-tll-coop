@@ -11,7 +11,31 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest CONFIRMED / OWNED NEW-ARTIFACT LOADER COMPARISON (2026-10-08):
+Latest CONFIRMED / OWNED SEVEN-PROVIDER PARTIAL EVIDENCE (2026-10-08):
+New p99_preparation_provider_evidence.py replays the complete manifest root set
+against immutable ImportInventory before any process reads. Provider bytes are
+reparsed, full Resolution equality checked, paths require an exact owned keyset;
+terminal RVAs derive from pinned exports, never observed EAT/IAT. Native paths
+come from SAME locked file handles before LoadLibrary, not mapped-path output.
+Provider evidence now brackets artifact comparison while ALL refs/files remain
+held. Actual owned exam repeated3x:321153partial provider bytes per pass across
+7modules/59prefixes; artifact428693B/59IAT also matches, both pages stayZERO and
+artifact unloads. No artifact export/prepare/PIN/game call. Full Python758/758,
+CTest132/132; old actual ABI376071B/36IAT passes, both DLL hashes unchanged.
+Limits remain explicit:32B prefixes, selected header spans excluding ImageBase,
+complete export directories ONLY; not full provider bodies/import dependencies,
+API-set schema, file-object identity, atomic snapshot, PIN or post-return lease.
+Unused/forwarder-only selected providers without terminal anchors refuse rather
+than disappearing from coverage. Existing tmp/ remains untouched.
+NEXT: prepare the native-owned-host equivalent of this reviewed inventory and
+bind its selected provider expectations to the actual C++ preparation Request.
+Do not copy Python's VCRUNTIME selection or treat Request's same-build local ABI
+as a remote wire protocol. Keep artifact+dependency cap32 and independent hashes/
+native paths/bases/entry anchors; test mismatch refusal before publication.
+Target admission/complete dependency policy, held transaction/recovery/ACK/manual
+arm and positive real-main preparation remain outstanding. No visual grip fix.
+
+Previous CONFIRMED / OWNED NEW-ARTIFACT LOADER COMPARISON (2026-10-08):
 Added separately scoped p99_provider_preparation_profile.py / fixture.py. Strict
 new importer/scope, at most31dependencies (artifact reserves slot32). Lock/hash
 artifact+ALL selected files before load; resolve ALL59 expected addresses from

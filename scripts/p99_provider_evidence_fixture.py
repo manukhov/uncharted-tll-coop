@@ -14,7 +14,7 @@ import subprocess
 import sys
 import threading
 
-from p99_provider_evidence import ModuleAPI, compare_provider, native_path, PATH_CAPACITY
+from p99_provider_evidence import ModuleAPI, compare_provider, file_native_path
 from p99_wrist_abi_manifest import require, manifest, digest
 from p99_wrist_import_graph import MAX_TOTAL_FILES, Resolver, read_provider
 from p99_wrist_import_profile import IMPORTER, read_profile
@@ -45,13 +45,6 @@ def api_setup():
         fn = getattr(api.kernel, name)
         fn.restype, fn.argtypes = result, args
     return api
-
-
-def file_native_path(kernel, handle):
-    buffer = ct.create_unicode_buffer(PATH_CAPACITY)
-    count = kernel.GetFinalPathNameByHandleW(handle, buffer, len(buffer), 2)  # VOLUME_NAME_NT
-    require(0 < count < len(buffer) and len(buffer.value) == count, 'independent file path failed/truncated')
-    return native_path(buffer.value)
 
 
 def drop(kernel, handle):

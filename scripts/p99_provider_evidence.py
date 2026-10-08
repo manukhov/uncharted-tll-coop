@@ -41,6 +41,14 @@ def native_path(value):
     return value
 
 
+def file_native_path(kernel, handle):
+    """Expected native spelling from caller-owned file, NEVER observed mapping."""
+    buffer = ct.create_unicode_buffer(PATH_CAPACITY)
+    count = kernel.GetFinalPathNameByHandleW(handle, buffer, len(buffer), 2)  # VOLUME_NAME_NT
+    require(0 < count < len(buffer) and len(buffer.value) == count, 'independent file path failed/truncated')
+    return native_path(buffer.value)
+
+
 def comparison_spans(provider, entry_rvas):
     require(isinstance(provider, Provider), 'provider type')
     checked = read_provider(provider.raw, provider.sha256, provider.name, provider.base)

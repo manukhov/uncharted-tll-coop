@@ -8,14 +8,14 @@ This is not a cross-process import integrity/API-set/forwarder certificate.
 """
 import argparse
 import ctypes as ct
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 import json
 from itertools import islice
 from pathlib import Path, PureWindowsPath
 
 import p99_wrist_abi_manifest as disk
 import p99_wrist_mapped_image as mapped
-from p99_wrist_import_graph import MAX_TOTAL_FILES, Resolver, api_contract, module_name, read_provider
+from p99_wrist_import_graph import MAX_TOTAL_FILES, Provider, Resolution, Resolver, api_contract, module_name, read_provider
 from p99_wrist_import_profile import IMPORTER, read_profile
 from p99_wrist_mapped_windows import WindowsAPI, Reader
 
@@ -49,6 +49,23 @@ def import_bindings(kernel, profile, snapshots, imports, refs):
 
 
 def _import_bindings(kernel, profile, snapshots, imports, refs, *, importer):
+    inventory = _import_inventory(kernel, profile, snapshots, imports, refs, importer=importer)
+    return list(inventory.bindings), [asdict(row) for row in inventory.resolutions]
+
+
+@dataclass(frozen=True)
+class ImportInventory:
+    importer: str
+    providers: tuple[Provider, ...]
+    api_routes: tuple
+    resolutions: tuple[Resolution, ...]
+
+    @property
+    def bindings(self):
+        return tuple(row.binding for row in self.resolutions)
+
+
+def _import_inventory(kernel, profile, snapshots, imports, refs, *, importer):
     # Own a bounded version before callbacks and before the two passes below.
     # Iterators must not be exhausted into a silently empty binding result.
     imports = tuple({'dll': row['dll'], 'name': row['name']} for row in islice(imports, 4097))
@@ -64,7 +81,7 @@ def _import_bindings(kernel, profile, snapshots, imports, refs, *, importer):
     resolver = Resolver(providers, profile.api_routes)
     # Resolve ALL expected addresses before using any observed export oracle.
     resolved = [resolver.resolve(row['dll'], row['name'], importer=importer) for row in imports]
-    bindings, resolutions, sources = [], [], {}
+    sources = {}
     for row, resolution in zip(imports, resolved):
         dll = module_name(row['dll'])
         if dll not in sources:
@@ -75,9 +92,7 @@ def _import_bindings(kernel, profile, snapshots, imports, refs, *, importer):
         actual = kernel.GetProcAddress(sources[dll], row['name'].encode('ascii'))
         disk.require(actual == resolution.binding.address,
                      'local loader export differs from independent disk graph: '+dll+'!'+row['name'])
-        bindings.append(resolution.binding)
-        resolutions.append(asdict(resolution))
-    return bindings, resolutions
+    return ImportInventory(importer, tuple(resolver.providers.values()), tuple(profile.api_routes), tuple(resolved))
 
 
 def configure_loader(kernel):
@@ -93,6 +108,7 @@ def configure_loader(kernel):
         ('GetFileSizeEx', ct.c_int, [ct.c_void_p, ct.POINTER(ct.c_int64)]),
         ('ReadFile', ct.c_int, [ct.c_void_p, ct.c_void_p, ct.c_uint32, ct.POINTER(ct.c_uint32), ct.c_void_p]),
         ('CloseHandle', ct.c_int, [ct.c_void_p]),
+        ('GetFinalPathNameByHandleW', ct.c_uint32, [ct.c_void_p, ct.c_wchar_p, ct.c_uint32, ct.c_uint32]),
         ('GetCurrentProcess', ct.c_void_p, [])):
         fn = getattr(kernel, name)
         fn.restype, fn.argtypes = result, args

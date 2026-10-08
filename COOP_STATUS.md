@@ -38565,3 +38565,99 @@ keep full code/import dependency/API-set/ABA/lifetime limitations explicit. Then
 target-specific inventory, held verification, actual transaction/recovery/ACK and
 manual arm plus positive real-main preparation remain. No source capture or
 visible Nadine pistol-grip repair this turn.
+
+## 2026-10-08 — P99 141ABA973: bracket the artifact comparison with seven-provider memory evidence
+
+STATIC / owned-provider evidence integration. Added
+scripts/p99_preparation_provider_evidence.py; shared import helper now also
+returns an immutable ImportInventory containing canonical providers, exact
+resolutions, importer and explicit API routes. Old public bindings API retains
+its previous list/JSON output. No game/runtime/flags changes, new game semantic
+claims, launch/input/injection or IDB labeling. No artifact export is called.
+
+Before the owned run, prediction was written: both provider passes must match
+321153bytes across seven providers/59 terminal entry prefixes, bracketing the
+existing428693B/59IAT artifact comparison. Publication pages must stayZERO and
+artifact cleanup must unload it. Any mismatched path, byte, process identity,
+mapping permission or missing root must refuse, not shrink the expected coverage.
+
+Alternatives distinguished by source audit and negative tests:
+
+- Reconstructing expected roots only from returned resolutions could hide a lost
+  import. The caller supplies the independently validated artifact manifest roots;
+  require exact normalized key inventory/count, no duplicate/missing/extra row.
+- A frozen outer type is not a certificate. Resolver reparses each Provider's
+  pinned bytes, then EVERY Resolution is replayed and compared in full, including
+  binding, terminal owner/RVA/hash and intermediate steps. Forged size/base/entry/
+  step values cannot become process-read expectations merely through their type.
+- Expected native paths cannot come from observed K32GetMappedFileNameW output.
+  Query GetFinalPathNameByHandleW(VOLUME_NAME_NT=2) on each SAME locked snapshot
+  handle before loading the artifact; copy exact strings and require exact name
+  keyset/no duplicate path. Comparison observes mapping paths without normalizing
+  mismatches away. The helper moved to p99_provider_evidence.py and is reexported
+  by the old fixture; its ctypes signature is explicitly configured for both.
+- Selecting only providers with convenient terminal entries silently omits others.
+  This narrow verifier requires at least one terminal anchor for EVERY selected
+  provider. Unused/forwarder-only selections refuse explicitly; metadata-only
+  support is not invented. All seven current selections have terminal entries.
+- First-pass evidence cannot authorize a later read. Provider comparisons run
+  before AND after the artifact comparison, while every file/ref remains held.
+  Even two matching passes do not exclude intervening ABA or supply a target lease.
+
+compare_inventory owns bounded providers/resolutions/roots and native path strings,
+validates graph equality and ALL prefix/span expectations before its first memory
+read, then invokes the existing compare_provider for each selected module. Each
+module checks fresh PID/creation and exact mapping paths around exact readonly
+metadata/RX prefix reads. Multiple imports to one terminal RVA share one32B prefix
+read, but independent root cardinality remains unchanged. Result reports separate
+root count, prefix count, provider count and copied-byte count; all full-provider/
+closure/API-set/file-object/lifetime/atomic/admission flags remain FALSE.
+
+Coverage per pass for the unchanged reviewed local profile:
+
+- kernel32.dll:28prefixes,58768bytes
+- ntdll.dll:1prefix,78289bytes
+- vcruntime140.dll (Python312 path):11prefixes,3092bytes
+- vcruntime140_1.dll:1prefix,732bytes
+- ucrtbase.dll:13prefixes,55520bytes
+- bcrypt.dll:4prefixes,2712bytes
+- msvcp140.dll:1prefix,122040bytes
+
+Total321153bytes includes selected DOS/NT/section spans (NOT ImageBase or a full
+header certificate), complete export directories and32-byte terminal prefixes.
+The large MSVCP count is mostly export metadata, NOT a complete function/body
+audit. Existing explicit file hashes, paths and two CRT routes from the preceding
+entry are unchanged; hashes were not learned from mapped bytes. No process write,
+protection change, loader PIN or export invocation is added by this evidence.
+
+CONFIRMED (owned fixture ONLY): initialPID22444 passed. Final three fresh runs
+PID20396/23344/3124 each matched321153provider bytes per pass/59prefixes/seven
+modules and428693artifact bytes/59IAT. Both page observations were zero and stable;
+artifact unloaded after comparison. Final report separates partial provider
+evidence from full-provider integrity and still says admitted_for_install=false.
+This is local Python-host evidence, not target-game provider selection or lifetime.
+
+Validation:10new evidence tests, expanded existing19 fixture tests. Coverage
+includes missing/duplicate/forged roots/resolutions, provider reparse, wrong path
+keysets, unused/forwarder-only refusal, corruption in each selected provider's
+header/export/prefix, last-provider path/allocation/guard/short-read failures,
+fresh second-pass refusal after unload, and owned path strings surviving caller
+mutation during the first read. Orchestration verifies all seven file-path
+queries happen before load; last-path and either evidence-pass failure still
+perform all owned cleanup. Independent review reran64targeted tests with no
+remaining blocker. Full Python758/758, CTest132/132; default+old ABI builds up to
+date. Old actual ABI fixture still matches376071B/36IAT after helper extraction.
+New DLL SHA8532ae918ef2c6d6f56dc2e3fe34318acd02d18b68b3a94a4f67e181ebbca3d1 and
+old a81ba7f43c543c731942c999f8b6aa9ed8f2bc0cda96c41ab96882257e22aae5 unchanged.
+No game/fixture process remains; unrelated tmp/ preserved. Reproduce with the
+same p99_provider_preparation_fixture.py command/profile as the preceding entry.
+
+LIMITS / NEXT: bind these graph-checked selected-provider expectations to actual
+C++ preparation in a native-owned host. Establish its own independently reviewed
+CRT/provider inventory, rather than copying Python's VCRUNTIME path. Keep Request
+a same-build local ABI, not an implicit remote wire protocol; artifact index0 plus
+dependencies must fit32. Preserve independent file/native-path/base/entry/hash
+selection and prove mismatch refusal before publication. This does not eliminate
+the separate complete-dependency/target-admission policy, held transaction,
+uncertain recovery, ACK/manual arm and positive real-main preparation obligations.
+No source capture, installation or visible Nadine pistol-grip repair this turn.
