@@ -11,7 +11,32 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest CONFIRMED / OWNED SEVEN-PROVIDER PARTIAL EVIDENCE (2026-10-08):
+Latest CONFIRMED / NATIVE EIGHT-RECORD PREPARATION REFUSAL (2026-10-08):
+Native-owned padded host now constructs the actual same-build Request with
+artifact0 + seven System32 providers. Offline p99_native_preparation_inventory.py
+generates test-only pins/RVAs from independent disk hashes and all59 manifest
+imports; synthetic graph bases are never emitted. Native VCRUNTIME140 hash is
+d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7, NOT Python's
+052ad6... profile. Files are locked/hash-checked before artifact load; native
+paths derive from those handles, bases from owned fullpath refs. 87partial spans
+(321153B)/59terminal prefixes and59IAT match before/after the real entry call.
+Owner itself verifies8anchors, NOT59imports or full dependency completeness.
+Normal/race reaches predicted SnapshotRefused7 at owned non-RX BSS, both pages
+zero/writable. Each8prefix/last-path/last-base Request fault returns6. Wrong last
+file pin refuses before load; last-span/IAT expectation faults refuse before
+entry with exact failure-stage counters. Ambiguous failed ref acquisition is
+retained until fixture exit, never released as a known-owned token.
+15new native tests pass, including3x repetition; final CTest147/147, Python767/767.
+Production/new/old DLL source unchanged; pinned new+old DLL hashes unchanged.
+NEXT: bind the complete immutable preparation-artifact comparison to this native
+host's held-file/ref preflight (currently native checks artifact entry/pages/IAT,
+NOT its complete428693immutable bytes). Reuse the separately paired manifest/
+mapped policy; keep loaded-header/DIR64 expectations independent of observations.
+This is NOT game admission. Positive real-main Snapshot/FLS/publication, complete
+dependency/target policy and held transaction/recovery/ACK/manual arm remain open.
+No game launch, source capture or visual pistol-grip correction. tmp/ untouched.
+
+Previous CONFIRMED / OWNED SEVEN-PROVIDER PARTIAL EVIDENCE (2026-10-08):
 New p99_preparation_provider_evidence.py replays the complete manifest root set
 against immutable ImportInventory before any process reads. Provider bytes are
 reparsed, full Resolution equality checked, paths require an exact owned keyset;

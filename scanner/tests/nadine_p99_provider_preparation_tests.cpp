@@ -5,6 +5,9 @@
 #include <memory>
 #include <atomic>
 #include <thread>
+#if defined(TLL_P99_NATIVE_INVENTORY)
+#include "nadine_p99_native_inventory_support.h"
+#endif
 namespace boot=coop::p99_provider_preparation;
 namespace pp=coop::p99_provider;
 #if defined(TLL_P99_BOOTSTRAP_PAD)
@@ -28,7 +31,15 @@ int wmain(int argc,wchar_t** argv){
     if(argc!=2)return 2;const std::wstring mode=argv[1];
     const std::array<std::wstring_view,19> modes{L"empty",L"null",L"noaccess",L"partial",L"unaligned",L"short",L"version",L"reserved",L"oversize",
         L"tail",L"path",L"duplicate",L"wrong-self",L"wrong-main",L"wrong-creation",L"wrong-size",L"normal",L"prefix",L"race"};
-    if(std::find(modes.begin(),modes.end(),mode)==modes.end())return 2;
+    bool recognized=std::find(modes.begin(),modes.end(),mode)!=modes.end();
+#if defined(TLL_P99_NATIVE_INVENTORY)
+    recognized=mode==L"normal" || mode==L"race";
+    std::size_t bad_prefix=native_inventory::pins.size();
+    for(std::size_t i=0;i<native_inventory::pins.size();++i)if(mode==L"native-prefix-"+std::to_wstring(i)){recognized=true;bad_prefix=i;}
+    recognized=recognized || mode==L"native-path-last" || mode==L"native-base-last" || mode==L"native-hash-last" ||
+        mode==L"native-evidence-span" || mode==L"native-evidence-iat";
+#endif
+    if(!recognized)return 2;
 #if defined(TLL_P99_BOOTSTRAP_PAD)
     g_padding[0]=1; // Own writable BSS, never executable retail data.
 #endif
@@ -41,6 +52,20 @@ int wmain(int argc,wchar_t** argv){
     const auto entry=disk.named("TllP99PrepareProvidersV1"),offer=disk.named("TllP99WristPreparedV1"),providers=disk.named("TllP99ProviderPreparedV1");
     if(!check(entry && offer && providers && offer!=providers && disk.zero_page(offer) && disk.zero_page(providers) &&
         disk.prefix(entry,selected.prefix),"two distinct zero RW disk sections and unrelocated RX entry prefix"))return 1;
+#if defined(TLL_P99_NATIVE_INVENTORY)
+    if(!check(entry==native_inventory::entry && offer==native_inventory::offer && providers==native_inventory::providers,
+              "compiled independent artifact RVAs"))return 1;
+    if(!check(!GetModuleHandleW(filename.c_str()),"fresh owned host has no preparation artifact before explicit load"))return 1;
+    native_fixture::Inventory inventory;
+    const auto inventory_opened=inventory.open(selected,mode==L"native-hash-last");
+    if(mode==L"native-hash-last"){
+        check(!inventory_opened && inventory.verified_files==native_inventory::pins.size()-1 &&
+              inventory.hash_refused_index==native_inventory::pins.size()-1 && !GetModuleHandleW(filename.c_str()),
+              "last-provider hash mismatch refuses before artifact loading, after all preceding files verified");
+        std::cout<<checks<<" checks, "<<failures<<" failures; PRELOAD_HASH_REFUSED\n";return failures?1:0;
+    }
+    if(!check(inventory_opened,"all eight independently pinned files locked before loading artifact"))return 1;
+#endif
     HMODULE loaded=LoadLibraryExW(filename.c_str(),nullptr,LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR|LOAD_LIBRARY_SEARCH_SYSTEM32);
     if(!check(loaded!=nullptr,"load only new inert artifact"))return 1;
     const auto base=reinterpret_cast<std::uintptr_t>(loaded);
@@ -48,9 +73,32 @@ int wmain(int argc,wchar_t** argv){
     if(!check(reinterpret_cast<std::uintptr_t>(prepare)==base+entry &&
         reinterpret_cast<std::uintptr_t>(GetProcAddress(loaded,"TllP99WristPreparedV1"))==base+offer &&
         reinterpret_cast<std::uintptr_t>(GetProcAddress(loaded,"TllP99ProviderPreparedV1"))==base+providers,"loaded locators equal independent disk RVAs"))return 1;
-    check(empty_page(base,base+offer) && empty_page(base,base+providers),"DllMain never prepares either page");
+    if(!check(empty_page(base,base+offer) && empty_page(base,base+providers),"DllMain never prepares either page"))return 1;
     auto request=std::make_unique<boot::Request>();request->count=1;request->artifact=base;request->artifact_bytes=selected.bytes;
     selected.base=base;selected.anchor_rva=entry;request->selected[0]=selected;
+#if defined(TLL_P99_NATIVE_INVENTORY)
+    if(!check(inventory.acquire(*request),"all seven fullpath references and exact native mapping paths"))return 1;
+    std::size_t evidence_before=0;
+    const auto evidence_fault=mode==L"native-evidence-span"?native_fixture::EvidenceFault::LastSpan:
+        mode==L"native-evidence-iat"?native_fixture::EvidenceFault::LastIat:native_fixture::EvidenceFault::None;
+    const bool evidence_ok=inventory.evidence(*request,evidence_before,evidence_fault);
+    if(evidence_fault!=native_fixture::EvidenceFault::None){
+        check(!evidence_ok,"last expected span/IAT mismatch refuses without invoking any preparation entry");
+        std::size_t total=0;for(const auto& span:native_inventory::spans)total+=span.size;
+        check(evidence_fault==native_fixture::EvidenceFault::LastSpan?
+            (evidence_before==total-native_inventory::spans.back().size && !inventory.matched_bindings):
+            (evidence_before==total && inventory.matched_bindings==native_inventory::bindings.size()-1),
+            "preflight refusal occurs at the selected last span/IAT, not an unrelated earlier boundary");
+        check(empty_page(base,base+offer) && empty_page(base,base+providers),"pre-entry refusal keeps both pages zero/writable");
+        check(inventory.release(),"release caller fullpath refs on pre-entry refusal");
+        check(FreeLibrary(loaded)!=FALSE,"release initial artifact ref without preparation");
+        MEMORY_BASIC_INFORMATION state{};
+        check(VirtualQuery(reinterpret_cast<void*>(base),&state,sizeof(state))==sizeof(state) && state.State==MEM_FREE,
+              "preflight refusal does not retain/PIN artifact");
+        std::cout<<checks<<" checks, "<<failures<<" failures; PRE_ENTRY_EVIDENCE_REFUSED\n";return failures?1:0;
+    }
+    if(!check(evidence_ok,"all independent provider spans and 59 root IAT bindings before entry"))return 1;
+#endif
     request->pid=GetCurrentProcessId();FILETIME start{},exit{},kernel{},user{};
     if(!check(GetProcessTimes(GetCurrentProcess(),&start,&exit,&kernel,&user)!=FALSE,"actual process creation"))return 1;
     request->creation=(std::uint64_t{start.dwHighDateTime}<<32)|start.dwLowDateTime;
@@ -61,10 +109,10 @@ int wmain(int argc,wchar_t** argv){
 #if defined(TLL_P99_BOOTSTRAP_PAD)
     MEMORY_BASIC_INFORMATION first_region{};
     const auto first_address=request->main+coop::p99_wrist_code_manifest::kRegions[0].rva;
-    check(VirtualQuery(reinterpret_cast<void*>(first_address),&first_region,sizeof(first_region))==sizeof(first_region) &&
+    if(!check(VirtualQuery(reinterpret_cast<void*>(first_address),&first_region,sizeof(first_region))==sizeof(first_region) &&
         first_region.AllocationBase==reinterpret_cast<void*>(request->main) && first_region.Type==MEM_IMAGE &&
         (first_region.Protect==PAGE_READWRITE || first_region.Protect==PAGE_WRITECOPY),
-        "first required retail region is owned non-RX BSS, so actual Snapshot reader must refuse");
+        "first required retail region is owned non-RX BSS, so actual Snapshot reader must refuse"))return 1;
 #endif
     auto expected=boot::Result::InputRefused;
     if(mode==L"empty"){request->count=0;request->selected[0]={};}
@@ -84,6 +132,14 @@ int wmain(int argc,wchar_t** argv){
         expected=boot::Result::ResourcesRefused;
 #endif
     }
+#if defined(TLL_P99_NATIVE_INVENTORY)
+    // All expectations above have already passed. Fault only the owned Request,
+    // never a loaded image. Owner must reject at provider stage before publication.
+    const auto original=std::make_unique<boot::Request>(*request);
+    if(bad_prefix<request->count){request->selected[bad_prefix].prefix[0]^=1;expected=boot::Result::ProviderRefused;}
+    if(mode==L"native-path-last"){request->selected[request->count-1].native_path[8]^=1;expected=boot::Result::ProviderRefused;}
+    if(mode==L"native-base-last"){request->selected[request->count-1].base=0x10000000000ULL;expected=boot::Result::ProviderRefused;}
+#endif
     void* unreadable=nullptr;
     if(mode==L"noaccess" || mode==L"partial"){
         unreadable=VirtualAlloc(nullptr,sizeof(boot::Request),MEM_RESERVE|MEM_COMMIT,mode==L"noaccess"?PAGE_NOACCESS:PAGE_READWRITE);
@@ -109,6 +165,14 @@ int wmain(int argc,wchar_t** argv){
     check(result==static_cast<std::uint32_t>(expected),"actual full-TU refusal at predicted stage");
     check(prepare(nullptr,sizeof(*request))==static_cast<std::uint32_t>(boot::Result::Reused),"repeat refuses before dereferencing caller input");
     check(empty_page(base,base+offer) && empty_page(base,base+providers),"both pages stay zero/writable after actual refusal");
+#if defined(TLL_P99_NATIVE_INVENTORY)
+    std::size_t evidence_after=0;
+    check(inventory.evidence(*original,evidence_after) && evidence_after==evidence_before,
+          "all provider spans and IAT bindings still match after refused preparation");
+    check(inventory.release(),"release only caller-owned provider references after both calls join");
+    std::cout<<"selected="<<native_inventory::pins.size()<<" prefixes="<<native_inventory::prefix_count
+             <<" imports="<<native_inventory::bindings.size()<<" providerBytesPerPass="<<evidence_after<<'\n';
+#endif
     if(unreadable)check(VirtualFree(unreadable,0,MEM_RELEASE)!=FALSE,"release only own input page");
     check(FreeLibrary(loaded)!=FALSE,"release initial artifact reference only");
     MEMORY_BASIC_INFORMATION mapping{};check(VirtualQuery(reinterpret_cast<void*>(base),&mapping,sizeof(mapping))==sizeof(mapping),"inspect artifact lifetime after own loader release");

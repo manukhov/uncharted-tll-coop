@@ -38661,3 +38661,117 @@ selection and prove mismatch refusal before publication. This does not eliminate
 the separate complete-dependency/target-admission policy, held transaction,
 uncertain recovery, ACK/manual arm and positive real-main preparation obligations.
 No source capture, installation or visible Nadine pistol-grip repair this turn.
+
+## 2026-10-08 native owned inventory enters actual preparation before 0x141ABA973 source exam
+
+CONFIRMED (owned native fixture ONLY): the reviewed selected-provider inventory
+now enters the existing full-TU TllP99PrepareProvidersV1 through a same-build typed
+Request. This advances the admission fixture, NOT the Nadine grip correction.
+No tll.exe, injection, input, native adapters, observer/worker or game hooks ran.
+No game semantic finding or new IDB label; existing source frontier141ABA973/
+return141ABA978 is unchanged. Production/preparation/old-ABI source unchanged.
+
+Added scripts/p99_native_preparation_inventory.py and separate optional native
+CMake test target. The generator is disk-only: independently supplied artifact
+SHA, separately scoped profile and pinned provider files feed the strict new
+ten-export manifest and existing export resolver. All59 root imports resolve
+before emitting8pins,87partial-span descriptors,59IAT bindings and page/entry
+RVAs. Temporary synthetic graph bases are NEVER emitted; runtime addresses are
+owned native-host references plus independently derived RVAs. Generated header
+is immutable test data, NOT Request serialization, remote IPC or auto-discovery.
+
+Native profile schema p99-native-preparation-inventory-v1, scope
+owned-native-preparation-fixture-only, same providers/api_routes row grammar.
+It rejects the Python fixture schema/scope and non-System32 paths. Current native
+fixture explicitly admits only C:\Windows\System32, and requires exactly7provider
+pins/59bindings; the general parser/Request capacity remains31dependencies+artifact.
+All files were read and checked locally; hashes are explicit build/profile IDs,
+not Authenticode or whole mapped-file identity certificates. Reproducible pins:
+
+- kernel32.dll:7db088338b81ad0a5030ae73adb3202004ccedd79d92a87ceb91483ba09e6728
+- ntdll.dll:3063ca9a91d64bfb319c805def6c7f89158d4f33a3167b728c7421cd26b90a5b
+- vcruntime140.dll:d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7
+- vcruntime140_1.dll:a7146c08f89fe5b04541ab507cdb59ff7b44534d4ba3c668a426c6450a03434e
+- ucrtbase.dll:185b56b4f32ee97a308471bf0e4a7615f861958b2d1231386d7ef07193db9808
+- bcrypt.dll:54ea6103870ed2799daa841a2103ce7b63146d0a66db326a16976549a7f53924
+- msvcp140.dll:7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca
+
+Two explicit routes for importer tll_p99_provider_preparation.dll:
+api-ms-win-crt-heap-l1-1-0.dll and api-ms-win-crt-runtime-l1-1-0.dll ->ucrtbase.dll.
+Unlike Python-host VCRUNTIME140 SHA052ad6a20d375957e82aa6a3c441ea548d89be0981516ca7eb306e063d5027f4,
+native host uses the distinct System32 d1f422... above. No loader lookup chooses
+the expected hash; a differing runtime file/path refuses.
+
+STATIC / prediction written before owned tests (reports local prediction):
+actual entry order is Resources ->Owner ->Snapshot ->FLS ->publication. With8
+valid records and all59 root bindings matching, Owner must succeed but Snapshot
+must reject the padded EXE's first stock region: own MEM_IMAGE RW BSS, never RX.
+This predicts result7, not Prepared0/FlsRefused8. Prefix/native-path/base faults
+in the Request predict earlier ProviderRefused6. File hash/preflight byte/IAT
+mismatches must not invoke entry at all. The native non-RX extent assertion now
+terminates a test on failure, rather than continuing into the entry.
+
+Native flow and competing interpretations excluded:
+
+- Lock/hash artifact+all7provider files before explicit LoadLibraryExW; compare
+  hashes and extents against compiled pins. Artifact must be initially absent.
+  Native paths derive from the SAME held file handles before loading, never from
+  mapped-path output. References afterward use full-path GetModuleHandleExW, not
+  a base-name search or additional provider LoadLibrary. Exact native mapping
+  spelling is checked; all caller refs/files stay held through both evidence passes.
+- Verify87partial spans/321153B and59root IAT cells before AND after the entry.
+  Spans cover selected headers (excluding ImageBase), complete export directory
+  and59terminal32B prefixes. Chunk reads require same allocation/MEM_IMAGE/exact
+  RO or RX, with before/after MEMORY_BASIC_INFORMATION equality and exact RPM size.
+  IAT expectations use provider index+disk-resolved RVA, not GetProcAddress.
+- Construct8 actual Selection records: artifact first, one deterministic trusted
+  terminal prefix per provider. Owner itself validates only8anchors; it is NOT
+  the59root verifier. A nonzero Request hash is only a claim identifier, and
+  omitting a dependency can remain syntactically valid. Do not misreport these
+  as Owner's independent hash/completeness enforcement.
+- Fault only caller Request/expected test data, never mapped images. Post-entry
+  evidence uses an owned unmodified original Request. Race joins both callers
+  before dropping any input/file/ref. Caller references are released once;
+  ambiguous failed acquisitions remain until process exit. DLL Owner's own
+  refs/PINs/resources are not released or retried on refusal.
+- Self remains mapped after dropping initial caller DLL ref because real Resources
+  self-PIN has already happened. Remaining OS/CRT mappings are NOT an independent
+  proof of their PIN/lifetime: the host also imports some of them.
+
+CONFIRMED results: normal count8 request returns SnapshotRefused7; race returns
+exactly one Reused1 +one7. Each of8 Request prefix faults and last-provider path/
+base faults returns ProviderRefused6. Both4096B pages stay zero/writable; partial
+provider evidence/IAT still match afterward. Last file-pin mismatch refuses before
+artifact load; last expected span/IAT faults refuse before entry and artifact
+unloads without PIN. Exact failed-hash index and preceding-span/IAT counters
+prevent an unrelated earlier failure passing as the intended negative result.
+
+Validation:9new generator tests cover profile separation/System32 restriction,
+31dependency cap, exact graph roots and deduplicated anchors, pin failures,
+missing providers/routes/symbols, unused/forwarder-only refusal, duplicate IAT,
+artifact hash validation and deterministic header without absolute bases.
+15native cases pass (also repeated3x); final Python767/767, CTest147/147, build
+clean. Independent read-only review found no remaining blocker; exact negative
+failure attribution was tightened following review. New artifact SHA remains
+8532ae918ef2c6d6f56dc2e3fe34318acd02d18b68b3a94a4f67e181ebbca3d1; old ABI remains
+a81ba7f43c543c731942c999f8b6aa9ed8f2bc0cda96c41ab96882257e22aae5. tmp/ untouched.
+
+Reproduction (generated files/profile are ignored local artifacts; pin inputs
+above are durable). Generate with py -3.12 scripts/p99_native_preparation_inventory.py
+--dll scanner/build/tll_p99_provider_preparation.dll --sha256 8532ae918ef2c6d6f56dc2e3fe34318acd02d18b68b3a94a4f67e181ebbca3d1
+--provider-profile reports/p99_native_preparation_profile_20261008.json
+--output-dir scanner/build/p99-native-inventory. Configure CMake with
+TLL_P99_NATIVE_INVENTORY_DIR=<absolute scanner/build/p99-native-inventory path>,
+build tll_p99_bootstrap_native_tests, run ctest -R nadine_p99_bootstrap_native_.
+Without explicit directory the optional target/tests are absent; default runtime
+and old8-export artifact contracts remain unchanged.
+
+LIMITS / NEXT: native preflight does NOT yet compare the entire428693immutable
+artifact bytes (that is still separately exercised by the Python-owned fixture).
+Bind that complete comparison to this native host's held files/refs, preserving
+the new artifact's paired manifest/mapped policy, loaded-header expectations,
+DIR64 fixups and separate zero publication pages. Do not count entry/pages/IAT
+as complete code integrity. Positive real-main Snapshot/FLS/publication, complete
+provider/dependency and target policy, held transaction/uncertain recovery/ACK/
+manual arm remain open. Full provider bodies, API-set schema, file-object
+identity, atomic snapshot and target-game admission are still NOT established.

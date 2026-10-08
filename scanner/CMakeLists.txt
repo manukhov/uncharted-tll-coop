@@ -135,7 +135,27 @@ target_link_libraries(tll_p99_provider_preparation PRIVATE tll_p99_provider_wind
 set_target_properties(tll_p99_provider_preparation PROPERTIES PREFIX "")
 
 include(CTest)
+set(TLL_P99_NATIVE_INVENTORY_DIR "" CACHE PATH "Explicit generated TEST-ONLY native inventory header directory")
 if(BUILD_TESTING)
+    if(TLL_P99_NATIVE_INVENTORY_DIR)
+        if(NOT EXISTS "${TLL_P99_NATIVE_INVENTORY_DIR}/nadine_p99_native_inventory_generated.h")
+            message(FATAL_ERROR "Generate/review native inventory first; no automatic profile discovery")
+        endif()
+        add_executable(tll_p99_bootstrap_native_tests tests/nadine_p99_provider_preparation_tests.cpp)
+        target_include_directories(tll_p99_bootstrap_native_tests PRIVATE src "${TLL_P99_NATIVE_INVENTORY_DIR}")
+        target_compile_features(tll_p99_bootstrap_native_tests PRIVATE cxx_std_20)
+        target_compile_definitions(tll_p99_bootstrap_native_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX PSAPI_VERSION=2
+            TLL_P99_BOOTSTRAP_PAD=1 TLL_P99_NATIVE_INVENTORY=1)
+        target_compile_options(tll_p99_bootstrap_native_tests PRIVATE /W4 /permissive- /EHsc)
+        target_link_libraries(tll_p99_bootstrap_native_tests PRIVATE bcrypt)
+        add_dependencies(tll_p99_bootstrap_native_tests tll_p99_provider_preparation)
+        foreach(native_case normal race native-path-last native-base-last native-hash-last native-evidence-span native-evidence-iat
+                native-prefix-0 native-prefix-1 native-prefix-2 native-prefix-3 native-prefix-4
+                native-prefix-5 native-prefix-6 native-prefix-7)
+            add_test(NAME nadine_p99_bootstrap_native_${native_case} COMMAND tll_p99_bootstrap_native_tests ${native_case})
+            set_tests_properties(nadine_p99_bootstrap_native_${native_case} PROPERTIES TIMEOUT 20)
+        endforeach()
+    endif()
     foreach(bootstrap_kind small padded)
         add_executable(tll_p99_bootstrap_${bootstrap_kind}_tests tests/nadine_p99_provider_preparation_tests.cpp)
         target_include_directories(tll_p99_bootstrap_${bootstrap_kind}_tests PRIVATE src)
