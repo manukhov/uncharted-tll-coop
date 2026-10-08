@@ -2,6 +2,12 @@
 
 ## Current user priority / handoff (2026-09-20)
 
+USER PRIORITY RESET (2026-10-08): direct arm/hand repair, NOT further provider/
+loader infrastructure. User confirms BOTH current defects: left arm/forearm
+through torso and incorrect right-hand pistol grip. All later infrastructure
+NEXT statements are parked history, not authority to continue that detour.
+Keep left support-target/arm chain separate from the21 right distal rows.
+
 Continue the local Nadine P99 grip repair, including the reported lag/crash.
 The user self-closed the last unchanged PID18204; no late-arm source exam ran.
 Do not repeat that diagnostic by default. Appearance Nadine was user-confirmed;
@@ -38775,3 +38781,113 @@ as complete code integrity. Positive real-main Snapshot/FLS/publication, complet
 provider/dependency and target policy, held transaction/uncertain recovery/ACK/
 manual arm remain open. Full provider bodies, API-set schema, file-object
 identity, atomic snapshot and target-game admission are still NOT established.
+
+### 2026-10-08 STATIC / hand repair resumed: NPC right-grip geometry and native left support constraint
+
+User explicitly confirms BOTH symptoms: the left arm/forearm crosses the torso
+and the right hand/fingers hold the pistol incorrectly. Provider/loader work is
+PARKED. This entry concerns actual pose selection and terminal arm geometry,
+not installation infrastructure. Existing weapon attachments are preserved.
+
+**Right hand: a distinct native candidate, not a ready correction.**
+`scripts/p99_npc_grip_candidate.py` resolves the shipped nonadditive, one-sample
+NPC weapon-grip clip `4CAA7420`, raw `anim-elena-combat-dlc.pak+621480`, through
+the authored Elena `D0B04A60` -> Nadine `C67A06F1` row149 (`+1C40`, map `+2AA0`,
+profile0). Twenty mode1 records and mode3 right-prop30 produce exactly palm28,
+prop30 and the19 right fingers. The corrected opcode24 model is retained. Whole
+assets, raw clip, group programs and row/map are pinned; no retail code runs.
+The native inner composition is already known to be arms then hand, with normal
+masked blends; unresolved type5 weights prevent calling weight1 a live pose.
+Candidate local/prop-relative f32 hashes are respectively
+`e538153dfe8053ab47c757d7b1fb8c5be2bf116e1b4945ba0306bccfe2a69fe6` and
+`c3ecf80cc504bc5442f9981b82f3e67e599dc109fde7cc5282be27ab6c6be360`.
+Versus conditional directR124+B8, prop30 differs by15.474411deg and the largest
+local finger delta is68.199603deg at139. This is not an alias of the old donor.
+
+`scripts/p99_npc_grip_contact.py` compares three explicit alternatives on the
+SAME Nadine skin/P99 mesh, not distances to Chloe's differently proportioned
+bones. All use the4328-vertex/8026-triangle wrist-extended cohort;494 touched
+helper-supported vertices remain excluded. Root/prop identity is still an
+explicit assumption and the827-triangle LOWER grip patch is not the whole gun.
+
+| Conditional pose | Crossing pairs | Removed / new pairs | Mean unsigned distance |
+| --- | ---: | ---: | ---: |
+| Current directR124+B8 |315|--|0.0228381|
+| Full native NPC hand |175|313 /173|0.0185847|
+| NPC fingers only, current palm/prop |813|265 /763|0.0146277|
+| NPC palm/prop only, current fingers |104|313 /102|0.0329351|
+
+STATIC REJECTED as a standalone correction: copying only NPC fingers while
+preserving the current attachment. It preserves palm/prop/wrist frames exactly
+but adds763 new crossings, notably pinky366 and ring214. A smaller unsigned
+distance is not evidence of better contact. Full native hand is also NOT a clean
+fix: ring crossings increase41->76 and173 pairs are new. Palm/prop-only has fewer
+crossings partly alongside increased separation; it must not be ranked as a
+successful grasp from the count alone. No right-hand variant is runtime-admitted.
+Ignored reports: `p99-npc-grip-{candidate,contact,fingers,palm-prop}-20261008.json`.
+Focused candidate/contact tests9/9 and existing wrist-surface tests18/18 pass.
+
+**Left arm: isolate the distal constraint instead of copying an arm/world pose.**
+Fresh MCP disassembly reconfirms `WeaponIK_Apply 1418F1780` and its four stock
+getter calls `1418F1872/1896/18A6/18B5`, followed by the first pointer read at
+`1418F18BD`. For selector1 its target remains
+`rightProp * inverse(leftProp) * leftWrist`, consumed by left `SolveArmIk` at
+`1418F1C43`, followed by wrist rotation and commits `1418F1DEE/1DF9`.
+On the named Nadine rigid chain wrist25 -> palm27 -> prop29, this reduces to
+`desiredLeftWrist = rightProp * C`, where `C = inverse(localPalm27 * localProp29)`.
+All proximal ancestry cancels. A donor constraint can still be mesh-incompatible,
+but it does NOT inherently copy the donor's forearm length or world wrist basis.
+The current P99 D350 layer has no left palm/prop rows; altering its21 right rows
+cannot repair this inherited left constraint.
+
+Native NPC UP `036F20E5` and DOWN `5E67B1FA`, through the same authored row149,
+provide target-space endpoints:
+
+- UP C: P=(0.054486509,-0.054372347,-0.027894534),
+  Q=(0.282013521,-0.124050930,-0.900677126,0.306366538).
+- DOWN C: P=(0.070765160,-0.008410480,-0.018463762),
+  Q=(0.438439192,0.066494868,-0.787632879,0.427766239).
+
+Palm27 is identical; authored prop29 changes the constraint by34.176533deg /
+0.049663137 asset units. `NpcAnimOverlay_SelectWeaponUpDown 14051B370` commits
+the up/down category at `14051B487 ->1417F9150`, and the authored down mapping
+is `036F20E5 ->5E67B1FA`. This is independent data/string/call-graph evidence,
+not a guess based only on the clip filename. Type5 weight and mapping Player ADS
+to NPC UP remain unproven; do NOT enable a two-state/ADS correction by assumption.
+
+**HYPOTHESIS / pre-launch prediction for the narrow DOWN support experiment.**
+Scope only local owner0/screen0, lookD27C074F, underlyingC39CA709/580, exact P99
+art8075397D, WeaponOut draw2, selector1, stable idle, no aim/reload/grenade/cover,
+and full Apply weight. Use DOWN C under the LIVE same-call rightProp; preserve
+stock right inputs, normal Nadine solver/commits, all attachments and appearance.
+Use only the previously safe outer Apply1410959AC and four stock getter E8s;
+never internal1418F2E0B, C39-global finger writes or group-shadow hooks.
+An initialized stock LW copy may be returned before RP is available. Commit its
+desired value AND the LP=RP substitution together only at the final getter after
+all four results, expected sets/ordinals and current ownership are validated.
+Any refusal must preserve stock LW bytes and return stock LP, avoiding a partial
+substitution. No foreign animation object or resource lifetime is introduced.
+
+Before launch require a fresh successful DLL build and direct helper tests.
+One instance only. User loads appearance1, draws the P99, stands still without
+aiming; agent sends no game input. Expected markers: P99-SUPPORT-CONSTRAINT
+READY, ADMITTED, APPLIED with old/new C. If correct, the left hand/forearm moves
+to the pistol and no longer runs through the torso, while the right grip and
+back/hip attachments remain unchanged. This specifically differs from the
+finger-only candidate, which cannot change the left chain. APPLIED with unchanged
+left anatomy rejects sufficiency of this DOWN endpoint and selects a later
+writer/chain or inappropriate endpoint; missing APPLIED is scope/packaging, not
+a visual result. ADS/movement remain stock and are not predicted fixed. Any
+crash/lag or right-side change rejects this implementation and requires rollback.
+This is an experimental LEFT correction, NOT a claim that both defects are fixed.
+
+Reproduction: `p99_npc_support_constraint.py` additionally pins both raw clips,
+all seven descriptors, g0/g1 opcode programs, row149 and semantic25/27/29. Its
+five tests include noncommuting world ancestors cancelling from C. Combined new
+Python suite14/14 passes; no native/retail mapping is needed. Type5 callback
+14860 has a live-dependent result, so the DOWN endpoint remains a deliberately
+selected experimental constraint, not a claimed final NPC blend. IDB comment and
+getter-order annotation were saved to the only `ida/tll.i64` (1927functions,
+80data names,2types; `.codex/ida_apply_p99_support_20261008.log` says
+`save_database returned True`). Restarted MCP resolves WeaponIK_Apply and its
+unchanged1418F2E0B caller; the new function comment is read back successfully.

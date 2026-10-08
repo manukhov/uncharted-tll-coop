@@ -11,7 +11,35 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest CONFIRMED / NATIVE EIGHT-RECORD PREPARATION REFUSAL (2026-10-08):
+USER PRIORITY RESET (2026-10-08): fix the actual arms/hands. User explicitly
+confirmed BOTH defects: left arm/forearm passes through the torso and right
+hand/fingers grip the pistol incorrectly. DLL/provider/loader infrastructure
+expansion is PARKED; its historical NEXT items below are NOT the current task.
+Keep these symptoms separate: the21-row right-palm/prop/finger model cannot fix
+the left support chain. Pursue specific pose/retarget/IK changes with a visible
+prediction, preserve confirmed attachments, and do not repeat rejected writers.
+
+CURRENT hand-repair work (2026-10-08): right-hand NPC4CAA7420/row149 was decoded
+with corrected opcode24 and compared on the same4328 Nadine/P99 surface cohort.
+Current315 crossing pairs -> full native175, fingers-only813, palm/prop-only104.
+Fingers-only is rejected as a correction; full native retains ring problems;
+palm/prop-only increases separation. None is a ready right-grip fix.
+New scripts p99_npc_grip_candidate.py / p99_npc_grip_contact.py reproduce this.
+
+LEFT correction candidate: terminal1418F1780 consumes RP * inverse(LP) * LW.
+On Nadine wrist25->palm27->prop29, C=inverse(localPalm27*localProp29); proximal
+ancestry cancels. p99_npc_support_constraint.py pins native NPC row149 UP/DOWN
+endpoints. DOWN5E67B1FA gives P(.070765160,-.008410480,-.018463762),
+Q(.438439192,.066494868,-.787632879,.427766239). Do not substitute UP in ADS yet:
+endpoints differ34.176533deg and native type5 weight/state mapping is unproven.
+Prepare only an idle P99 local-Nadine/selector1/full-weight DOWN exam using the
+safe outer1410959AC + four stock getter callsites. Paired LW/LP substitutions
+must commit together at the LAST getter, leaving stock bytes on refusal.
+Pre-launch evidence, competing candidates, prediction and no-input scenario are
+written in the latest COOP_STATUS entry. Right grip and attachments stay stock.
+No provider/loader work and no second game instance. Runtime result pending.
+
+PARKED infrastructure history / NATIVE EIGHT-RECORD PREPARATION REFUSAL (2026-10-08):
 Native-owned padded host now constructs the actual same-build Request with
 artifact0 + seven System32 providers. Offline p99_native_preparation_inventory.py
 generates test-only pins/RVAs from independent disk hashes and all59 manifest
@@ -28,7 +56,7 @@ entry with exact failure-stage counters. Ambiguous failed ref acquisition is
 retained until fixture exit, never released as a known-owned token.
 15new native tests pass, including3x repetition; final CTest147/147, Python767/767.
 Production/new/old DLL source unchanged; pinned new+old DLL hashes unchanged.
-NEXT: bind the complete immutable preparation-artifact comparison to this native
+PARKED NEXT (not active after user priority reset): bind the complete immutable preparation-artifact comparison to this native
 host's held-file/ref preflight (currently native checks artifact entry/pages/IAT,
 NOT its complete428693immutable bytes). Reuse the separately paired manifest/
 mapped policy; keep loaded-header/DIR64 expectations independent of observations.

@@ -1927,7 +1927,13 @@ FUNCTIONS = {
         "left-arm target as Compose(rightHandProp, "
         "MakeRelative(leftHandProp, leftWrist)); rightWrist is finite-checked "
         "but does not enter the target. It then solves the left arm and applies "
-        "the target wrist rotation before committing both JointSets.",
+        "the target wrist rotation before committing both JointSets. STATIC "
+        "2026-10-08: on the rigid Nadine wrist25->palm27->prop29 chain, the "
+        "relative constraint equals inverse(localPalm27*localProp29); all "
+        "proximal ancestry cancels. Native NPC row149 endpoints 036F20E5/up "
+        "and 5E67B1FA/down have the same palm27 but different prop29, hence "
+        "different support constraints. This is not proof of Player state "
+        "selection, full overlay weight or a rendered P99 repair.",
     ),
     0x1418F1E60: (
         "WeaponIKFeatherInfo_ConstructForPlayerLook",
@@ -14737,6 +14743,15 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x1418F18BD: (
+        "STATIC 2026-10-08: first dereference after four stock getter calls "
+        "1872(right wrist),1896(left wrist),18A6(right prop),18B5(left prop). "
+        "Earlier results are pointers retained at stack+28/r14/rdi/rbx, not "
+        "copied values. Any paired input relay must leave initialized stock "
+        "left-wrist bytes intact until the final getter validates BOTH "
+        "substitutions; early one-sided override is not fail-stock. No new "
+        "runtime relay is admitted by this ordering observation."
+    ),
     0x141AB97CC: (
         "STATIC native Process epoch: seven pushes put RSP=entryReturnSlot-38; "
         "this LEA yields RBP=entryReturnSlot-15A8. After sub rsp,1670, "
