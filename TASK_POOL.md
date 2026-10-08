@@ -11,7 +11,29 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / OWNED FULL-TU PROVIDER PREPARATION (2026-10-08):
+Latest STATIC / OFFLINE TEN-EXPORT ARTIFACT CONTRACT (2026-10-08):
+Added p99_provider_preparation_manifest.py and separate mapped-plan entry point.
+Exact ten exports, two distinct zero4096B RW/non-DISCARDABLE publication sections,
+primary unwind ownership plus ALL chained fragments, exact59 reviewed direct
+imports. New preparation APIs do NOT relax the old eight-export inert policy.
+Bootstrap0x122E0 has THREE fragments465/241/136B; its32B prefix is only an anchor.
+New pinned artifact8532ae91...bca3d1: image0xCB000,296runtime records,126DIR64.
+Offline plan covers428693immutable bytes, applies121DIR64, explicitly excludes5
+mutable fixups and BOTH publication pages. These are planned bytes, NOT a loaded
+DLL comparison: only synthetic bindings/mapping tests ran for the new verifier.
+24new tests include each59IAT mutation, chained body/metadata coverage, policy
+separation and page discardability. Full Python729/729, CTest132/132; builds and
+both DLL hashes unchanged. No game launch/injection/IDB or visual grip repair.
+NEXT: create a separately scoped, independently pinned provider profile and
+owned loader/RPM fixture for the NEW importer, not the old hardcoded ABI profile.
+Resolve all59 imports from disk files + explicit routes/bases before observing
+IAT; cap dependencies at31 because target Owner max32 INCLUDES artifact index0.
+Even all59 resolutions do not prove transitive provider/code/API-set closure.
+That closure, real-target held verification, transaction/recovery/ACK/manual arm
+and positive real-main preparation remain outstanding. Never infer admission
+from this manifest/plan or from mutable page exclusions.
+
+Previous STATIC / OWNED FULL-TU PROVIDER PREPARATION (2026-10-08):
 Added separate inert tll_p99_provider_preparation.dll with explicit local entry
 TllP99PrepareProvidersV1 and independently exported4096B provider page. It uses
 the actual full-TU hooks, Resources, Snapshot/FLS and original Gate proof methods

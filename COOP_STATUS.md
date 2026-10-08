@@ -38361,3 +38361,92 @@ imports, API-set/forwarder/dependency coverage, without changing old pinned ABI
 validation. Test locators/self-only input are insufficient. External held checks,
 actual write transaction, uncertain recovery, ACK and manual arm remain unwired.
 No successful install, source capture or visible Nadine pistol-grip fix is claimed.
+
+## 2026-10-08 — P99 141ABA973: separate ten-export disk and mapped-image contracts
+
+STATIC / offline verification infrastructure. Added
+scripts/p99_provider_preparation_manifest.py and
+scripts/p99_provider_preparation_mapped.py for the new explicitly invoked
+preparation artifact. Old eight-export manifest/public plan remains strict;
+only the bounded export decoder and transformation engine are shared internally.
+Neither public entry guesses an artifact type, mutates global policy, accepts
+both contracts or falls back after rejection. Both manifest and metadata-read
+tracking select the SAME new contract; switching only the manifest would leave
+the old export decoder or incomplete metadata coverage in the mapped plan.
+No scanner/runtime/flag changes, game launch/input/injection or IDB change.
+
+Alternatives / falsifiable checks used in this unit:
+
+- Widening the old ROLES or permitting VirtualProtect/FlsAlloc globally would
+  silently change the old pinned ABI. Keep distinct schemas and public entries;
+  old must reject new ten exports, new must reject old eight, and the old import
+  policy must still reject VirtualProtect. Those regressions pass.
+- Using the first .pdata record or32B entry anchor as the preparation body is
+  incomplete. Disk evidence: TllP99PrepareProvidersV1 RVA0x122E0 owns THREE
+  fragments [0x122E0,0x124B1), [0x124B1,0x125A2), [0x125A2,0x1262A), sizes
+  465/241/136B. Require the primary unwind boundary and collect every CHAININFO
+  fragment; hash complete sections too. Synthetic secondary-body changes must
+  change the recorded body even when the entry prefix remains identical.
+- Accepting observed IAT addresses as expectations would self-validate changed
+  bindings. Plans require the exact independent binding set; mutating EACH of59
+  synthetic mapped IAT cells must fail. Missing BCryptHash, MSVCP::_Xout_of_range,
+  FlsAlloc or VirtualProtect binding and invented/duplicate bindings must refuse.
+- Publication pages are mutable state, NOT part of immutable image comparison.
+  Synthetic mutations there deliberately do not fail this comparison. Explicit
+  exclusions remain visible and cannot be used as evidence of paired claims,
+  provider retention, successful preparation or installation.
+
+The new disk schema is tll-p99-provider-preparation-disk-v1. An independently
+reviewed SHA256 is mandatory before parsing; exports/roles/section hashes never
+provide trust by themselves. Require exact ten unique non-forwarded exports,
+distinct named .p99deps/.p99prep pages (each4096B, zero disk bytes, RW/nonexec and
+non-DISCARDABLE), primary runtime entries for all eight code roles, all owned
+unwind fragments, nonrelocated32B bootstrap prefix within its primary range, and
+exact59 direct imports by DLL and case-sensitive symbol. Inherited PE bounds,
+ASLR/NX, complete imports/IAT, DIR64 and unwind-chain checks remain in force.
+Request version1/133952B is a SAME-BUILD x64 contract, not an IPC wire certificate.
+Handler/opcode/frame semantics and DllMain behavior are not certified by hashes.
+
+Direct imports:29KERNEL32,4bcrypt,1MSVCP140,11VCRUNTIME140,1VCRUNTIME140_1,
+3CRT-heap and10CRT-runtime. This is a reviewed direct allowlist, not a dependency
+profile or closure proof. Compiler/import changes require an explicit new review;
+unknown imports cannot become acceptable because preparation needs OS services.
+
+REJECTED during independent review: treating RW/nonexec alone as the publication
+section contract. Synthetic flags0xC2000040 also permit DISCARDABLE, and the
+shared mapped engine excludes WRITE sections before checking discardability.
+The new manifest now rejects DISCARDABLE on BOTH publication pages; dedicated
+disk and mapped regressions cover each. The actual pinned build was unaffected.
+This was a structural contract gap, not evidence of arbitrary-file admission:
+the independent hash was still required. Old ABI behavior was not broadened.
+
+Actual pinned-file disk result (no load/call by these verification scripts):
+SHA8532ae918ef2c6d6f56dc2e3fe34318acd02d18b68b3a94a4f67e181ebbca3d1,
+image0xCB000,10exports,59imports,296runtime records,126DIR64. A plan generated
+with EXPLICITLY SYNTHETIC external binding addresses contains428693 immutable
+bytes,121 applied fixups and5 excluded mutable fixups. These counts are OFFLINE
+PLAN coverage, not bytes compared in a loaded DLL. Mutable .data and both pages,
+discardable .reloc and alignment gaps are explicitly unverified. New mapping
+tests use separately constructed owned synthetic memory, not Plan-derived bytes.
+
+Validation:24new Python tests (13disk,11mapped), including59 individual IAT
+corruptions and metadata crossing VirtualSize through CHAININFO/ILT. Independent
+review reran24new plus51old manifest/mapped tests; no remaining blocker reported.
+Full Python729/729, CTest132/132 pass; MSVC default and old ABI targets up to date.
+Old DLL SHA remains a81ba7f43c543c731942c999f8b6aa9ed8f2bc0cda96c41ab96882257e22aae5;
+new DLL hash unchanged above. Existing owned CTest refusal fixtures still pass;
+there is no new positive retail preparation/mapped comparison. No game/fixture
+process remains, and unrelated tmp/ is preserved.
+
+LIMITS / NEXT: existing import Resolver can resolve the new importer, but the
+old owned-Python profile/parser/fixture hardcode the old importer and path. Add a
+separately scoped independently pinned profile and owned loader/RPM exam for
+tll_p99_provider_preparation.dll, keeping old contracts intact. Resolve expected
+addresses from held disk snapshots, explicit selected bases and API-set routes,
+NOT GetProcAddress/IAT values. Limit dependency inventory to31: Owner max32
+includes the mandatory artifact at index0, unlike the resolver's32-provider cap.
+Even resolving all59 roots cannot establish transitive provider imports, native
+implementation trampolines or actual target API-set namespace; those remain
+separate admission obligations. Then real-target held checks, transaction,
+uncertain recovery, ACK/manual arm and positive real-main preparation remain.
+No installation or visible Nadine grip repair is established by this unit.

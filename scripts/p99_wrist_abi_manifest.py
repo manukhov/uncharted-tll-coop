@@ -137,6 +137,11 @@ class Image:
         return self.read(rva, size)
 
     def exports(self):
+        return self._exports(ROLES)
+
+    def _exports(self, roles):
+        # Shared bounded decoder; each public artifact Image keeps its own exact
+        # export contract. The old manifest never selects the preparation roles.
         d = self.pe.OPTIONAL_HEADER.DATA_DIRECTORY[0]
         require(40 <= d.Size <= 65536, 'export directory extent')
         def metadata(rva, size):
@@ -145,7 +150,7 @@ class Image:
             return self.readonly(rva, size)
         fields = struct.unpack('<IIHHIIIIIII', metadata(d.VirtualAddress, 40))
         _, _, _, _, _, base, count, n_names, eat, names, ordinals = fields
-        require(count == n_names == len(ROLES) and base == 1, 'exact versioned export count required')
+        require(count == n_names == len(roles) and base == 1, 'exact versioned export count required')
         addresses = struct.unpack('<'+'I'*count, metadata(eat, count*4))
         name_rvas = struct.unpack('<'+'I'*count, metadata(names, count*4))
         indexes = struct.unpack('<'+'H'*count, metadata(ordinals, count*2))
@@ -160,7 +165,7 @@ class Image:
             require(address != 0 and not d.VirtualAddress <= address < d.VirtualAddress+d.Size,
                     'null/forwarded export')
             result[name] = address
-        require(set(result) == set(ROLES), 'missing/unexpected versioned export')
+        require(set(result) == set(roles), 'missing/unexpected versioned export')
         require(len(set(result.values())) == len(result), 'aliased ABI roles')
         return result
 

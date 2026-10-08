@@ -82,9 +82,16 @@ def _disjoint_regions(staged):
 
 
 def build_plan(raw, trusted_sha256, base, bindings, *, header_base=HeaderBase.PREFERRED):
+    return _build_plan(raw, trusted_sha256, base, bindings, header_base=header_base,
+                       manifest_reader=disk.manifest, metadata_reader=_MetadataReads)
+
+
+def _build_plan(raw, trusted_sha256, base, bindings, *, header_base, manifest_reader, metadata_reader):
+    # Internal shared transformation only. Public entry points must bind BOTH
+    # readers to the same exact artifact contract, never select by remote data.
     raw = bytes(raw)  # Own one immutable version for every parse and expectation.
-    manifest = disk.manifest(raw, trusted_sha256)
-    image = _MetadataReads(raw, trusted_sha256)
+    manifest = manifest_reader(raw, trusted_sha256)
+    image = metadata_reader(raw, trusted_sha256)
     # Require FULL metadata reads within compared VirtualSize, not merely the
     # first unwind header. Raw padding may hold a valid-looking CHAININFO tail,
     # import name or ILT that the disk parser can read but the plan excludes.
