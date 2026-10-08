@@ -8,14 +8,16 @@ through torso and incorrect right-hand pistol grip. All later infrastructure
 NEXT statements are parked history, not authority to continue that detour.
 Keep left support-target/arm chain separate from the21 right distal rows.
 
-CURRENT (2026-10-08): the narrow LEFT support-constraint experiment is implemented
-and enabled in build2026-10-08p99-support. One-copy PID9504 emitted READY,
-ADMITTED and four APPLIED rows with the expected changed left constraint.
-The user confirms they closed the game themselves; this is NOT a reported crash.
-Visual effect is still UNKNOWN: do not call either hand fixed or repeat the exam
-until the user describes the left forearm result. All previous right-grip writers,
-group shadows and the ordinary observer remain OFF. Attachments are unchanged by
-this patch. Details, limits and exact artifact are in the latest registry entry.
+CURRENT (2026-10-08): REJECTED visual correction, native DOWN5E67B1FA left
+support constraint via1418F18B5. One-copy PID9504 emitted READY, ADMITTED and four
+APPLIED rows, but the user explicitly reports "Not fixed". This confirms the
+input substitution only, NOT a corrected arm, solved output or rendered pose.
+They closed the game themselves; this is NOT a reported crash. The experiment
+is now disabled in build2026-10-08p99-support-safe; do not repeat it unchanged.
+All previous right-grip writers, group shadows and the ordinary observer remain
+OFF. Attachments unchanged. NEXT statically trace the terminal solve/commit and
+later arm consumers, distinguish bad endpoint from rejected/later overwritten
+output before admitting another correction. Both hand defects remain open.
 
 The older unchanged PID18204 was also self-closed; no late-arm source exam ran.
 Do not repeat that diagnostic or resume its parked provider/loader work.
@@ -38962,3 +38964,29 @@ available). If unchanged despite APPLIED, reject sufficiency of this DOWN
 endpoint and trace the downstream arm result before another run. Right-grip
 candidate comparison remains unresolved; none of the three geometry variants
 is admitted. Both-defect repair is incomplete.
+
+### 2026-10-08 REJECTED: native DOWN support endpoint does not fix the visible hands
+
+The user's follow-up is explicit: "Not fixed". The PID9504 experiment therefore
+fails its visible-fix prediction despite four APPLIED rows. This rejects
+sufficiency of the native DOWN5E67B1FA constraint at getter1418F18B5 in the
+tested scope. It does not prove absolutely zero bone motion, a particular later
+writer, a solver failure or a crash. The user had already confirmed self-close.
+Right grip was intentionally unchanged and remains unresolved.
+
+Disable `kEnableLegacyNadineP99SupportConstraint`; retain code/tests and authored
+asset findings. Build tag becomes2026-10-08p99-support-safe, with the rejected
+getter package dormant. No second launch is justified by this negative result.
+
+Competing next hypotheses: (1) the changed terminal target is not a compatible
+support endpoint for the actual right-hand/mesh pose; (2) SolveArmIk/commit gates
+do not publish that requested endpoint; (3) a later arm writer replaces it; (4)
+the tested scope does not persist through the user's observed state. The bounded
+four input-only APPLIED logs cannot distinguish these. Follow1418F1C43 through
+wrist rotation and1418F1DEE/1DF9 commits, then their caller's remaining actions;
+do not jump to a later-writer conclusion or invent another offset.
+
+Safe rollback build completed with `scanner/build-release.cmd`; helper checks
+remain89/89. Fresh disabled runtime DLL SHA256 is
+`863FFAB48DEB4E4D1777A1039F9A7A5B87FC4E09B88D95B07D774F591F69ACF6`.
+No tll.exe process is running and no game was launched for this rollback.

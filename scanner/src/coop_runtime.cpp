@@ -2807,11 +2807,11 @@ constexpr bool kEnableWeaponIkTerminalGetterCensus = false;
 // Keep the package disabled while the runtime-confirmed two-hand baseline from
 // 82e7b9e/adr is restored without discarding later static findings.
 constexpr bool kEnableLegacyNadineWeaponIkTerminalGoalRelay = false;
-// One sharply scoped local-Nadine/P99 state-2 exam. It changes only the
-// terminal left-arm support constraint at the four already-proven stock getter
-// callsites. The right-side Locators, C39 finger rows and animation graph remain
-// stock. Both left substitutions commit together at the last getter.
-constexpr bool kEnableLegacyNadineP99SupportConstraint = true;
+// REJECTED visual correction (2026-10-08, PID9504): all four bounded APPLIED
+// rows were present, but the user reports that the hands were not fixed.
+// Preserve the atomic getter implementation for analysis; do not repeat the
+// native DOWN endpoint exam or infer a post-solver/render result from APPLIED.
+constexpr bool kEnableLegacyNadineP99SupportConstraint = false;
 // Build acg proved that the two P99 WeaponIK paths share the same lifecycle and
 // scalar controls, but composing the interleaved arm hierarchy reveals a
 // residual 6.7 mm hand-endpoint split. Distinguish that upstream pose delta
@@ -80887,8 +80887,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-10-08p99-support "
-        "(local Nadine P99 left support-constraint exam; stock right arm/fingers; appearance and AGC back profiles retained)");
+        "TLL co-op runtime init 2026-10-08p99-support-safe "
+        "(rejected P99 left support correction disabled; stock arm/finger paths; appearance and AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "

@@ -38,9 +38,11 @@ Paired LW/LP substitutions commit together at the LAST getter, leaving stock
 bytes on refusal. Native solver remains active; right grip/attachments untouched.
 One-copy PID9504 emitted READY, ADMITTED and four APPLIED rows with the expected
 old/new constraint. User then closed it themselves (NOT a reported crash).
-Visual result is still UNKNOWN; neither hand is declared fixed. NEXT ask for
-the left-forearm result/fresh screenshot, not another blind launch. If unchanged
-despite APPLIED, reject this endpoint's sufficiency and trace the downstream arm.
+User follow-up: "Not fixed". REJECT this endpoint as a sufficient visible repair;
+disable it in build2026-10-08p99-support-safe. APPLIED proves changed input, not
+post-solver/rendered output. NEXT statically trace1418F1C43 and1418F1DEE/1DF9 plus
+later arm consumers; distinguish endpoint mismatch, solver/commit gating, later
+overwrites and scope persistence. Do not repeat the same exam or guess offsets.
 Right-hand geometry candidates remain unadmitted. Tests:89 helper checks and
 133/133 scoped CTest pass;15 parked native-bootstrap fixtures have stale pins,
 so the full suite is not green. Exact artifact/evidence in latest COOP_STATUS.
