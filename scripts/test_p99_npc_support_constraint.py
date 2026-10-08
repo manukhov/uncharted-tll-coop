@@ -1,5 +1,8 @@
+import hashlib
 import math
 from pathlib import Path
+import re
+import struct
 import sys
 import unittest
 
@@ -35,6 +38,18 @@ class NpcSupportConstraintTests(unittest.TestCase):
                 "game_launched_or_attached", "runtime_writer_or_admission_proven",
                 "live_clip_selection_proven", "visual_fix_proven"):
             self.assertFalse(report[key])
+
+    def test_compiled_down_endpoint_matches_fresh_asset_constraint(self):
+        header = support.ROOT / 'scanner/src/nadine_p99_support_constraint.h'
+        text = header.read_text(encoding='utf-8')
+        block = text.split('inline constexpr Locator kNativeDownSupportConstraint{', 1)[1].split('};', 1)[0]
+        bits = [int(value, 16) for value in re.findall(r'0x([0-9A-Fa-f]{8})u', block)]
+        self.assertEqual(len(bits), 7)  # P3 then Q4; native padding is separately zero.
+        compiled = struct.pack('<7I', *bits)
+        row = self.report['clips']['weapon_down']['constraint']['target_constraint']
+        self.assertEqual(compiled, struct.pack('<7f', *row[8:11], *row[4:8]))
+        self.assertEqual(hashlib.sha256(compiled).hexdigest(),
+                         support.TARGET_CONSTRAINT_SHA256['weapon_down'])
 
     def test_both_raw_clips_descriptors_programs_and_row149_are_pinned(self):
         report = self.report

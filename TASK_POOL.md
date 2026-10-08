@@ -32,12 +32,19 @@ ancestry cancels. p99_npc_support_constraint.py pins native NPC row149 UP/DOWN
 endpoints. DOWN5E67B1FA gives P(.070765160,-.008410480,-.018463762),
 Q(.438439192,.066494868,-.787632879,.427766239). Do not substitute UP in ADS yet:
 endpoints differ34.176533deg and native type5 weight/state mapping is unproven.
-Prepare only an idle P99 local-Nadine/selector1/full-weight DOWN exam using the
-safe outer1410959AC + four stock getter callsites. Paired LW/LP substitutions
-must commit together at the LAST getter, leaving stock bytes on refusal.
-Pre-launch evidence, competing candidates, prediction and no-input scenario are
-written in the latest COOP_STATUS entry. Right grip and attachments stay stock.
-No provider/loader work and no second game instance. Runtime result pending.
+IMPLEMENTED in build2026-10-08p99-support: idle P99 local-Nadine/selector1/
+full-weight DOWN correction using outer1410959AC + four stock getter callsites.
+Paired LW/LP substitutions commit together at the LAST getter, leaving stock
+bytes on refusal. Native solver remains active; right grip/attachments untouched.
+One-copy PID9504 emitted READY, ADMITTED and four APPLIED rows with the expected
+old/new constraint. User then closed it themselves (NOT a reported crash).
+Visual result is still UNKNOWN; neither hand is declared fixed. NEXT ask for
+the left-forearm result/fresh screenshot, not another blind launch. If unchanged
+despite APPLIED, reject this endpoint's sufficiency and trace the downstream arm.
+Right-hand geometry candidates remain unadmitted. Tests:89 helper checks and
+133/133 scoped CTest pass;15 parked native-bootstrap fixtures have stale pins,
+so the full suite is not green. Exact artifact/evidence in latest COOP_STATUS.
+No provider/loader work and no second game instance.
 
 PARKED infrastructure history / NATIVE EIGHT-RECORD PREPARATION REFUSAL (2026-10-08):
 Native-owned padded host now constructs the actual same-build Request with

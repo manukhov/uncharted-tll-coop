@@ -8,10 +8,17 @@ through torso and incorrect right-hand pistol grip. All later infrastructure
 NEXT statements are parked history, not authority to continue that detour.
 Keep left support-target/arm chain separate from the21 right distal rows.
 
-Continue the local Nadine P99 grip repair, including the reported lag/crash.
-The user self-closed the last unchanged PID18204; no late-arm source exam ran.
-Do not repeat that diagnostic by default. Appearance Nadine was user-confirmed;
-both P99 writers and the ordinary observer remain OFF. Attachments unchanged.
+CURRENT (2026-10-08): the narrow LEFT support-constraint experiment is implemented
+and enabled in build2026-10-08p99-support. One-copy PID9504 emitted READY,
+ADMITTED and four APPLIED rows with the expected changed left constraint.
+The user confirms they closed the game themselves; this is NOT a reported crash.
+Visual effect is still UNKNOWN: do not call either hand fixed or repeat the exam
+until the user describes the left forearm result. All previous right-grip writers,
+group shadows and the ordinary observer remain OFF. Attachments are unchanged by
+this patch. Details, limits and exact artifact are in the latest registry entry.
+
+The older unchanged PID18204 was also self-closed; no late-arm source exam ran.
+Do not repeat that diagnostic or resume its parked provider/loader work.
 
 CORRECTION: previous151.847deg/palm21.601deg result is REJECTED, caused by
 the Python opcode24 decoder's wrong component permutation and32767 divisor.
@@ -38891,3 +38898,67 @@ getter-order annotation were saved to the only `ida/tll.i64` (1927functions,
 80data names,2types; `.codex/ida_apply_p99_support_20261008.log` says
 `save_database returned True`). Restarted MCP resolves WeaponIK_Apply and its
 unchanged1418F2E0B caller; the new function comment is read back successfully.
+
+### 2026-10-08 CONFIRMED application / HYPOTHESIS visual outcome: P99 left support exam
+
+Implemented `kEnableLegacyNadineP99SupportConstraint` in the existing outer
+PlayerWeaponIKAction call1410959AC and four getter callsites. Only owner0/screen0,
+lookD27C074F, exact target skeletonC39CA709/580 and P99 art8075397D qualify, with
+draw2, selector1, bit-exact Apply weight1, stationary/no-action state and350ms
+dwell. Scope, draw or weight refusal resets local dwell; unrelated owner1 calls
+do not reset it. Aim/movement/reload/grenade/cover remain stock.
+
+The left-wrist getter returns a byte-identical TLS-owned copy. Only the final
+left-prop getter1418F18B5 may change that copy and return captured rightProp
+together, after all four expected getters/sets/ordinals and same-call ownership
+validate. Null/read/SEH/order/metadata failures preserve the stock pair. Nested
+selected or unselected Apply calls hide and then restore outer TLS state.
+Runtime composition uses native TransformCompose1401998F0 and
+TransformMakeRelative1401990F0; their passed locator operands use unaligned
+loads, not an assumed TLS alignment. Native Nadine IK solve/rotation/commits
+remain enabled. No right-side locator, finger row, appearance or attachment is
+written by this correction. Compile-time exclusions retain previous rejected
+mutators OFF. Logs are bounded to2 admissions,4 applications,8 refusals.
+
+Source DOWN clip5E67B1FA raw SHA256:
+`42b20919ead031d51125aee6aa174bb9ac8cfb1f1b1a5a819ffb1172b4eea0d6`.
+Packed P3/Q4 endpoint SHA256:
+`19e6944679d6e6f89d91020a083393806655a9d6291cf38b90a5223a64942a21`.
+The compiled seven float bit patterns are independently compared with a fresh
+asset decode in `test_p99_npc_support_constraint.py`, not just a copied literal.
+
+Build/verification: `scanner/build-release.cmd` succeeds; the helper executable
+passes89 checks and the combined candidate/contact/support Python suite15/15.
+Full CTest yielded133 passes and15 failures, all in parked
+`nadine_p99_bootstrap_native_*` fixtures. Their independently generated artifact
+pin0 still expects8532ae918ef2c6d6f56dc2e3fe34318acd02d18b68b3a94a4f67e181ebbca3d1,
+while the rebuilt preparation DLL is
+9508F463D86E0501E7F147BDF05C21F1DCC15810451E7238199D4951EFFC9AFE.
+These fixtures fail preflight (error126); the full suite is NOT green. Do not
+expand the hand task into regenerating this parked provider infrastructure.
+The scoped command excluding `^nadine_p99_bootstrap_native_` passes133/133.
+
+Fresh game artifact `scanner/build/tll_coop_runtime.dll` SHA256:
+`1FD6A2AFB7298DEF31E8A37C09FF33D2DC9005386DF96BF776CDDD86352B5270`.
+Launched via `scripts/launch_coop.ps1 -Count 1` at17:51:42 local, PID9504; injector
+reported success and the module path was independently checked. No second game
+instance and no agent game input. RoleB requested Nadine; actual appearance for
+this fresh launch remains a user visual check, not an installer inference.
+
+CONFIRMED runtime application, not visual correction: PID9504 logged READY,
+ADMITTED and four APPLIED rows. First old constraint was
+P(.0117279,.00711641,-.0768337), Q(.113229,-.0604819,.652164,-.747130).
+First new constraint was P(.0707881,-.00841612,-.0184645),
+Q(.438439,.0664949,-.787633,.427766), matching the authored DOWN endpoint within
+the observed native world/relative float error. This distinguishes actual
+substitution from a merely installed hook. No REJECTED marker appeared in the
+checked PID-filtered tail. This is not sufficient evidence of visual success,
+absence of later writers, correct appearance, or whole-session stability.
+
+At17:56 the process was no longer running. User explicitly answered that they
+closed it themselves: do NOT record a crash. They have not yet said whether the
+left forearm changed. NEXT: obtain that visual result (fresh screenshot if
+available). If unchanged despite APPLIED, reject sufficiency of this DOWN
+endpoint and trace the downstream arm result before another run. Right-grip
+candidate comparison remains unresolved; none of the three geometry variants
+is admitted. Both-defect repair is incomplete.

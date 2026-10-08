@@ -48,6 +48,7 @@
 #include "nadine_p99_source_observation.h"
 #include "nadine_p99_observation_arm.h"
 #include "nadine_p99_preselection_trace.h"
+#include "nadine_p99_support_constraint.h"
 #include "nadine_p99_wrist_snapshot.h"
 #include "nadine_p99_wrist_read_diagnostic.h"
 #include "nadine_p99_wrist_report.h"
@@ -2806,6 +2807,11 @@ constexpr bool kEnableWeaponIkTerminalGetterCensus = false;
 // Keep the package disabled while the runtime-confirmed two-hand baseline from
 // 82e7b9e/adr is restored without discarding later static findings.
 constexpr bool kEnableLegacyNadineWeaponIkTerminalGoalRelay = false;
+// One sharply scoped local-Nadine/P99 state-2 exam. It changes only the
+// terminal left-arm support constraint at the four already-proven stock getter
+// callsites. The right-side Locators, C39 finger rows and animation graph remain
+// stock. Both left substitutions commit together at the last getter.
+constexpr bool kEnableLegacyNadineP99SupportConstraint = true;
 // Build acg proved that the two P99 WeaponIK paths share the same lifecycle and
 // scalar controls, but composing the interleaved arm hierarchy reveals a
 // residual 6.7 mm hand-endpoint split. Distinguish that upstream pose delta
@@ -2829,6 +2835,16 @@ static_assert(
       (kEnableLegacyNadineWeaponIkGoalRelay ||
        kEnableLegacyNadineWeaponIkFeatherSuppression)),
     "terminal target relay must be the only grip/arm-pose mutation");
+static_assert(
+    !kEnableLegacyNadineP99SupportConstraint ||
+        (!kEnableWeaponIkTerminalGetterCensus &&
+         !kEnableLegacyNadineWeaponIkTerminalGoalRelay &&
+         !kEnableLegacyNadineWeaponIkGoalRelay &&
+         !kEnableLegacyNadineWeaponIkFeatherSuppression &&
+         !kEnableLegacyNadineP99ChloeGripTransfer &&
+         !kEnableLegacyNadinePistolPoseGripRepair &&
+         !kEnableLegacyNadineActiveWeaponGripOverlayRepair),
+    "P99 support constraint must exclusively own the terminal arm seam");
 constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
 // Runtime-confirmed 82e7b9e/adr two-hand baseline. Build aep retains it as the
 // exact fail-closed pose under the one-process semantic right-hand reference.
@@ -46518,13 +46534,23 @@ struct WeaponIkGoalCensusScope {
 
 constexpr std::size_t kWeaponIkTerminalGetterCount = 4;
 
+struct P99SupportConstraintOwnerToken {
+    void* player = nullptr;
+    void* weapon = nullptr;
+    std::byte* fg_anim_data = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+};
+
 struct WeaponIkTerminalGetterCaptureTls {
     bool active = false;
     bool relay_source = false;
     bool relay_target = false;
+    bool p99_support_constraint = false;
     bool left_wrist_overridden = false;
     bool left_prop_overridden = false;
     void* feather = nullptr;
+    void* p99_feather_info = nullptr;
     std::uint32_t selector = 0;
     WeaponIkGoalCensusScope scope{};
     std::array<bool, kWeaponIkTerminalGetterCount> captured{};
@@ -46532,12 +46558,17 @@ struct WeaponIkTerminalGetterCaptureTls {
     std::array<WeaponIkGoalLocator, kWeaponIkTerminalGetterCount> spines{};
     WeaponIkGoalLocator override_goal_relative{};
     WeaponIkGoalLocator override_goal_world{};
+    WeaponIkGoalLocator p99_old_constraint{};
+    WeaponIkGoalLocator p99_new_constraint{};
+    P99SupportConstraintOwnerToken p99_owner{};
+    coop::p99_support_constraint::Transaction p99_transaction{};
 };
 
 thread_local WeaponIkTerminalGetterCaptureTls
     g_weapon_ik_terminal_getter_capture_tls{};
 std::atomic<bool> g_weapon_ik_terminal_getter_census_ready{false};
 std::atomic<bool> g_weapon_ik_terminal_goal_relay_ready{false};
+std::atomic<bool> g_p99_support_constraint_ready{false};
 
 struct WeaponIkGoalRelayDwell {
     void* player = nullptr;
@@ -47362,6 +47393,85 @@ bool seh_apply_chloe_right_hand_prop_goal(
     }
 }
 
+bool seh_p99_support_constraint_owner_still_valid(
+    const P99SupportConstraintOwnerToken& token, void* feather_info) {
+    __try {
+        if (token.player == nullptr || token.weapon == nullptr ||
+            token.fg_anim_data == nullptr || token.player_runtime_id == 0 ||
+            token.weapon_runtime_id == 0 || feather_info == nullptr ||
+            retained_player_object(0) != token.player ||
+            !player_object_stable(token.player) ||
+            !player_screen_index_is(token.player, 0)) {
+            return false;
+        }
+        auto* const player = static_cast<std::byte*>(token.player);
+        if (*reinterpret_cast<const std::uint32_t*>(
+                player + kGameObjectRuntimeIdOffset) !=
+                token.player_runtime_id ||
+            *reinterpret_cast<void* const*>(player + 0x4308) != feather_info ||
+            *reinterpret_cast<std::byte* const*>(
+                player + kPlayerFgAnimDataOffset) != token.fg_anim_data) {
+            return false;
+        }
+        std::uint32_t look = 0;
+        if (!seh_read_player_look(token.player, &look) ||
+            look != kLegacyNadineAttachTargetLookId) {
+            return false;
+        }
+        auto* const owner_cell = *reinterpret_cast<std::byte* const*>(
+            token.fg_anim_data + kFgAnimDataRetainedHandleOffset);
+        auto* const target_skeleton = *reinterpret_cast<std::byte**>(
+            token.fg_anim_data + kFgAnimDataSkeletonOffset);
+        if (owner_cell == nullptr || readable_bytes(owner_cell) < 0x10 ||
+            *reinterpret_cast<void* const*>(owner_cell + 0x8) != token.player ||
+            *reinterpret_cast<const std::uint32_t*>(
+                token.fg_anim_data + kFgAnimDataRetainedIdOffset) !=
+                token.player_runtime_id ||
+            target_skeleton == nullptr ||
+            readable_bytes(target_skeleton) < 0x48 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                target_skeleton + 0x24) !=
+                kLegacyNadineTargetSkeletonArtId ||
+            *reinterpret_cast<const std::uint32_t*>(
+                target_skeleton + kSkeletonJointCountOffset) !=
+                kLegacyNadineSkeletonJointCount) {
+            return false;
+        }
+        auto* const underlying_skeleton =
+            *reinterpret_cast<std::byte**>(target_skeleton + 0x40);
+        if (underlying_skeleton == nullptr ||
+            readable_bytes(underlying_skeleton) < 0x12 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                underlying_skeleton + 0x04) !=
+                kLegacyNadineUnderlyingSkeletonId ||
+            *reinterpret_cast<const std::uint16_t*>(
+                underlying_skeleton + 0x10) !=
+                kLegacyNadineSkeletonJointCount) {
+            return false;
+        }
+        int current_slot = -1;
+        std::uint32_t draw_state = 0;
+        if (!read_weapon_draw_state(
+                token.player, current_slot, draw_state) ||
+            draw_state != 2 || current_slot < 0 || current_slot >= 18 ||
+            get_weapon_from_slot(token.player, current_slot) != token.weapon ||
+            readable_bytes(token.weapon) < 0x864 ||
+            *reinterpret_cast<const std::uintptr_t*>(token.weapon) !=
+                g_module + kProcessWeaponVtableRva ||
+            *reinterpret_cast<const std::uint32_t*>(
+                static_cast<const std::byte*>(token.weapon) +
+                kGameObjectRuntimeIdOffset) != token.weapon_runtime_id ||
+            weapon_art_id_from_object(token.weapon) != kCoopPistolArtId ||
+            !seh_weapon_parent_resolves_to_owner(
+                token.weapon, token.player)) {
+            return false;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
 const float* capture_weapon_ik_terminal_getter_result(
     std::size_t getter_index, void* joint_set, std::int32_t joint_offset) {
     const auto original = g_original_weapon_ik_goal_get_joint_loc_ws;
@@ -47369,6 +47479,20 @@ const float* capture_weapon_ik_terminal_getter_result(
         ? original(joint_set, joint_offset)
         : nullptr;
     auto& capture = g_weapon_ik_terminal_getter_capture_tls;
+    if (capture.p99_support_constraint) {
+        if (result == nullptr) {
+            capture.p99_transaction.fail(
+                coop::p99_support_constraint::RejectReason::kLocator);
+        } else if (!capture.active || capture.feather == nullptr ||
+                   capture.selector > 1) {
+            capture.p99_transaction.fail(
+                coop::p99_support_constraint::RejectReason::kMetadata);
+        } else if (getter_index >= kWeaponIkTerminalGetterCount ||
+                   capture.captured[getter_index]) {
+            capture.p99_transaction.fail(
+                coop::p99_support_constraint::RejectReason::kOrder);
+        }
+    }
     if (result == nullptr || !capture.active || capture.feather == nullptr ||
         capture.selector > 1 || getter_index >= kWeaponIkTerminalGetterCount ||
         capture.captured[getter_index]) {
@@ -47382,11 +47506,19 @@ const float* capture_weapon_ik_terminal_getter_result(
         ? static_cast<void*>(first_set)
         : static_cast<void*>(second_set);
     if (joint_set != expected_set) {
+        if (capture.p99_support_constraint) {
+            capture.p99_transaction.fail(
+                coop::p99_support_constraint::RejectReason::kMetadata);
+        }
         return result;
     }
     __try {
         if (readable_bytes(result) <
                 sizeof(capture.locators[getter_index].value)) {
+            if (capture.p99_support_constraint) {
+                capture.p99_transaction.fail(
+                    coop::p99_support_constraint::RejectReason::kLocator);
+            }
             return result;
         }
         std::memcpy(
@@ -47400,6 +47532,70 @@ const float* capture_weapon_ik_terminal_getter_result(
         capture.captured[getter_index] = false;
         capture.locators[getter_index] = {};
         capture.spines[getter_index] = {};
+    }
+    if (capture.p99_support_constraint) {
+        bool metadata_matches = false;
+        __try {
+            if (readable_bytes(expected_set) >= 0x46) {
+                const std::ptrdiff_t ordinal_field =
+                    getter_index < 2 ? 0x44 : 0x45;
+                const auto expected_ordinal =
+                    *reinterpret_cast<const std::int8_t*>(
+                        static_cast<const std::byte*>(expected_set) +
+                        ordinal_field);
+                metadata_matches = capture.captured[getter_index] &&
+                    joint_offset == expected_ordinal;
+            }
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            metadata_matches = false;
+        }
+
+        coop::p99_support_constraint::Locator desired{};
+        const coop::p99_support_constraint::Locator* desired_pointer = nullptr;
+        if (getter_index == coop::p99_support_constraint::kLeftHandProp &&
+            capture.p99_transaction.next_getter ==
+                coop::p99_support_constraint::kLeftHandProp &&
+            capture.captured[0] && capture.captured[1] &&
+            capture.captured[2] && capture.captured[3] &&
+            seh_p99_support_constraint_owner_still_valid(
+                capture.p99_owner, capture.p99_feather_info)) {
+            WeaponIkGoalLocator authored_constraint{};
+            authored_constraint.value =
+                coop::p99_support_constraint::kNativeDownSupportConstraint;
+            WeaponIkGoalLocator desired_world{};
+            WeaponIkGoalLocator old_constraint{};
+            WeaponIkGoalLocator new_constraint{};
+            if (weapon_ik_goal_compose(
+                    capture.locators[2], authored_constraint,
+                    &desired_world) &&
+                weapon_ik_goal_make_relative(
+                    capture.locators[3], capture.locators[1],
+                    &old_constraint) &&
+                weapon_ik_goal_make_relative(
+                    capture.locators[2], desired_world,
+                    &new_constraint)) {
+                desired = desired_world.value;
+                desired_pointer = &desired;
+                capture.p99_old_constraint = old_constraint;
+                capture.p99_new_constraint = new_constraint;
+            }
+        }
+        coop::p99_support_constraint::Locator current{};
+        current = capture.locators[getter_index].value;
+        const auto decision = capture.p99_transaction.observe(
+            getter_index, current, metadata_matches, desired_pointer);
+        if (decision.choice ==
+            coop::p99_support_constraint::ReturnChoice::kStagedLeftWrist) {
+            return capture.p99_transaction.staged_left_wrist.data();
+        }
+        if (decision.choice == coop::p99_support_constraint::ReturnChoice::
+                kCapturedRightHandProp) {
+            capture.left_wrist_overridden = true;
+            capture.left_prop_overridden = true;
+            return capture.p99_transaction
+                .stock[coop::p99_support_constraint::kRightHandProp].data();
+        }
+        return result;
     }
     if (capture.relay_target && getter_index == 1 &&
         capture.captured[1] &&
@@ -48437,6 +48633,150 @@ bool seh_select_legacy_nadine_weapon_ik_feather_scope(
     }
 }
 
+struct P99SupportConstraintDwell {
+    void* player = nullptr;
+    void* weapon = nullptr;
+    std::uint32_t player_runtime_id = 0;
+    std::uint32_t weapon_runtime_id = 0;
+    ULONGLONG stable_since_ms = 0;
+    ULONGLONG last_seen_ms = 0;
+};
+
+SRWLOCK g_p99_support_constraint_dwell_lock = SRWLOCK_INIT;
+P99SupportConstraintDwell g_p99_support_constraint_dwell{};
+
+bool seh_select_p99_support_constraint_scope(
+    void* feather, void* feather_info, float apply_weight,
+    NadineWeaponIkFeatherScope* scope) {
+    if (scope == nullptr) {
+        return false;
+    }
+    *scope = {};
+    scope->current_slot = -1;
+    if (!seh_select_legacy_nadine_weapon_ik_feather_scope(
+            feather, feather_info, apply_weight, scope)) {
+        return false;
+    }
+    __try {
+        if (scope->owner_index != 0 || scope->player == nullptr ||
+            scope->weapon == nullptr || scope->fg_anim_data == nullptr ||
+            scope->art != kCoopPistolArtId || scope->draw_state != 2 ||
+            scope->current_slot < 0 ||
+            !player_screen_index_is(scope->player, 0) ||
+            get_weapon_from_slot(scope->player, scope->current_slot) !=
+                scope->weapon ||
+            g_local_reload_level.load(std::memory_order_acquire) ||
+            player_cover_state_field(scope->player)) {
+            return false;
+        }
+        auto* const player = static_cast<std::byte*>(scope->player);
+        auto* const target_skeleton = *reinterpret_cast<std::byte**>(
+            scope->fg_anim_data + kFgAnimDataSkeletonOffset);
+        if (target_skeleton == nullptr ||
+            readable_bytes(target_skeleton) < 0x48 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                target_skeleton + 0x24) !=
+                kLegacyNadineTargetSkeletonArtId ||
+            *reinterpret_cast<const std::uint32_t*>(
+                target_skeleton + kSkeletonJointCountOffset) !=
+                kLegacyNadineSkeletonJointCount) {
+            return false;
+        }
+        auto* const underlying_skeleton =
+            *reinterpret_cast<std::byte**>(target_skeleton + 0x40);
+        if (underlying_skeleton == nullptr ||
+            readable_bytes(underlying_skeleton) < 0x12 ||
+            *reinterpret_cast<const std::uint32_t*>(
+                underlying_skeleton + 0x04) !=
+                kLegacyNadineUnderlyingSkeletonId ||
+            *reinterpret_cast<const std::uint16_t*>(
+                underlying_skeleton + 0x10) !=
+                kLegacyNadineSkeletonJointCount) {
+            return false;
+        }
+        auto* const grenade_controller = *reinterpret_cast<std::byte**>(
+            player + kPlayerFastGrenadeControllerOffset);
+        if (grenade_controller == nullptr ||
+            readable_bytes(grenade_controller) < 0x124 ||
+            *reinterpret_cast<const std::uintptr_t*>(grenade_controller) !=
+                g_module + kFastGrenadeControllerVtableRva ||
+            *reinterpret_cast<void* const*>(grenade_controller + 0x108) !=
+                scope->player ||
+            *reinterpret_cast<const std::uint32_t*>(
+                grenade_controller + 0x120) != 0) {
+            return false;
+        }
+        const float move_stick[2]{
+            *reinterpret_cast<const float*>(player + 0x39C8),
+            *reinterpret_cast<const float*>(player + 0x39CC)};
+        float move_world[4]{};
+        std::memcpy(move_world, player + 0x3A30, sizeof(move_world));
+        const float move_magnitude =
+            *reinterpret_cast<const float*>(player + 0x3A1C);
+        const auto near_zero = [](float value, float limit) {
+            return std::isfinite(value) && std::abs(value) <= limit;
+        };
+        if (!near_zero(move_stick[0], 0.025F) ||
+            !near_zero(move_stick[1], 0.025F) ||
+            !near_zero(move_magnitude, 0.025F)) {
+            return false;
+        }
+        for (const float value : move_world) {
+            if (!near_zero(value, 0.025F)) {
+                return false;
+            }
+        }
+        const std::uint64_t action_bits =
+            g_cached_local_input_buttons.load(std::memory_order_acquire) &
+            ~kInputBlockButtonBaseMask;
+        // The exact neutral PC forms are 0/0x9. Aim, fire, reload and every
+        // command edge add other bits and therefore restart the dwell.
+        if (action_bits != 0 && action_bits != 0x9ull) {
+            return false;
+        }
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *scope = {};
+        scope->current_slot = -1;
+        return false;
+    }
+}
+
+bool p99_support_constraint_dwell_ready(
+    const NadineWeaponIkFeatherScope& scope) {
+    constexpr ULONGLONG kDwellMs = 350;
+    constexpr ULONGLONG kContinuityMs = 100;
+    const ULONGLONG now = GetTickCount64();
+    bool ready = false;
+    AcquireSRWLockExclusive(&g_p99_support_constraint_dwell_lock);
+    auto& dwell = g_p99_support_constraint_dwell;
+    const bool reset = dwell.player != scope.player ||
+        dwell.weapon != scope.weapon ||
+        dwell.player_runtime_id != scope.player_runtime_id ||
+        dwell.weapon_runtime_id != scope.weapon_runtime_id ||
+        dwell.stable_since_ms == 0 || dwell.last_seen_ms == 0 ||
+        now < dwell.last_seen_ms || now - dwell.last_seen_ms > kContinuityMs;
+    if (reset) {
+        dwell = {};
+        dwell.player = scope.player;
+        dwell.weapon = scope.weapon;
+        dwell.player_runtime_id = scope.player_runtime_id;
+        dwell.weapon_runtime_id = scope.weapon_runtime_id;
+        dwell.stable_since_ms = now;
+    }
+    dwell.last_seen_ms = now;
+    ready = now >= dwell.stable_since_ms &&
+        now - dwell.stable_since_ms >= kDwellMs;
+    ReleaseSRWLockExclusive(&g_p99_support_constraint_dwell_lock);
+    return ready;
+}
+
+void reset_p99_support_constraint_dwell() {
+    AcquireSRWLockExclusive(&g_p99_support_constraint_dwell_lock);
+    g_p99_support_constraint_dwell = {};
+    ReleaseSRWLockExclusive(&g_p99_support_constraint_dwell_lock);
+}
+
 constexpr std::size_t kWeaponIkFeatherCensusFirstJoint = 19;
 constexpr std::size_t kWeaponIkFeatherCensusJointCount = 12;
 constexpr ULONGLONG kWeaponIkFeatherCensusDwellMs = 350;
@@ -48936,6 +49276,51 @@ std::uint8_t __fastcall hooked_weapon_ik_feather_apply(
     std::uint32_t hand_side_selector, float strength,
     std::uint8_t unused_mode, float anim_scale) {
     log_weapon_ik_feather_census_entry(feather_info);
+    NadineWeaponIkFeatherScope p99_support_scope{};
+    bool p99_support_admitted = false;
+    if constexpr (kEnableLegacyNadineP99SupportConstraint) {
+        if (g_p99_support_constraint_ready.load(std::memory_order_acquire)) {
+            int p99_support_owner = -1;
+            void* p99_support_player = nullptr;
+            const bool p99_support_local_owner_call =
+                seh_find_weapon_ik_feather_census_owner(
+                    feather_info, &p99_support_owner,
+                    &p99_support_player) &&
+                p99_support_owner == 0;
+            if (p99_support_local_owner_call) {
+                p99_support_admitted = hand_side_selector == 1 &&
+                    std::bit_cast<std::uint32_t>(apply_weight) ==
+                        0x3F800000u &&
+                    seh_select_p99_support_constraint_scope(
+                        feather, feather_info, apply_weight,
+                        &p99_support_scope);
+                if (!p99_support_admitted) {
+                    // Only owner 0 may reset its dwell. Foreign/sibling Apply
+                    // calls are unrelated and may interleave every frame.
+                    reset_p99_support_constraint_dwell();
+                }
+            }
+        }
+    }
+    const bool p99_support_selected = p99_support_admitted &&
+        p99_support_constraint_dwell_ready(p99_support_scope);
+    if (p99_support_selected) {
+        static std::atomic<std::uint32_t> admitted_logs{0};
+        if (admitted_logs.fetch_add(1, std::memory_order_relaxed) < 2) {
+            std::ostringstream line;
+            line << "P99-SUPPORT-CONSTRAINT ADMITTED owner=0 screen=0"
+                 << " player=0x" << std::hex
+                 << p99_support_scope.player_runtime_id
+                 << " weapon=0x" << p99_support_scope.weapon_runtime_id
+                 << " art=0x" << p99_support_scope.art << std::dec
+                 << " drawState=" << p99_support_scope.draw_state
+                 << " selector=" << hand_side_selector
+                 << " weight=" << apply_weight
+                 << " strength=" << strength
+                 << " animScale=" << anim_scale;
+            write_log_line(line.str().c_str());
+        }
+    }
     WeaponIkGoalCensusScope terminal_scope{};
     bool terminal_selected = false;
     if ((kEnableWeaponIkTerminalGetterCensus ||
@@ -48974,16 +49359,36 @@ std::uint8_t __fastcall hooked_weapon_ik_feather_apply(
             &terminal_relay_snapshot);
     const WeaponIkTerminalGetterCaptureTls previous_terminal_capture =
         g_weapon_ik_terminal_getter_capture_tls;
+    if constexpr (kEnableLegacyNadineP99SupportConstraint) {
+        // A nested but unselected PlayerWeaponIKAction must not see or advance
+        // the outer invocation's getter transaction. The object itself stays at
+        // the same TLS address, so a selected outer call's staged pointer is
+        // restored byte-for-byte after the nested stock call returns.
+        g_weapon_ik_terminal_getter_capture_tls = {};
+    }
     if (terminal_claimed || terminal_relay_source ||
-        terminal_relay_target) {
+        terminal_relay_target || p99_support_selected) {
         auto& capture = g_weapon_ik_terminal_getter_capture_tls;
         capture = {};
         capture.active = true;
         capture.relay_source = terminal_relay_source;
         capture.relay_target = terminal_relay_target;
+        capture.p99_support_constraint = p99_support_selected;
         capture.feather = feather;
+        capture.p99_feather_info = p99_support_selected
+            ? feather_info : nullptr;
         capture.selector = hand_side_selector;
         capture.scope = terminal_scope;
+        capture.p99_transaction.begin(p99_support_selected);
+        if (p99_support_selected) {
+            capture.p99_owner.player = p99_support_scope.player;
+            capture.p99_owner.weapon = p99_support_scope.weapon;
+            capture.p99_owner.fg_anim_data = p99_support_scope.fg_anim_data;
+            capture.p99_owner.player_runtime_id =
+                p99_support_scope.player_runtime_id;
+            capture.p99_owner.weapon_runtime_id =
+                p99_support_scope.weapon_runtime_id;
+        }
         if (terminal_relay_target) {
             capture.override_goal_relative =
                 terminal_relay_snapshot.relative;
@@ -49046,6 +49451,67 @@ std::uint8_t __fastcall hooked_weapon_ik_feather_apply(
     const WeaponIkTerminalGetterCaptureTls terminal_capture =
         g_weapon_ik_terminal_getter_capture_tls;
     g_weapon_ik_terminal_getter_capture_tls = previous_terminal_capture;
+    if (p99_support_selected) {
+        if (terminal_capture.p99_transaction.committed &&
+            terminal_capture.left_wrist_overridden &&
+            terminal_capture.left_prop_overridden &&
+            weapon_ik_goal_locator_valid(
+                terminal_capture.p99_old_constraint) &&
+            weapon_ik_goal_locator_valid(
+                terminal_capture.p99_new_constraint)) {
+            static std::atomic<std::uint32_t> applied_logs{0};
+            if (applied_logs.fetch_add(1, std::memory_order_relaxed) < 4) {
+                WeaponIkGoalLocator source_constraint{};
+                source_constraint.value =
+                    coop::p99_support_constraint::
+                        kNativeDownSupportConstraint;
+                std::ostringstream line;
+                line << "P99-SUPPORT-CONSTRAINT APPLIED owner=0 screen=0"
+                     << " player=0x" << std::hex
+                     << p99_support_scope.player_runtime_id
+                     << " weapon=0x" << p99_support_scope.weapon_runtime_id
+                     << " art=0x" << p99_support_scope.art
+                     << " clip=0x5E67B1FA retargetRow=149"
+                     << " sourceBase=0xD0B04A60 targetBase=0xC67A06F1"
+                     << " sourceDb=0x46622D19 sourceSkel=0x8592680F"
+                     << " sourceRawSha=42b20919ead031d51125aee6aa174bb9ac8cfb1f1b1a5a819ffb1172b4eea0d6"
+                     << std::dec
+                     << " constraintSha="
+                     << coop::p99_support_constraint::
+                            kNativeDownConstraintSha256;
+                log_weapon_ik_goal_locator(
+                    line, "sourceC", source_constraint);
+                log_weapon_ik_goal_locator(
+                    line, "oldC", terminal_capture.p99_old_constraint);
+                log_weapon_ik_goal_locator(
+                    line, "newC", terminal_capture.p99_new_constraint);
+                write_log_line(line.str().c_str());
+            }
+        } else {
+            static std::atomic<std::uint32_t> rejected_logs{0};
+            if (rejected_logs.fetch_add(1, std::memory_order_relaxed) < 8) {
+                std::uint32_t captured_mask = 0;
+                for (std::size_t index = 0;
+                     index < terminal_capture.p99_transaction.captured.size();
+                     ++index) {
+                    if (terminal_capture.p99_transaction.captured[index]) {
+                        captured_mask |= 1u << index;
+                    }
+                }
+                std::ostringstream line;
+                line << "P99-SUPPORT-CONSTRAINT REJECTED stage=terminal-getters"
+                     << " reason="
+                     << static_cast<unsigned>(
+                            terminal_capture.p99_transaction.reject_reason)
+                     << " next="
+                     << static_cast<unsigned>(
+                            terminal_capture.p99_transaction.next_getter)
+                     << " captured=0x" << std::hex << captured_mask
+                     << std::dec;
+                write_log_line(line.str().c_str());
+            }
+        }
+    }
     if (terminal_claimed) {
         const bool emitted = finish_weapon_ik_terminal_getter_census(
             terminal_capture, apply_weight, strength, anim_scale);
@@ -49348,7 +49814,12 @@ bool install_weapon_ik_terminal_getter_census() {
     }
     g_weapon_ik_terminal_getter_census_ready.store(
         true, std::memory_order_release);
-    if constexpr (kEnableLegacyNadineWeaponIkTerminalGoalRelay) {
+    if constexpr (kEnableLegacyNadineP99SupportConstraint) {
+        boot_log_line(
+            protection_restored
+                ? "P99 support-constraint getter callsites READY (four stock getters; dormant until combined READY)"
+                : "P99 support-constraint getter callsites READY (protection WARNING; relays retained)");
+    } else if constexpr (kEnableLegacyNadineWeaponIkTerminalGoalRelay) {
         boot_log_line(
             protection_restored
                 ? "WeaponIK terminal target callsites READY (four stock getters; dormant until combined READY)"
@@ -61815,6 +62286,9 @@ std::atomic<bool> g_p99_chloe_transfer_ready{false};
 // output/cost and fresh game fault attribution remain unresolved. Isolated
 // crash-capture fixtures and scope tests do NOT earn a new game exam.
 constexpr bool kEnableP99GroupShadow = false;
+static_assert(
+    !kEnableLegacyNadineP99SupportConstraint || !kEnableP99GroupShadow,
+    "P99 support constraint must not coexist with cmd16 group shadows");
 static_assert(!kEnableP99GroupShadow,
     "P99 remains blocked: validate authored numeric operands, native output/cost and fresh fault attribution before re-enabling");
 static_assert(!kEnableP99GroupShadow || !kEnableLegacyNadineP99ChloeGripTransfer,
@@ -80413,8 +80887,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-09-20late-arm "
-        "(bounded preselection diagnostics; observer opt-in only; both pose writers disabled; appearance and AGC back profiles retained)");
+        "TLL co-op runtime init 2026-10-08p99-support "
+        "(local Nadine P99 left support-constraint exam; stock right arm/fingers; appearance and AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "
@@ -80601,18 +81075,34 @@ DWORD WINAPI install_hook(void*) {
     if constexpr ((kEnableLegacyNadineWeaponIkFeatherInputCensus ||
                    kEnableLegacyNadineWeaponIkFeatherSuppression ||
                    kEnableWeaponIkTerminalGetterCensus ||
-                   kEnableLegacyNadineWeaponIkTerminalGoalRelay) &&
+                   kEnableLegacyNadineWeaponIkTerminalGoalRelay ||
+                   kEnableLegacyNadineP99SupportConstraint) &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         const bool outer_apply_ready =
             install_legacy_nadine_weapon_ik_feather_suppression();
+        bool terminal_getters_ready = false;
         if constexpr (kEnableWeaponIkTerminalGetterCensus ||
-                      kEnableLegacyNadineWeaponIkTerminalGoalRelay) {
+                      kEnableLegacyNadineWeaponIkTerminalGoalRelay ||
+                      kEnableLegacyNadineP99SupportConstraint) {
             if (outer_apply_ready) {
-                install_weapon_ik_terminal_getter_census();
+                terminal_getters_ready =
+                    install_weapon_ik_terminal_getter_census();
             } else {
                 boot_log_line(
                     "WeaponIK terminal getter package SKIPPED (outer Apply boundary)");
             }
+        }
+        if constexpr (kEnableLegacyNadineP99SupportConstraint) {
+            const bool ready = outer_apply_ready && terminal_getters_ready &&
+                g_original_weapon_ik_goal_get_joint_loc_ws != nullptr &&
+                g_transform_make_relative != nullptr &&
+                g_weapon_ik_transform_compose != nullptr;
+            g_p99_support_constraint_ready.store(
+                ready, std::memory_order_release);
+            boot_log_line(
+                ready
+                    ? "P99-SUPPORT-CONSTRAINT READY build=2026-10-08p99-support owner=0 screen=0 art=8075397D state=2 selector=1 weight=1 dwellMs=350 clip=5E67B1FA retargetRow=149 atomicLastGetter=1"
+                    : "P99-SUPPORT-CONSTRAINT REJECTED stage=installer");
         }
     }
     if constexpr (kEnableLegacyNadineMazurStrapVisibilityRepair &&
