@@ -38,6 +38,12 @@ target_compile_features(tll_p99_provider_windows PUBLIC cxx_std_20)
 target_compile_definitions(tll_p99_provider_windows PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX PSAPI_VERSION=2)
 target_compile_options(tll_p99_provider_windows PRIVATE /W4 /permissive- /EHsc)
 # Not linked into tll_coop_runtime or tll_p99_wrist_abi. No startup/publication enabled.
+add_library(tll_p99_prepared_pair STATIC src/nadine_p99_prepared_pair_windows.cpp)
+target_include_directories(tll_p99_prepared_pair PUBLIC src)
+target_compile_features(tll_p99_prepared_pair PUBLIC cxx_std_20)
+target_compile_definitions(tll_p99_prepared_pair PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(tll_p99_prepared_pair PRIVATE /W4 /permissive- /EHsc)
+target_link_libraries(tll_p99_prepared_pair PUBLIC tll_p99_provider_windows tll_p99_wrist_remote_read)
 add_library(tll_coop_runtime SHARED src/coop_runtime.cpp
     src/nadine_p99_wrist_invoke.cpp
     src/nadine_p99_wrist_code_windows.cpp
@@ -117,6 +123,23 @@ set_target_properties(tll_p99_wrist_abi PROPERTIES PREFIX "")
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(tll_p99_prepared_providers_tests tests/nadine_p99_prepared_providers_tests.cpp)
+    target_include_directories(tll_p99_prepared_providers_tests PRIVATE src)
+    target_compile_features(tll_p99_prepared_providers_tests PRIVATE cxx_std_20)
+    target_compile_options(tll_p99_prepared_providers_tests PRIVATE /W4 /permissive- /EHsc)
+    add_test(NAME nadine_p99_prepared_providers COMMAND tll_p99_prepared_providers_tests)
+    add_executable(tll_p99_prepared_pair_tests tests/nadine_p99_prepared_pair_tests.cpp
+        src/nadine_p99_wrist_prepare_windows.cpp src/nadine_p99_wrist_code_windows.cpp)
+    target_compile_features(tll_p99_prepared_pair_tests PRIVATE cxx_std_20)
+    target_compile_definitions(tll_p99_prepared_pair_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(tll_p99_prepared_pair_tests PRIVATE /W4 /permissive- /EHsc)
+    target_link_libraries(tll_p99_prepared_pair_tests PRIVATE tll_p99_prepared_pair bcrypt)
+    add_dependencies(tll_p99_prepared_pair_tests tll_p99_provider_fixture)
+    foreach(pair_case normal wrong-prefix provider-before provider-after read-missing read-session
+            read-inventory read-after-proof finish-fail proof-fail offer-before offer-after offer-partial)
+        add_test(NAME nadine_p99_prepared_pair_${pair_case} COMMAND tll_p99_prepared_pair_tests ${pair_case})
+        set_tests_properties(nadine_p99_prepared_pair_${pair_case} PROPERTIES TIMEOUT 20)
+    endforeach()
     add_executable(tll_p99_provider_owner_tests tests/nadine_p99_provider_owner_tests.cpp)
     target_include_directories(tll_p99_provider_owner_tests PRIVATE src)
     target_compile_features(tll_p99_provider_owner_tests PRIVATE cxx_std_20)

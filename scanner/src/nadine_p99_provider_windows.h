@@ -17,6 +17,7 @@ public:
     bool verify(const Selection&,std::uintptr_t retained) const noexcept;
     bool pin(const Selection&,std::uintptr_t retained) noexcept;
     bool publish(const Session&,const Wire&) noexcept;
+    std::optional<Claims> read(const Session&) const noexcept;
 };
 // Read-only borrowed process handle. No process open/discovery, PIN certificate,
 // native callback, implicit ACK or installer permission. Read RO page twice.

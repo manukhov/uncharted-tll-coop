@@ -122,4 +122,7 @@ std::optional<Claims> read_claims(HANDLE process,const Session& expected,std::ui
        first!=second || !process_identity(process,expected))return {};
     return claims; // Claimed pins/expected hashes require independent verification; NOT admission.
 }
+std::optional<Claims> WindowsOps::read(const Session& expected) const noexcept {
+    return read_claims(GetCurrentProcess(),expected,reinterpret_cast<std::uintptr_t>(&page_));
+}
 } // namespace coop::p99_provider

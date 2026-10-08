@@ -38143,3 +38143,121 @@ in the owned harness first. External held provider/artifact verification and
 actual write transaction/uncertain recovery/ACK/manual-arm remain absent. Do not
 inject the inert ABI artifact, equate readable claims with lifetime admission,
 or claim this step fixed the visible Nadine pistol grip.
+
+## 2026-10-08 — P99 141ABA973: bind provider ownership to isolated PREPARED publication
+
+STATIC / isolated integration, not a game patch. Added
+scanner/src/nadine_p99_prepared_providers.h and separate prepared_pair_windows
+reader library. Existing Owner, Gate, actual Windows relay/FLS/page publishers
+are exercised together, rather than adding a second implementation of them.
+No ordinary runtime linkage/startup/flags or retained ABI export contract change;
+nadine_p99_wrist_prepare_runtime.inl is still untouched. No game, game input,
+injection, new game semantics or IDB labels; existing tmp/ preserved.
+
+Source audit of actual preparation established this order: Resources::prepare
+generates Offer nonce and retains self/relays; provider session MUST derive from
+that exact Offer; then provider retention, Snapshot/FLS completion, provider
+publication/readback, Gate checks and finally Offer publication. Existing
+full-TU wrong-main refusal fixture stops inside Resources before this new
+boundary and CANNOT prove positive provider integration. A separate coordinator
+fixture is used; it must not be described as successful retail preparation.
+
+Alternatives and predictions before the owned test:
+
+- Creating a new provider nonce instead of using Offer's nonce would split the
+  channels into two sessions. Session is exactly PID/creation/nonce/DLL/extent
+  from the supplied Offer; neither decoder creates or repairs those values.
+- Checking only Owner::Published plus nonce misses wrong provider inventories.
+  Own the expected count/order/base/size/anchor/hash before any callback; compare
+  the complete Claims at BOTH readback boundaries, not a remote success boolean.
+- Continuing after provider publication reports FALSE could enter PREPARED even
+  when local outcome is unknown. Prediction: provider-after exposes readable RO
+  claims, but leaves GateEmpty and Offer page allZERO, just like no preparation.
+- Erasing/releasing on later failure would recall already visible resources.
+  Prediction: finish/proof/read/store failures retain references/relays; full
+  false-after-Offer can expose both readable pages while local result stays
+  OfferUnknown/GateRefused. This is NOT an ACK or an installation certificate.
+- Reusing OfferV1 reserved words is still rejected. Keep separate4096B pages
+  and unchanged240B OfferV1 plus P9PROV01 claims. Reader rejects aliased/swapped
+  pages and mismatched values; it does not invent a new combined wire version.
+
+Preparation::run takes a const owned Offer, explicit selected providers and
+stable same-thread Ops. It validates a syntactic plan, copies expected Claims,
+invokes the existing Owner (which copies full selected inputs before OS calls),
+then Local.finish for Snapshot/FLS preparation. Owner.publish must return TRUE;
+the first exact claims readback must match before Gate.prepare can begin. After
+local identity/resources/stock-sites/code proofs, a second exact inventory check
+AND byte-for-byte comparison of Gate wire to the original Offer must pass before
+the first Offer store. Every path consumes one shot; no reset/free/worker/ACK.
+ProviderUnknown and OfferUnknown distinguish the two possible exposure stages.
+Local.publish remains a trusted concrete backend contract, not a capability.
+
+REJECTED during independent code review: mutable callback Offer parameter.
+Original coordinator could pass its local Offer by nonconst reference to finish,
+allowing the callback to change nonce while provider claims retained the original.
+Gate also has its own mutable candidate copy, which a proof callback can change.
+Fix uses const owned input and exact final Gate wire equality. Two regressions:
+an overloaded mutable finish MUST NOT be selected; a proof that changes its Gate
+candidate MUST refuse without Offer publication and leave GateRefused. The old
+Gate's general API was not changed; coordinator enforces the stronger boundary.
+
+read_pair takes borrowed process HANDLE, caller-owned exact expected Offer and
+Claims, and two independently resolved page addresses. Preflight checks plan,
+canonical provider records, matching session/artifact and distinct fully contained
+aligned pages. It performs claims/offer/claims/offer/claims reads via existing
+strict RO readers; final claims read rechecks fresh process PID/creation. It
+returns only the expected copied pair after all equalities succeed. Query/read
+cycles are NOT atomic, do not exclude ABA/third-party writers, prove PIN/refcount,
+whole provider code/file identity, API-set schema, complete dependencies or
+post-return lifetime. No process opening, debugger, patch, ACK or admission.
+
+Owned fixture: fixed test EXE plus adjacent tll_p99_provider_fixture.dll, held
+file snapshots/native paths/hashes and independent literal RX data anchors.
+Never calls those anchors, relays, artifact adapters or any retail function.
+A reserved/uncommitted128MiB main extent at0x140000000 is SYNTHETIC, not a loaded
+retail image. Real five RX relay allocations, two provider refs/PINs, one real
+random process session, real FLS initialization and both page publishers are
+used. sites/code predicates are explicitly fixture-only, NOT Snapshot evidence.
+Thus the test proves ordering, refusal, retention and transport only.
+
+Every OS case also creates a hidden same-build child to read parent pages through
+an inherited handle with only PROCESS_QUERY_INFORMATION|PROCESS_VM_READ|SYNCHRONIZE.
+Explicit PROC_THREAD_ATTRIBUTE_HANDLE_LIST contains ONLY that handle and a
+FILE_MAP_READ expected-value mapping handle. No inherited write/debug/create-thread
+rights, arbitrary PID lookup or path selector. Packet contains canonical expected
+wires from original parent inputs, never copies observed page output. The child
+does not independently authenticate the parent-supplied profile; this is an owned
+transport exam, not target trust bootstrap. Its same-build Packet is fixture
+memory transport only, not a public C++ layout/IPC contract. Timeout cleanup acts
+only on the handle returned by this exact CreateProcessW. Reference:
+https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute
+
+CONFIRMED (owned fixture ONLY):13 real Windows modes passed: normal, wrong-prefix,
+provider-before/after, read-missing/session/inventory/after-proof, finish-fail,
+proof-fail, offer-before/after/partial. Child reads agree with each expected result;
+stale session and wrong expected hash refuse. Normal and Offer-after expose both
+RO pages; provider-after exposes only provider claims and never starts Gate.
+After coordinator destruction and dropping initial DLL load ref, acquired modules
+and all relay allocations remain. No resources recalled after failed exposure.
+Core103checks additionally verify exact stage order, caller selection mutation,
+all local proof failures, immutable Offer/proof-mutation rejection, zero reserved
+V1 bytes and repeat refusal. Shared owned-file helper extracted without changing
+the previous provider fixture's expectations; its regressions still pass.
+
+Validation:14newCTest cases repeated3x after review corrections; full CTest109/109,
+Python705/705, MSVC default and inert ABI builds; no game/fixture process remains.
+Independent review reran all14 including child reads; no remaining acceptance
+blocker reported. Artifact hash remains
+a81ba7f43c543c731942c999f8b6aa9ed8f2bc0cda96c41ab96882257e22aae5.
+Reproduce: ctest --test-dir scanner/build -R nadine_p99_prepared_
+--repeat until-fail:3 --output-on-failure (single command).
+
+LIMITS / NEXT: coordinator is not yet invoked by the actual full-TU preparation
+body. Add a separate inert, explicit provider-preparation adapter/target rather
+than silently changing the existing eight-export pinned ABI artifact. It must
+obtain an independently trusted provider profile and an independently locatable
+provider page; feed actual Resources::offer into Preparation and use real
+Snapshot/FLS finish/proofs, with empty-profile/wrong-main refusal intact. Do not
+reuse the synthetic predicates or parent supplied values as retail evidence.
+Then external held verification/actual write transaction/uncertain recovery/ACK
+and manual arm still require integration. No visual Nadine grip repair this turn.

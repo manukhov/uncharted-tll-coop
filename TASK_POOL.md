@@ -11,7 +11,34 @@
 
 ## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
 
-Latest STATIC / OWNED PROVIDER OWNER AND CLAIMS (2026-10-08):
+Latest STATIC / OWNED COORDINATED PREPARED PAIR (2026-10-08):
+Added Preparation coordinator: exact immutable Offer -> provider Owner retention
+-> finish Snapshot/FLS callback -> provider publication + complete claims readback
+-> existing Gate proofs -> second inventory check + exact original Offer bytes
+-> existing240B Offer publication. Provider FALSE-after-seal stops with GateEmpty;
+Offer FALSE-after-seal stays locally unknown, with all resources retained/no retry.
+Separate pages/protocols unchanged. read_pair requires exact caller-owned values,
+matching PID/creation/nonce/artifact and distinct aligned pages; it re-reads both
+RO channels, never learns expectations from their contents or grants admission.
+Fixed mutable Offer callback hazard: immutable owned candidate and byte-for-byte
+Gate publication check prevent proof callbacks from changing the accepted session.
+Owned real-Windows tests exercise retained refs/PIN, five real never-called RX
+relays, FLS, Gate, both page publishers and an actual hidden child RO reader.
+Child inherits ONLY RO expected-value mapping + query/read/synchronize parent
+handle; expected values come from original fixture inputs, NOT published pages.
+13OS modes +103core checks;14newCTest cases repeated3x. Full CTest109/109,
+Python705/705; MSVC default+ABI builds. Same ABI SHA a81ba7f4...22aae5.
+IMPORTANT: synthetic uncommitted main and explicit fixture stock-code predicates;
+NOT complete retail Resources/Snapshot preparation. Actual game runtime .inl and
+its startup remain untouched; new library is isolated. No game/IDB/grip change.
+NEXT: explicit inert full-TU provider-preparation adapter/target, separate from
+the pinned eight-export ABI artifact. Supply a trusted profile and independently
+locatable provider page, feed actual Resources::offer into this coordinator and
+bind finish/proofs to real Snapshot/FLS; preserve empty-profile/wrong-main refusal.
+Only after this can external held verification/transaction/recovery/ACK be wired.
+Do not treat readable paired claims (including false-after-effect) as install proof.
+
+Previous STATIC / OWNED PROVIDER OWNER AND CLAIMS (2026-10-08):
 Added isolated C++ provider owner + Windows backend, NOT linked into either game
 DLL target. Copy selected full/native paths, base/size, independent32-byte RX
 anchor and expected hash; acquire ALL fullpath refs, validate ALL, then PIN ALL
