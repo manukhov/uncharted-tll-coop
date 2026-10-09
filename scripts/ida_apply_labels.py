@@ -5221,7 +5221,19 @@ FUNCTIONS = {
         "elbow pole or torso-clearance input. Byte143684E64 bypasses solve. "
         "Terminal WeaponIK passes failUnreachable=0, so reach is clamped, "
         "not refused; changing only the wrist target does not independently "
-        "select an authored elbow roll.",
+        "select an authored elbow roll. STATIC2026-10-09: actual reach clamp "
+        "1418F113E is min(requested distance,upper+lower). The0.99 threshold "
+        "1418F107F is only unreachable/refusal routing, not a bend margin. "
+        "At full extension, fixed-endpoint roll cannot meaningfully move E.",
+    ),
+    0x1406FE2E0: (
+        "Math_SolveTriangleAnglesFromSides",
+        "STATIC side-to-angle helper called by SolveArmIk1418F116A. RCX=three "
+        "broadcast angle outputs, RDX/R8/R9=broadcast side inputs. Sorts "
+        "largest side, evaluates acos(clamp((b*b+c*c-a*a)/(2*b*c),-1,1)) "
+        "at1406FE379..3C7, sine-law second angle and pi-A-B. SolveArmIk passes "
+        "(clamped target distance,forearm length,upperarm length); first "
+        "angle is elbow interior, approaching pi at full reach.",
     ),
     0x14181DEA0: (
         "JointSet_HasAllJointsInValidBits",
@@ -14827,7 +14839,21 @@ INSTRUCTION_COMMENTS = {
         "14181ECD0, freed by its reset. Right commit1DF9 must stay untouched. "
         "Endpoint-preserving roll candidate: native world D on shoulder, "
         "inverse D on wrist, verify solved locators or restore two local Qs "
-        "and invalidate world prefix. No skin-clearance claim."
+        "and invalidate world prefix. REJECTED visible repair2026-10-09 "
+        "PID21244: four numeric APPLIED rows but nearly straight S/E/W and "
+        "essentially unchanged E; user reports not fixed. Keep writer OFF."
+    ),
+    0x1418F107F: (
+        "STATIC compares d to0.99*(upper+lower), constant142BE91BC=3F7D70A4. "
+        "This is unreachable/debug/refusal routing, NOT the actual reach clamp. "
+        "Terminal clears request+34 at1418F1BC5, so out-of-reach may continue."
+    ),
+    0x1418F113E: (
+        "STATIC actual dClamped=min(requested |T-S|,upper+lower), no bend margin. "
+        "1418F116A passes(dClamped,lower,upper) to triangle-angle helper. "
+        "At d=upper+lower the elbow circle radius is zero; endpoint-preserving "
+        "roll cannot create a visible bend. PID21244 logs lack raw T, so its "
+        "near-straight solved geometry alone does not prove T was unreachable."
     ),
     0x1418F116F: (
         "STATIC arm bend plane: normalize((E-S) cross (W-E)) from incoming "

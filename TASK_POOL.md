@@ -58,7 +58,7 @@ Right-hand geometry candidates remain unadmitted. Tests:89 helper checks and
 so the full suite is not green. Exact artifact/evidence in latest COOP_STATUS.
 No provider/loader work and no second game instance.
 
-2026-10-09 NEW LEFT EXAM (PID21244 READY; user visual result pending): post-solve roll at
+2026-10-09 REJECTED LEFT EXAM (PID21244; user reports not fixed): post-solve roll at
 1418F1DEE, after stock wrist rotation and before LEFT commit. Use14181F450 world
 delta on shoulder21 and inverse on wrist25; preserve current W/LP/RP, verify E/
 normal/lengths, rollback two local Qs plus prefix invalidation on refusal. Four
@@ -69,9 +69,17 @@ No bind-helper stand-ins for
 missing left-skin influences. Right inverse(RW)*RP diagnostic only, no right
 writer. See latest COOP_STATUS for alternatives, static quota and prelaunch
 falsifier; do not call the candidate a visible fix before user validation.
-Build2026-10-09p99-arm-roll is now running, SHA D27498F8...862EF04A. Read this
-PID's new APPLIED/REJECTED markers and the user's screenshot next; do not launch
-a second copy or repeat an unchanged test. Installation alone is not a hand fix.
+PID21244 produced4APPLIED/8REJECTED bounded rows, but S/E/W remained nearly
+collinear and E barely moved despite27..41deg rotations. User reports no fix.
+Native1418F113E clamps target reach at upper+lower (not.99times that); rolling
+about a fully extended axis cannot restore bend. Raw target T was NOT logged,
+so the exact source of saturation remains open. Roll nowOFF; safe build
+2026-10-09p99-roll-safe SHA623C5B8F...7DFDEA6, game closed, no new launch.
+NEXT trace requested T versus shoulder/reach in the existing terminal scope,
+not another fixed-endpoint roll or blind combination of rejected writers.
+Also live inverse(RW)*RP differs from modeled R124+B8 by12.3746deg/.0258176
+and NPC by11.1928deg/.0216257; neither scalar donor is an exact live baseline.
+119roll checks/134scoped CTest pass. Full suite still has15parked exclusions.
 
 PARKED infrastructure history / NATIVE EIGHT-RECORD PREPARATION REFUSAL (2026-10-08):
 Native-owned padded host now constructs the actual same-build Request with

@@ -2815,9 +2815,10 @@ constexpr bool kEnableLegacyNadineWeaponIkTerminalGoalRelay = false;
 constexpr bool kEnableLegacyNadineP99SupportConstraint = false;
 // Separate post-solve experiment: retain the STOCK wrist/prop constraint and
 // roll only the left shoulder, counter-rotating the wrist before stock commit.
-// 2026-10-09 scoped exam: native boundary, numeric tests and falsifier reviewed.
-// Visible correction remains unconfirmed until the user's game result.
-constexpr bool kEnableLegacyNadineP99ArmRoll = true;
+// REJECTED 2026-10-09, PID21244: user reports no fix. Four APPLIED rows
+// rotated Q but left an almost straight S/E/W chain and essentially unchanged
+// elbow P. Endpoint-preserving roll cannot restore bend at maximum reach.
+constexpr bool kEnableLegacyNadineP99ArmRoll = false;
 // Build acg proved that the two P99 WeaponIK paths share the same lifecycle and
 // scalar controls, but composing the interleaved arm hierarchy reveals a
 // residual 6.7 mm hand-endpoint split. Distinguish that upstream pose delta
@@ -81268,8 +81269,8 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-10-09p99-arm-roll "
-        "(rejected P99 left support correction disabled; stock arm/finger paths; appearance and AGC back profiles retained)");
+        "TLL co-op runtime init 2026-10-09p99-roll-safe "
+        "(rejected P99 support-target and elbow-roll corrections disabled; stock arm/finger paths; appearance and AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
             "legacy-Nadine Mazur empty-track endpoint filler ACTIVE "

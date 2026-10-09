@@ -156,6 +156,18 @@ int main() {
     roll::Plan exact_plan{},near_plan{};
     check(roll::plan(s,e,w,exact,&exact_plan)&&roll::plan(s,e,w,near_unit,&near_plan),"near unit prop admitted");
     check(distance(exact_plan.expected_elbow,near_plan.expected_elbow)<2e-6F,"prop normalization preserves requested plane");
+    // PID21244 exposed a missing sufficiency condition: a numerically nonzero
+    // bend normal may exist on an almost fully extended arm. Plane alignment
+    // can then pass without visibly moving the elbow. This is a mathematical
+    // counterexample, not copied low-precision world-coordinate telemetry.
+    const auto almost_s=make({0,0,0});
+    const auto almost_e=make({.2854322F,.0001F,0});
+    const auto almost_w=make({.5309945F,0,0});
+    roll::Plan almost{};
+    check(roll::plan(almost_s,almost_e,almost_w,rp,&almost),"nearly straight arm has a numerical plane");
+    check(std::abs(almost.angle_degrees)>20.F,"large roll angle does not imply elbow displacement");
+    check(distance(almost.expected_elbow,roll::position(almost_e))<=.000201F,
+          "endpoint-preserving roll cannot restore bent arm");
     std::printf("nadine_p99_arm_roll_tests: %d checks, %d failures\n",checks,failures);
     return failures==0?0:1;
 }

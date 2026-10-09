@@ -8,7 +8,16 @@ through torso and incorrect right-hand pistol grip. All later infrastructure
 NEXT statements are parked history, not authority to continue that detour.
 Keep left support-target/arm chain separate from the21 right distal rows.
 
-CURRENT (2026-10-08): REJECTED visual correction, native DOWN5E67B1FA left
+CURRENT (2026-10-09): post-solve elbow roll1418F1DEE is also REJECTED as a
+visible fix by the user. PID21244 emitted4APPLIED rows but retained an almost
+straight S/E/W chain with essentially unchanged elbow position. It did not
+restore elbow bend. Disable the roll alongside the failed support-target swap;
+safe build2026-10-09p99-roll-safe. NEXT distinguish requested wrist reach from
+post-solve clamping, NOT another endpoint-preserving roll. See latest section
+for exact geometry, clamp addresses and the right-hand live/model mismatch.
+Both hand defects remain unresolved; no new game exam is admitted.
+
+Previous (2026-10-08): REJECTED visual correction, native DOWN5E67B1FA left
 support constraint via1418F18B5. One-copy PID9504 emitted READY, ADMITTED and four
 APPLIED rows, but the user explicitly reports "Not fixed". This confirms the
 input substitution only, NOT a corrected arm, solved output or rendered pose.
@@ -20,7 +29,7 @@ incoming elbow plane; proximal NPC rows19..30 are now reconstructed, including
 retarget mode2. NEXT bind the authored plane to the live shoulder/target and
 validate an elbow-roll correction plus post-solve output, not another distal
 target-only swap. Both hand defects remain open. The 2026-10-09 section below
-defines the distinct post-solve roll candidate and its exam gates; the rejected
+defines the now-rejected post-solve roll candidate and its exam gates; the rejected
 support-constraint getter substitution remains disabled.
 
 The older unchanged PID18204 was also self-closed; no late-arm source exam ran.
@@ -39226,3 +39235,80 @@ User was asked to load Nadine, draw P99 and stand non-ADS3..5s, then provide a
 front/side screenshot. No game input was sent. NEXT read PID21244 ARM-ROLL
 APPLIED/REJECTED and user result; do not restart the already ready instance or
 call either hand fixed from build/READY alone. Right-grip writer remains OFF.
+
+### 2026-10-09 REJECTED: post-solve roll aligns a plane but does not restore elbow bend
+
+User explicitly reports "Not fixed" for PID21244. Exact log104173..104186 has
+2ADMITTED,4APPLIED and8REJECTED rows (bounded counters, NOT total frame counts).
+Six refusals are elbow-or-plane-readback; two are degenerate-plane. All logged
+refusals have commitSeen=1/nextGetter=4/rollbackFailed=0; no critical rollback
+failure is present. Thus total non-admission is not the explanation: four writes
+passed their numeric readback, but the visible-fix prediction failed.
+
+APPLIED angles27.1918..40.7429deg, wrist position error3.22703e-5..6.98221e-5,
+logged wrist angle error0 and normalDot.999994..1 did NOT mean useful elbow
+translation. Before/after E coordinates are essentially identical in all four
+samples. Reconstructing the PRINTED S/E/W gives reach/(upper+lower)
+.99999512...99999947, upper about.2854/lower.2456. Positions were logged at only
+six significant digits at worldX~-761/Z~383, so exact submillimetre radius or
+displacement cannot be inferred. The robust observation is almost full extension,
+not a precise tiny bend angle. Passing a bend-normal dot on this near-degenerate
+chain overstates the useful effect; quaternion rotation is not elbow clearance.
+
+STATIC geometric rejection: for fixed S/W and upper/lower lengths, E lies on
+the shoulder-wrist-axis circle with radius h. Any roll moves E at most2h. As
+|W-S| approaches upper+lower, h approaches0. This rejects endpoint-preserving
+roll alone as a way to restore a bent arm at full reach. New regression uses a
+synthetic near-straight chain, not rounded telemetry: a >20deg plan is admitted
+yet elbow displacement stays<=.000201. The original invariant tests never proved
+minimum useful elbow displacement or body clearance.
+
+Fresh STATIC native explanation of that limit:1418F113A sums segment lengths;
+1418F113E takes min(requested shoulder-to-target distance, upper+lower).
+1418F116A passes that clamped side to triangle-angle helper1406FE2E0. The
+.99*(upper+lower) threshold1418F107F/constant142BE91BC=3F7D70A4 only controls
+unreachable/debug/refusal routing; it is NOT a retained bend margin. Terminal
+1418F1BC5 clears failUnreachable+34, allowing the hard reach clamp. Therefore
+this solver can legitimately output the observed straight chain. The logs do
+NOT include the raw preclamp target, so they do not prove which target input,
+anatomical mismatch or preceding pose made the distance reach that limit.
+Do not infer a later render overwrite just from this failed roll.
+
+Right-side discriminator now has live evidence, but no correction: APPLIED row
+104184 records inverse(RW)*RP P=(-.00901055,.0287114,-.0693022),
+Q=(-.698051,-.699815,-.0863881,.12458). Fresh scalar localPalm28*localProp30
+composition from the existing disk audits differs by.025817573/12.374575deg
+for conditional currentR124+B8 and.021625654/11.192811deg for nativeNPC4CAA7420.
+This rules out treating either full-weight modeled palm/prop frame as an exact
+live observation of this sample. It does not identify the selected clip, weight,
+later writer or correct grip; no fingers/attachment writer is admitted from it.
+Compute via p99_npc_grip_candidate.audit and p99_direct_grip_audit.audit
+(include_local_rows=True), then p99_grip_composition_audit.blend(rows28,rows30).
+
+The game was still responsive at the initial failure inspection and is now
+closed; no crash is established. No process was killed/restarted and no input
+was sent. kEnableLegacyNadineP99ArmRoll=false, rejected support constraint=false,
+all right-grip writers stillOFF, attachments unchanged. Release safe build
+2026-10-09p99-roll-safe succeeds; SHA256
+623C5B8F3A2B0FFB5778832EB3A28ADBE3F5B59BA92CD1901F744EB0B7DFDEA6.
+Roll regressions119/119; scoped CTest134/134 passes with the same15parked
+native-bootstrap fixtures excluded. No new launch is justified by this rollback.
+
+NEXT: statically bind the terminal requested T=RP*inverse(LP)*LW to the native
+reach calculation and existing operand captures. Distinguish requested target
+outside reach versus an already straight incoming chain or partial weight;
+require actual T, S, segment lengths and post-solve reach in one scope before
+selecting a new endpoint/pose correction. Do not simply combine two rejected
+writers, guess a reach margin, or resume provider/loader infrastructure.
+The existing TLS already copies four pre-solve RW/LW/RP/LP getters and post-solve
+S/E/W; compute C=inverse(LP)*LW, T=RP*C in that SAME call. Compare |T-S| to a+b,
+|T-W| and ray alignment; use full float precision and copied values, not freed
+buffers after commit. Current logs did not emit absolute RP/LP/LW or T, so
+RW->RP alone cannot recover it. Do not combine PID9504 constraints or older
+census data with PID21244's different state to fill the missing target.
+
+Handoff verification: Python support11/11 also passes. New triangle-helper
+name and clamp/rejection comments were saved in sole ida/tll.i64; log
+.codex/ida_apply_p99_roll_reject_20261009.log reports1936functions/80data/2types
+and save_database returned True. Restarted MCP reads the new helper name,
+SolveArmIk callerxref1418F116A and both precise clamp instruction comments.
