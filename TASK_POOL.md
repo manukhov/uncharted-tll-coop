@@ -58,6 +58,21 @@ Right-hand geometry candidates remain unadmitted. Tests:89 helper checks and
 so the full suite is not green. Exact artifact/evidence in latest COOP_STATUS.
 No provider/loader work and no second game instance.
 
+2026-10-09 NEW LEFT EXAM (PID21244 READY; user visual result pending): post-solve roll at
+1418F1DEE, after stock wrist rotation and before LEFT commit. Use14181F450 world
+delta on shoulder21 and inverse on wrist25; preserve current W/LP/RP, verify E/
+normal/lengths, rollback two local Qs plus prefix invalidation on refusal. Four
+getter hooks become read-only captures; failed DOWN C swap stays OFF. Native
+commit ABI has TWO args(set,byteflag), forwarded exactly once. New five-site
+package passed code review and116scalar checks; fresh final build precedes launch.
+No bind-helper stand-ins for
+missing left-skin influences. Right inverse(RW)*RP diagnostic only, no right
+writer. See latest COOP_STATUS for alternatives, static quota and prelaunch
+falsifier; do not call the candidate a visible fix before user validation.
+Build2026-10-09p99-arm-roll is now running, SHA D27498F8...862EF04A. Read this
+PID's new APPLIED/REJECTED markers and the user's screenshot next; do not launch
+a second copy or repeat an unchanged test. Installation alone is not a hand fix.
+
 PARKED infrastructure history / NATIVE EIGHT-RECORD PREPARATION REFUSAL (2026-10-08):
 Native-owned padded host now constructs the actual same-build Request with
 artifact0 + seven System32 providers. Offline p99_native_preparation_inventory.py

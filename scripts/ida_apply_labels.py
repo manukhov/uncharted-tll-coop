@@ -633,6 +633,19 @@ FUNCTIONS = {
         "world-valid prefix at +0x38 to the changed ordinal so dependent world "
         "locators are rebuilt. It does not alter arm bend-plane selection.",
     ),
+    0x141820AD0: (
+        "JointChain_AdvanceWorldPrefixThroughOrdinal",
+        "ArmIkChain RTTI vtable142B0FF58 slot11/+0x58. Advances the world-valid "
+        "prefix after a refreshed locator. This is not the local-valid byte "
+        "array at work-table[4]; rotation helpers do not set that array.",
+    ),
+    0x141820150: (
+        "JointChain_ComposeScaledLocalWithParentWorld",
+        "Composes one chain local locator with parent world locator, scaling "
+        "local translation by the unchanged uniform scalar at work-table+0x28 "
+        "before rigid quaternion composition. STATIC endpoint-preserving "
+        "shoulder roll is compatible with this uniform-scale path.",
+    ),
     0x1418F0920: (
         "ArmIkChain_Construct",
         "Constructs the type3, 0x50-byte arm JointChain with RTTI vtable "
@@ -689,25 +702,31 @@ FUNCTIONS = {
         "JointCache local pose using the receiver-local index array at +0x18, "
         "then dispatches the JointSet reset slot. It performs no local-bank "
         "extent check; authored indices must already belong to that bank. "
-        "Its full-row stores do not authorize arbitrary global finger indices.",
+        "Its full-row stores do not authorize arbitrary global finger indices. "
+        "Two-argument ABI: RCX=set, DL=flag; preserve flag and RAX result. "
+        "ArmIkChain reset frees work buffers, so post-commit pointers expire.",
     ),
     0x14181F450: (
         "JointSet_ApplyRelativeJointRotation",
-        "Builds a normalized relative rotation for one JointSet member and passes "
-        "it to JointSet_MultiplyJointRotationAndMarkValid; no handle or asset "
-        "pointer enters the numeric result.",
+        "RCX=set, RDX=outQ16, R8D=ordinal, R9=worldDeltaQ16. Builds normalized "
+        "conjugate(parentWS.Q)*worldDelta*parentWS.Q and PRE-multiplies local Q "
+        "through14181F640. ArmIkChain invalidates world prefix, but does NOT "
+        "set local-valid bytes; require already valid local rows. Applying D "
+        "at shoulder then conjugate(D) at wrist restores distal world Q.",
     ),
     0x14181F640: (
-        "JointSet_MultiplyJointRotationAndMarkValid",
-        "Multiplies a numeric quaternion into the selected JointSet locator "
-        "rotation at buffers[0]+0x20*index+0x10 and marks that joint valid through "
-        "the JointSet vtable.",
+        "JointSet_PreMultiplyLocalRotationAndInvalidateWorld",
+        "PRE-multiplies normalized input Q into local Q at work-table[0] "
+        "+0x20*ordinal+0x10. Calls vtable+0x48: for ArmIkChain this invalidates "
+        "world prefix141820AA0, NOT local-valid bytes at work-table[4]. "
+        "No allocation/free. Previous MarkValid name was misleading.",
     ),
     0x14181F710: (
-        "JointSet_PostMultiplyJointRotationAndMarkValid",
+        "JointSet_PostMultiplyLocalRotationAndInvalidateWorld",
         "Post-multiplies the selected JointSet locator rotation by the supplied "
         "normalized quaternion, stores the result in buffers[0]+0x20*index+0x10, "
-        "then marks the joint valid through vtable +0x48. WeaponIK_Apply computes "
+        "then invalidates ArmIkChain world prefix through vtable +0x48; it does "
+        "NOT set local-valid bytes. WeaponIK_Apply computes "
         "inverse(current wrist WS) * desired wrist WS and uses this exact helper "
         "to make the wrist orientation reach its target before commit.",
     ),
@@ -14801,6 +14820,15 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x1418F1DEE: (
+        "STATIC left post-solve/pre-commit seam: wrist rotation finished at "
+        "1418F1DE3, DL=1 at1DE8, RCX=left set at1DEA. Forward BOTH arguments "
+        "and original return exactly once. Work buffers still live BEFORE "
+        "14181ECD0, freed by its reset. Right commit1DF9 must stay untouched. "
+        "Endpoint-preserving roll candidate: native world D on shoulder, "
+        "inverse D on wrist, verify solved locators or restore two local Qs "
+        "and invalidate world prefix. No skin-clearance claim."
+    ),
     0x1418F116F: (
         "STATIC arm bend plane: normalize((E-S) cross (W-E)) from incoming "
         "joint positions. Degenerate fallback at1418F1202 is negative "

@@ -53,6 +53,15 @@ class NpcSupportConstraintTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256(compiled).hexdigest(),
                          support.TARGET_CONSTRAINT_SHA256['weapon_down'])
 
+    def test_compiled_roll_normal_matches_fresh_authored_arm(self):
+        header = support.ROOT / 'scanner/src/nadine_p99_arm_roll.h'
+        text = header.read_text(encoding='utf-8')
+        block = text.split('inline constexpr Vector kAuthoredDownNormal{', 1)[1].split('};', 1)[0]
+        bits = [int(value, 16) for value in re.findall(r'0x([0-9A-Fa-f]{8})u', block)]
+        self.assertEqual(len(bits), 3)
+        expected = self.report['clips']['weapon_down']['authored_proximal_geometry']['incoming_bend_normal']
+        self.assertEqual(struct.pack('<3I', *bits), struct.pack('<3f', *expected))
+
     def test_mode2_absolute_uses_reference_scale_and_half_translation(self):
         a = SimpleNamespace(normalized=axis_angle((1, 2, 3), 28))
         e = SimpleNamespace(normalized=axis_angle((3, -1, 2), -37))

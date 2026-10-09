@@ -19,7 +19,9 @@ OFF. Attachments unchanged. Fresh STATIC trace proves the solver inherits the
 incoming elbow plane; proximal NPC rows19..30 are now reconstructed, including
 retarget mode2. NEXT bind the authored plane to the live shoulder/target and
 validate an elbow-roll correction plus post-solve output, not another distal
-target-only swap. Both hand defects remain open; no new launch is admitted.
+target-only swap. Both hand defects remain open. The 2026-10-09 section below
+defines the distinct post-solve roll candidate and its exam gates; the rejected
+support-constraint getter substitution remains disabled.
 
 The older unchanged PID18204 was also self-closed; no late-arm source exam ran.
 Do not repeat that diagnostic or resume its parked provider/loader work.
@@ -39117,3 +39119,110 @@ Final sole-IDB save log `.codex/ida_apply_p99_proximal_20261008.log` reports1933
 functions,80data names,2types and save_database returned True. Restarted MCP
 readback verifies the mode2 comment, three NPC modifier names and vtable xrefs.
 No game launched, injected or controlled during this rejected-result follow-up.
+
+### 2026-10-09 STATIC / HYPOTHESIS: preserve the wrist while correcting the left elbow plane
+
+HYPOTHESIS: the local idle-P99 left arm retains an unsuitable bend plane after
+SolveArmIk1418F0B60. At the FIRST terminal commit call1418F1DEE, rotate shoulder21
+about the CURRENT S->W axis toward the native DOWN5E67B1FA bend normal in the
+CURRENT right-prop30 frame; apply the inverse world rotation at wrist25. This
+changes elbow23 without changing wrist position/orientation, palm27, prop29 or
+the right chain. It does not replace the failed distal C and is NOT yet a
+confirmed visible repair. Right grip remains a separate unresolved symptom.
+
+Alternatives and discriminators: (A) an unsuitable elbow plane is sufficient;
+(B) the live wrist/weapon endpoint itself is unsuitable, so this endpoint-
+preserving correction will not fix it; (C) a later pose/helper/skin writer keeps
+the rendered arm wrong despite the corrected post-solve joints; (D) admission
+does not persist in the visible state. Input-only logs cannot distinguish them.
+The new exam must observe solved S/E/W/LP/RP before AND after the two writes.
+No full-clavicle pose transplant, guessed offset, ADS or right-finger writer.
+
+Independent STATIC evidence for this new seam:
+
+1. Call/instruction ordering:1418F1DE3 calls wrist postrotation14181F710;
+   1DE8 sets DL=1,1DEA selects the left set,1DEE calls14181ECD0. The right
+   commit1DF9 follows and must remain untouched. This is AFTER solve, unlike
+   pre-solve plane changes that the native shortest-arc step can alter.
+2. Dataflow:14181F450 takes(set,outQ,ordinal,Dworld), computes
+   inverse(QparentWS)*Dworld*QparentWS, then PRE-multiplies the local Q via
+   14181F640. Apply D at shoulder and conjugate(D) at wrist.14181F710 instead
+   POST-multiplies a local delta and must not receive Dworld directly.
+3. Resolved RTTI/vtable: ArmIkChain142B0FF58 slot3/+18 returns ordinal-1;
+   slot7/+38=1418209F0 refreshes world, slot9/+48=141820AA0 invalidates its
+   prefix, slot11/+58=141820AD0 advances it. Neither rotation helper sets the
+   local-valid bytes in work-table[4]; both changed local rows must already
+   be valid. Work-table[0] is the local32B bank, [1] the world32B bank.
+   The helper names formerly ending MarkValid were misleading and are corrected.
+4. Independent authored/structural evidence: existing mode2/mode1/mode3
+   reconstruction gives DOWN incoming normal in same-clip RP space
+   (-.4872866612,-.4954023494,-.7191162785), packed BEF97DA3/BEFDA560/BF381801.
+   JointChain141820150 uses an unchanged uniform translation scale, consistent
+   with endpoint-preserving rigid roll. Python binds these C++ bits to a fresh
+   disk decode; arbitrary world-frame and noncommuting rotation tests apply.
+
+The new pure header nadine_p99_arm_roll.h projects that authored normal onto
+the live axis-perpendicular plane. It refuses degenerate axes/planes and invalid
+locators. No fallback pole or copied authored shoulder position is used. Save
+both local Q16 beforeimages, perform both native rotations, then verify S/W/LP/
+RP, lengths, expected E and normal alignment. On any failed readback restore
+the two Qs and invalidate from the shoulder; never restore an old world-prefix
+cursor because its cache could contain the modified pose. Forward original
+commit exactly once with BOTH set and byte flag and preserve its return. Buffers
+are freed by commit/reset; outer-return pointers are not valid for this write.
+
+Offline skin-clearance limit is now explicit, NOT silently bypassed: normal
+LEFT rural arm mesh181B98 has6448vertices/36582indices and zero closed vertices
+under just joints18..30. Even adding left fingers closes only4328vertices/
+8026triangles, leaving2120 upperarm/forearm vertices dependent on procedural
+elbow67/69, shoulder/chest240..260 and arm507..531 helpers. Elbow23 itself has
+no direct positive influence. Normal shirt7ED28 has2782vertices/12798indices;
+ordinary joints3..34 close only205vertices. Do not use the earlier RIGHT181AE8
+mesh as left-arm evidence or fill missing animated helpers with bind constants.
+Body SHA256 bc75642917f19fcc9f42b869131df1687bd1cc179635578352a83d87d611423f;
+shirt SHA2565a5f35fb20ae00e765e356fe8dae37831bb208e4cd658f618857efc5c24ffb9a.
+
+Written exam prediction, BEFORE launch: after the user draws P99 as local
+appearance1 Nadine and waits idle/non-ADS for at least350ms, the new bounded
+P99-ARM-ROLL trace must show post-solve E moving to the projected native plane
+while W position/Q and both props remain invariant. If A is sufficient, the
+visible left forearm will leave the torso without moving the pistol/attachments.
+If APPLIED/readback passes but the visible defect persists, reject sufficiency
+of this roll and distinguish B/C; do not report success or repeat unchanged.
+No APPLIED means examine the explicit admission/refusal, not assume no visual
+effect. Crash, severe lag or changed attachments fails the exam. Right grip
+is intentionally unchanged; bounded inverse(RW)*RP gives its next discriminator.
+One instance only; the agent launches/injects but never performs game input.
+
+Implementation reviewed before exam: four getters are capture-only; fifth E8
+callsite is1418F1DEE. Exact owner/ID/skeleton, selector1/fullweight/idle350ms,
+named joints, same-call table/five banks/count and localValid checks precede
+writes. Normalized quaternion dot avoids confusing norm error with orientation.
+Bounded logs:2ADMITTED/4APPLIED/8REJECTED; rollback failure disables the path and
+emits a separate critical line. Existing attachments and all rejected writers
+remain unchanged/disabled. New build tag2026-10-09p99-arm-roll; flag enabled
+only for this distinct reviewed exam, not a confirmed repair.
+
+Prelaunch verification: pure roll116/116 checks, including native-style LOCAL
+premultiply through noncommuting parent frames and uniform scales. Independent
+review found and corrected the raw quaternion-dot gate; no remaining code blocker
+was found. Python candidate/contact/support20/20; scoped CTest134/134 excluding
+the15 previously parked native-bootstrap stale-pin fixtures. Full suite is NOT
+claimed green. Sole IDB save `.codex/ida_apply_p99_arm_roll_20261009.log`:
+1935functions/80data/2types, save_database returned True. Restarted MCP resolves
+the new/corrected five names and slot11 xref142B0FFB0.
+
+2026-10-09 exam launched: final Release build succeeded after one transient
+mt.exe manifest Access-denied failure cleared by an unchanged normal rebuild
+(no security changes). DLL SHA256
+D27498F853A76505A3D6AF7C8720167132AE9533DCAA99F03CD76D32862EF04A.
+One tll.exe PID21244 started13:59:40 local and injection returned success.
+Its log contains the new build tag, five-callsite READY, combined P99-ARM-ROLL
+READY and LOCAL-LOOK READY requested=Nadine. Initial process remained responsive.
+The generic init parenthetical still describes the previous stock-arm baseline;
+use the explicit new ARM-ROLL READY and feature flag for this experiment.
+At handoff only installation is observed, NOT applied pose or visual success.
+User was asked to load Nadine, draw P99 and stand non-ADS3..5s, then provide a
+front/side screenshot. No game input was sent. NEXT read PID21244 ARM-ROLL
+APPLIED/REJECTED and user result; do not restart the already ready instance or
+call either hand fixed from build/READY alone. Right-grip writer remains OFF.

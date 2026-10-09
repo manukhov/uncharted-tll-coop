@@ -49,6 +49,7 @@
 #include "nadine_p99_observation_arm.h"
 #include "nadine_p99_preselection_trace.h"
 #include "nadine_p99_support_constraint.h"
+#include "nadine_p99_arm_roll.h"
 #include "nadine_p99_wrist_snapshot.h"
 #include "nadine_p99_wrist_read_diagnostic.h"
 #include "nadine_p99_wrist_report.h"
@@ -2812,6 +2813,11 @@ constexpr bool kEnableLegacyNadineWeaponIkTerminalGoalRelay = false;
 // Preserve the atomic getter implementation for analysis; do not repeat the
 // native DOWN endpoint exam or infer a post-solver/render result from APPLIED.
 constexpr bool kEnableLegacyNadineP99SupportConstraint = false;
+// Separate post-solve experiment: retain the STOCK wrist/prop constraint and
+// roll only the left shoulder, counter-rotating the wrist before stock commit.
+// 2026-10-09 scoped exam: native boundary, numeric tests and falsifier reviewed.
+// Visible correction remains unconfirmed until the user's game result.
+constexpr bool kEnableLegacyNadineP99ArmRoll = true;
 // Build acg proved that the two P99 WeaponIK paths share the same lifecycle and
 // scalar controls, but composing the interleaved arm hierarchy reveals a
 // residual 6.7 mm hand-endpoint split. Distinguish that upstream pose delta
@@ -2845,6 +2851,16 @@ static_assert(
          !kEnableLegacyNadinePistolPoseGripRepair &&
          !kEnableLegacyNadineActiveWeaponGripOverlayRepair),
     "P99 support constraint must exclusively own the terminal arm seam");
+static_assert(!kEnableLegacyNadineP99ArmRoll ||
+    (!kEnableLegacyNadineP99SupportConstraint &&
+     !kEnableWeaponIkTerminalGetterCensus &&
+     !kEnableLegacyNadineWeaponIkTerminalGoalRelay &&
+     !kEnableLegacyNadineWeaponIkGoalRelay &&
+     !kEnableLegacyNadineWeaponIkFeatherSuppression &&
+     !kEnableLegacyNadineP99ChloeGripTransfer &&
+     !kEnableLegacyNadinePistolPoseGripRepair &&
+     !kEnableLegacyNadineActiveWeaponGripOverlayRepair),
+    "P99 arm roll must not coexist with rejected pose writers");
 constexpr bool kEnableLegacyNadineMazurDrawEndpointRepair = false;
 // Runtime-confirmed 82e7b9e/adr two-hand baseline. Build aep retains it as the
 // exact fail-closed pose under the one-process semantic right-hand reference.
@@ -19317,6 +19333,10 @@ constexpr std::uintptr_t kMemoryResolveAllocatorByIdRva = 0x15A1D70u;
 constexpr std::uintptr_t kMemoryGetCurrentAllocatorRva = 0x15A1EB0u;
 constexpr std::uint32_t kWeaponIkJointSetTransientAllocatorId = 14u;
 constexpr std::uintptr_t kJointSetMultiplyJointRotationRva = 0x181F710u;
+constexpr std::uintptr_t kP99ArmRollCommitCallsiteRva = 0x18F1DEEu;
+constexpr std::uintptr_t kJointSetApplyWorldRotationRva = 0x181F450u;
+constexpr std::uintptr_t kJointChainInvalidatePrefixRva = 0x1820AA0u;
+constexpr std::uintptr_t kArmIkChainVtableRva = 0x2B0FF58u;
 constexpr std::uintptr_t kSolveArmIkRva = 0x18F0B60u;
 constexpr std::uintptr_t kTransformMakeRelativeRva = 0x1990F0u;
 constexpr std::uintptr_t kPlayerWeaponIkActionVtableRva = 0x2A483A0u;
@@ -46460,6 +46480,13 @@ using WeaponIkTransformComposeFunction = void*(__fastcall*)(
 using SolveArmIkFunction = std::uint8_t(__fastcall*)(void*, void*, void*);
 using JointSetMultiplyJointRotationFunction = std::int64_t(__fastcall*)(
     void*, std::int32_t, const float*, std::uint8_t);
+using JointSetApplyWorldRotationFunction = float*(__fastcall*)(
+    void*, float*, std::int32_t, const float*);
+using JointChainInvalidatePrefixFunction = std::int64_t(__fastcall*)(
+    void*, std::int32_t);
+JointSetApplyWorldRotationFunction g_p99_arm_roll_apply_rotation = nullptr;
+JointChainInvalidatePrefixFunction g_p99_arm_roll_invalidate = nullptr;
+JointSetCommitJointTransformsFunction g_original_p99_arm_roll_commit = nullptr;
 
 WeaponIkFeatherSolveFunction g_original_weapon_ik_feather_solve = nullptr;
 JointChainFindNamedJointOffsetFunction
@@ -46547,6 +46574,22 @@ struct WeaponIkTerminalGetterCaptureTls {
     bool relay_source = false;
     bool relay_target = false;
     bool p99_support_constraint = false;
+    bool p99_arm_roll = false;
+    bool p99_roll_failed = false;
+    bool p99_roll_commit_seen = false;
+    bool p99_roll_applied = false;
+    bool p99_roll_rollback_failed = false;
+    std::size_t p99_roll_next_getter = 0;
+    const char* p99_roll_reason = "commit-not-reached";
+    std::array<void*, 2> p99_roll_tables{};
+    std::array<std::array<void*, 5>, 2> p99_roll_banks{};
+    std::array<std::int16_t, 2> p99_roll_counts{};
+    WeaponIkGoalChainSample p99_roll_before{};
+    WeaponIkGoalChainSample p99_roll_after{};
+    coop::p99_arm_roll::Plan p99_roll_plan{};
+    float p99_roll_wrist_error = 0;
+    float p99_roll_wrist_q_error_degrees = 0;
+    float p99_roll_normal_dot = 0;
     bool left_wrist_overridden = false;
     bool left_prop_overridden = false;
     void* feather = nullptr;
@@ -46569,6 +46612,7 @@ thread_local WeaponIkTerminalGetterCaptureTls
 std::atomic<bool> g_weapon_ik_terminal_getter_census_ready{false};
 std::atomic<bool> g_weapon_ik_terminal_goal_relay_ready{false};
 std::atomic<bool> g_p99_support_constraint_ready{false};
+std::atomic<bool> g_p99_arm_roll_ready{false};
 
 struct WeaponIkGoalRelayDwell {
     void* player = nullptr;
@@ -47479,6 +47523,77 @@ const float* capture_weapon_ik_terminal_getter_result(
         ? original(joint_set, joint_offset)
         : nullptr;
     auto& capture = g_weapon_ik_terminal_getter_capture_tls;
+    if (capture.p99_arm_roll) {
+        // This package observes the four stock operands; it NEVER substitutes
+        // a getter result or reuses the rejected DOWN distal constraint.
+        __try {
+            if (!capture.active || capture.selector != 1 ||
+                capture.feather == nullptr || capture.p99_roll_failed ||
+                getter_index >= kWeaponIkTerminalGetterCount ||
+                getter_index != capture.p99_roll_next_getter ||
+                result == nullptr || readable_bytes(result) < 32) {
+                capture.p99_roll_failed = true;
+                capture.p99_roll_reason = "getter-order-or-locator";
+                return result;
+            }
+            const std::size_t side = getter_index == 0 || getter_index == 2
+                ? 1 : 0;
+            auto* const expected = static_cast<std::byte*>(capture.feather) +
+                0x08 + side * 0x50;
+            if (joint_set != expected || readable_bytes(expected) < 0x50 ||
+                *reinterpret_cast<const std::uintptr_t*>(expected) !=
+                    g_module + kArmIkChainVtableRva ||
+                *reinterpret_cast<void* const*>(expected + 8) !=
+                    capture.p99_owner.player ||
+                joint_offset != *reinterpret_cast<const std::int8_t*>(
+                    expected + (getter_index < 2 ? 0x44 : 0x45))) {
+                capture.p99_roll_failed = true;
+                capture.p99_roll_reason = "getter-chain-identity";
+                return result;
+            }
+            const auto count = *reinterpret_cast<const std::int16_t*>(
+                expected + 0x12);
+            void* const table = *reinterpret_cast<void* const*>(expected + 0x20);
+            if (count < 5 || count > 32 || joint_offset < 1 ||
+                joint_offset >= count || table == nullptr ||
+                (getter_index >= 2 &&
+                 (capture.p99_roll_tables[side] != table ||
+                  capture.p99_roll_counts[side] != count))) {
+                capture.p99_roll_failed = true;
+                capture.p99_roll_reason = "getter-buffer-generation";
+                return result;
+            }
+            capture.p99_roll_tables[side] = table;
+            capture.p99_roll_counts[side] = count;
+            if (readable_bytes(table) < 0x50) {
+                capture.p99_roll_failed = true;
+                capture.p99_roll_reason = "getter-table";
+                return result;
+            }
+            for (std::size_t bank = 0; bank < 5; ++bank) {
+                void* const pointer = static_cast<void* const*>(table)[bank];
+                if (pointer == nullptr || (getter_index >= 2 &&
+                    capture.p99_roll_banks[side][bank] != pointer)) {
+                    capture.p99_roll_failed = true;
+                    capture.p99_roll_reason = "getter-bank-generation";
+                    return result;
+                }
+                capture.p99_roll_banks[side][bank] = pointer;
+            }
+            std::memcpy(capture.locators[getter_index].value.data(), result, 32);
+            capture.captured[getter_index] =
+                coop::p99_support_constraint::locator_valid(
+                    capture.locators[getter_index].value);
+            capture.p99_roll_failed = !capture.captured[getter_index];
+            capture.p99_roll_reason = capture.p99_roll_failed
+                ? "getter-nonfinite" : "commit-not-reached";
+            ++capture.p99_roll_next_getter;
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            capture.p99_roll_failed = true;
+            capture.p99_roll_reason = "getter-read-fault";
+        }
+        return result;
+    }
     if (capture.p99_support_constraint) {
         if (result == nullptr) {
             capture.p99_transaction.fail(
@@ -47621,6 +47736,209 @@ const float* capture_weapon_ik_terminal_getter_result(
         }
     }
     return result;
+}
+
+bool seh_p99_roll_read_side(
+    WeaponIkTerminalGetterCaptureTls& capture, std::size_t side,
+    std::array<WeaponIkGoalLocator, kWeaponIkGoalChainJointCount>& output,
+    std::array<std::int32_t, kWeaponIkGoalChainJointCount>& ordinals) {
+    __try {
+        auto* const set = static_cast<std::byte*>(capture.feather) +
+            8 + side * 0x50;
+        if (readable_bytes(set) < 0x50 ||
+            *reinterpret_cast<const std::uintptr_t*>(set) !=
+                g_module + kArmIkChainVtableRva ||
+            *reinterpret_cast<void* const*>(set + 8) != capture.p99_owner.player ||
+            *reinterpret_cast<void* const*>(set + 0x20) !=
+                capture.p99_roll_tables[side] ||
+            *reinterpret_cast<const std::int16_t*>(set + 0x12) !=
+                capture.p99_roll_counts[side]) return false;
+        const auto count = capture.p99_roll_counts[side];
+        auto* const table = static_cast<std::byte*>(capture.p99_roll_tables[side]);
+        if (count < 5 || count > 32 || readable_bytes(table) < 0x50) return false;
+        for (std::size_t bank = 0; bank < 5; ++bank)
+            if (reinterpret_cast<void* const*>(table)[bank] !=
+                capture.p99_roll_banks[side][bank]) return false;
+        auto* const local = *reinterpret_cast<std::byte* const*>(table);
+        auto* const world = *reinterpret_cast<std::byte* const*>(table + 8);
+        auto* const valid = *reinterpret_cast<std::uint8_t* const*>(table + 0x20);
+        auto* const indices = *reinterpret_cast<const std::int16_t* const*>(set + 0x18);
+        if (local == nullptr || world == nullptr || valid == nullptr ||
+            indices == nullptr || readable_bytes(local) < count * 32u ||
+            readable_bytes(world) < count * 32u ||
+            readable_bytes(valid) < static_cast<std::size_t>(count) ||
+            readable_bytes(indices) < count * 2u) return false;
+        // C39 has exactly 66 live group-0 local rows. These indices are not
+        // arbitrary 580-joint workspace/finger indices.
+        for (int i = 0; i < count; ++i) {
+            if (indices[i] < 0 || indices[i] >= 66 || valid[i] != 1) return false;
+        }
+        const auto& ids = side == 0 ? g_weapon_ik_goal_left_joint_ids
+                                   : g_weapon_ik_goal_right_joint_ids;
+        const std::array<std::int16_t, 4> globals = side == 0
+            ? std::array<std::int16_t, 4>{21, 23, 25, 29}
+            : std::array<std::int16_t, 4>{22, 24, 26, 30};
+        for (std::size_t i = 0; i < output.size(); ++i) {
+            const auto ordinal = i == 0 ? 0 :
+                g_joint_chain_find_named_joint_offset(set, ids[i]);
+            if (ordinal < 0 || ordinal >= count ||
+                (i > 0 && (ordinal <= ordinals[i - 1] ||
+                           indices[ordinal] != globals[i - 1]))) return false;
+            ordinals[i] = ordinal;
+            const auto* value = g_original_weapon_ik_goal_get_joint_loc_ws(set, ordinal);
+            if (value == nullptr || readable_bytes(value) < 32) return false;
+            std::memcpy(output[i].value.data(), value, 32);
+            if (!coop::p99_support_constraint::locator_valid(output[i].value)) return false;
+        }
+        return ordinals[1] == *reinterpret_cast<const std::int8_t*>(set + 0x42) &&
+            ordinals[2] == *reinterpret_cast<const std::int8_t*>(set + 0x43) &&
+            ordinals[3] == *reinterpret_cast<const std::int8_t*>(set + 0x44) &&
+            ordinals[4] == *reinterpret_cast<const std::int8_t*>(set + 0x45);
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+
+bool seh_p99_roll_restore(
+    void* set, void* table, void* expected_local,
+    const std::array<std::int32_t, 2>& ordinals,
+    const std::array<std::array<float, 4>, 2>& before) {
+    __try {
+        if (*reinterpret_cast<void* const*>(static_cast<std::byte*>(set) + 0x20) != table)
+            return false;
+        auto* const local = *reinterpret_cast<std::byte* const*>(table);
+        if (local != expected_local) return false;
+        for (std::size_t i = 0; i < 2; ++i)
+            std::memcpy(local + 32 * ordinals[i] + 16, before[i].data(), 16);
+        // World cache may already contain the rotated pose. Never restore its
+        // old prefix without invalidating/recomputing those cached values.
+        g_p99_arm_roll_invalidate(set, ordinals[0]);
+        for (std::size_t i = 0; i < 2; ++i)
+            if (std::memcmp(local + 32 * ordinals[i] + 16, before[i].data(), 16) != 0)
+                return false;
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
+
+float p99_roll_position_error(const WeaponIkGoalLocator& a, const WeaponIkGoalLocator& b) {
+    const auto d = coop::p99_arm_roll::subtract(
+        coop::p99_arm_roll::position(a.value), coop::p99_arm_roll::position(b.value));
+    return std::sqrt(coop::p99_arm_roll::dot(d, d));
+}
+
+float p99_roll_normalized_quaternion_dot(const WeaponIkGoalLocator& a, const WeaponIkGoalLocator& b) {
+    double dot = 0, norm_a = 0, norm_b = 0;
+    for (int i = 4; i < 8; ++i) {
+        dot += static_cast<double>(a.value[i]) * b.value[i];
+        norm_a += static_cast<double>(a.value[i]) * a.value[i];
+        norm_b += static_cast<double>(b.value[i]) * b.value[i];
+    }
+    if (!std::isfinite(dot) || !std::isfinite(norm_a) || !std::isfinite(norm_b) ||
+        norm_a < 0.5 || norm_b < 0.5) return -1.F;
+    return static_cast<float>(std::clamp(std::abs(dot) / std::sqrt(norm_a * norm_b), 0.0, 1.0));
+}
+
+bool p99_roll_same_frame(const WeaponIkGoalLocator& a, const WeaponIkGoalLocator& b) {
+    return p99_roll_position_error(a, b) <= 0.0005F &&
+        p99_roll_normalized_quaternion_dot(a, b) >= 0.99999F;
+}
+
+bool seh_apply_p99_arm_roll(WeaponIkTerminalGetterCaptureTls& capture, void* set) {
+    std::array<std::int32_t, kWeaponIkGoalChainJointCount> left{}, right{};
+    std::array<std::int32_t, 2> changed{};
+    std::array<std::array<float, 4>, 2> before_q{};
+    bool wrote = false;
+    bool success = false;
+    __try {
+        do {
+            capture.p99_roll_reason = "owner-or-buffer";
+            if (capture.p99_roll_tables[0] == capture.p99_roll_tables[1] ||
+                capture.p99_roll_banks[0][0] == capture.p99_roll_banks[1][0] ||
+                capture.p99_roll_banks[0][1] == capture.p99_roll_banks[1][1] ||
+                !seh_p99_support_constraint_owner_still_valid(
+                    capture.p99_owner, capture.p99_feather_info) ||
+                !seh_p99_roll_read_side(capture, 0, capture.p99_roll_before.left, left) ||
+                !seh_p99_roll_read_side(capture, 1, capture.p99_roll_before.right, right)) break;
+            capture.p99_roll_reason = "degenerate-plane";
+            if (!coop::p99_arm_roll::plan(
+                    capture.p99_roll_before.left[1].value,
+                    capture.p99_roll_before.left[2].value,
+                    capture.p99_roll_before.left[3].value,
+                    capture.p99_roll_before.right[4].value,
+                    &capture.p99_roll_plan)) break;
+            changed = {left[1], left[3]};
+            auto* const local = *reinterpret_cast<std::byte* const*>(capture.p99_roll_tables[0]);
+            for (std::size_t i = 0; i < 2; ++i)
+                std::memcpy(before_q[i].data(), local + 32 * changed[i] + 16, 16);
+            alignas(16) float scratch[4]{};
+            const auto& delta = capture.p99_roll_plan.world_delta;
+            const std::array<float, 4> inverse{-delta[0], -delta[1], -delta[2], delta[3]};
+            capture.p99_roll_reason = "native-rotation-or-readback";
+            wrote = true;
+            g_p99_arm_roll_apply_rotation(set, scratch, changed[0], delta.data());
+            g_p99_arm_roll_apply_rotation(set, scratch, changed[1], inverse.data());
+            if (!seh_p99_roll_read_side(capture, 0, capture.p99_roll_after.left, left) ||
+                !seh_p99_roll_read_side(capture, 1, capture.p99_roll_after.right, right)) break;
+            capture.p99_roll_reason = "endpoint-or-right-frame-drift";
+            const auto& before = capture.p99_roll_before.left;
+            const auto& after = capture.p99_roll_after.left;
+            capture.p99_roll_wrist_error = p99_roll_position_error(before[3], after[3]);
+            const float wrist_dot = p99_roll_normalized_quaternion_dot(before[3], after[3]);
+            capture.p99_roll_wrist_q_error_degrees = wrist_dot >= 0
+                ? 2.F * std::acos(wrist_dot) * 57.29577951308232F : 180.F;
+            if (p99_roll_position_error(before[1], after[1]) > 0.0005F ||
+                !p99_roll_same_frame(before[3], after[3]) ||
+                !p99_roll_same_frame(before[4], after[4]) ||
+                !p99_roll_same_frame(capture.p99_roll_before.right[3], capture.p99_roll_after.right[3]) ||
+                !p99_roll_same_frame(capture.p99_roll_before.right[4], capture.p99_roll_after.right[4])) break;
+            capture.p99_roll_reason = "elbow-or-plane-readback";
+            auto expected = after[2];
+            for (std::size_t i = 0; i < 3; ++i)
+                expected.value[i] = capture.p99_roll_plan.expected_elbow[i];
+            if (p99_roll_position_error(expected, after[2]) > 0.0005F ||
+                std::abs(p99_roll_position_error(before[1], before[2]) -
+                         p99_roll_position_error(after[1], after[2])) > 0.0005F ||
+                std::abs(p99_roll_position_error(before[2], before[3]) -
+                         p99_roll_position_error(after[2], after[3])) > 0.0005F) break;
+            auto normal = coop::p99_arm_roll::cross(
+                coop::p99_arm_roll::subtract(coop::p99_arm_roll::position(after[2].value),
+                                            coop::p99_arm_roll::position(after[1].value)),
+                coop::p99_arm_roll::subtract(coop::p99_arm_roll::position(after[3].value),
+                                            coop::p99_arm_roll::position(after[2].value)));
+            if (!coop::p99_arm_roll::normalize(normal)) break;
+            capture.p99_roll_normal_dot = coop::p99_arm_roll::dot(normal, capture.p99_roll_plan.desired_normal);
+            if (!std::isfinite(capture.p99_roll_normal_dot) || capture.p99_roll_normal_dot < 0.9999F) break;
+            success = true;
+            capture.p99_roll_reason = "applied";
+        } while (false);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        capture.p99_roll_reason = "native-or-buffer-fault";
+    }
+    if (wrote && !success && !seh_p99_roll_restore(set, capture.p99_roll_tables[0],
+            capture.p99_roll_banks[0][0], changed, before_q)) {
+        capture.p99_roll_rollback_failed = true;
+        capture.p99_roll_reason = "rollback-failed-disabled";
+        g_p99_arm_roll_ready.store(false, std::memory_order_release);
+    }
+    return success;
+}
+
+std::int64_t __fastcall hooked_p99_arm_roll_terminal_commit(void* set, std::uint8_t flag) {
+    auto& capture = g_weapon_ik_terminal_getter_capture_tls;
+    if (capture.p99_arm_roll && capture.active) {
+        if (!capture.p99_roll_commit_seen && !capture.p99_roll_failed &&
+            capture.p99_roll_next_getter == 4 && capture.selector == 1 && flag == 1 &&
+            capture.feather != nullptr &&
+            set == static_cast<std::byte*>(capture.feather) + 8 &&
+            g_p99_arm_roll_ready.load(std::memory_order_acquire)) {
+            capture.p99_roll_commit_seen = true;
+            capture.p99_roll_applied = seh_apply_p99_arm_roll(capture, set);
+        } else {
+            capture.p99_roll_failed = true;
+            capture.p99_roll_reason = "commit-scope-or-order";
+        }
+    }
+    // The original owns publication and transient buffer reset. No saved
+    // buffer or getter pointer is touched after this call.
+    return g_original_p99_arm_roll_commit(set, flag);
 }
 
 const float* __fastcall hooked_weapon_ik_terminal_right_wrist_getter(
@@ -49278,8 +49596,9 @@ std::uint8_t __fastcall hooked_weapon_ik_feather_apply(
     log_weapon_ik_feather_census_entry(feather_info);
     NadineWeaponIkFeatherScope p99_support_scope{};
     bool p99_support_admitted = false;
-    if constexpr (kEnableLegacyNadineP99SupportConstraint) {
-        if (g_p99_support_constraint_ready.load(std::memory_order_acquire)) {
+    if constexpr (kEnableLegacyNadineP99SupportConstraint || kEnableLegacyNadineP99ArmRoll) {
+        if (g_p99_support_constraint_ready.load(std::memory_order_acquire) ||
+            g_p99_arm_roll_ready.load(std::memory_order_acquire)) {
             int p99_support_owner = -1;
             void* p99_support_player = nullptr;
             const bool p99_support_local_owner_call =
@@ -49302,13 +49621,16 @@ std::uint8_t __fastcall hooked_weapon_ik_feather_apply(
             }
         }
     }
-    const bool p99_support_selected = p99_support_admitted &&
+    const bool p99_selected = p99_support_admitted &&
         p99_support_constraint_dwell_ready(p99_support_scope);
-    if (p99_support_selected) {
+    const bool p99_support_selected = kEnableLegacyNadineP99SupportConstraint && p99_selected;
+    const bool p99_arm_roll_selected = kEnableLegacyNadineP99ArmRoll && p99_selected;
+    if (p99_selected) {
         static std::atomic<std::uint32_t> admitted_logs{0};
         if (admitted_logs.fetch_add(1, std::memory_order_relaxed) < 2) {
             std::ostringstream line;
-            line << "P99-SUPPORT-CONSTRAINT ADMITTED owner=0 screen=0"
+            line << (p99_arm_roll_selected ? "P99-ARM-ROLL" : "P99-SUPPORT-CONSTRAINT")
+                 << " ADMITTED owner=0 screen=0"
                  << " player=0x" << std::hex
                  << p99_support_scope.player_runtime_id
                  << " weapon=0x" << p99_support_scope.weapon_runtime_id
@@ -49359,7 +49681,7 @@ std::uint8_t __fastcall hooked_weapon_ik_feather_apply(
             &terminal_relay_snapshot);
     const WeaponIkTerminalGetterCaptureTls previous_terminal_capture =
         g_weapon_ik_terminal_getter_capture_tls;
-    if constexpr (kEnableLegacyNadineP99SupportConstraint) {
+    if constexpr (kEnableLegacyNadineP99SupportConstraint || kEnableLegacyNadineP99ArmRoll) {
         // A nested but unselected PlayerWeaponIKAction must not see or advance
         // the outer invocation's getter transaction. The object itself stays at
         // the same TLS address, so a selected outer call's staged pointer is
@@ -49367,20 +49689,21 @@ std::uint8_t __fastcall hooked_weapon_ik_feather_apply(
         g_weapon_ik_terminal_getter_capture_tls = {};
     }
     if (terminal_claimed || terminal_relay_source ||
-        terminal_relay_target || p99_support_selected) {
+        terminal_relay_target || p99_selected) {
         auto& capture = g_weapon_ik_terminal_getter_capture_tls;
         capture = {};
         capture.active = true;
         capture.relay_source = terminal_relay_source;
         capture.relay_target = terminal_relay_target;
         capture.p99_support_constraint = p99_support_selected;
+        capture.p99_arm_roll = p99_arm_roll_selected;
         capture.feather = feather;
-        capture.p99_feather_info = p99_support_selected
+        capture.p99_feather_info = p99_selected
             ? feather_info : nullptr;
         capture.selector = hand_side_selector;
         capture.scope = terminal_scope;
         capture.p99_transaction.begin(p99_support_selected);
-        if (p99_support_selected) {
+        if (p99_selected) {
             capture.p99_owner.player = p99_support_scope.player;
             capture.p99_owner.weapon = p99_support_scope.weapon;
             capture.p99_owner.fg_anim_data = p99_support_scope.fg_anim_data;
@@ -49451,6 +49774,43 @@ std::uint8_t __fastcall hooked_weapon_ik_feather_apply(
     const WeaponIkTerminalGetterCaptureTls terminal_capture =
         g_weapon_ik_terminal_getter_capture_tls;
     g_weapon_ik_terminal_getter_capture_tls = previous_terminal_capture;
+    if (p99_arm_roll_selected) {
+        static std::atomic<std::uint32_t> applied_logs{0}, rejected_logs{0};
+        if (terminal_capture.p99_roll_rollback_failed) {
+            // Failure disables the path, so this critical event is one-shot;
+            // do not let earlier ordinary refusals exhaust its log allowance.
+            write_log_line("P99-ARM-ROLL CRITICAL rollback-failed-disabled");
+        }
+        if (terminal_capture.p99_roll_applied &&
+            applied_logs.fetch_add(1, std::memory_order_relaxed) < 4) {
+            std::ostringstream line;
+            line << "P99-ARM-ROLL APPLIED owner=0 screen=0 stockConstraint=1"
+                 << " player=0x" << std::hex << p99_support_scope.player_runtime_id
+                 << " weapon=0x" << p99_support_scope.weapon_runtime_id << std::dec
+                 << " angleDeg=" << terminal_capture.p99_roll_plan.angle_degrees
+                 << " wristPError=" << terminal_capture.p99_roll_wrist_error
+                 << " wristQErrorDeg=" << terminal_capture.p99_roll_wrist_q_error_degrees
+                 << " normalDot=" << terminal_capture.p99_roll_normal_dot;
+            log_weapon_ik_goal_locator(line, "beforeS", terminal_capture.p99_roll_before.left[1]);
+            log_weapon_ik_goal_locator(line, "beforeE", terminal_capture.p99_roll_before.left[2]);
+            log_weapon_ik_goal_locator(line, "afterE", terminal_capture.p99_roll_after.left[2]);
+            log_weapon_ik_goal_locator(line, "beforeW", terminal_capture.p99_roll_before.left[3]);
+            log_weapon_ik_goal_locator(line, "afterW", terminal_capture.p99_roll_after.left[3]);
+            WeaponIkGoalLocator right_relative{};
+            if (weapon_ik_goal_make_relative(terminal_capture.locators[0],
+                    terminal_capture.locators[2], &right_relative))
+                log_weapon_ik_goal_locator(line, "rightWristToProp", right_relative);
+            write_log_line(line.str().c_str());
+        } else if (!terminal_capture.p99_roll_applied &&
+                   rejected_logs.fetch_add(1, std::memory_order_relaxed) < 8) {
+            std::ostringstream line;
+            line << "P99-ARM-ROLL REJECTED reason=" << terminal_capture.p99_roll_reason
+                 << " nextGetter=" << terminal_capture.p99_roll_next_getter
+                 << " commitSeen=" << terminal_capture.p99_roll_commit_seen
+                 << " rollbackFailed=" << terminal_capture.p99_roll_rollback_failed;
+            write_log_line(line.str().c_str());
+        }
+    }
     if (p99_support_selected) {
         if (terminal_capture.p99_transaction.committed &&
             terminal_capture.left_wrist_overridden &&
@@ -49686,7 +50046,9 @@ bool install_weapon_ik_terminal_getter_census() {
         std::array<std::uint8_t, 5> stock{};
         std::array<std::uint8_t, 5> patch{};
     };
-    const std::array<const void*, kWeaponIkTerminalGetterCount> kHooks{
+    constexpr std::size_t site_count = kWeaponIkTerminalGetterCount +
+        (kEnableLegacyNadineP99ArmRoll ? 1 : 0);
+    const std::array<const void*, kWeaponIkTerminalGetterCount + 1> kHooks{
         reinterpret_cast<const void*>(
             &hooked_weapon_ik_terminal_right_wrist_getter),
         reinterpret_cast<const void*>(
@@ -49694,8 +50056,9 @@ bool install_weapon_ik_terminal_getter_census() {
         reinterpret_cast<const void*>(
             &hooked_weapon_ik_terminal_right_prop_getter),
         reinterpret_cast<const void*>(
-            &hooked_weapon_ik_terminal_left_prop_getter)};
-    std::array<PreparedCallsite, kWeaponIkTerminalGetterCount> sites{};
+            &hooked_weapon_ik_terminal_left_prop_getter),
+        reinterpret_cast<const void*>(&hooked_p99_arm_roll_terminal_commit)};
+    std::array<PreparedCallsite, site_count> sites{};
     const auto free_relays = [&]() {
         for (auto& site : sites) {
             if (site.relay != nullptr) {
@@ -49705,15 +50068,18 @@ bool install_weapon_ik_terminal_getter_census() {
         }
     };
     for (std::size_t index = 0;
-         index < kWeaponIkTerminalGetterCount; ++index) {
+         index < site_count; ++index) {
+        const bool commit_site = index == kWeaponIkTerminalGetterCount;
         if (!prepare_plain_callsite_relay(
-                kWeaponIkTerminalGetterCallsiteRvas[index],
-                kJointSetGetJointLocWsRva, kHooks[index],
+                commit_site ? kP99ArmRollCommitCallsiteRva
+                            : kWeaponIkTerminalGetterCallsiteRvas[index],
+                commit_site ? kJointSetCommitJointTransformsRva
+                            : kJointSetGetJointLocWsRva, kHooks[index],
                 sites[index].address, sites[index].relay,
                 sites[index].new_displacement)) {
             free_relays();
             boot_log_line(
-                "WeaponIK terminal getter census SKIPPED (four-callsite preflight)");
+                "WeaponIK terminal callsite package SKIPPED (callsite preflight)");
             return false;
         }
         std::memcpy(
@@ -49734,6 +50100,19 @@ bool install_weapon_ik_terminal_getter_census() {
     g_weapon_ik_transform_compose =
         reinterpret_cast<WeaponIkTransformComposeFunction>(
             g_module + kTransformComposeRva);
+    if constexpr (kEnableLegacyNadineP99ArmRoll) {
+        if (!initialize_weapon_ik_native_helpers()) {
+            free_relays();
+            boot_log_line("P99-ARM-ROLL REJECTED stage=native-helper-identity");
+            return false;
+        }
+        g_original_p99_arm_roll_commit = reinterpret_cast<JointSetCommitJointTransformsFunction>(
+            g_module + kJointSetCommitJointTransformsRva);
+        g_p99_arm_roll_apply_rotation = reinterpret_cast<JointSetApplyWorldRotationFunction>(
+            g_module + kJointSetApplyWorldRotationRva);
+        g_p99_arm_roll_invalidate = reinterpret_cast<JointChainInvalidatePrefixFunction>(
+            g_module + kJointChainInvalidatePrefixRva);
+    }
     SuspendedProcessThreads suspended_threads{};
     if (!suspend_other_process_threads(suspended_threads)) {
         free_relays();
@@ -49814,7 +50193,9 @@ bool install_weapon_ik_terminal_getter_census() {
     }
     g_weapon_ik_terminal_getter_census_ready.store(
         true, std::memory_order_release);
-    if constexpr (kEnableLegacyNadineP99SupportConstraint) {
+    if constexpr (kEnableLegacyNadineP99ArmRoll) {
+        boot_log_line("P99 arm-roll callsites READY (four stock getters plus first terminal commit; dormant until combined READY)");
+    } else if constexpr (kEnableLegacyNadineP99SupportConstraint) {
         boot_log_line(
             protection_restored
                 ? "P99 support-constraint getter callsites READY (four stock getters; dormant until combined READY)"
@@ -62287,7 +62668,7 @@ std::atomic<bool> g_p99_chloe_transfer_ready{false};
 // crash-capture fixtures and scope tests do NOT earn a new game exam.
 constexpr bool kEnableP99GroupShadow = false;
 static_assert(
-    !kEnableLegacyNadineP99SupportConstraint || !kEnableP99GroupShadow,
+    (!kEnableLegacyNadineP99SupportConstraint && !kEnableLegacyNadineP99ArmRoll) || !kEnableP99GroupShadow,
     "P99 support constraint must not coexist with cmd16 group shadows");
 static_assert(!kEnableP99GroupShadow,
     "P99 remains blocked: validate authored numeric operands, native output/cost and fresh fault attribution before re-enabling");
@@ -80887,7 +81268,7 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-10-08p99-support-safe "
+        "TLL co-op runtime init 2026-10-09p99-arm-roll "
         "(rejected P99 left support correction disabled; stock arm/finger paths; appearance and AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
@@ -81076,14 +81457,16 @@ DWORD WINAPI install_hook(void*) {
                    kEnableLegacyNadineWeaponIkFeatherSuppression ||
                    kEnableWeaponIkTerminalGetterCensus ||
                    kEnableLegacyNadineWeaponIkTerminalGoalRelay ||
-                   kEnableLegacyNadineP99SupportConstraint) &&
+                   kEnableLegacyNadineP99SupportConstraint ||
+                   kEnableLegacyNadineP99ArmRoll) &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {
         const bool outer_apply_ready =
             install_legacy_nadine_weapon_ik_feather_suppression();
         bool terminal_getters_ready = false;
         if constexpr (kEnableWeaponIkTerminalGetterCensus ||
                       kEnableLegacyNadineWeaponIkTerminalGoalRelay ||
-                      kEnableLegacyNadineP99SupportConstraint) {
+                      kEnableLegacyNadineP99SupportConstraint ||
+                      kEnableLegacyNadineP99ArmRoll) {
             if (outer_apply_ready) {
                 terminal_getters_ready =
                     install_weapon_ik_terminal_getter_census();
@@ -81103,6 +81486,19 @@ DWORD WINAPI install_hook(void*) {
                 ready
                     ? "P99-SUPPORT-CONSTRAINT READY build=2026-10-08p99-support owner=0 screen=0 art=8075397D state=2 selector=1 weight=1 dwellMs=350 clip=5E67B1FA retargetRow=149 atomicLastGetter=1"
                     : "P99-SUPPORT-CONSTRAINT REJECTED stage=installer");
+        }
+        if constexpr (kEnableLegacyNadineP99ArmRoll) {
+            const bool ready = outer_apply_ready && terminal_getters_ready &&
+                g_original_weapon_ik_goal_get_joint_loc_ws != nullptr &&
+                g_joint_chain_find_named_joint_offset != nullptr &&
+                g_original_p99_arm_roll_commit != nullptr &&
+                g_p99_arm_roll_apply_rotation != nullptr &&
+                g_p99_arm_roll_invalidate != nullptr &&
+                g_transform_make_relative != nullptr;
+            g_p99_arm_roll_ready.store(ready, std::memory_order_release);
+            boot_log_line(ready
+                ? "P99-ARM-ROLL READY build=2026-10-09p99-arm-roll owner=0 screen=0 art=8075397D state=2 selector=1 weight=1 dwellMs=350 clip=5E67B1FA row=149 stockConstraint=1 preCommit=1418F1DEE"
+                : "P99-ARM-ROLL REJECTED stage=installer");
         }
     }
     if constexpr (kEnableLegacyNadineMazurStrapVisibilityRepair &&
