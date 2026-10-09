@@ -12890,7 +12890,9 @@ FUNCTIONS = {
         "Matrix4x4_NormalizeBasisRows",
         "Normalizes the first three basis rows of a 4x4 transform in place. "
         "WeaponIK_Apply uses it immediately before converting the transferred "
-        "off-hand target matrix back to a quaternion and translation.",
+        "off-hand target matrix back to a quaternion and translation. STATIC "
+        "reach trace: writes basis rows+0/+10/+20 ONLY, not translation+30; "
+        "it cannot secretly clamp or blend the pending left target position.",
     ),
     0x1403421B0: (
         "Script_ReattachPlayerWeapon",
@@ -14332,6 +14334,12 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x143684E64: (
+        "g_ArmIkSolveBypass",
+        "Nonzero byte makes SolveArmIk return AL=1 without solving or writing "
+        "request+20 (1418F0B8C). A global debug/bypass condition, not a "
+        "per-owner successful-solve flag; live value must be observed.",
+    ),
     0x146904C60: (
         "g_SkinningShaderByFamilyAndMode",
         "6x8 shader-pointer table filled by141876A60 from IngameShaderMgr. "
@@ -14861,9 +14869,25 @@ INSTRUCTION_COMMENTS = {
         "elbow-world Y. No authored pole or torso collision test here."
     ),
     0x1418F1C43: (
-        "Terminal opposite/left SolveArmIk for selector1. Apply weight is "
-        "smoothstepped; request failUnreachable+34 was cleared at1418F1BC5. "
-        "Input-only getter APPLIED is not an observation of this solve output."
+        "Terminal opposite/left SolveArmIk for selector1. Exact ABI has ONE "
+        "argument RCX=request (stack+60), AL return; entry RDX/R8 are not "
+        "parameters on this path. Request+0=set,+8=armIndex -1,+C=0,+10=rawT "
+        "float4,+20=zero-initialized output float4,+30=smoothstep(weight), "
+        "+34=failUnreachable0 from1BC5. Caller preserves AL at1C48, ignores "
+        "output+20, and proceeds with wristQ and both commits regardless AL. "
+        "Post-solve positions precede final wrist orientation1DE3. Read-only "
+        "capture must pair nativeT/pre/post same-call; do not mutate request."
+    ),
+    0x1418F0B8C: (
+        "Global byte143684E64 bypass returns AL=1 without solving or updating "
+        "request+20. AL=1 alone is NOT successful wrist observation. A paired "
+        "reach capture must record bypass flag and actual pre/post positions."
+    ),
+    0x1418F1515: (
+        "Solved path stores current wrist float4 at request+20 after getter "
+        "1418F150C. ArmIkChain world prefix is exclusive (slot11 stores "
+        "ordinal+1); copy S/E/W from existing table[1] only if prefix>wrist. "
+        "No extra world-refresh calls are needed for this read-only snapshot."
     ),
     0x1418F18BD: (
         "STATIC 2026-10-08: first dereference after four stock getter calls "
@@ -14906,6 +14930,9 @@ INSTRUCTION_COMMENTS = {
 
 
 FUNCTION_TYPES = {
+    0x1418F0B60: (
+        "unsigned __int8 __fastcall SolveArmIk(void *request);"
+    ),
     0x14217B630: (
         "unsigned int *__fastcall AnimCmdEvaluator_ExecuteSkeletonJointPrograms("
         "unsigned int *status, const void *segment);"

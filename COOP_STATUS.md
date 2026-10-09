@@ -8,14 +8,19 @@ through torso and incorrect right-hand pistol grip. All later infrastructure
 NEXT statements are parked history, not authority to continue that detour.
 Keep left support-target/arm chain separate from the21 right distal rows.
 
-CURRENT (2026-10-09): post-solve elbow roll1418F1DEE is also REJECTED as a
-visible fix by the user. PID21244 emitted4APPLIED rows but retained an almost
-straight S/E/W chain with essentially unchanged elbow position. It did not
-restore elbow bend. Disable the roll alongside the failed support-target swap;
-safe build2026-10-09p99-roll-safe. NEXT distinguish requested wrist reach from
-post-solve clamping, NOT another endpoint-preserving roll. See latest section
-for exact geometry, clamp addresses and the right-hand live/model mismatch.
-Both hand defects remain unresolved; no new game exam is admitted.
+CURRENT (2026-10-09): read-only exact1418F1C43 exam PID17512 completed4pairs.
+Native T is INSIDE reach by.0002585..0005684asset units, NOT beyond it in this
+sample. Full-weight native solve reaches T within.0000081..0000696 and reduces
+elbow radius from~.078 to.0083..0123; bypass=0. This explains the observed
+near-extension at the solver boundary, not the full rendered defect or a fix.
+Offline SAME-state RP*C substitution would put failed DOWN2.16..2.18cm and
+UP5.00..5.03cm beyond reach (assuming metre-scaled asset units); do not repeat
+either distal-only donor or the rejected fixed-endpoint elbow roll.
+Both hand defects remain unresolved. Reach observer and both failed writers
+are OFF in2026-10-09p99-reach-safe. NEXT compare a coherent authored proximal/
+right-prop pose to the captured shoulder/right-prop relation before choosing
+an endpoint correction; no guessed reach margin, provider work or new launch.
+See the final section for exact raw sample, distinctions and verification.
 
 Previous (2026-10-08): REJECTED visual correction, native DOWN5E67B1FA left
 support constraint via1418F18B5. One-copy PID9504 emitted READY, ADMITTED and four
@@ -39312,3 +39317,176 @@ name and clamp/rejection comments were saved in sole ida/tll.i64; log
 .codex/ida_apply_p99_roll_reject_20261009.log reports1936functions/80data/2types
 and save_database returned True. Restarted MCP reads the new helper name,
 SolveArmIk callerxref1418F116A and both precise clamp instruction comments.
+
+### 2026-10-09 STATIC / HYPOTHESIS: observe the actual terminal wrist request, not just its result
+
+Current hypothesis H1: the terminal left target is outside the current arm's
+reach, producing the nearly straight PID21244 result. Competing H2: the chain
+already arrives straight and T is reachable/at its current W; H3: solver bypass,
+refusal or unexpected weight prevents the anticipated calculation; H4: a later
+helper/skin stage accounts for the defect despite a useful solved pose. The last
+roll logs cannot discriminate H1/H2/H3 because they omitted actual T/pre-solve
+geometry. Do not use an offline donor as a replacement for these missing values.
+
+New independent STATIC closure for a narrow read-only exam:
+
+1. Exact call1418F1C43 supplies ONLY RCX=request at caller stack+60. RDX/R8 are
+   decompiler artifacts, not incoming parameters. Request+0=set,+8=armIndex-1,
+   +C=0,+10=target float4,+20=zero-initialized output float4,+30=smoothstep(weight),
+   +34=failUnreachable0. Target is stored at1418F1B75/1BBA and consumed at
+   1418F0FF5. Forward request unchanged once; preserve AL return. Existing old
+   three-arg SolveArmIk alias is not a model for the new exactcall wrapper.
+2. Separate matrix-helper analysis:140EE7500 normalizes only rows+0/+10/+20,
+   not translation+30. Thus no concealed target-position clamp/blend intervenes
+   between RP*inverse(LP)*LW and the actual request. Native T and the scalar
+   reconstruction must nevertheless be compared rather than assumed identical.
+3. RTTI/type3 ArmIkChain uses set+42/+43/+44 shoulder/elbow/wrist ordinals.
+   Its world prefix+38 is exclusive:141820AD0 stores ordinal+1. Four stock
+   terminal getters already refresh through prop; solved path calls wrist getter
+   1418F150C then copies W to request+20 at1515. With prefix>wrist, S/E/W can be
+   copied directly from existing table[1], without extra refresh/native calls.
+4. Caller/callee graph pins this to WeaponIKFeather1418F2E0B->WeaponIK_Apply,
+   exact left solve1C43, not other SolveArmIk consumers. Caller preserves AL at
+   1C48 but ignores output+20 and performs wrist-Q correction1DE3 and both
+   commits regardless of AL. Post-solve positions are meaningful here; wrist Q
+   is NOT the final terminal orientation at this point.
+
+Important competing-path fact: byte143684E64 returns AL=1 at1418F0B8C WITHOUT
+solving/updating output+20. Record bypass and raw output, not just a bool success.
+No observer may treat AL=1 as sufficient proof that the solver ran.
+
+New pure nadine_p99_arm_reach.h computes paired upper/lower lengths, requested
+distance/excess, pre/post reach and elbow radius, target error, max-reach-clamped
+ray error, shoulder and length drift. Arithmetic subtracts input float coordinates
+in double; it cannot recover precision lost before capture. No automatic repair
+or diagnosis is encoded. Coincident S/W returns radius0, so radius alone must
+not be interpreted as full extension; reach distinguishes folded degeneracy.
+22unit checks cover overshoot, reachable success, reachable wrong/straight
+output, coordinate offset, drift and refusal. No copied old rounded telemetry.
+
+PRELAUNCH falsifier for this new READ-ONLY exam: local appearance1 Nadine, P99
+drawn, non-ADS idle at least350ms, unchanged stock pose. Four paired captures
+must retain exact owner/generation/set/banks and show actual request+30/bypass,
+rawT/output, pre/postS/E/W, all four original getter operands and reconstructedT
+at float max_digits10. If H1 holds, raw distance exceeds a+b, output W lies near
+S+(a+b)*normalize(T-S), and its elbow radius collapses. If reachable T and W
+disagree, do not call it reach saturation; check bypass/return/weight. If input
+was already straight with T near W, investigate the preceding pose/endpoint
+rather than blaming a new stretch here. Meaningful bent output with the reported
+visible defect supports H4 only after user comparison. Deltas near numeric
+precision remain inconclusive, not evidence for a guessed margin.
+
+The planned observer reuses four capture-only getters plus exact solve1C43
+(five-site atomic package), NOT the rejected commit writer1DEE. Read-only
+snapshots copy already valid worlds; no joint refresh call, quaternion write,
+request modification or donor substitution. It stops inspecting after4captures
+or8refusals, so there is no unlimited frame dump. Only one game instance, all
+input by user. This diagnostic's expected visual result is UNCHANGED hands;
+it does not constitute a repair and must not be presented as another fix test.
+
+Additional right-hand STATIC elimination from fresh pinned audits: native
+UP036F20E5/DOWN5E67B1FA right28/30 are identical to NPC4CAA7420, so they are not
+new right-frame candidates. Conditional ChloeR157(R20)+B8 differs from the
+PID21244 sample by12.379055deg/.025815833, essentially the directR124 result.
+Base-only Chloe also differs12.379055deg/.025815834. B8FC6B25 palm/prop source
+rows (semanticsB42DF599/05FC3888, Chloe39/41->Nadine28/30) are S=1,T=0,Qxyz=0,
+Qw=3F7FFFFF; both48B rows SHA256
+6a03e46f752be6f85b4e101cce0bcce31eca2ab2c4766f4439e5ef6c8a303368.
+Full B8 selected rows SHA1735098f297a40b996325966f95307ed07fc7c98276aa27877967dc098be2ecf.
+Changing that additive weight/order cannot meaningfully alter this wrist->prop
+frame (not a claim about its nonidentity finger rows). Correct26->28->30
+composition cancels proximal/world rotations. Neither a copied Chloe endpoint
+nor a global basis rotation is justified by these mismatches. Live source/weight
+remains unproven; no new right-grip writer is enabled.
+
+### 2026-10-09 CONFIRMED paired native reach; REJECTED overshoot in this sample
+
+The above read-only exam ran once in PID17512 (start14:20:17 local), build
+2026-10-09p99-reach, DLL SHA256
+2E1D2C1AC2800A7FF8612A44FDE2BCB0ABBF459EE1701A1E805457038B9BE269.
+READY/LOCAL-LOOK READY requested Nadine; four captures and COMPLETE were
+obtained while the user controlled the game. No pose writes, extra world
+refresh calls, menu/input automation, second process or process kill occurred.
+Game subsequently closed; no new crash is established. No corrected visual
+result was expected or obtained from this read-only diagnostic.
+
+All four same-call pairs at1418F1C43 have weight1, failUnreachable0,
+bypassBefore/After0, returned1, unchanged shoulder, and output+20 XYZ equal to
+post-solve wrist. Requested distance is BELOW upper+lower in every pair.
+Values are asset units; elbow radius is distance from E to the S-W axis:
+
+| Pair | Requested reach | Target excess over a+b | Native target error | Pre elbow radius | Post elbow radius |
+| --- | --- | --- | --- | --- | --- |
+| 1 | .530426419669 | -.000568370142 | .000009059906 | .078063855474 | .012248640233 |
+| 2 | .530604033066 | -.000380823344 | .000008106232 | .078283924595 | .010033119024 |
+| 3 | .530492144924 | -.000516397224 | .000018119812 | .078040915259 | .011646900265 |
+| 4 | .530720382056 | -.000258495290 | .000069533257 | .078230989507 | .008288974692 |
+
+Pre-reach.50722675..50740248; post-reach.53041905..53073156; elbow moves
+.06455792..06834899. Upper/lower are~.28543/.24556. Scalar reconstructed T
+differs from actual native T by.000041185..000086948; do not assert bit identity
+or replace the observed request with the scalar reconstruction.
+
+CONFIRMED at this boundary: native solving changes a previously bent chain
+to nearly straight because the requested position is extremely close to the
+arm's maximum length. REJECTED for these four samples: H1 rawT beyond reach,
+H2 already straight incoming chain, and H3 bypass/refusal/partial weight as the
+reason. This is NOT a reclassification of old PID21244: its rawT is still
+unknown. H4 later render/skin changes remain untested; this proves positions
+here, not visible skin clearance, final wrist rotation, fingers or a hand fix.
+
+Raw pair1 is retained verbatim in nadine_p99_arm_reach_tests.cpp; its RP
+position/quaternion for offline alternatives is:
+P=(-759.48370361328125,4.6767168045043945,383.26937866210938),
+Q=(.14315108954906464,.80034184455871582,-.52467858791351318,.25233471393585205).
+Normalize Q before scalar rotation. p99_npc_support_constraint.audit()['clips']
+is keyed by weapon_up/weapon_down; each constraint.target_constraint is S3/pad,
+Q4,T3/pad. Use RP.P + rotate(RP.Q,C.T), not a direct world-space offset.
+
+STATIC same-state alternatives (NOT another donor installation):
+
+| Pair | DOWN requested reach | DOWN excess | UP requested reach | UP excess |
+| --- | --- | --- | --- | --- |
+| 1 | .552583160713 | .021588370902 | .581011617674 | .050016827863 |
+| 2 | .552735371404 | .021750514994 | .581177992639 | .050193136229 |
+| 3 | .552632444777 | .021623902629 | .581096908208 | .050088366060 |
+| 4 | .552773519833 | .021794642486 | .581252923222 | .050274045875 |
+
+Both full-weight targets are unreachable from the current S; native1418F113E
+would clamp them to full extension. This excludes DOWN/UP-only substitution
+as a bend-restoring correction in this captured state. It does not reconstruct
+the earlier PID9504 exam. Pair1 S in RP space is
+(.260098279003,.329196128759,-.412827676683), unlike authored DOWN
+(.193097385961,.296404093676,-.310035441600), distance.127006617255;
+authored UP differs.307007305549. Copying only donor C does NOT reproduce the
+donor's shoulder-to-weapon arrangement. An elbow-plane roll cannot compensate
+for incompatible endpoint distance. Do not combine the two rejected writers.
+
+Local logging issue: common write_log_line has a1600-byte buffer. Old launched
+CAPTURED records were1599printable bytes plus NUL, without newline. ActualT,
+all pre/post S/E/W and all FOUR complete getter arrays survived; only redundant
+right-relative/ready-made metric tails were truncated. Parse PID17512 markers
+and NUL boundaries (rg -a), not physical lines. Independently recomputed the
+table above from preserved float coordinates. Source now emits bounded
+CAPTURED/INPUTS/METRICS records joined by PID+sample, so a repeat is unnecessary.
+Do not claim the post-fix split logger was exercised in the game.
+
+Handoff: kEnableLegacyNadineP99ReachCensus=false; support-target/arm-roll and
+right-grip writers remainOFF. Existing appearance/back-attachment fixes stay
+unchanged. Release2026-10-09p99-reach-safe built successfully, DLL SHA256
+3B27BBB8DCBF558BADA2715071A4E48DC26283DD384490E4ED8E36DE0254BCEC.
+30/30 geometry checks include the exact native pair and modeled unreachable
+donors; scoped CTest135/135 passes, still excluding15parked native-bootstrap
+fixtures with stale pins. This is NOT full-suite green. Sole ida/tll.i64 saved:
+.codex/ida_apply_p99_reach_20261009.log reports1936functions/81data/3types,
+save_database returned True. Restarted MCP reads one-argument SolveArmIk,
+g_ArmIkSolveBypass and the existing matrix-helper caller relationship.
+
+NEXT: use existing authored rows19..30/arm hierarchy to compare a coherent
+proximal plus right-prop arrangement, rooted in a common torso frame, against
+the actual same-call RP/S relation. Determine which current pose/retarget layer
+produces that relation and the right wrist->prop mismatch before choosing a
+replacement. Do not infer a source from clip names, invent a reach margin, or
+move a shoulder/weapon directly merely to satisfy geometry. Left/right skin
+clearance and preservation of the confirmed attachments are still required
+before any writer/visual exam. No new runtime test is admitted by this result.

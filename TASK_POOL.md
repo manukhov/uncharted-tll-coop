@@ -81,6 +81,30 @@ Also live inverse(RW)*RP differs from modeled R124+B8 by12.3746deg/.0258176
 and NPC by11.1928deg/.0216257; neither scalar donor is an exact live baseline.
 119roll checks/134scoped CTest pass. Full suite still has15parked exclusions.
 
+2026-10-09 continuation COMPLETED: READ-ONLY exact1418F1C43 exam PID17512
+captured4paired nativeT/pre/post chains, then stopped inspection. In this
+sample T is INSIDE reach by.0002585..0005684, yet full-weight solving reduces
+elbow radius~.078 to.0083..0123 and reaches T within.0000081..0000696.
+Bypass0, returned1; incoming chain was bent. This rejects overshoot/bypass/
+already-straight explanations for THIS sample, not old PID21244. No hand fix.
+SAME-state offline RP*C gives DOWN overshoot.02159..02180 and UP.05002..05028:
+neither distal-only donor can restore bend with this shoulder/right-prop pose.
+Pair1 shoulder relative to RP differs from authored DOWN by.1270066; a donor
+constraint is not a complete donor pose. Do not combine the two failed writers.
+NEXT compare coherent authored proximal/right-prop rows19..30 and trace the
+current source of shoulder-to-weapon geometry in a common torso frame; no
+guessed reach margin or direct shoulder/weapon displacement without skin/
+attachment proof. Completed observer and both rejected flags nowOFF; release
+2026-10-09p99-reach-safe SHA3B27BBB8...254BCEC,30geometry checks/135scoped tests
+pass (same15parked exclusions). One-argument ABI and bypass global labeled/
+saved in soleIDB, MCP readback verified. Game is closed; no new launch admitted.
+The old1600byte log truncation spared nativeT/chains/all4getters; metrics were
+recomputed independently. Future record splitting is fixed but not game-tested.
+Exact floats, four-pair table and model distinctions are in latest COOP_STATUS.
+Right-side offline UP/DOWN both equalNPC28/30; conditionalChloe also misses
+the live frame. B8 palm/prop rows are identity, so their additive weight cannot
+explain the gap. Do not repeat these donors or infer a live source from filenames.
+
 PARKED infrastructure history / NATIVE EIGHT-RECORD PREPARATION REFUSAL (2026-10-08):
 Native-owned padded host now constructs the actual same-build Request with
 artifact0 + seven System32 providers. Offline p99_native_preparation_inventory.py
