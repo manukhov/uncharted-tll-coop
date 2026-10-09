@@ -17,10 +17,16 @@ Offline SAME-state RP*C substitution would put failed DOWN2.16..2.18cm and
 UP5.00..5.03cm beyond reach (assuming metre-scaled asset units); do not repeat
 either distal-only donor or the rejected fixed-endpoint elbow roll.
 Both hand defects remain unresolved. Reach observer and both failed writers
-are OFF in2026-10-09p99-reach-safe. NEXT compare a coherent authored proximal/
-right-prop pose to the captured shoulder/right-prop relation before choosing
-an endpoint correction; no guessed reach margin, provider work or new launch.
-See the final section for exact raw sample, distinctions and verification.
+are OFF in2026-10-09p99-reach-safe. Latest STATIC continuation: full authored
+UP/DOWN arms are coherent and bent (target elbow radius.1434/.1486), but no
+minimum live replacement is established. The actual right product is much
+better explained by conditional Chloe defaultHands7D11D4FD plus a tiny D350
+contribution than by the full-weight grip models used earlier: no-scale error
+only.0000108..0000308, rotation~.00075deg. This is an analytic fit, NOT recovered
+native weights/source. NEXT bind the actual stock Hands/partial blending and
+validity to the pre-Feather pose; do not infer a missing grip or patch its weight
+from a fit alone. No guessed reach margin, provider work or new launch.
+See the final sections for raw data, competing explanations and verification.
 
 Previous (2026-10-08): REJECTED visual correction, native DOWN5E67B1FA left
 support constraint via1418F18B5. One-copy PID9504 emitted READY, ADMITTED and four
@@ -39490,3 +39496,135 @@ replacement. Do not infer a source from clip names, invent a reach margin, or
 move a shoulder/weapon directly merely to satisfy geometry. Left/right skin
 clearance and preservation of the confirmed attachments are still required
 before any writer/visual exam. No new runtime test is admitted by this result.
+
+### 2026-10-09 STATIC: coherent arm geometry and the previously omitted default-Hands baseline
+
+No game was launched, attached or given input in this continuation. No runtime
+source, DLL, pose writer or attachment was changed. Work uses the existing
+PID17512 four getter pairs plus pinned shipped assets. Both hand defects remain
+unfixed; analytic agreement is not a visual validation.
+
+**Left: a whole authored arm pair differs from an isolated wrist constraint.**
+New p99_coherent_arm_pose.py composes all retargeted19..30 below shared torso18,
+including both clavicles. Its complete UP/DOWN predictions are:
+
+| Whole authored pose | Target reach | Reach margin | Target elbow radius | Incoming wrist-to-target gap |
+| --- | --- | --- | --- | --- |
+| UP036F20E5 | .446173756154 | .084820718733 | .143372130076 | .001357284114 |
+| DOWN5E67B1FA | .439193741095 | .091800733792 | .148601831126 | .001400814403 |
+
+The left/right prop frames differ only.00136/.00140 and.01057/.01082deg. These
+are geometric alignment checks, NOT surface-contact checks. Both poses have
+exactly the same left shoulder origin under torso18; their different right-arm
+arrangement and distal constraint place the target differently. Their full
+local geometry naturally retains bend without a made-up reach margin.
+
+Changing only left21/23/25 leaves S, RP, C and requested distance unchanged.
+The endpoint depends on left clavicle19, right20/22/24/26/28/30, and left27/29;
+left21/23 still supplies the coherent incoming bend. Synthetic BIND mixtures
+illustrate why merely making reach pass is insufficient: DOWN right-proximal
+plus distal is reachable but moves incoming W by.55547; both-proximal except
+left19 moves it.04343; full DOWN moves it only.00140. These are NOT current
+runtime reconstructions. The21-row hand models contain no19..26 and PID17512
+contains no torso18/proximal locals. No minimum live writer follows.
+
+Raw Nadine references already have left upper/lower lengths.285432189703 and
+.245562285185 (matching the observed lengths approximately). Uniform.95 on
+those rows predicts.27116058/.23328417, not the observed pair, unless another
+unobserved local scaling compensates. Actual rootS was not captured.
+
+**Right: near-bind was a clue, not proof of a bind fallback.**
+p99_live_grip_baseline.py preserves all64 exact getter floats (RW/RP x4), SHA
+6e6afc1e39dd817c5c284011e3deebca48cd642f0c65b860b14692c6052aadb0.
+Live wrist-relative-prop rotation is.1185905→.0920194deg from Nadine bind,
+not the full-weight R124/NPC endpoints (~12/~11deg away). A bind↔D350 NLERP
+fit reduced rotation error but left~.0018 positional error. An exploratory
+prop-only.95 factor fit that error; it is REJECTED as an identified native
+operation. The concrete authored default below explains the translation without
+inventing that scale. Product alone cannot identify palm28 and prop30 separately;
+a test changes palm by>10deg and compensates prop while preserving the product.
+
+p99_default_hands_baseline.py resolves named ANIM descriptors, raw links,
+headers, masks, constant programs and corrected opcode24 outputs for:
+
+- Chloe7D11D4FD clo-uneasy-idle-hands: actor77/anim-chloe-relaxed-movement.pak,
+  descriptor page4+24E0, raw1F0920 (page1+E5400), size2E80, skeleton4B0F5DE3.
+  Whole-entry SHAe25ff53fd6f4de161714ba39599b3d46189d4cc099d8858765fee0c2e4f99a9d;
+  raw SHAe943884491e17ab8fb042eb1d32e036f84fc07e1125c9b2c371e886e0d9288b8.
+- Player7FB80CC8 idle-hands: actor77/anim-player-misc.pak, descriptorpage6+50610,
+  raw4FB610 (page4+F90D0), size5CA0, skeletonFD6DBE03.
+  Whole-entry SHAb5c1d01a92407bc04e1a0fdce544b771518b5d948b59ecd1883d3da7d5ebefc6;
+  raw SHA1cfd7e0d8283510862fb4f07347ac574270a626dbe5e437861e7b48073621613.
+
+Headers contain337/301 samples; ONLY group0 is proved constant (22,24,0),
+on Chloe38..41 / Player29..32. This does not decode variable finger groups.
+The existing registry already recorded337; do not reinterpret the whole clip
+as a one-sample animation. Old pre-correction opcode24 Q values are not reused.
+
+Conditional R157 defaultHands gives wrist->prop
+T=(-.0090190941,.0287141457,-.0692990873),
+Q=(.6980458271,.6998201004,.0863906921,-.1245812930).
+It is already within.000200..000263 / .09716..12374deg of all4 measurements.
+Using this exact authored default as the base instead of bind, a shortest-
+hemisphere local NLERP/linear-T fit toward the conditional R124 D350+B8 rows
+gives the following WITHOUT any additional translation scale:
+
+| Pair | Fitted scalar, NOT native weight | Rotation residual degrees | Position residual |
+| --- | --- | --- | --- |
+| 1 | .010017707201 | .000753333056 | .000024101905 |
+| 2 | .009238577069 | .000754005088 | .000030755358 |
+| 3 | .008524912582 | .000745936672 | .000010757010 |
+| 4 | .007865879251 | .000748843846 | .000011385096 |
+
+Conditional R157(R20(D350))+B8 fits similarly, so this cannot distinguish the
+live retarget route. Conditional Player default viaR20/R157 retains a different
+prop translation and~.00295 error; that is NOT a directR124 Player default test.
+This new baseline is a concrete discriminator, not proof the live D350 weight
+is1%, that any layer is absent, or that forcing a full-weight grip is safe.
+Native142188A30 copies one-sided-valid rows fully; a weight interpretation also
+needs both same-generation validity bits and the actual left/right owner.
+
+**Independent native exclusions before selecting a pose writer.**
+
+- JointSet_AllocateAndSeedBuffers14181E780 reads owner=set+8, Fg=owner+1A8;
+  EBA2..EBDE unconditionally copies current Fg+100 local S/Q/T and marks local
+  valid. It does NOT fill nonroot rows from bind/reference or read sparse pose
+  ValidBits. Near-bind terminal data therefore cannot be blamed on a getter
+  fallback. Native defaults, if used, occur upstream (141AB78F0), not here.
+- Feather seeds both JointTrees at1418F27F1, solves at29D0, commits right29DA/
+  left29E4, then calls terminal1418F1780 at2E0B. Terminal seeds fresh ArmIkChains
+  at184E/1857. Native world composition141820150 scales all local translations
+  by table+28, seeded from first-rowS.x atEB5F..EB6E; no measured scale follows.
+- Concrete JointTree vtable142AFC890: +18=1418212E0 parent ordinal,
+  +30=1418212F0 validity propagation, +48=1418215D0 invalidate. Feather294F
+  only invalidates world-cache validity; it does not reset local T/Q to bind.
+- Feather2937 prop-T factor is h*animScale+(1-h), h=3w*w-2w*w*w, established
+  at2767..2783/27B0..27C9. With captured animScale1 it is1, not.95. Q is copied
+  unchanged at293F. A right-wrist/common-ancestor change alone cancels in RW^-1RP.
+- JacobianSolver_FinalizeResidualsAndBlend1418CD250 is NOT just teardown:
+  map+40 residual T/Q storesCD4D9/CD4DF and optional saved/solved local blend
+  use instance+428. Feather312B sets h; CD5B9/CD5C9 skips blend atweight>=1.
+  The separate.9 at142BE9158/Feather2996->3123 controls prior-residual warm start
+  through+42C, not base prop scaling. Unknown live profile DOFs/residuals still
+  prevent claiming every distal row is invariant in the current sample.
+
+NEXT specific discriminator: establish the actual same-owner pre-Feather
+defaultHands versus weapon partial source, validity and blend coefficients,
+using the already traced node source/resolved+40/+44 and native layer order.
+Historical source path14191801C->1419182E0->14191E5F0/14189EC8C and pose-overlay
+resolver141918C30 are useful anchors, not proof of present selection. Do not
+reopen rejected outer1418B2945 clip substitution or infer source from a final
+B8 command lacking provenance. In parallel a coherent arm-pose correction must
+retain its compatible right-prop arrangement, incoming bend and native later
+helper evaluation; do not repeat either rejected endpoint-only writer. A new
+game test requires a distinguishing prediction from these actual sources.
+
+Verification/handoff:25new Python tests (coherent10, live-baseline6,
+default-Hands9) and existing support11 all pass; unchanged scoped CTest135/135
+passes with the same15parked native-bootstrap exclusions. Runtime source diff
+is empty and DLL remains3B27BBB8DCBF558BADA2715071A4E48DC26283DD384490E4ED8E36DE0254BCEC;
+all rejected writers/finished reach observer remainOFF. No tll process is running.
+Four new native function names plus seed comments saved to sole ida/tll.i64:
+.codex/ida_apply_p99_pose_baseline_20261009.log reports1940functions/81data/
+3types and save_database returned True. Restarted MCP resolves all four names,
+the seed comment, and JointTree+30 vtablexref142AFC8C0. Preexisting tmp/ untouched.

@@ -105,6 +105,34 @@ Right-side offline UP/DOWN both equalNPC28/30; conditionalChloe also misses
 the live frame. B8 palm/prop rows are identity, so their additive weight cannot
 explain the gap. Do not repeat these donors or infer a live source from filenames.
 
+LATEST STATIC continuation (2026-10-09, no launch/runtime edit): complete
+authored UP/DOWN19..30 under torso18 produce attainable targets with elbow
+radius.14337/.14860 and preW-target gap only.00136/.00140. Distal-only transfer
+discarded that compatible proximal/right-prop arrangement. Synthetic bind
+mixtures are NOT the live pose; no minimum live replacement is proven.
+New p99_coherent_arm_pose.py preserves those comparisons and dependency tests.
+
+Right baseline is now substantially closer: corrected constant group0 of
+Chloe7D11D4FD defaultHands via conditionalR157, mixed analytically toward D350,
+matches all4PID17512 RW^-1RP products within~.00075deg/.0000108..0000308 without
+extra translation scale. Fitted weight~.0100→.00787 is NOT a native observation;
+R124 and Chloe-path fits are not distinguishable from this product. A prop-only
+.95 repair is not justified. p99_live_grip_baseline.py and
+p99_default_hands_baseline.py retain exact fixtures, asset identities and fits.
+337/301 header samples coexist with constant group0; fingers were NOT decoded.
+
+Native seed14181E780 copies current JointCache locals, NOT bind fallback.
+JointTree invalidation1418215D0 and slot+30/1418212F0 write validity only. Feather's
+prop-T factor is1 for captured animScale1; finalize1418CD250 is weighted
+residual/pose blending, not teardown. These native paths do not identify a.95
+shrink. NEXT identify actual pre-Feather Hands/weapon-partial provenance and
+joint validity/weight, not impose a fitted scalar or full-weight donor. Preserve
+the captured attachment and first reproduce the actual pose that needs repair.
+No new pose writer or runtime exam is admitted by the analytic fit.
+Verification:25new +11existing Python tests pass; unchanged scoped CTest135/135
+passes (same15parked exclusions). Four native function labels/seed comment saved
+and read back from soleIDB; DLL remains unchanged3B27BBB8...254BCEC. tmp/ untouched.
+
 PARKED infrastructure history / NATIVE EIGHT-RECORD PREPARATION REFUSAL (2026-10-08):
 Native-owned padded host now constructs the actual same-build Request with
 artifact0 + seven System32 providers. Offline p99_native_preparation_inventory.py

@@ -147,6 +147,15 @@ FUNCTIONS = {
         "in the common Feather solve, not all effects of the profile on "
         "solver-map DOF and step weights.",
     ),
+    0x1418CD250: (
+        "JacobianSolver_FinalizeResidualsAndBlend",
+        "STATIC: finalizes solved-minus-saved T/Q into map+0x40 residual "
+        "records at CD4D9/CD4DF, then optionally blends saved and solved "
+        "JointSet locals using instance+0x428. CD5B9/CD5C9 skips that blend "
+        "for weight>=1. WeaponIKFeather calls at1418F3349 with the same "
+        "smoothstepped application weight; this is not merely teardown or "
+        "a fixed 0.95 prop-translation shrink. Other IK callers share it.",
+    ),
     0x1419184E0: (
         "AnimSnapshotNodeAnimation_HasAdditiveRawFlag",
         "Animation vtable 0x142B14D68 slot +0xA0. Returns true exactly when "
@@ -557,7 +566,13 @@ FUNCTIONS = {
         "JointSet_AllocateAndSeedBuffers",
         "Allocates the five receiver-local JointSet work arrays behind +0x20: "
         "two 32-byte locator arrays, one 16-byte companion array, scalars and "
-        "per-joint validity bytes; seeds them from the current JointCache pose.",
+        "per-joint validity bytes; seeds them from the current JointCache pose. "
+        "STATIC: owner=set+8, Fg=owner+1A8. EBA2..EBDE copies nonroot current "
+        "Fg+100 local S/Q/T unconditionally and sets localValid=1, without "
+        "reading authored references or pose ValidBits. EB5F..EB6E copies "
+        "first-row S.x to work-table+28 uniform chain scale. Near-bind getter "
+        "values do not prove a bind fallback here. Feather seed27F1 and "
+        "terminal seeds184E/1857 reseed from the then-current JointCache.",
     ),
     0x14181F330: (
         "JointSet_FreeWorkBuffersAndClear",
@@ -608,6 +623,24 @@ FUNCTIONS = {
         "JointTree vtable slot +0x20. Calls JointSet_FreeWorkBuffersAndClear "
         "and frees the auxiliary allocation at JointTree+0x48; dispatched by "
         "JointSet_CommitJointTransformsAndReset after every stock commit.",
+    ),
+    0x1418212E0: (
+        "JointTree_GetParentJointOffset",
+        "JointTree RTTI vtable142AFC890 slot3/+18. Reads the signed parent "
+        "ordinal from tree+38, indexed by the supplied joint offset.",
+    ),
+    0x1418212F0: (
+        "JointTree_PropagateWorldInvalidation",
+        "JointTree RTTI vtable142AFC890 slot6/+30. Walks the descendant range "
+        "from tree+40 and clears world-valid bytes at tree+48 when the parent "
+        "is invalid. Does not write any local T/Q or install a bind pose.",
+    ),
+    0x1418215D0: (
+        "JointTree_InvalidateJointWorldSpace",
+        "JointTree RTTI vtable142AFC890 slot9/+48. Clears the selected "
+        "tree+48 world-valid byte and optionally invokes slot+30 to propagate "
+        "invalidation. Feather calls at1418F294F after scaling prop local T; "
+        "this invalidation does not overwrite the unchanged local quaternion.",
     ),
     0x141986C60: (
         "LegIkChain_ResetAndSeedFromJointCache",
