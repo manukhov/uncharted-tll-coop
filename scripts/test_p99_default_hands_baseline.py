@@ -82,6 +82,8 @@ class DefaultHandsBaselineTests(unittest.TestCase):
 
     def test_numeric_fit_does_not_admit_writer_or_recover_native_weight(self):
         self.assertEqual(self.report["capture_pid"], 17512)
+        self.assertEqual(self.report["capture_context"], default.live.capture_context())
+        self.assertFalse(self.report["capture_context"]["steady_animation_proven"])
         for key in ("native_profile_choice_observed", "live_clip_selection_proven",
                     "live_layer_weight_proven", "live_local_rows_observed",
                     "runtime_writer_admitted", "visual_fix_proven"):

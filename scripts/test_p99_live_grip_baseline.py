@@ -25,6 +25,20 @@ class LiveGripBaselineTests(unittest.TestCase):
         for s in self.report["samples"]:
             self.assertGreater(s["bind_whole_chain_scale_control"]["residual_asset_units"], .001)
 
+    def test_owner_dwell_does_not_identify_animation_phase(self):
+        context = self.report["capture_context"]
+        self.assertEqual(context["capture_pid"], 17512)
+        self.assertEqual(context["sample_count"], 4)
+        self.assertEqual(context["controller_weapon_state"], 2)
+        self.assertEqual(context["owner_weapon_continuity_dwell_ms"], 350)
+        self.assertEqual(context["maximum_continuity_gap_ms"], 100)
+        self.assertIsNone(context["sample_times_or_frame_numbers"])
+        self.assertIsNone(context["sample_duration_ms"])
+        for key in ("hands_root_observed", "weapon_partial_root_observed",
+                    "transition_tail_excluded", "steady_animation_proven",
+                    "transient_animation_proven"):
+            self.assertFalse(context[key])
+
     def test_bind_direct_fade_distinguishes_npc_direction(self):
         previous = math.inf
         for sample in self.report["samples"]:

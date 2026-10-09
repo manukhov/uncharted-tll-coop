@@ -8,6 +8,24 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-10-09: distinguish an empty partial tail from a missing grip ---
+    0x141893B00: (
+        "AnimLayer_GetCurrentBlendWeight",
+        "STATIC: returns float layer+0x28. AnimStateLayer vtable142B0ABB0 "
+        "slot+0x10 points here; CreateAnimCommands14189EA60 reads this L and "
+        "passes it to each snapshot's lane-zero command7 tail. It is distinct "
+        "from instance+0x158 track/instance transition weight and from terminal "
+        "WeaponIK solve weight. Also shared by other layer vtables.",
+    ),
+    0x141AC7F10: (
+        "AnimSnapshotNodeInstanceZero_GenerateAnimCommands",
+        "STATIC: vtable142B3D590 slot+0x70, constructed by141AD5DC0. Emits "
+        "two DWORDs {0x00020009, outputLane}; not a no-op. Process segment "
+        "case9 at141ABA485/4A9 calls14217D940 and clears lane ValidBits. With "
+        "snapshot context+0x1C enabled, the subsequent141AB6C40 command7 tail "
+        "inherits valid lane-zero rows. Empty root does not author all-valid "
+        "identity or bind transforms and does not imply a missing Hands layer.",
+    ),
     # --- 2026-09-28: native animation phase drains, not installation gates ---
     0x1415B5210: (
         "Ndjob_SubmitSingleJobAndWait",
@@ -2378,7 +2396,9 @@ FUNCTIONS = {
         "slot 14 with the caller-owned command-list record. When inner context+0x1C "
         "is nonzero, it then emits the exact command-7 tail {left=0,right=output,"
         "out=output}; this materializes lane-zero one-sided JointParams and ValidBits "
-        "even when the state root emitted no pose. Animation ids were already "
+        "even when an InstanceZero root emitted cmd9 to clear its output. "
+        "The tail weight is layer L from the caller (layer+0x28), not the "
+        "instance+0x158 inter-instance/track transition weight. Animation ids were already "
         "remapped during SnapshotAnimState.",
     ),
     0x14172C370: (
@@ -2444,8 +2464,13 @@ FUNCTIONS = {
         "into lane 2. With inner snapshot context byte +0x1C equal to 1, each "
         "AnimStateSnapshot_GenerateAnimCommands call appends an internal command 7 "
         "with left=0, right=output, out=output, the caller-supplied mode and that "
-        "snapshot's supplied track weight. The layer then appends the outer fold "
-        "left=1, right=2, out=1, mode=1, weight=newest/current AnimStateInstance+0x158. "
+        "snapshot's supplied layer weight L from virtual+0x10/141893B00 "
+        "(layer+0x28), passed unchanged at14189EB0A/EB17. The layer then appends the outer fold "
+        "left=1, right=2, out=1, mode=1, weight=current track's last-array "
+        "instance[count-1]+0x158 (14189EB4B); with one instance this is the "
+        "current instance. Within-track folds instead read the newly processed "
+        "instance+0x158 at141AB6F47. Callback pointers layer+0x560/+0x568/"
+        "+0x570/+0x578/+0x580 can replace ordinary folding/tails. "
         "Its terminal per-layer command 7 at "
         "0x14189EC8C..0x14189ECD6 is left=0, right=1, out=0, mode=1, weight=1; "
         "therefore a WeaponPartial layer can replace jointly valid base-pose rows. "
@@ -5047,8 +5072,11 @@ FUNCTIONS = {
     ),
     0x14217D940: (
         "AnimCmdEvaluator_ClearOutput",
-        "Clears or invalidates a processing-group output slot when animation command "
-        "evaluation cannot produce a valid pose.",
+        "Clears a processing-group output slot's ValidBits and status; does not "
+        "author all-valid identity/bind rows. Process segment case9 calls here "
+        "at141ABA4A9 for InstanceZero output. D969/D96C clear first stream "
+        "bits at evaluator+0x10; D97B/D97F clear the second stream when present; "
+        "mirrored validity tails in pose storage are cleared as well.",
     ),
     0x141AB7FE0: (
         "AnimCmdEvaluator_IsLaneValidBitsEmpty",

@@ -48,6 +48,29 @@ is analysis only: no game launch, runtime edit, new writer or new admission.
 Existing failed P99 writers and the historical Mazur pair writer remain OFF;
 attachments are separate. Provider/loader infrastructure remains PARKED.
 
+STATIC checkpoint (2026-10-09, after the NPC coverage review): P99's exact
+specific-weapon table has only eight reload rows, no steady Hands override.
+Hands7FB80CC8 -> Chloe7D11D4FD comes from move/run (and a shared uneasy-run
+table) in player-anim-settings-chloe.bin, NOT player-mesh. s_no-weapon3889CC0E
+is an empty-pose root; cmd9 invalidates its output, then the snapshot tail
+inherits Base+Hands by one-sided ValidBits. An outgoing partial can therefore
+fade toward default Hands. Do NOT force a permanent WeaponPartial.
+
+PID17512 captured the first four admitted calls after350ms owner continuity,
+not four proven steady-animation frames. It recorded no layer roots, native
+weights, phases or timestamps. Neither a transition tail nor steady state is
+proven. Both baseline audits now expose this limitation explicitly. The new
+conditional two-track model tests ordinary mode1 folding; L*(1-w) applies to
+jointly-valid LOCAL translation, not nested quaternion or wrist-to-prop product.
+
+NEXT precise evidence contract: join actual owner/weapon/Fg and frame to ordered
+Hands/WeaponPartial tracks, roots, animation leaves and native weights, plus
+the same-pass arm pose before/after Feather. Distinguish settled empty partial,
+outgoing Draw/custom state, fading whole layer and scripted internal blend.
+Animation-node+40/+44 are IDs; Blend-node+40/+44 are child indices. No existing
+record provides this join, and controller state2/IKweight1 cannot replace it.
+No new runtime observer or pose writer is enabled by this checkpoint.
+
 CURRENT hand-repair work (2026-10-08): right-hand NPC4CAA7420/row149 was decoded
 with corrected opcode24 and compared on the same4328 Nadine/P99 surface cohort.
 Current315 crossing pairs -> full native175, fingers-only813, palm/prop-only104.

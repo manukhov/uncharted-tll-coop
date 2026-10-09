@@ -39794,3 +39794,142 @@ IDB write was needed. DLL remains SHA256
 failed P99 support/roll writers, completed observer and historical Mazur pair
 writer remain OFF. No tll process was running when checked. Preexisting tmp/
 is untouched. Both user-visible hand defects remain unresolved.
+
+### 2026-10-09 STATIC: close P99 default-Hands routing and distinguish empty-partial tails from steady pose
+
+Continuation of the user's Nadine analysis, without runtime mutation or launch.
+This closes asset routing and native weight ownership, not the current live
+selection. Neither hand is visually fixed. It also narrows the previous
+"current P99 lowered-idle" wording: PID17512 has no proof of settled animation.
+
+**Fresh asset evidence, separate selector categories.**
+
+anim-player.bin (1294585 bytes, SHA256
+f9cf8a60995511d2e9ecf7bace3423ea081842e07bf595837668208ed4653d47):
+
+| State | Record / root | Root content |
+| --- | --- | --- |
+| default-hands FEC2DB76 | 18F40 / 78838 | Animation EF949D7D, source idle-hands7FB80CC8 |
+| idle-hands7FB80CC8 | 192C0 / 78838 | Same animation descriptor |
+| s_weapon-out7405AACB | 1D440 / 69510 | Animation source D350A452 p1h-fingers |
+| s_no-weapon3889CC0E | 1D3C0 / 61DEC | anim-node-empty-pose0EB88BD7 |
+
+s_no-weapon record+20 contains idle41C84248 as state metadata, not its pose
+root. Empty WeaponPartial after Draw is intentional, as already recorded on
+2026-08-11; forcing nonempty WeaponPartial remains REJECTED.
+
+player-anim-settings-chloe.bin (SHA256
+2f446122d91705ae42d15520e00da1d999320df27549d041437090ffbdb2562b), move/run
+object FF5562B1 record1070, selector25A767CF, table2D970/count137:
+row10@2DB00 run-tense-hands77A8107C ->7D11D4FD;
+row11@2DB28 idle-hands7FB80CC8 ->7D11D4FD;
+row12@2DB50 idle41C84248 ->5F913F74. All type0/flags0. The same table is shared
+by uneasy-explore-run-fast object F6F53CC4 record1040/selector42716A93; do not
+misname that second object as run. The ordinary player-anim-settings.bin
+move/run object2AC1B317 instead has idle ->2AD31AAC bindpose-no-hands and no
+such Hands remap in its114-row tableAA5D8. Current active move selector is not
+observed in PID17512.
+
+This is NOT player-mesh routing. Chloe mesh object4C9FB65C tableDFA38/count979
+has row280@E25F8 D350A452 ->B8FC6B25, type1/flags0; it does not replace the
+above default/idle Hands sources. Nadine mesh6567DEA7 tableEDB70/count323 also
+contains none of these Hands sources or D350/B8/0A2. The default player-mesh
+object C9CC711C is in player-overlays.bin, record8DB8/table2DDE0/count0. Thus
+changing only the player-mesh overlay record does not directly replace the
+separate move-category Hands remap; the earlier zh failure is not evidence
+that those categories are one.
+
+The exact P99 specific-weapon object43DC560C, selector8075397D, recordCC8,
+table35550/count8 in player-specific-weapon-overlays.bin consists ONLY of
+reload rows at35550..35668, targeting1BCB8A84/D6F67C0A. It has no steady Hands
+or D350 override. Entry SHA256:
+18d0c7825f20b5dedc8cfae1326f118b822e371e586cbaa1f1883df7166a9412.
+Generic pistol weapon-base table50388/count241 also has no listed idle/Hands/
+D350 remap. The Mazur chain D350 ->EBEFDD92 (long-gun table463B0) ->0A2F8976
+(Mazur table row80@21E28) is a different selector route, not newly established
+leakage into P99. B8 can be appended to multiple source families, so its final
+clip ID alone still loses provenance.
+
+**Native command and weight ownership, read through MCP.**
+
+AnimControl_CreateAnimCommands14172C370 walks active ordered registry records
+and calls the type2 generator at14172C575. AnimStateLayer14189EA60 reads L
+through vtable142B0ABB0+10 ->141893B00, an exact float getter for layer+28.
+It passes that same L to every snapshot at14189EB0A/EB17. Layer mode is+24.
+Snapshot141AB6C40 resolves instance root heap/index+130/+138, invokes root+70
+at141AB6DD8, and, with inner context+1C enabled, appends cmd7
+{left=0,right=output,out=output,mode=layerMode,weight=L} at141AB6E48..6E98.
+
+The InstanceZero root is NOT a no-op or all-valid identity pose. Concrete
+vtable142B3D590+70 ->141AC7F10 emits {00020009,outputLane}. Evaluator case9
+141ABA485/4A9 calls14217D940, clearing lane ValidBits atD969/D96C and the
+second stream atD97B/D97F, as well as mirrored validity tails. The subsequent
+snapshot cmd7 inherits already valid lane-zero Base+Hands through one-sided
+copy. Empty root is therefore not synonymous with a missing hand pose.
+
+Within-track folding reads the newly processed instance+158 at141AB6F47.
+Between-track folding reads that track's instance[count-1]+158 at14189EB4B;
+these indexing rules must not be conflated. Final per-layer cmd7 is{0,1,0,1,1}.
+The terminal1 does NOT cancel upstream L or transition weights. Custom pointers
+layer+560/+568/+570/+578/+580 can replace ordinary folding/terminal behavior.
+
+L is maintained by141896950 (also called by type2 Step at1418A3785), from
+layer remaining+30/total+34/start+38/target+2C/curve+3C. Instance1418A3820
+updates+158 from timer/duration+150/+154 and curve+18C; the separate+164 from
++15C/+160 is not read by these command generators. Internal Blend-node+60 is
+a further independent weight;14191E180 can evaluate its descriptor+58 and
+store a clamped result at14191E345. Terminal WeaponIK weight1 measures none
+of these weights.
+
+**Conditional fold model, not inferred live commands.**
+
+p99_partial_tail_model.py follows two tracks with one instance each, ordinary
+mode1 callbacks and the snapshot lane-zero tail. With base B, old partial P,
+layer weight L and new empty-track weight w, its intermediate lanes are
+O=Mix(B,P,L), N=B, F=Mix(O,B,w). For a jointly-valid LOCAL translation only,
+P has coefficient L*(1-w). Nested normalized quaternion blends cannot generally
+be collapsed to that coefficient; neither can the composed wrist-to-prop
+translation, which rotates the child offset. One-sided-valid joints copy fully
+even at weight0. The model tests these counterexamples explicitly. It does not
+assert that PID17512 took this topology or recover native L/w from the fit.
+
+**Existing runtime records and current mods exclude stronger conclusions.**
+
+PID17512 logs104392..104394 retain four complete getter pairs for Player49F,
+weapon4A3, P99 state2, owner0/screen0 and terminal IKweight1. Admission required
+neutral movement/aim/reload/cover/grenade conditions plus owner/weapon continuity
+of350ms, max gap100ms. It did NOT inspect Hands/WeaponPartial roots, phases,
+transition state, node IDs or native weights. These are the first four complete
+admitted calls, not four certified steady frames. No timestamps/frame numbers
+were recorded, so their exact duration cannot be recovered. A Draw/custom tail
+remains possible but is NOT proven by the decreasing numeric fit. Both existing
+baseline audit reports now carry explicit capture_context flags for this limit.
+
+All current local grip/source/retarget/support/roll/Feather-suppression/Mazur
+pair writers remain OFF; P99GroupShadow and SOURCE_OBSERVATION_EXAM are OFF.
+The enabled Init-only appearance swap intentionally leaves Player's other
+identity/animation selection on Chloe; that is a verified configuration, not
+a newly proven cause. Held-hand admission excludes the hip/back attachment
+repairs. No current local pose writer was found to explain the fit directly.
+
+**NEXT discriminator / no runtime admission yet.**
+
+Join actual owner/weapon/Fg and frame identity to active move selector, ordered
+Hands and WeaponPartial tracks, every instance state+98/weights+158/+164/
+phase+168, root+130/+138 and callbacks. At final leaf generation1419182E0,
+Animation-node+40/+44 are source/resolved IDs, +48/+4C are lookup keys and+50
+is clip. For Blend nodes +40/+44 are child indices and+60 is weight, not phase.
+Include actual joint validity and same-pass arm pose before/after Feather.
+Distinguish settled empty partial, lingering Draw/custom contributor, fading
+whole layer and scripted internal blend. The old outer1418B2945 tuple, terminal
+IK weight,350ms dwell or fitted scalar cannot replace this join. Do not restart
+the rejected startup-only14172CB32 observer or force a permanent partial.
+
+Verification:46 scoped Python tests pass (partial-tail9, live-baseline7,
+default-Hands9, coherent-arm10, support11). No runtime/DLL source changed and
+no game was launched. Sole ida/tll.i64 saved two new function names plus corrected
+generator/clear comments. .codex/ida_apply_p99_empty_partial_20261009.log reports
+1942functions/81data/3types and save_database returned True. Restarted MCP
+resolves141893B00/141AC7F10 and their vtable xrefs142B0ABC0/142B3D600. DLL remains
+3B27BBB8DCBF558BADA2715071A4E48DC26283DD384490E4ED8E36DE0254BCEC; no tll process
+is running. Existing tmp/ remains untouched. No visual correction is claimed.

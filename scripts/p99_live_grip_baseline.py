@@ -42,6 +42,32 @@ GETTER_PAIRS = (
 GETTER_PAIRS_SHA256 = "6e6afc1e39dd817c5c284011e3deebca48cd642f0c65b860b14692c6052aadb0"
 
 
+def capture_context():
+    """Scope proved by the PID17512 observer, not an inferred animation state.
+
+    p99_support_constraint_dwell_ready checks owner/weapon continuity for350ms;
+    the reach observer takes its first four admitted calls. Neither helper reads
+    the Hands/WeaponPartial roots or their phases/weights. WeaponOut2 plus the
+    dwell is therefore NOT a verified steady-animation baseline. The saved log
+    has no timestamps/frame numbers with which to reconstruct sample spacing.
+    """
+    return {
+        "capture_pid": 17512,
+        "sample_count": 4,
+        "selection": "first_four_complete_admitted_terminal_calls",
+        "controller_weapon_state": 2,
+        "owner_weapon_continuity_dwell_ms": 350,
+        "maximum_continuity_gap_ms": 100,
+        "sample_times_or_frame_numbers": None,
+        "sample_duration_ms": None,
+        "hands_root_observed": False,
+        "weapon_partial_root_observed": False,
+        "transition_tail_excluded": False,
+        "steady_animation_proven": False,
+        "transient_animation_proven": False,
+    }
+
+
 def observed_rows():
     payload = b"".join(struct.pack("<8f", *r) for pair in GETTER_PAIRS for r in pair)
     if hashlib.sha256(payload).hexdigest() != GETTER_PAIRS_SHA256:
@@ -170,11 +196,15 @@ def audit():
         "live_clip_selection_proven": False, "live_weight_proven": False,
         "live_chain_scale_observed": False, "pose_writer_admitted": False,
         "capture_pid": 17512, "capture_getter_pairs_f32_sha256": GETTER_PAIRS_SHA256,
+        "capture_context": capture_context(),
         "skeleton_sha256": npc.source.sha256(data), "bind_local_rows": bind,
         "samples": samples,
         "limits": [
             "Observed product cannot identify palm28 versus prop30 separately.",
             "Near-bind rotation is not exact bind; the four samples evolve.",
+            "WeaponOut2 and350ms owner continuity do not prove a steady animation root.",
+            "No sample timestamps, frame numbers, layer roots or native blend weights were captured.",
+            "A transition tail is a competing explanation, not an observed fact.",
             "NLERP fits are analytic controls, not reconstructed native blending commands.",
             "Native chain scale multiplies both local translations; its live value is missing.",
             "Prop-only 0.95 is a contrasting numeric fit, not a proven native operation.",
