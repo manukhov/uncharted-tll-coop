@@ -39933,3 +39933,142 @@ generator/clear comments. .codex/ida_apply_p99_empty_partial_20261009.log report
 resolves141893B00/141AC7F10 and their vtable xrefs142B0ABC0/142B3D600. DLL remains
 3B27BBB8DCBF558BADA2715071A4E48DC26283DD384490E4ED8E36DE0254BCEC; no tll process
 is running. Existing tmp/ remains untouched. No visual correction is claimed.
+
+### 2026-10-09 STATIC: separate selected overlay, live snapshot and consumed commands for P99 hands
+
+The proposed joined Hands/WeaponPartial census was audited before implementation.
+No new observer or pose writer was enabled. Both user-visible hand defects remain
+unresolved. This pass closes specific provenance/layout gaps, not the cause.
+
+**STATIC: current move selection is not the track's resolved selection.**
+
+Read control=*(Player+1A0), wrapper=*(control+60), master=*wrapper. Master+24
+is a byte count; master+8 is the selected-set pointer array, +10 the parallel
+object-id array. Each set has rows+0/count+8, category+0C, objectId+10,
+selectorId+18 and sourceId array+20. Find move category0B7AD9B2 and cross-check
+objectId against the parallel array. Values are NOT selector IDs.
+CommitResolvedKnowledgeRecordIntoSinkSlot1417F9150 reads category at916E,
+writes objectId at9194 and set pointer at919B. Consumer1417FA6E0 searches
+sourceId array+20 and40-byte rows. Player init1410CE260 has a conditional
+move/run-chloe branch atCE677/693; its existence is not current selection.
+
+AnimStateLayer_Step1418A3725 calls AnimOverlayState_Copy1417F9DD0 from
+layer+18 master into track+8. A fading track may retain a different route than
+the current master. Compare both routes with the instantiated leaf; neither
+the asset table nor the current master alone proves that leaf's provenance.
+The earlier FF5562B1/F6F53CC4 shared Hands remap remains a static asset fact,
+not an observed PID17512 selector.
+
+**STATIC: node+50 is not universally the clip emitted by the generator.**
+
+Animation generator1419182E0 checks clip+24 mask04 at141918323. For streamed
+clips it calls141775E90 to set stream phase,141776520 for chunk-local phase,
+and1417762D0 for a chunk clip. Command6 at1419183B8 contains the returned clip
+and sample=(chunk sampleCount-1)*localPhase (optional ceil by context+48),
+not necessarily node+50/node+60. Missing clip emits command11, distinct from
+InstanceZero's command9. Node+69 adds command8. The independent SimpleLayer
+path141894B3B..C0C uses the same streamed selection and command6 construction.
+
+The helpers are NOT passive readers:141961790 can attach through141774A10
+(AnimStream::Attach assertion and interlocked lock atA62) and writes a stream
+header slot at141961A50 (AnimStream::UpdateHeader assertion).141775F10 writes
+stream+20 phase. Chunk records at stream+40 have stride20 and interval+4/+8;
+141776520 maps [start,end) to local phase; phase1 has a separate endpoint path.
+1417762D0 can resolve chunk-last/chunk-0 through the animation database.
+Do not call these from a read-only observer, or claim streamed flags are active
+for current P99: that runtime fact has not been captured.
+
+**STATIC: snapshot ownership and post-Perform limits.**
+
+14189B760 selects layer+58 override heap, otherwise+50; instance construction
+stores the selected heap at+130 via1418B4086. PhaseUpdate refreshes snapshot
+nodes at1418A5098/51B4/5442/57BF. ResetSnapshotRoot1418A4A50 invokes root+78
+then invalidates+138. Blend release14191EB80 recursively releases children
+and calls SnapshotNodeHeap_ReleaseNode1418C3150; heap records are stride28
+at+A0, bounded by+AC. Re-reading equal pointers/indices is not a generation
+certificate or proof of unchanged history.
+
+Perform141A92905 precedes Player+408 at141A929A1, Player_PostAnimBlending_Async
+1410EB6A0, phase3 dispatcher1410EB865 and WeaponIK outer1410959AC. Before
+the outer call, wrapper141095090 may call141090AC0 if Player+161A bit0 is set.
+Its phase writes141091946/1979/1983 target the MAIN instance
+[[Player+1A0]+58]+10, not the separately selected WeaponPartial instance.
+WeaponPartial call1410915D5 is GetValidBitsFromAnimNodeTree1418B41A0, root
+slot19/+98, NOT resnapshot. No direct Hands/WeaponPartial node+60, instance
++158/+164 or layer+28 write was found in this prepass. Do not overstate this
+main-phase mutation as proof those specific descriptors changed.
+
+The earlier virtual1410EB715 is now resolved: Player+1ED0 is
+PlayerOverheadMoveController, ctor140DB9D90/vtable142A1CB90, slot40 ->
+UpdatePostAnim140DBC020 (exact source string atDBC888). Heavy path gates
+controller+330>=0.01 and signed+984>=10; its joint-writer branch also tests
+byte142FFAE9F, seeds JointSet atDBC8A0/8B7, solves atDBC952 and writes/commits
+atDBCA0B/A30/A3F. It is a possible earlier pose modifier, NOT a proven idle
+cause or snapshot rebuild. Remaining exact closure gap is virtual1410EB708:
+receiver=*(*(Player+C0)), slot38. Its concrete RTTI/target/writer set is still
+unresolved. Authored state hash from1416A5790 does not establish that vtable.
+Phase3 actions before channel4 are a separate conditional modifier set.
+Sequencer OnStart can set action state+18 from0 to1 and dispatch slot+10 at
+142051F78/7F or142052099/A0. Reading state1 later inside Feather does not
+prove OnStart did not run earlier in that pass.
+
+**STATIC: concrete alternative to reading a formerly live command buffer.**
+
+Normal Process call141A92759 receives RCX=[R12+0] command words,
+EDX=[R12+C] DWORD count, R8=stack AnimCmdContext, R9D=ESI group; stack
+arguments5..7 are job callbacks[RDI+18/+20/+28]. RDI is the native job reloaded
+at141A926E4; R12 is a20-byte segment record. Context+00 is ArtItemSkeleton,
++08=[Fg+2C0], +10=&Fg+1C0, +18=scratch, +20 flags (normal initialization0).
+Recover Fg from context+10 minus1C0, check job+8==Fg and job+0==Fg+10.
+Skeleton/group resource identity alone is not owner identity.
+
+The enclosing141A928F0 keeps that job in RSI from141A92902. At postblend
+call141A929A1, RSI=job, RBX=Fg, RCX=RDI=retained owner. This is an explicit
+register-carried bridge; it does NOT require thread-affine TLS through Perform.
+Ordinary C++ Process/postblend wrappers do not receive RDI/RSI as extra ABI
+arguments; an exact callsite adaptor must pass them explicitly. Commands are
+caller-owned and passed through Perform stack outputs, not a proven retained
+Fg/AnimControl log that can be dereferenced later at Feather.
+
+**Decision / falsifiable next evidence contract (HYPOTHESIS, not launch-ready).**
+
+- REJECTED as sufficient provenance: current master alone, leaf ID alone,
+  snapshot-pointer equality, or metadata captured only around Feather. They
+  may be useful corroborating observations, not the consumed command record.
+- Competing explanations remain settled Base+Hands with empty partial,
+  outgoing nonempty partial, internal blend and layer fade. These are not
+  mutually exclusive; store topology and weights independently.
+- Preferred next narrow observation: bounded value-copy of actual normal
+  Process/group0 commands, joined by an owned per-invocation ticket to the
+  same native job and Player+408/Feather arm rows. No new loader/provider work.
+  Native job pointer alone can be reused; admission still needs entry/exit,
+  missing-Process/no-owner-callback cleanup and duplicate/ambiguous-group
+  rejection. Do not read saved pointers to Perform's former stack or rely on
+  flags2000 as a sequence. This callsite is NOT rejected startup14172CB32.
+- Before any launch, test exact argument forwarding, bounded parser/copy,
+  ticket lifecycle (including missing and reused jobs), owner/pose identity,
+  nested calls and finite sampling budgets. Reserve separated late samples;
+  do not repeat the first-four-consecutive capture. Unknown nodes/commands,
+  truncation and changed containers must be explicit incomplete evidence.
+- Prediction: an actual transition must appear as emitted fold operands/
+  weights and change across the joined passes; a settled empty partial must
+  instead emit clear plus lane-zero inheritance without an outgoing partial.
+  Command6 identifies the emitted chunk/sample even for streamed clips.
+  Neither observation alone proves masks, rendered skinning or a hand fix.
+  Copy any needed referenced clip identity while native lifetime is valid;
+  copied command pointers are not a license to dereference resources later.
+  Group0 does not establish later residual-group/finger output.
+
+The existing raw48 census comment was corrected: scale.xyz starts+00,
+quaternion+10, translation.xyz+20; only W+0C/+2C may carry service/padding
+bits. Native14181EB5F..6E consumes root scale andEBA2..EBD1 copies S/Q/T.
+Runtime instructions/feature flags are unchanged; no DLL rebuild or launch.
+46 scoped geometry/routing-model tests pass. Failed hand writers remain OFF;
+existing DLL SHA256 is3B27BBB8DCBF558BADA2715071A4E48DC26283DD384490E4ED8E36DE0254BCEC.
+Sole ida/tll.i64 saved11 new labels plus corrected provenance comments:
+.codex/ida_apply_p99_consumed_provenance_20261009.log reports1953functions,
+81data/3types and save_database returned True. Restarted MCP resolves all11
+names; checked Overhead+40 and Blend+78 vtable xrefs and both stream-generator
+callers. Label AST is valid; all11 additions have unique keys (the existing
+unrelated duplicate keys were not changed). No tll process is running.
+Preexisting tmp/ remains untouched.

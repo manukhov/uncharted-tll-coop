@@ -49352,11 +49352,12 @@ bool seh_capture_weapon_ik_feather_pose(
                         kJointLocalPoseStride,
                 kJointLocalPoseStride);
             // This is an exact read-only census of a raw 48-byte JointCache
-            // row, not a network pose payload.  Only +0x10/+0x20 are the
-            // rotation/translation Locators; the leading 16 bytes are
-            // companion service data and must not be interpreted as floats.
-            // Pointer identity, generation and span readability above are the
-            // complete safety contract for copying these diagnostic bytes.
+            // row, not a network pose payload: scale.xyz at +0x00,
+            // quaternion at +0x10, translation.xyz at +0x20 (native
+            // 14181EBA2..EBD1). The W lanes at +0x0C/+0x2C may contain
+            // service/padding bits; preserve all 48 bytes exactly.
+            // These scope/span checks admit the raw copy, not attribution
+            // to a selected animation, consumed command list or render frame.
         }
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {

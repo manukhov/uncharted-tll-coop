@@ -8,6 +8,94 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-10-09: snapshot metadata is not always the emitted clip ---
+    0x140DB9D90: (
+        "PlayerOverheadMoveController_Initialize",
+        "STATIC: constructor stores RTTI PlayerOverheadMoveController vtable "
+        "142A1CB90 at140DB9DBE. Player construction assigns this controller "
+        "to+0x1ED0 at1410CC3D7; vtable+0x40 is140DBC020 UpdatePostAnim.",
+    ),
+    0x140DBC020: (
+        "PlayerOverheadMoveController_UpdatePostAnim",
+        "STATIC: exact PlayerOverheadMoveController::UpdatePostAnim string "
+        "at140DBC888 and vtable142A1CB90 slot+0x40. Called from Player+0x1ED0 "
+        "at1410EB715 before phase3 WeaponIK. Heavy branch requires controller "
+        "+0x330>=0.01 and signed+0x984>=10 (140DBC2F3/301); joint writer also "
+        "tests byte142FFAE9F at140DBC789, seeds JointSet140DBC8A0/8B7, calls "
+        "SolveArmIk140DBC952, writes rotation140DBCA0B and commits/resets "
+        "at140DBCA30/3F. This is a potential earlier pose modifier, not a "
+        "proven Hands/WeaponPartial snapshot rebuild or current idle cause.",
+    ),
+    0x141774A10: (
+        "AnimStream_AttachAnimation",
+        "STATIC: exact AnimStream::Attach assertions. Called by141961790 when "
+        "a candidate stream can bind the requested animation. Takes an "
+        "interlocked stream lock at141774A62 and rebuilds slot-id/index arrays "
+        "at+0x8/+0x18. This is a mutating, potentially waiting lookup fallback, "
+        "not an accessor a diagnostic may call to inspect clip identity.",
+    ),
+    0x141775E90: (
+        "AnimStream_SetPhaseForAnimation",
+        "STATIC: streamed-clip helper used by Animation-node generator1419182E0 "
+        "and SimpleLayer141894A90 when clip+0x24 mask0x04 is set. Finds/binds the "
+        "animation stream through141961790 and writes normalized phase to "
+        "stream+0x20 at141775F10. Phase1 first probes chunk-last and can return "
+        "without this write. This is NOT a read-only metadata getter.",
+    ),
+    0x141776520: (
+        "AnimStream_GetChunkLocalPhase",
+        "STATIC: phase1 returns1 directly; otherwise141961790 finds/binds stream. "
+        "Scans count+0x38, intervals+0x40 with stride0x20, selecting start<=phase "
+        "and phase<end from row+4/+8. Returns (stream+0x20-start)/(end-start), "
+        "or0 when no matching interval/stream. Its lookup may update stream "
+        "headers; do not call it from a read-only observer.",
+    ),
+    0x1417762D0: (
+        "AnimStream_ResolveChunkClip",
+        "STATIC: streamed clip selection called at141918354/141894B83. Phase1 "
+        "tries chunk-last; otherwise finds/binds stream141961790, locates the "
+        "requested animation slot and interval containing stream+0x20, then "
+        "returns interval+0x18 clipArray[slot]. If no interval matches, uses "
+        "the first interval; absent stream falls back to database chunk-0. "
+        "Returned clip can differ from Animation-node+0x50. Not read-only.",
+    ),
+    0x141961790: (
+        "AnimStream_FindOrBindAnimation",
+        "STATIC: searches active stream table14690B858/count14690B850 by "
+        "animation id; optional fallback141774A10 binds a matching stream. "
+        "With update flag, validates AnimStream::UpdateHeader assertions and "
+        "writes stream headerArray+0x28[slot]=requested header at141961A50. "
+        "This helper and its phase/clip callers are not passive observers.",
+    ),
+    0x1418B41A0: (
+        "AnimStateSnapshot_GetValidBitsFromAnimNodeTree",
+        "STATIC: exact source assertion. Resolves instance heap+0x130/root+0x138 "
+        "(or sentinel fallback), invokes root virtual slot19/+0x98 at1418B4239 "
+        "with instance+0x90 context and caller output. Reached by Player weapon "
+        "IK prepass141090AC0 at1410915D5 for WeaponPartial; this call is not "
+        "a snapshot-root rebuild or proof that the consumed pose changed.",
+    ),
+    0x14189B760: (
+        "AnimStateLayer_GetEffectiveSnapshotHeap",
+        "STATIC: returns layer+0x58 override heap when nonnull, otherwise "
+        "layer+0x50. Track construction passes this selected heap to instance "
+        "initialization;1418B4086 stores it at instance+0x130. Not a private "
+        "immutable command buffer owned by each instance.",
+    ),
+    0x1418C3150: (
+        "SnapshotNodeHeap_ReleaseNode",
+        "STATIC: exact SnapshotNodeHeap::ReleaseNode source assertion. Bounds "
+        "index against heap+0xAC, takes record heap+0xA0+index*0x28 and "
+        "unlinks it through1418C3210. Reached by snapshot-node release virtuals; "
+        "a later equal root index/pointer is not a node-generation certificate.",
+    ),
+    0x14191EB80: (
+        "AnimSnapshotNodeBlend_ReleaseSubtree",
+        "STATIC: Blend release virtual slot15/+0x78. Resolves children+0x40/"
+        "+0x44, releases each through the same virtual slot, then releases "
+        "own node index+0x18 with SnapshotNodeHeap_ReleaseNode1418C3150. "
+        "ResetSnapshotRoot can therefore retire the entire current tree.",
+    ),
     # --- 2026-10-09: distinguish an empty partial tail from a missing grip ---
     0x141893B00: (
         "AnimLayer_GetCurrentBlendWeight",
@@ -1257,7 +1345,10 @@ FUNCTIONS = {
         "set pointers, value ids, hash, four-entry variant history, set count and "
         "random/flags state. AnimStateLayer_Step calls it at 0x1418A3725 with "
         "layer+0x18 as the Player-owned master source and the first track's +0x8 "
-        "state pointer as the destination.",
+        "state pointer as the destination. The copied track route may differ "
+        "from the master's later current route. Values[] contains overlay "
+        "object ids (set+0x10), not selectors (set+0x18); see1417F9150. "
+        "Current master alone cannot attribute an already resolved leaf.",
     ),
     0x1417F9F00: (
         "AnimOverlayState_ResolveAnimationId",
@@ -2387,7 +2478,14 @@ FUNCTIONS = {
     0x1419182E0: (
         "AnimSnapshotNodeAnimation_GenerateAnimCommands",
         "Animation-node virtual slot 14. Emits the 0x60006 animation command from "
-        "the selected clip and dynamic phase at node+0x60.",
+        "the selected clip and dynamic phase at node+0x60. STATIC provenance "
+        "limit: if node+0x50 clip has flags+0x24 mask0x04, calls141775E90/141776520/"
+        "1417762D0 to update stream phase and choose a chunk clip plus local "
+        "phase; cmd6 at1419183B8 then contains that returned clip, not necessarily "
+        "node+0x50. Missing clip emits cmd11, distinct from InstanceZero cmd9. "
+        "Sample=(raw+0x22 sampleCount-1)*phase, optionally ceil by context+0x48; "
+        "node+0x69 adds cmd8. Node ids/clip/phase alone do not prove emitted "
+        "commands for streamed clips.",
     ),
     0x141AB6C40: (
         "AnimStateSnapshot_GenerateAnimCommands",
@@ -3859,7 +3957,13 @@ FUNCTIONS = {
         "underlying skeleton +0x1E word, group count, Fg+7 bit3 and flags "
         "0x20000; 0x141A92424 then limits the inline loop to one and "
         "0x141A927D9 queues the residual mask. Fallback allocates and publishes "
-        "identity matrices.",
+        "identity matrices. STATIC observation seam141A92759: RCX=[R12] "
+        "command words, EDX=[R12+0xC] wordCount, R8=stack context, R9D=group; "
+        "args5..7=[RDI+0x18/+0x20/+0x28], where RDI is native job reloaded "
+        "at141A926E4 and R12 is the0x20-byte segment. Context+0x10=&Fg+0x1C0 "
+        "allows Fg recovery and job+8 cross-check. Job/segment registers are "
+        "NOT extra C++ ABI arguments: a callsite adaptor must explicitly "
+        "forward them. Segment pointers are not a published post-Perform log.",
     ),
     0x1418C4FB0: (
         "FgAnimData_AllocateAndSwapSkinningBuffers",
@@ -3886,9 +3990,14 @@ FUNCTIONS = {
         "Synchronous animation worker callback: calls PerformAnimBlend at exact "
         "callsite 0x141A92905, then resolves the retained Fg owner and dispatches "
         "Player vtable+0x408 through exact bytes FF 90 08 04 00 00 at "
-        "0x141A929A1 on the same worker. The final Async joint-blend job follows "
+        "0x141A929A1 in the same enclosing job call. The final Async joint-blend job follows "
         "separately, making these two callsites the exact Perform-to-postblend "
-        "handoff for the Mazur authored-pair preservation scope.",
+        "handoff for the Mazur authored-pair preservation scope. STATIC value "
+        "bridge: RSI retains native job from141A92902, RBX=Fg, and RCX=RDI="
+        "retained owner at141A929A1. Do not infer OS-thread/TLS continuity "
+        "through Perform or treat job pointer/flags2000 as a generation id. "
+        "An observation ticket must close on missing Process/owner callback "
+        "and all return paths; copying native commands is not pose repair.",
     ),
     0x1415A9040: (
         "TaggedHeapAllocator_Init",
@@ -6581,7 +6690,11 @@ FUNCTIONS = {
     0x141095090: (
         "PlayerWeaponIKAction_UpdateWrapper",
         "PlayerWeaponIKAction vtable +0x40 wrapper. Forwards the action update "
-        "to PlayerWeaponIKAction_Update and preserves the action scheduler ABI.",
+        "to PlayerWeaponIKAction_Update and preserves the action scheduler ABI. "
+        "Before forwarding, Player+0x161A bit0 gates a call1410950AC to "
+        "Player_UpdateWeaponPartialBlendAndIkInputs141090AC0. At postblend "
+        "this may rewrite main instance+0x168 after Perform; do not confuse "
+        "that main-phase field with Hands/WeaponPartial leaf phase+0x60.",
     ),
     0x1410950E0: (
         "PlayerWeaponIKAction_Update",
@@ -14296,7 +14409,13 @@ FUNCTIONS = {
         "Player_UpdateWeaponPartialBlendAndIkInputs",
         "Per-Player weapon-partial/IK prepass. Integrates the per-screen target "
         "and transition duration into the main active-state phase and applies "
-        "blind-fire gesture attenuation before PlayerWeaponIKAction_Update.",
+        "blind-fire gesture attenuation before PlayerWeaponIKAction_Update. "
+        "STATIC: main instance comes from [[Player+0x1A0]+0x58]+0x10; stores "
+        "at141091946/1979/1983 target its+0x168. WeaponPartial instance is "
+        "looked up separately by E2B990B9; its call1410915D5 queries node-tree "
+        "ValidBits, not resnapshot. No direct Hands/WeaponPartial node+0x60, "
+        "instance+0x158/+0x164 or layer+0x28 write was found in this function. "
+        "Do not use main-phase mutation as proof of those fields changing.",
     ),
     0x140FB1790: (
         "Settings_RegisterHackDisableWeaponPartialsForScreen",

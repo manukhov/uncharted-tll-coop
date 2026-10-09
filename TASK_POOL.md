@@ -71,6 +71,26 @@ Animation-node+40/+44 are IDs; Blend-node+40/+44 are child indices. No existing
 record provides this join, and controller state2/IKweight1 cannot replace it.
 No new runtime observer or pose writer is enabled by this checkpoint.
 
+STATIC provenance checkpoint (2026-10-09, next continuation): a Feather-only
+current-tree census is NOT enough to prove consumed commands. Master overlay
+values are object IDs, not selectors, and each track+8 retains its own copied
+route. Streamed clip mask04 may replace leaf+50/phase during command emission;
+do not call the stream helpers from an observer. The exact current-tree closure
+gap is Player postblend1410EB708, receiver=*(*(Player+C0)), virtual+38; the
+separate Player+1ED0 virtual is now OverheadMoveController_UpdatePostAnim.
+
+NEXT narrow implementation decision: actual normal Process/group0 at141A92759
+has RCX=commands, EDX=wordCount, R8=context, R9D=group, RDI=native job,
+R12=segment. context+10=&Fg+1C0; compare with job+8. Enclosing141A928F0 retains
+job in RSI through postblend141A929A1 (RBX=Fg, RCX=owner). Use explicit
+callsite-adaptor operands and a bounded per-invocation ticket/value copy, not
+TLS across yielding Perform or a cached native pointer. Close missing Process,
+duplicate groups, job reuse and absent owner-callback paths BEFORE admission.
+Then join actual cmd6 clip/sample, cmd7 weights/modes and same-pass arm rows;
+add current master/track metadata only as separately scoped corroboration.
+Detailed ABI, alternative hypotheses, bounds and prediction are in latest
+COOP_STATUS entry. No observer enabled, no visual fix, no runtime test earned.
+
 CURRENT hand-repair work (2026-10-08): right-hand NPC4CAA7420/row149 was decoded
 with corrected opcode24 and compared on the same4328 Nadine/P99 surface cohort.
 Current315 crossing pairs -> full native175, fingers-only813, palm/prop-only104.
