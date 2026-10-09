@@ -19,6 +19,35 @@ Keep these symptoms separate: the21-row right-palm/prop/finger model cannot fix
 the left support chain. Pursue specific pose/retarget/IK changes with a visible
 prediction, preserve confirmed attachments, and do not repeat rejected writers.
 
+USER ANALYSIS REQUEST (2026-10-09): investigate Nadine as a specialized NPC,
+not an already supported multi-weapon Player. Fresh asset inventory supports
+the narrow premise: her dedicated weapon overlays contain pistol/fist only;
+her own NPC weapon is Glock art C7CB8F0E, NOT the current P99 art 8075397D.
+However, shared female-buddy overlays contain MG/shotgun/pistol recipes and
+explicit character/nadine-dlc rows. Do not infer a global absence of long-gun
+animations, or full Player compatibility, from either inventory alone.
+
+NEXT repair decision, superseding the older experimental NEXT items below:
+
+1. Close source/selector -> resolved clip -> semantic retarget -> masks/weights
+   for one exact current P99 lowered-idle state, including defaultHands and
+   weapon-partial ownership. Find the first incompatible composition stage;
+   the final wrist-to-prop fit does NOT identify a missing layer or native weight.
+2. Compare native Nadine Glock and Player content OFFLINE as a control; do not
+   force NPC art C7CB8F0E into Player inventory. No safe give path is established.
+3. If a complete compatible recipe exists, repair its specific selection/blend
+   fault. If absent, adapt a coherent upper-body/hand/prop/finger recipe into the
+   Player snapshot/command graph, preserving group-local masks, native later IK,
+   helpers and action events. A full adapter is a candidate, NOT yet proven needed.
+4. Validate one pistol's draw -> idle -> aim/lower -> reload -> put -> draw before
+   extending by weapon family and exact art. Do not copy NPC overlay tables or
+   late-write all skeleton indices into the 66-row Fg+100 buffer.
+
+The architecture/evidence matrix is in the latest COOP_STATUS entry. This turn
+is analysis only: no game launch, runtime edit, new writer or new admission.
+Existing failed P99 writers and the historical Mazur pair writer remain OFF;
+attachments are separate. Provider/loader infrastructure remains PARKED.
+
 CURRENT hand-repair work (2026-10-08): right-hand NPC4CAA7420/row149 was decoded
 with corrected opcode24 and compared on the same4328 Nadine/P99 surface cohort.
 Current315 crossing pairs -> full native175, fingers-only813, palm/prop-only104.

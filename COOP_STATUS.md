@@ -39628,3 +39628,169 @@ Four new native function names plus seed comments saved to sole ida/tll.i64:
 .codex/ida_apply_p99_pose_baseline_20261009.log reports1940functions/81data/
 3types and save_database returned True. Restarted MCP resolves all four names,
 the seed comment, and JointTree+30 vtablexref142AFC8C0. Preexisting tmp/ untouched.
+
+### 2026-10-09 STATIC / HYPOTHESIS: Nadine NPC weapon coverage and the Player repair boundary
+
+The user requested a thorough analysis starting from the possibility that Nadine
+was authored only for her own pistol. This is an analysis result, NOT a hand fix
+or permission to restart the rejected writers. No game launch/injection/input,
+runtime source change or DLL rebuild was performed.
+
+**STATIC inventory: specialized own kit, but not an isolated animation island.**
+
+Fresh reads of dc1.psarc reproduce the following typed anim-overlay-set records
+(type 65FA07C0, category weapon D862A057), rather than treating arbitrary nearby
+DWORD matches as overlay objects:
+
+| Dedicated anim-overlays-nadine.bin selector | Selector ID | Object / table offset | Rows |
+| --- | --- | --- | --- |
+| pistol-ambi | 64D17A21 | 3289BC6C / 7338 | 78 |
+| pistol-aggr | 99C2B773 | CF9A713E / E680 | 145 |
+| pistol-crouch | 90CE6B09 | BCDD654F / 9FB0 | 118 |
+| fist-ambi | D57BDF2C | 6245E479 / D918 | 84 |
+| fist-aggr | 2868127E | 9F56292B / 8148 | 111 |
+| fist-crouch | 8B015FA0 | DD5999ED / FD58 | 101 |
+
+These are all six weapon-category records in that file; weapon-base contains
+fist49D93E76 (26 rows) and pistolBD498AB2 (107). Names are exact StringId
+preimages, not inferred from the visible weapon. In particular 99C2B773 means
+pistol-aggr, NOT Nadine's particular weapon art. The file is 88185 bytes,
+SHA256 f2e4ad2493aebb1719abeafb589f06f3ea3394a09dcfd3ba491c0317833efc8b.
+
+However, anim-overlays-female-buddy.bin (385121 bytes, SHA256
+223b7f46ca202ecf895435468a1b6f7a2309d970d2fe5e4a5706a7b85a1913ce) contains weapon recipes
+for MG, shotgun and pistol, including ambient/aggressive/crouch/search variants;
+weapon-base has MG409 / shotgun164 / pistol552 rows. It also contains the exact
+character/nadine-dlc selector12AC7354, 224 rows at20B68. The existing 2026-08-09
+analysis already traced generic weapon/base -> intermediate identifiers ->
+Nadine-specific holster/unholster clips in that shared stack. It is incorrect
+to infer all Nadine capabilities from anim-overlays-nadine.bin alone.
+
+Coverage is broader than one static grip, but rows are not unique clip counts:
+
+| Nadine pistol state/content | Verified source -> target or table | Unclosed condition |
+| --- | --- | --- |
+| Hand/grip | E720: weapon-grip791687E5 -> 4CAA7420 | Combined with arm wrappers and retarget |
+| Raised/lowered arm pose | E888:036F20E5; 2460:036F20E5 -> 5E67B1FA | Actual up/down selector and callback weights |
+| Aim gesture | E6D0: aim-gesture -> FF34FFC3 | NPC gesture is not automatically Player ADS |
+| Recoil | 132D0: fire-recoil -> 4322214B | Additive blend and action ownership |
+| Reload | 132F8: reload-partial38D51FF1 -> 9BC3DE87 | Player event timing and exact gun geometry |
+| Cover | 13320 -> 4FD75719; 13348 -> D822B81E | Side/state selection and compatible masks |
+| Movement | F7B0:FFAEFAA4 -> B72EB252; crouch stairs AED8/AF00 | Full state reachability, not merely present rows |
+| Draw/put | Shared character/nadine-dlc224@20B68 | Chained NPC seven-group contract, not direct Player |
+
+Fresh authored-resource checks also resolve actual shared long-gun poses, not
+just selector names: anim-elena-combat-dlc.pak MG idle41F57C40 raw5FD540 and
+run20B3523A raw5FF660 own joints19..30; shotgun handsD78483EF raw622080 owns28/30,
+and shotgun idle9841D72A raw5FBAC0 owns19..30. They use skeleton8592680F, seven
+groups. This proves reusable source content exists, NOT that native Nadine
+selects each recipe or that every Player action has a compatible complete set.
+MG selector reachability/precedence and Player-state coverage remain open.
+
+Own weapon identity is independently distinct: weapon-art C7CB8F0E
+pistol-nadine resolves to pistol-glock-nadine F856FE95; current P99 art8075397D
+resolves to p99-silencer-dlc255BEBA0. Fresh weapon-art records are at79C0/6CE8;
+both raw class bytes are0, but art-specific selector+38 is0/8075397D. Do not
+equate a shared pistol category with identical per-art geometry or overrides.
+weapon-art.bin is119637 bytes, SHA256
+5f5a601d2a7d799c741ce906f57f4b3e49172d81a85e412e6df67cb52a106d53.
+The historical native NPC loadout and498 runtime rows establish the Glock as
+Nadine's own NPC weapon. They do not establish a safe Player give path for it.
+
+Reproduce the category inventory with existing psarc_asset_audit.py:
+`<python> scripts/psarc_asset_audit.py <game>/Uncharted4_data/build/pc/thelostlegacy/dc1.psarc --entry anim-overlays-nadine.bin --dc00-record-id weapon --limit 30`
+and the same command for anim-overlays-female-buddy.bin. Keep only object type
+65FA07C0 with category at record+0C; this broad diagnostic can also show a
+neighboring non-overlay record whose first30 bytes overlap the next record.
+Use --dc00-record-id weapon-base or --dc00-record-id 0x12AC7354 for the other
+tables. Existing support/coherent/default-Hands audits retain the pose details.
+
+**STATIC architecture: visual Nadine is not automatically native NPC Nadine.**
+
+The current appearance hook intercepts Player vtable[92]/140A1DCC0 only at the
+renderer look-builder return site. It leaves Player+15A0 and its animation
+knowledge unchanged while showing lookD27C074F. Fresh read-only IDA confirms
+Player_ApplyLook2MeshKnowledge1410D6AD0 reads +15A0 and commits player-mesh,
+mesh/default and female/default knowledge. Conversely native NPC builder
+GameCharacter_BuildNpcAnimTreeWithOverlays141DE36E0 commits character/skeleton
+and character/look overlays and builds anim-npc. The prior resolved RTTI slot
++710 includes Nadine/NadineBuddy but not Player. This is a controller/content
+contract difference, not merely two visible meshes with different bone lengths.
+
+Generic semantic retarget already exists (Player->Nadine row124,
+Chloe->Nadine row157, NPC/Elena->Nadine row149 for the checked pistol poses).
+It maps local transforms/reference frames; it does not choose the right state,
+blend mask, phase, weapon contact frame or event ownership. Therefore neither
+"there is no way to move Nadine's bones" nor "copy Chloe's animation and done"
+describes the actual limitation. Swapping player-mesh knowledge alone was
+already runtime-rejected in zh. Direct, unadapted NPC holster overlay/clip
+substitution remains STATIC REJECTED at the previously traced Player boundary:
+native holster clips have seven groups with different owned joints from Player's
+eight-group partial/additive contracts. This does not reject every NPC pose as
+a source for a correctly adapted Player recipe.
+
+**Competing explanations and their present status.**
+
+- Specialized pistol-first NPC content: STATIC supported by own-loadout and
+  dedicated selector inventory. Strict "no other reusable weapon animations
+  exist" is not supported; the shared long-gun resources are concrete contrary
+  evidence. Full native Nadine support for every weapon is also unproven.
+- Missing semantic retarget as the sole cause: REJECTED by existing authored
+  maps and native141AE2100/141AE2A50 processing. Correct mapping is necessary,
+  not sufficient for a coherent final weapon pose.
+- Attachment-only defect: REJECTED as a sufficient explanation of both arms.
+  Back/hip placement is separate from shoulders, support IK and finger layers.
+- Wrong or incomplete Player pose composition: HYPOTHESIS with strong structural
+  support; its exact selector/mask/weight failure is NOT identified. PID17512
+  proves left IK reaches a nearly maximum-distance target and straightens an
+  initially bent arm. It does not prove a bad solver. The right defaultHands fit
+  is not proof of a missing grip; lowered-idle/transition contributions compete.
+- Inherently unusable Nadine skin/rig: NOT established. Native coherent poses
+  and prior user-confirmed Mazur two-hand ADR contradict blanket impossibility.
+  That historical Mazur writer is currently disabled, not a current working fix.
+
+**Repair strategy: diagnose the first divergence, then choose the smallest fix.**
+
+First close the exact current P99 lowered-idle source chain: original/resolved
+node+40/+44, Hands2EAA36BC, WeaponPartialE2B990B9, semantic retarget, both validity
+masks and actual blend coefficients. Compare against native Glock content
+offline, keeping actor identity, posture and per-art binding distinct. Do not
+force C7CB8F0E into Player inventory just to obtain a runtime baseline.
+
+If a compatible coherent recipe is already present but incorrectly selected
+or mixed, repair that specific decision. Only if the required recipe is absent
+or incompatible, build a Nadine-compatible Player content adapter. The latter
+is an architectural candidate, not a proven requirement or a runtime-ready hook.
+Its unit is a coherent upper-body/hand/prop/finger pose with transition rules,
+not one offset and not a raw copy of NPC overlay rows.
+
+Relevant existing seams are snapshot overlays141919F60->141918C30, native layer
+commands14189EA60/141AB6C40, and semantic group retarget141936490->141AE2A50.
+The chosen source must survive the actual ordered Player postblend1410EB6A0,
+Feather1418F2700, terminal1418F1780, then helper/palette evaluation. "Before IK"
+alone is not a sufficient boundary: there are multiple later owners. G0 arms
+and G1 fingers must have coherent state/generation/weights; Fg+100 has only66
+local rows and must NOT be indexed as the complete skeleton. Preserve root
+motion, locomotion, fire/reload timing and physical weapon-handoff events;
+keeping the Player class alone does not guarantee those remain correct.
+
+The first complete validation slice should be ONE exact pistol: draw -> idle
+-> aim/lower -> reload -> put -> draw, then move/turn. For each stage distinguish
+correct pre-IK pose, post-IK pose, helper/skinned surface and weapon binding.
+Only after that extend by weapon family, retaining per-art geometry/selector
+exceptions. Long-gun shared content may be reusable; new authored/retargeted
+clips are required only where the coverage/compatibility audit proves a gap.
+Back attachments and missing strap-guide content stay separate from hand repair.
+
+No new runtime hypothesis meets admission from this architecture review alone.
+The next discriminator is actual source/mask/weight provenance, NOT another
+full-weight donor, arbitrary shoulder shift, elbow roll, IK disable, NPC
+controller swap, or provider/loader infrastructure project.
+
+Handoff: documentation only. No new native function/field names were introduced;
+existing relevant names were read back from sole ida/tll.i64 through MCP, so no
+IDB write was needed. DLL remains SHA256
+3B27BBB8DCBF558BADA2715071A4E48DC26283DD384490E4ED8E36DE0254BCEC;
+failed P99 support/roll writers, completed observer and historical Mazur pair
+writer remain OFF. No tll process was running when checked. Preexisting tmp/
+is untouched. Both user-visible hand defects remain unresolved.
