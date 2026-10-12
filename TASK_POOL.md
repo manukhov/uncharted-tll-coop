@@ -99,13 +99,20 @@ on a prestarted worker holding the sole value buffer, not the animation worker.
 The default build stays OFF; the explicit TLL_P99_CONSUMED_CENSUS_EXAM option
 enables only this census in the main DLL, not old/inert artifact packages.
 
-LIVE exam checkpoint: all8 scoped CTest suites and final emitted ABI review
-passed; fresh2026-10-12p99-consumed-census launched/injected ONE PID24484
-(2026-10-12 21:17:07 local), startup four-site INSTALLED and READY. No hand fix
-claimed. User must load local Nadine/P99, draw then stand without aim/movement
-for15s; no joined sample was present at handoff. Do not launch another copy.
-NEXT read PID24484 P99-CONSUMED records and user's report, checking incomplete/
-budget flags first. Identify copied cmd6 clip IDs and
+PID24484 exam RESULT: user completed the scenario, reports no lag and closed
+the game himself, but the
+collector produced ONLY sample0/budget1 before owner admission (23.0339ms
+wall interval). No commands/arms; no pose conclusion. The eager global abort
+on a rejected initial probe is REJECTED; see latest COOP_STATUS. Repair the
+probe/capture separation without relaxing identity or the1ms threshold:
+pre-touch own storage beforeinstall, no reset on rejection, reason-only log,
+one overbudget-rejection retry after2s then terminal. Invalid clocks and slow
+ADMITTED probes/captures stay terminal. Preserve120s/600/8 bounds and test all
+paths before any replacement exam. The correction now passes all8 scoped CTest
+suites (runtime3894/owner44 checks). No native owner predicates or pose writers
+changed; successful probe+capture still share one1ms allowance. PID24484 is
+closed; only a reviewed fresh census-r2 ONE-process replacement is in scope.
+NEXT only after actual complete records: identify copied cmd6 clip IDs and
 cmd7/9/11 folds at early/late samples, compare pre/post+408 geometry, and find
 the first incompatible stage. A complete record is not a repaired hand;
 group0 does not capture the later finger groups, and instantaneous state2 is

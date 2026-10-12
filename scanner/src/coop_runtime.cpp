@@ -81573,9 +81573,9 @@ DWORD WINAPI install_hook(void*) {
     }
     boot_log_line(
 #if defined(TLL_P99_CONSUMED_CENSUS_EXAM)
-        "TLL co-op runtime init 2026-10-12p99-consumed-census "
+        "TLL co-op runtime init 2026-10-12p99-consumed-census-r2 "
 #else
-        "TLL co-op runtime init 2026-10-12p99-consumed-safe "
+        "TLL co-op runtime init 2026-10-12p99-consumed-safe-r2 "
 #endif
         "(completed read-only reach census disabled; rejected support-target and elbow-roll writers disabled; stock arm/finger paths; appearance and AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {

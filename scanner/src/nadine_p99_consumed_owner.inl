@@ -1,6 +1,18 @@
 // Field-only scope for the bounded normal-Process observer. Include after the
 // runtime constants/helpers. No virtual/native getter, resolver, or game write.
 // A readable/equal snapshot is not a lifetime lease or consumed-source proof.
+// Diagnostic stages identify the rejected group, not a specific predicate or
+// the reason for any earlier capture that did not record this value.
+enum class P99ConsumedOwnerReject : std::uint32_t {
+    None, Disabled, Input, LocalPlayer, NativeJob, RetainedFg, Skeleton,
+    Control, Weapon, Motion, Changed, ReadFault
+};
+
+void p99_consumed_owner_stage(P99ConsumedOwnerReject* reason,
+    P99ConsumedOwnerReject stage) {
+    if (reason != nullptr) *reason = stage;
+}
+
 struct P99ConsumedOwner {
     std::uintptr_t job = 0, player = 0, weapon = 0, fg = 0, local_pose = 0;
     std::uintptr_t target_skeleton = 0, underlying_skeleton = 0, control = 0;
@@ -73,10 +85,15 @@ struct P99ConsumedRead {
     }
 };
 
-bool p99_read_consumed_owner_fields(void* job, P99ConsumedOwner& value) {
+bool p99_read_consumed_owner_fields(void* job, P99ConsumedOwner& value,
+    P99ConsumedOwnerReject* reason = nullptr) {
     value = {};
-    if (g_module == 0 || !g_state_net.enabled || !g_net_role_b || job == nullptr ||
-        g_local_reload_level.load(std::memory_order_acquire)) return false;
+    p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::Disabled);
+    if (g_module == 0 || !g_state_net.enabled || !g_net_role_b) return false;
+    p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::NativeJob);
+    if (job == nullptr) return false;
+    p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::Input);
+    if (g_local_reload_level.load(std::memory_order_acquire)) return false;
     const auto buttons = g_cached_local_input_buttons.load(std::memory_order_acquire) &
         ~kInputBlockButtonBaseMask;
     if (buttons != 0 && buttons != 0x9ull) return false;
@@ -87,6 +104,7 @@ bool p99_read_consumed_owner_fields(void* job, P99ConsumedOwner& value) {
     std::uint16_t half = 0;
     std::uint8_t byte = 0;
     const auto retained = g_module + kRetainedSlotTableRva;
+    p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::LocalPlayer);
     if (!r.read(retained, 0, value.retained_handle) ||
         !r.read(retained, 8, value.player_id) || value.player_id == 0 ||
         !r.read(value.retained_handle, 8, value.player) ||
@@ -94,18 +112,22 @@ bool p99_read_consumed_owner_fields(void* job, P99ConsumedOwner& value) {
         !r.read(value.player, kGameObjectRuntimeIdOffset, word) || word != value.player_id ||
         !r.read(value.player, 0x4010, word) || word != 0 ||
         !r.read(value.player, 0x170, word) || word != kLegacyNadineAttachTargetLookId ||
-        !r.read(value.player, kPlayerIsInCoverFlagOffset, byte) || (byte & 1u) != 0 ||
-        !r.read(value.player, kPlayerFgAnimDataOffset, value.fg) ||
+        !r.read(value.player, kPlayerIsInCoverFlagOffset, byte) || (byte & 1u) != 0)
+        return false;
+    p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::NativeJob);
+    if (!r.read(value.player, kPlayerFgAnimDataOffset, value.fg) ||
         !r.read(value.job, 8, p) || p != value.fg ||
         !r.read(value.job, 0, value.job_state) || value.job_state == 0 ||
         !r.read(value.fg, 0x10, p) || p != value.job_state ||
         !r.read(value.job, 0x14, byte) || byte != 0 ||
-        !r.read(value.fg, 6, byte) || byte != 2 ||
-        !r.read(value.fg, kFgAnimDataRetainedHandleOffset, owner_handle) ||
+        !r.read(value.fg, 6, byte) || byte != 2) return false;
+    p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::RetainedFg);
+    if (!r.read(value.fg, kFgAnimDataRetainedHandleOffset, owner_handle) ||
         owner_handle != value.retained_handle ||
         !r.read(value.fg, kFgAnimDataRetainedIdOffset, owner_id) || owner_id != value.player_id ||
-        !r.read(owner_handle, 8, p) || p != value.player ||
-        !r.read(value.fg, kFgAnimDataSkeletonOffset, value.target_skeleton) ||
+        !r.read(owner_handle, 8, p) || p != value.player) return false;
+    p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::Skeleton);
+    if (!r.read(value.fg, kFgAnimDataSkeletonOffset, value.target_skeleton) ||
         !r.read(value.target_skeleton, 0x24, word) || word != kLegacyNadineTargetSkeletonArtId ||
         !r.read(value.target_skeleton, kSkeletonJointCountOffset, word) ||
         word != kLegacyNadineSkeletonJointCount ||
@@ -113,8 +135,9 @@ bool p99_read_consumed_owner_fields(void* job, P99ConsumedOwner& value) {
         !r.read(value.underlying_skeleton, 4, word) || word != kLegacyNadineUnderlyingSkeletonId ||
         !r.read(value.underlying_skeleton, 0x10, half) || half != kLegacyNadineSkeletonJointCount ||
         !r.read(value.fg, kFgAnimDataJointCacheLocalPoseOffset, value.local_pose) ||
-        !r.range(value.local_pose, 31 * 48) ||
-        !r.read(value.player, kPlayerWeaponControllerOffset, value.control) ||
+        !r.range(value.local_pose, 31 * 48)) return false;
+    p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::Control);
+    if (!r.read(value.player, kPlayerWeaponControllerOffset, value.control) ||
         !r.read(value.control, 0, p) || p != g_module + kPlayerWeaponControllerVtableRva ||
         !r.read(value.control, 0x108, p) || p != value.player ||
         !r.read(value.control, kWeaponCtrlCurrentSlotOffset, value.slot) ||
@@ -127,6 +150,7 @@ bool p99_read_consumed_owner_fields(void* job, P99ConsumedOwner& value) {
     // Native1410A1F90 uses these weak records but writes weapon+72 on success.
     // Read ONLY the current slot; neither call that vslot nor scan other arts.
     const auto record_offset = 0x148 + static_cast<std::size_t>(value.slot) * 0x10;
+    p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::Weapon);
     if (!r.read(value.control, record_offset, value.weapon_handle) ||
         !r.read(value.control, record_offset + 8, value.weapon_id) || value.weapon_id == 0 ||
         !r.read(value.weapon_handle, 8, value.weapon) ||
@@ -137,23 +161,35 @@ bool p99_read_consumed_owner_fields(void* job, P99ConsumedOwner& value) {
         !r.read(value.parent_handle, 8, p) || p != value.player ||
         !r.read(value.weapon, 0x4E8, word) || word != value.player_id) return false;
     float stick[2]{}, move[4]{}, magnitude = 0;
+    p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::Motion);
     if (!r.read(value.player, 0x39C8, stick) || !r.read(value.player, 0x3A30, move) ||
         !r.read(value.player, 0x3A1C, magnitude)) return false;
     for (float x : stick) if (!std::isfinite(x) || std::abs(x) > 0.025F) return false;
     for (float x : move) if (!std::isfinite(x) || std::abs(x) > 0.025F) return false;
-    return std::isfinite(magnitude) && std::abs(magnitude) <= 0.025F;
+    if (!std::isfinite(magnitude) || std::abs(magnitude) > 0.025F) return false;
+    p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::None);
+    return true;
 }
 
-bool seh_read_p99_consumed_owner(void* job, P99ConsumedOwner* output) {
+bool seh_read_p99_consumed_owner(void* job, P99ConsumedOwner* output,
+    P99ConsumedOwnerReject* reason = nullptr) {
+    p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::Input);
     if (output == nullptr) return false;
     *output = {};
     __try {
         P99ConsumedOwner before{}, after{};
-        if (!p99_read_consumed_owner_fields(job, before) ||
-            !p99_read_consumed_owner_fields(job, after) || !same_owner(before, after)) return false;
+        if (!p99_read_consumed_owner_fields(job, before, reason) ||
+            !p99_read_consumed_owner_fields(job, after, reason)) return false;
+        p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::Changed);
+        if (!same_owner(before, after)) return false;
         *output = after;
+        p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::None);
         return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        *output = {};
+        p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::ReadFault);
+        return false;
+    }
 }
 
 bool seh_copy_p99_consumed_arms(const P99ConsumedOwner& owner,

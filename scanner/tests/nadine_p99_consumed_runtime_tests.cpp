@@ -33,6 +33,10 @@ struct P99ConsumedOwner {
     std::uintptr_t target_skeleton = 0, job_state = 0;
     std::uint32_t player_id = 0, weapon_id = 0;
 };
+enum class P99ConsumedOwnerReject : std::uint32_t {
+    None, Disabled, Input, LocalPlayer, NativeJob, RetainedFg,
+    Skeleton, Control, Weapon, Motion, Changed, ReadFault
+};
 bool same_owner(const P99ConsumedOwner& a, const P99ConsumedOwner& b) {
     return a.job == b.job && a.player == b.player && a.weapon == b.weapon &&
         a.fg == b.fg && a.local_pose == b.local_pose &&
@@ -53,7 +57,7 @@ BOOL mock_frequency(LARGE_INTEGER* output) { output->QuadPart = 1000000; return 
 P99ConsumedOwner mock_owner{};
 unsigned owner_calls = 0, arm_calls = 0, process_calls = 0, post_calls = 0;
 unsigned log_calls = 0, raw_lines = 0, arm_lines = 0, complete_lines = 0;
-unsigned budget_lines = 0;
+unsigned budget_lines = 0, probe_lines = 0, sample_zero_lines = 0;
 std::size_t max_log = 0;
 DWORD main_thread = 0;
 std::atomic<bool> block_logs{false}, log_started{false}, fault_log{false};
@@ -80,6 +84,8 @@ void boot_log_line(const char* line) {
     arm_lines += std::strstr(line, "P99-CONSUMED arms ") != nullptr;
     complete_lines += std::strstr(line, " complete=1 ") != nullptr;
     budget_lines += std::strstr(line, " budget=1 ") != nullptr;
+    probe_lines += std::strstr(line, "P99-CONSUMED PROBE ") != nullptr;
+    sample_zero_lines += std::strstr(line, "sample=0 ") != nullptr;
 }
 // Controlled owner/read seams. The companion owner suite covers the real raw
 // reader; this suite includes the ACTUAL runtime hooks/lease/FLS/copy/logger.
@@ -93,9 +99,12 @@ struct P99ConsumedRead {
         return base && offset <= UINTPTR_MAX - base && copy(base + offset, &out, sizeof(out));
     }
 };
-bool seh_read_p99_consumed_owner(void* job, P99ConsumedOwner* out) {
+bool seh_read_p99_consumed_owner(void* job, P99ConsumedOwner* out,
+    P99ConsumedOwnerReject* reason = nullptr) {
     ++owner_calls; *out = {};
+    if (reason) *reason = P99ConsumedOwnerReject::Control;
     if (!owner_allowed || reinterpret_cast<std::uintptr_t>(job) != mock_owner.job) return false;
+    if (reason) *reason = P99ConsumedOwnerReject::None;
     *out = mock_owner; return true;
 }
 bool seh_copy_p99_consumed_arms(const P99ConsumedOwner& owner,
@@ -169,8 +178,10 @@ void reset() {
     g_p99_consumed_ready = true; g_p99_consumed_failed = false; g_p99_consumed_finished = false;
     g_p99_consumed_first_local = g_p99_consumed_next_probe = g_p99_consumed_next_sample = 0;
     g_p99_consumed_probes = g_p99_consumed_attempts = 0;
+    g_p99_consumed_slow_probes = g_p99_consumed_probe_reports = 0;
     owner_calls = arm_calls = process_calls = post_calls = log_calls = 0;
-    raw_lines = arm_lines = complete_lines = budget_lines = 0; max_log = 0;
+    raw_lines = arm_lines = complete_lines = budget_lines = probe_lines = sample_zero_lines = 0;
+    max_log = 0;
     owner_allowed = arm_allowed = read_allowed = true;
     throw_process = throw_post = do_nested = do_old_nested = duplicate_process = corrupt_context = false;
     nested_depth = 0; mock_tick = 10000; job.flags = 0;
@@ -220,7 +231,7 @@ void basic_and_failures() {
     reset(); corrupt_context = true; invoke_catching();
     check(!g_p99_consumed_capture.copied && complete_lines == 0, "wrong root refuses command join");
     reset(); owner_allowed = false; invoke_catching();
-    check(process_calls == 1 && post_calls == 1 && log_calls == 0 &&
+    check(process_calls == 1 && post_calls == 1 && log_calls == 1 && probe_lines == 1 &&
         g_p99_consumed_attempts == 0, "unselected fallback once without capture");
     reset(); arm_allowed = false; invoke_catching();
     check(arm_lines == 0 && complete_lines == 0, "failed arm reads cannot produce joined result");
@@ -260,21 +271,66 @@ void worker_and_cost() {
     block_logs = false; drain_log();
     check(g_p99_consumed_log_frame.end_tick == 10000, "native closure timestamp not worker drain time");
     reset(); native_cost = true; mock_qpc_step = 1; invoke_catching();
-    check(complete_lines == 1 && budget_lines == 0 && g_p99_consumed_log_frame.observer_ticks == 5,
+    check(complete_lines == 1 && budget_lines == 0 && g_p99_consumed_log_frame.observer_ticks == 6 &&
+        g_p99_consumed_log_frame.probe_ticks == 1,
         "budget excludes all stock native execution time");
     reset(); mock_qpc_step = 2000; invoke_catching();
     check(g_p99_consumed_finished && budget_lines == 1 && complete_lines == 0 && arm_calls == 0,
-        "owner-read budget stop disables further deep reads but calls stock");
-    reset(); mock_jump_call = 6; invoke_catching();
+        "admitted slow probe stops before FLS or capture but calls stock");
+    check(g_p99_consumed_attempts == 0 && g_p99_consumed_log_frame.probe_only &&
+        g_p99_consumed_log_frame.probe_admitted, "slow admitted probe is not a sample");
+    reset(); mock_jump_call = 8; invoke_catching();
     check(g_p99_consumed_finished && g_p99_consumed_capture.clip_count == 1 &&
         !g_p99_consumed_capture.clips_complete && budget_lines == 1 && arm_calls == 0,
         "clip checkpoint stops after bounded current metadata read");
     reset(); mock_qpc_ok = false; invoke_catching();
     check(g_p99_consumed_finished && budget_lines == 1 &&
-        !g_p99_consumed_log_frame.clock_valid, "invalid QPC fails closed with explicit log");
+        !g_p99_consumed_log_frame.probe_clock && owner_calls == 0,
+        "invalid initial QPC fails closed before owner reads with explicit log");
+    reset(); mock_qpc = 100; mock_qpc_step = -1; invoke_catching();
+    check(g_p99_consumed_finished && !g_p99_consumed_log_frame.probe_clock &&
+        g_p99_consumed_attempts == 0, "backward probe clock cannot earn a retry");
+}
+void rejected_probe_recovery() {
+    // Preserve an actual old payload: neither a refusal nor its worker log may
+    // clear/read/re-emit it. This compares every byte, not only the counters.
+    reset(); invoke_catching();
+    static std::array<std::byte, sizeof(P99ConsumedCapture)> saved{};
+    std::memcpy(saved.data(), &g_p99_consumed_capture, saved.size());
     reset(); owner_allowed = false; mock_qpc_step = 2000; invoke_catching();
-    check(g_p99_consumed_attempts == 0 && budget_lines == 1 &&
-        g_p99_consumed_log_frame.sample == 0, "unadmitted expensive probe has separate stop evidence");
+    check(!g_p99_consumed_finished && g_p99_consumed_slow_probes == 1 &&
+        g_p99_consumed_attempts == 0 && arm_calls == 0 && process_calls == 1 && post_calls == 1,
+        "first slow refused probe gets one sparse retry, stock exactly once");
+    check(std::memcmp(saved.data(), &g_p99_consumed_capture, saved.size()) == 0 &&
+        raw_lines == 0 && arm_lines == 0 && probe_lines == 1 && sample_zero_lines == 0 &&
+        g_p99_consumed_log_frame.probe_reason == P99ConsumedOwnerReject::Control &&
+        !g_p99_consumed_log_frame.probe_terminal && g_p99_consumed_log_frame.probe_retry_tick == 12000,
+        "refused probe leaves old buffer untouched and logs only its own metadata");
+    owner_allowed = true; mock_qpc_step = 0; mock_tick += 1999; invoke_catching();
+    check(owner_calls == 1 && g_p99_consumed_attempts == 0, "no owner read during 2s retry cooldown");
+    ++mock_tick; invoke_catching();
+    check(g_p99_consumed_attempts == 1 && complete_lines == 1 && arm_calls == 2 &&
+        !g_p99_consumed_finished, "later valid admission recovers sample1 without resetting caps");
+
+    reset(); owner_allowed = false; mock_qpc_step = 2000; invoke_catching();
+    mock_tick += 2000; invoke_catching();
+    check(g_p99_consumed_finished && g_p99_consumed_slow_probes == 2 &&
+        g_p99_consumed_log_frame.probe_terminal && g_p99_consumed_log_frame.probe_retry_tick == 0 &&
+        g_p99_consumed_attempts == 0 && probe_lines == 2 && process_calls == 2 && post_calls == 2,
+        "second slow refusal is terminal with no third retry");
+    const auto owners = owner_calls; mock_tick += 2000; invoke_catching();
+    check(owner_calls == owners && probe_lines == 2, "terminal rejected-probe cap prevents further reads");
+
+    reset(); owner_allowed = false; mock_qpc_step = 2000; mock_tick = UINT64_MAX - 1000;
+    invoke_catching();
+    check(g_p99_consumed_finished && g_p99_consumed_log_frame.probe_retry_tick == 0,
+        "overflowing cooldown deadline fails closed instead of wrapping into a retry");
+
+    reset(); mock_qpc_step = 600; invoke_catching();
+    check(g_p99_consumed_finished && g_p99_consumed_log_frame.observer_ticks == 1200 &&
+        g_p99_consumed_log_frame.probe_ticks == 600 && !g_p99_consumed_log_frame.probe_only &&
+        arm_calls == 0 && !g_p99_consumed_capture.copied,
+        "successful probe shares the original 1ms budget with capture initialization");
 }
 void time_and_limits() {
     reset(); job.fg = 0; invoke_catching();
@@ -302,6 +358,7 @@ void time_and_limits() {
     check(g_p99_consumed_probes == 600 && g_p99_consumed_finished, "600 failed probes terminate");
     const auto capped = owner_calls; invoke_catching();
     check(owner_calls == capped, "no owner reads after probe cap");
+    check(probe_lines == 8, "ordinary refusal metadata is limited to eight worker lines");
     reset(); owner_allowed = false; invoke_catching(); mock_tick += 120001; invoke_catching();
     check(g_p99_consumed_finished && g_p99_consumed_probes == 1, "120s local-Fg deadline enforced");
 }
@@ -369,8 +426,11 @@ int main() {
         put(clip, 0x40, std::uint32_t{0x27E57F43});
     }
     put(clip_data, 4, std::uint32_t{0xFD6DBE03}); put(clip_data, 0x22, std::uint16_t{337});
+    g_p99_consumed_capture.raw.fill(0xFEEDFACE);
     check(initialize_p99_consumed_census(), "FLS and original targets initialize before publication");
-    basic_and_failures(); time_and_limits(); parser_and_logging(); worker_and_cost();
+    check(g_p99_consumed_capture.raw.front() == 0 && g_p99_consumed_capture.raw.back() == 0 &&
+        !g_p99_consumed_ready, "own capture storage is pre-touched before ready publication");
+    basic_and_failures(); time_and_limits(); parser_and_logging(); worker_and_cost(); rejected_probe_recovery();
     reset(); // Final cleanup audit, including after the largest capture.
     fault_log = true; invoke_catching(); // Last: worker failure is intentionally irreversible.
     check(g_p99_consumed_failed && g_p99_consumed_finished,

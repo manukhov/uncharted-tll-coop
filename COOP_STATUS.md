@@ -40223,3 +40223,77 @@ flags before identifying clips/folds and comparing pre/post whole+408 arms.
 The build cache currently has TLL_P99_CONSUMED_CENSUS_EXAM=ON and source examOFF;
 default in CMake remainsOFF. Disable the exam after its bounded capture is
 collected; do not reactivate a rejected writer to make a screenshot look changed.
+
+### 2026-10-12 REJECTED: first rejected probe prematurely ends PID24484 consumed census
+
+User completed the draw/stand scenario, reports no lag, and explicitly confirms
+closing the game himself (not a reported crash). The ONLY diagnostic
+record is sample0, elapsed0, complete0, budget1, cost230339/limit10000,
+clock1; all owner fields are zero and no commands/arms were copied. Thus the
+runtime prediction of joined early/late samples FAILED. No new hand-pose,
+source-clip, settled-state or pre/postblend conclusion is available.
+
+The causal sampler bug is confirmed in our code: the initial probe starts QPC,
+clears the entire owned capture storage, calls seh_read_p99_consumed_owner,
+then p99_consumed_charge unconditionally sets finished=true for >1ms BEFORE
+testing admitted. sample0 proves no owner was admitted; zero owner fields are
+the wrapper's deliberate cleared failure output, NOT null actual Player.
+g0/post0 mean no observation scope, NOT absent native animation callbacks.
+Cost is23.0339ms wall-QPC, not CPU time. Cold private pages/VirtualQuery and OS
+preemption are competing explanations; this record does not separate them.
+
+Nearby game-side logs show initial P99 hip/current=-1/draw0 and later controller
+0/2, consistent with loading/holstered state before the requested test. They
+are NOT a same-probe reason code. Independent later read-only memory inspection
+finds retained0 generation49E, Player10E0A22700, look+170=D27C074F and current
+Fg11191D4180: there is no evidence that the look guard itself is incorrect.
+Do not relax identity, skeleton, weapon or neutral-state admission checks.
+
+Narrow correction: pre-touch only owned capture storage before installing;
+do not clear it for rejected owner probes. Log probe failure as metadata only,
+with a broad rejection stage, never by inspecting stale capture payload. Keep
+the1ms threshold. Allow exactly ONE delayed retry (>=2s) of an over-budget
+NOT-admitted probe; second such event stops the collector. Invalid/backward/
+overflow timing stops immediately. An already admitted owner's slow probe,
+or a slow command/arm capture, remains terminal and must not enter/continue
+the observation scope. This is an explicit change from the former zero-retry
+policy, not a claim that the original collector already behaved this way.
+Do not reset the120s/600probe/8sample bounds or turn on a pose writer.
+
+Falsifiable correction prediction: a cold/rejected first check cannot consume
+the whole exam; it produces a reasoned probe record and either a later genuine
+joined P99 sample or a bounded explicit terminal reason. The test must preserve
+native call counts/results and existing attachments. It still cannot establish
+the cause of the bad grip without an actual complete sample.
+
+**Correction verification (before replacement exam).**
+
+The narrowly scoped fix is implemented in consumed_runtime.inl. The owner's
+predicate order and acceptance are unchanged; its optional diagnostic stage
+distinguishes Disabled/Input/LocalPlayer/NativeJob/RetainedFg/Skeleton/Control/
+Weapon/Motion/Changed/ReadFault without returning any failed snapshot payload.
+Failed output remains fully zeroed. A successful probe's cost is carried into
+the capture cost: there is still ONE combined1ms allowance, not two allowances.
+Separate worker PROBE lines never inspect the previous capture buffer. At most
+eight ordinary rejection records plus up to two budget records are emitted.
+
+Fresh CMake Release builds of the affected isolated tests and all8 scoped CTest
+suites pass. The actual included runtime fixture now has3894 checks, and the
+field-only owner fixture44, both with zero failures. New cases cover rejected
+probe recovery after2s, second-slow terminal, slow admitted refusal before FLS,
+invalid/backward clocks, cooldown overflow, combined probe+clear budget,
+byte-for-byte preservation of old payload on refusal, bounded reason-only
+worker logging, and owned-buffer pre-touch before ready. Native-once/full-width
+return, FLS, bridge, worker and installer regression suites remain passing.
+No new game function/field was discovered; sole-IDB labels from cc7d9ce remain
+applicable and no IDB write is needed for this collector-policy correction.
+
+Independent final source/emitted-code review found no blocker: post wrapper
+still joins entryRSP+30 and preserves RAX, Process forwards all seven native
+arguments and preserves EAX/native-once. Probe retry/terminal and no-stale-log
+paths were reviewed independently and the runtime/owner fixtures rerun.
+
+Replacement exam remains the same read-only four-site hypothesis/prediction
+above, with no game input by the agent and no attachment/pose writer changes.
+Use fresh census-r2 in ONE new process only after final review; prior PID24484
+is closed. Record actual startup/result separately; tests are not hand repair.
