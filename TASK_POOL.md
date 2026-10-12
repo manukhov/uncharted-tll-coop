@@ -112,6 +112,11 @@ paths before any replacement exam. The correction now passes all8 scoped CTest
 suites (runtime3894/owner44 checks). No native owner predicates or pose writers
 changed; successful probe+capture still share one1ms allowance. PID24484 is
 closed; only a reviewed fresh census-r2 ONE-process replacement is in scope.
+LIVE replacement: source2188cc8 pushed; fresh census-r2 successfully launched/
+injected ONE PID12588 (2026-10-12 21:28:07 local). Four-site INSTALLED/READY,
+pose_writes=0, no complete sample at startup. User must draw P99 and stand15s
+without aim/movement. No second instance. NEXT read PID12588 PROBE/sample
+records and user result, checking reason/terminal/budget/complete flags first.
 NEXT only after actual complete records: identify copied cmd6 clip IDs and
 cmd7/9/11 folds at early/late samples, compare pre/post+408 geometry, and find
 the first incompatible stage. A complete record is not a repaired hand;

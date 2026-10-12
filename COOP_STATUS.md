@@ -40297,3 +40297,18 @@ Replacement exam remains the same read-only four-site hypothesis/prediction
 above, with no game input by the agent and no attachment/pose writer changes.
 Use fresh census-r2 in ONE new process only after final review; prior PID24484
 is closed. Record actual startup/result separately; tests are not hand repair.
+
+**Replacement exam startup (user scenario pending).**
+
+Source2188cc8 is committed/pushed. Fresh EXAM=ON/source-examOFF main DLL
+2026-10-12p99-consumed-census-r2 built successfully, SHA256
+FE7530CB04201F012B5E9A99210DD550F3AC25227F3ED00E421BF386EE28DFB5.
+Immediately launched/injected ONE PID12588, creation2026-10-12 21:28:07 local.
+Startup reports four-site INSTALLED and READY, pose_writes=0; rejected support/
+elbow-roll/grip writers remain disabled, appearance/back profiles retained.
+No unsafe marker or joined sample was present at startup. These facts establish
+startup ONLY, not smoothness, complete capture or repaired hands. User scenario:
+load local Nadine/P99, draw and stand15s without aim/movement. No game input was
+sent by the agent. Do not launch a second process. NEXT inspect only PID12588
+PROBE/sample records and user report; check terminal/budget/reason/complete
+first, then decode actual copied clips/folds/pre/post arms if any complete pair.
