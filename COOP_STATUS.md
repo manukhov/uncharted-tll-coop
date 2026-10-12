@@ -40312,3 +40312,95 @@ load local Nadine/P99, draw and stand15s without aim/movement. No game input was
 sent by the agent. Do not launch a second process. NEXT inspect only PID12588
 PROBE/sample records and user report; check terminal/budget/reason/complete
 first, then decode actual copied clips/folds/pre/post arms if any complete pair.
+
+### 2026-10-12 REJECTED: automatic census-r2 admission ends before any P99 hand sample
+
+User reports the requested scenario done and says he is closing the game.
+Exact PID12588 records in reports/locomotion_hook.log are:
+- PROBE1: elapsed0, admitted0, reason7/Control, cost217767/limit10000,
+  clock1, slow1, retry347953890, terminal0, capture=none.
+- PROBE2: elapsed2000, admitted0, reason7/Control, cost276848/limit10000,
+  clock1, slow2, retry0, terminal1, capture=none.
+
+CONFIRMED narrowly: the revised refusal policy made exactly one2s retry and
+then stopped with reason-only records. It did not misreport sample0 or stale
+payload. REJECTED as a sufficient census correction: storage pre-touch and
+one retry did not produce ANY admitted sample/commands/clips/pre/post arms.
+No source-animation or hand-pose conclusion follows. The two probe intervals
+were21.7767ms and27.6848ms elapsed QPC, not CPU time. Unlike the first exam,
+capture memset is after admission and cannot be the cost of these refusals;
+worker logging is also outside the interval. No per-query timing exists here.
+
+Control is a GROUP, not an exact failed scalar: WC pointer/vtable/owner+108,
+current+120 in0..17, draw+134==2, grenade controller pointer/vtable/owner and
+state+120==0. It includes read/range refusal. It does not identify first versus
+second owner snapshot. Earlier groups passed for the refusing snapshot; this
+does not create a valid whole owner. SEH read fault has its own reason11.
+Nearby cold-hip records104669 and104686/687 show current=-1/draw0. The first
+later0/2 occurs at104702, AFTER terminal PROBE2 at104689. These separate logs
+have no same-probe scalar/time join; startup/holstered selection is consistent
+with them, not proof of the exact failed predicate. Do not relax owner guards.
+
+Existing native lifecycle evidence at14109D2BD/14109D2DB,1410AAF89,
+1410AB701 and1410ABD71 already explains legal holstered/transitional refusal.
+This is NOT a new game finding; no new IDB label is required. More importantly,
+the same initial-admission trap and its late-arm separation were recorded on
+2026-09-20 above. The old late-arm PID18204 closed BEFORE any signal, so it
+neither passed nor failed the post-Draw cost prediction. Do not repeat that
+history as an unrecorded new hypothesis or claim late arming fixes cost.
+
+Next safe scope: inspect/reuse the existing exact-PID/creation-bound one-shot
+arm protocol for this collector, keeping installed separate from sampling-ready,
+instead of spending the exam during loading or adding an unchecked raw-pointer
+prefilter. Keep full admission and1ms combined budget unchanged. Separately
+measure the CURRENT field-only reader in its owned isolated fixture; historical
+full-producer AHB/AHC benchmarks do not measure this new reader. Such timing
+cannot attribute PID12588's delay or admit live cost. No new runtime exam,
+rearm, injection, game input or pose change is earned by these two refusals.
+
+STATIC late-arm integration seam (design only, not implemented):
+consumed_install.inl currently publishes g_p99_consumed_ready on successful
+four-site install; outer already returns stock before local-Fg/owner reads when
+ready is false. Split installed from armed at that publication, then start the
+existing bounded worker pattern AFTER resuming suspended threads. Reuse process
+creation/image verification and OpenEvent/SetEvent tooling, with a distinct
+census event namespace (as source versus wrist already do), not the old source
+name or its one-attempt/100ms Policy. Keep census8/600/200ms and combined1ms;
+the120s deadline must start at successful one-shot arm, not first later callback.
+Never reset terminal/counters or allow rearm. Offline tests must cover stock-only
+pre-arm, timeout/stale event, cross-protocol isolation, arm-relative deadline,
+single publication and native-once/RAX. This affects diagnostic timing ONLY;
+it is not a proposed hand-pose correction or proof of acceptable live cost.
+
+**Isolated current-reader check and handoff.**
+
+Only scanner/tests/nadine_p99_consumed_owner_tests.cpp gains opt-in --benchmark.
+It executes the actual included owner reader with real VirtualQuery/QPC, no
+artificial latency: accepted/slot-1/draw0 over64KiB contiguous,64KiB alternating
+RO/RW pages,16MiB and64MiB committed regions (only first64KiB touched).
+Each case records32 first-after-setup and64 warm calls,1152 total plus12 warmups.
+Fresh allocation after fixture writes is NOT proven cold OS memory. Per-query
+and whole-reader intervals are nested; never sum them. Invalid clocks or wrong
+acceptance/reason fail the benchmark; timing values are not pass thresholds.
+There is no production/runtime code change or unchecked-reader prefilter.
+
+Root-verified final CMake Release run, stored locally as
+reports/p99_consumed_owner_bench_20261012.txt: integrity_errors0; warm refusal
+medians0.8..1.1us/1query on64KiB,4.0..4.9us/8queries when fragmented,
+5.6..9.6us/1query on larger regions. Accepted fragmented snapshots make22queries
+because the two value snapshots deliberately use fresh page-admission scopes.
+Maximum across this saved run73.5us. A separate agent run reported a1.3868ms
+outlier (1.3836ms within its query interval) in the tool transcript, not the
+saved root run. Neither run reproduced PID12588's21..28ms or establishes a
+hard query bound, game latency, CPU attribution or cost reduction. Do not launch
+because a synthetic median is small. Final8/8 scoped CTest suites pass; ordinary
+owner checks remain44/0, runtime3894/0. No new retail label/IDB write is needed.
+
+Both CMake exam options are now OFF for the NEXT build. At final inspection
+PID12588 was still present despite the user's stated closing intent; no crash
+or actual exit is asserted. Its collector is terminal. Do not terminate it or
+signal/rearm it. Main DLL relink was skipped while that process remains; disk
+and loaded artifact remain census-r2 SHA FE7530CB...EE28DFB5, not a rebuilt OFF
+DLL. No launch/injection/input/runtime patch this turn. Next safe work is the
+isolated readiness integration above; after game exit rebuild the normal OFF
+DLL before any unrelated launch. The only pre-existing untracked path is tmp/.

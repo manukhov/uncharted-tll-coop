@@ -30,11 +30,29 @@ enum class Interference { none, turn_over, fault_after_query, fault_owner_after_
 Interference interference = Interference::none;
 std::uintptr_t trigger_address = 0, fixture_base = 0;
 unsigned query_count = 0, interfere_at_query = 0;
+// Opt-in fixture measurements: real VirtualQuery/reader, no mocked latency.
+// These single-thread counters are bounded; printing is outside timed spans.
+bool benchmark_active = false, benchmark_clock_valid = true;
+std::uint64_t benchmark_vq_ticks = 0, benchmark_vq_max = 0;
+unsigned benchmark_queries = 0;
 template<class T> void put(std::uintptr_t address, T value) {
     std::memcpy(reinterpret_cast<void*>(address), &value, sizeof(value));
 }
 SIZE_T WINAPI fixture_query(LPCVOID address, PMEMORY_BASIC_INFORMATION mbi, SIZE_T size) {
+    LARGE_INTEGER begin{}, end{};
+    const bool measure = benchmark_active;
+    const bool clock_begin = !measure || QueryPerformanceCounter(&begin) != FALSE;
     const auto result = ::VirtualQuery(address, mbi, size);
+    if (measure) {
+        ++benchmark_queries;
+        if (!QueryPerformanceCounter(&end) || !clock_begin || begin.QuadPart < 0 ||
+            end.QuadPart < begin.QuadPart) benchmark_clock_valid = false;
+        else {
+            const auto ticks = static_cast<std::uint64_t>(end.QuadPart - begin.QuadPart);
+            benchmark_vq_ticks += ticks;
+            benchmark_vq_max = std::max(benchmark_vq_max, ticks);
+        }
+    }
     ++query_count;
     if (interference != Interference::none &&
         ((interfere_at_query != 0 && query_count == interfere_at_query) ||
@@ -70,8 +88,10 @@ void check(bool value, const char* name) {
     if (!value) { ++failures; std::printf("FAIL %s\n", name); }
 }
 struct Fixture {
-    std::uintptr_t base = reinterpret_cast<std::uintptr_t>(
-        VirtualAlloc(nullptr, 0x10000, MEM_RESERVE | MEM_COMMIT | MEM_TOP_DOWN, PAGE_READWRITE));
+    explicit Fixture(std::size_t allocation_bytes = 0x10000)
+        : base(reinterpret_cast<std::uintptr_t>(VirtualAlloc(nullptr, allocation_bytes,
+            MEM_RESERVE | MEM_COMMIT | MEM_TOP_DOWN, PAGE_READWRITE))) {}
+    std::uintptr_t base = 0;
     ~Fixture() { if (base) VirtualFree(reinterpret_cast<void*>(base), 0, MEM_RELEASE); }
     void reset() {
         DWORD old = 0;
@@ -130,7 +150,101 @@ struct Fixture {
 };
 }
 
-int main() {
+namespace {
+struct CostSample {
+    std::uint64_t wall = 0, queries = 0, vq = 0, max_vq = 0;
+    bool valid = false, accepted = false;
+    Reject reason = Reject::None;
+};
+CostSample measure_owner(Fixture& fixture) {
+    CostSample sample{};
+    P99ConsumedOwner owner{};
+    LARGE_INTEGER begin{}, end{};
+    benchmark_clock_valid = true; benchmark_vq_ticks = benchmark_vq_max = 0;
+    benchmark_queries = 0;
+    const bool start_valid = QueryPerformanceCounter(&begin) != FALSE;
+    benchmark_active = true;
+    sample.accepted = seh_read_p99_consumed_owner(fixture.job(), &owner, &sample.reason);
+    benchmark_active = false;
+    sample.valid = QueryPerformanceCounter(&end) != FALSE && start_valid &&
+        begin.QuadPart >= 0 && end.QuadPart >= begin.QuadPart && benchmark_clock_valid;
+    if (sample.valid) sample.wall = static_cast<std::uint64_t>(end.QuadPart - begin.QuadPart);
+    sample.queries = benchmark_queries; sample.vq = benchmark_vq_ticks; sample.max_vq = benchmark_vq_max;
+    return sample;
+}
+bool prepare_benchmark(Fixture& fixture, unsigned mode, bool fragmented) {
+    if (!fixture.base || fixture.base <= kRetainedSlotTableRva) return false;
+    fixture.reset(); // Only the first64KiB is touched even in the large region.
+    if (mode == 1) put(fixture.base + 0x7120, std::int32_t{-1});
+    if (mode == 2) put(fixture.base + 0x7134, std::uint32_t{0});
+    if (fragmented) for (std::size_t page = 0; page < 16; ++page) {
+        DWORD old = 0;
+        if (!VirtualProtect(reinterpret_cast<void*>(fixture.base + page * 0x1000), 0x1000,
+            page % 2 ? PAGE_READONLY : PAGE_READWRITE, &old)) return false;
+    }
+    return true;
+}
+unsigned print_costs(const char* layout, const char* mode, const char* phase,
+    const std::array<CostSample, 64>& samples, std::size_t count, double frequency) {
+    unsigned accepted = 0, invalid = 0, unexpected = 0;
+    const bool expect_accepted = std::strcmp(mode, "admitted") == 0;
+    for (std::size_t i = 0; i < count; ++i) {
+        accepted += samples[i].accepted; invalid += !samples[i].valid;
+        unexpected += samples[i].accepted != expect_accepted ||
+            samples[i].reason != (expect_accepted ? Reject::None : Reject::Control);
+    }
+    std::printf("OWNER-BENCH layout=%s mode=%s phase=%s n=%zu accepted=%u invalid_clock=%u unexpected=%u",
+        layout, mode, phase, count, accepted, invalid, unexpected);
+    // No timing threshold is a test assertion or a game-worker cost claim.
+    for (unsigned metric = 0; metric < 4; ++metric) {
+        std::array<std::uint64_t, 64> sorted{};
+        for (std::size_t i = 0; i < count; ++i) sorted[i] = metric == 0 ? samples[i].queries :
+            metric == 1 ? samples[i].wall : metric == 2 ? samples[i].vq : samples[i].max_vq;
+        std::sort(sorted.begin(), sorted.begin() + count);
+        const double factor = metric == 0 ? 1.0 : 1000000.0 / frequency;
+        const char* label = metric == 0 ? "qcount" : metric == 1 ? "wall_us" :
+            metric == 2 ? "vq_sum_us" : "vq_max_us";
+        std::printf(" %s[min,p50,p95,max]=%.3f,%.3f,%.3f,%.3f", label,
+            sorted[0] * factor, sorted[(count - 1) / 2] * factor,
+            sorted[((count * 95 + 99) / 100) - 1] * factor, sorted[count - 1] * factor);
+    }
+    std::puts("");
+    return invalid + unexpected;
+}
+int benchmark_owner() {
+    LARGE_INTEGER frequency{};
+    if (!QueryPerformanceFrequency(&frequency) || frequency.QuadPart <= 0) return 2;
+    std::puts("OWNER-BENCH actual reader + actual VirtualQuery; instrumented wall time, not CPU time. "
+        "first_after_setup uses fresh allocations but touched fixture pages, NOT proven cold OS pages. "
+        "Large regions commit16/64MiB but touch only64KiB; no working-set claim.");
+    const char* layouts[] = {"contiguous64KiB", "fragmented64KiB", "contiguous16MiB", "contiguous64MiB"};
+    const std::size_t sizes[] = {0x10000, 0x10000, 0x1000000, 0x4000000};
+    const char* modes[] = {"admitted", "slot_minus1", "draw0"};
+    unsigned integrity_errors = 0;
+    for (unsigned layout = 0; layout < 4; ++layout) for (unsigned mode = 0; mode < 3; ++mode) {
+        std::array<CostSample, 64> samples{};
+        for (unsigned i = 0; i < 32; ++i) {
+            Fixture fresh(sizes[layout]);
+            if (!prepare_benchmark(fresh, mode, layout == 1)) return 2;
+            samples[i] = measure_owner(fresh);
+        }
+        integrity_errors += print_costs(layouts[layout], modes[mode], "first_after_setup", samples, 32,
+            static_cast<double>(frequency.QuadPart));
+        Fixture warm(sizes[layout]);
+        if (!prepare_benchmark(warm, mode, layout == 1)) return 2;
+        measure_owner(warm); // Explicit warmup outside the recorded distribution.
+        for (unsigned i = 0; i < 64; ++i) samples[i] = measure_owner(warm);
+        integrity_errors += print_costs(layouts[layout], modes[mode], "warm", samples, 64,
+            static_cast<double>(frequency.QuadPart));
+    }
+    std::printf("OWNER-BENCH integrity_errors=%u; no timing thresholds\n", integrity_errors);
+    return integrity_errors ? 1 : 0;
+}
+} // namespace
+
+int main(int argc, char** argv) {
+    if (argc == 2 && std::strcmp(argv[1], "--benchmark") == 0) return benchmark_owner();
+    if (argc != 1) { std::puts("Usage: nadine_p99_consumed_owner_tests [--benchmark]"); return 2; }
     Fixture f;
     if (!f.base || f.base <= kRetainedSlotTableRva) {
         std::printf("Fixture allocation failed: base=%p error=%lu pointerSize=%zu\n",

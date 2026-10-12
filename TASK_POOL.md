@@ -112,11 +112,24 @@ paths before any replacement exam. The correction now passes all8 scoped CTest
 suites (runtime3894/owner44 checks). No native owner predicates or pose writers
 changed; successful probe+capture still share one1ms allowance. PID24484 is
 closed; only a reviewed fresh census-r2 ONE-process replacement is in scope.
-LIVE replacement: source2188cc8 pushed; fresh census-r2 successfully launched/
-injected ONE PID12588 (2026-10-12 21:28:07 local). Four-site INSTALLED/READY,
-pose_writes=0, no complete sample at startup. User must draw P99 and stand15s
-without aim/movement. No second instance. NEXT read PID12588 PROBE/sample
-records and user result, checking reason/terminal/budget/complete flags first.
+PID12588 replacement RESULT: user completed and is closing the game. ONLY two
+Control-rejected PROBEs, elapsed0/2000ms, cost21.7767/27.6848ms, no admitted
+sample; second probe is terminal. One-retry behavior worked, actual census did
+not. Capture memset/logging cannot explain these probe intervals. Exact Control
+predicate and query-vs-scheduling cost remain unknown. Nearby -1/0 then later
+0/2 corroborates the already recorded startup trap, not same-probe scalar proof.
+NEXT do not repeat automatic-start exams: assess reuse of existing one-shot
+PID/creation arm (2026-09-20 late-arm; prior PID18204 never armed) for this census,
+preserving full owner guards/budget. Current-reader isolated timing is not a
+live-cost admission. No new game launch/rearm/input/writer is justified yet.
+Current-reader optional benchmark is implemented/test-only; final8/8 suites pass,
+1152 saved measured calls have no integrity errors and do not reproduce the
+game delay. Late-arm integration remains design, not code. Both exam options
+are OFF in cache, but census-r2 DLL is unchanged because PID12588 was still
+present at last inspection. Collector terminal; do not rearm/kill/reinject.
+After exit rebuild normal OFF DLL. Next code seam: split installed/ready in
+consumed_install, reuse bounded event worker with distinct census namespace and
+120s from arm; no unchecked prefilter or owner/budget relaxation.
 NEXT only after actual complete records: identify copied cmd6 clip IDs and
 cmd7/9/11 folds at early/late samples, compare pre/post+408 geometry, and find
 the first incompatible stage. A complete record is not a repaired hand;
