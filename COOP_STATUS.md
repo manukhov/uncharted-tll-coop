@@ -40197,3 +40197,29 @@ and fresh EXAM=ON build complete; launch ONE instance immediately then let only
 the user perform the written scenario. Startup must report four-site INSTALLED
 and READY. On UNSAFE startup, stop that exact newly launched instance and do not
 ask the user to run the scenario. Later build/PID/results are recorded below.
+
+**Runtime launch checkpoint (prediction still pending user scenario).**
+
+Final /O2 emitted-code review of the actual included callbacks verified post
+entry-slot+30, Process's seven original arguments, mutually exclusive native
+calls, full RAX/EAX preservation, finally and worker lease transfer. The added
+post-lease stop recheck closes a callback racing a prior sample/worker shutdown.
+Fresh main DLL EXAM=ON built as2026-10-12p99-consumed-census, SHA256
+77D43C20EA772566C56851EF76E5CF596759029A0744D9A140E94056F3845307.
+Source checkpoint cc7d9ce was pushed before this exam build.
+
+Launched/injected exactly ONE tll.exe, PID24484, creation2026-10-12 21:17:07
+local. Startup log in reports/locomotion_hook.log reports P99-CONSUMED
+INSTALLED four sites and READY; no unsafe/failure marker. The old group-shadow
+package is DISABLED, support/roll/right-grip writers remain OFF, and existing
+appearance/back-attachment features are retained. This confirms startup only,
+not a captured pair, smooth performance or a hand correction.
+
+User scenario already supplied: load local Nadine, draw P99, stand15s without
+movement/aim. No agent gameplay input was sent. At handoff there is no joined
+P99-CONSUMED sample yet; do not launch a second instance. NEXT read only this
+PID's consumed records and the user's result, checking cost/budget/incomplete
+flags before identifying clips/folds and comparing pre/post whole+408 arms.
+The build cache currently has TLL_P99_CONSUMED_CENSUS_EXAM=ON and source examOFF;
+default in CMake remainsOFF. Disable the exam after its bounded capture is
+collected; do not reactivate a rejected writer to make a screenshot look changed.

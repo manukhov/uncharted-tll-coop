@@ -99,8 +99,13 @@ on a prestarted worker holding the sole value buffer, not the animation worker.
 The default build stays OFF; the explicit TLL_P99_CONSUMED_CENSUS_EXAM option
 enables only this census in the main DLL, not old/inert artifact packages.
 
-NEXT after integrated verification: one local-Nadine/P99 diagnostic run, draw
-then stand without aim/movement for15s. Identify copied cmd6 clip IDs and
+LIVE exam checkpoint: all8 scoped CTest suites and final emitted ABI review
+passed; fresh2026-10-12p99-consumed-census launched/injected ONE PID24484
+(2026-10-12 21:17:07 local), startup four-site INSTALLED and READY. No hand fix
+claimed. User must load local Nadine/P99, draw then stand without aim/movement
+for15s; no joined sample was present at handoff. Do not launch another copy.
+NEXT read PID24484 P99-CONSUMED records and user's report, checking incomplete/
+budget flags first. Identify copied cmd6 clip IDs and
 cmd7/9/11 folds at early/late samples, compare pre/post+408 geometry, and find
 the first incompatible stage. A complete record is not a repaired hand;
 group0 does not capture the later finger groups, and instantaneous state2 is
