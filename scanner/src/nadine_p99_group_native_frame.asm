@@ -2,7 +2,9 @@
 ; unwind metadata, not a leaf relay. RCX=job, RDX=native, R8=return-slot storage.
 ; Shadow space [rsp..rsp+1F] belongs to native; our saved pointer is outside it.
 PUBLIC p99_group_invoke_native
+PUBLIC p99_consumed_invoke_native
 .code
+p99_consumed_invoke_native LABEL NEAR
 p99_group_invoke_native PROC FRAME
     sub rsp, 38h
     .allocstack 38h

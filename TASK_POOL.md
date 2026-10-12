@@ -43,8 +43,9 @@ NEXT repair decision, superseding the older experimental NEXT items below:
    extending by weapon family and exact art. Do not copy NPC overlay tables or
    late-write all skeleton indices into the 66-row Fg+100 buffer.
 
-The architecture/evidence matrix is in the latest COOP_STATUS entry. This turn
-is analysis only: no game launch, runtime edit, new writer or new admission.
+The architecture/evidence matrix is in COOP_STATUS. The initial coverage
+checkpoint was analysis only; the current continuation implements the bounded
+read-only consumed-command census described below, not a new pose writer.
 Existing failed P99 writers and the historical Mazur pair writer remain OFF;
 attachments are separate. Provider/loader infrastructure remains PARKED.
 
@@ -79,17 +80,33 @@ do not call the stream helpers from an observer. The exact current-tree closure
 gap is Player postblend1410EB708, receiver=*(*(Player+C0)), virtual+38; the
 separate Player+1ED0 virtual is now OverheadMoveController_UpdatePostAnim.
 
-NEXT narrow implementation decision: actual normal Process/group0 at141A92759
-has RCX=commands, EDX=wordCount, R8=context, R9D=group, RDI=native job,
-R12=segment. context+10=&Fg+1C0; compare with job+8. Enclosing141A928F0 retains
-job in RSI through postblend141A929A1 (RBX=Fg, RCX=owner). Use explicit
-callsite-adaptor operands and a bounded per-invocation ticket/value copy, not
-TLS across yielding Perform or a cached native pointer. Close missing Process,
-duplicate groups, job reuse and absent owner-callback paths BEFORE admission.
-Then join actual cmd6 clip/sample, cmd7 weights/modes and same-pass arm rows;
-add current master/track metadata only as separately scoped corroboration.
-Detailed ABI, alternative hypotheses, bounds and prediction are in latest
-COOP_STATUS entry. No observer enabled, no visual fix, no runtime test earned.
+CURRENT implementation (2026-10-12): normal Process/group0 at141A92759 and
+arm rows18..30 around WHOLE owner+408 at141A929A1 are bound to one wrapped
+141A928F0 invocation. Native outer return-slot R is independently published
+by an ordinary unwind-described CALL bridge: context+A8==R and post return
+slot+30==R. This supersedes the need to forward RDI/RSI as extra ABI operands.
+FLS handles yielding; finally closes missing callbacks/SEH; foreign/nested or
+duplicate passes are incomplete. All native arguments/results stay unchanged.
+The four ingress/call sites fit individual aligned8 atomic patches. Exact
+stock/patched words, neighbouring bytes and protections are checked; failed
+installation is never runtime GO. Failed pose writers remain OFF.
+
+Census bounds: max4096 words/512 commands/64 copied clip headers, eight
+attempts with a200ms early pair then2s spacing; <=600 eligibility probes at
+200ms and120s maximum. Read-only observer work has a1ms budget; exceeding it
+stops further collection and makes the sample incomplete. Disk logging runs
+on a prestarted worker holding the sole value buffer, not the animation worker.
+The default build stays OFF; the explicit TLL_P99_CONSUMED_CENSUS_EXAM option
+enables only this census in the main DLL, not old/inert artifact packages.
+
+NEXT after integrated verification: one local-Nadine/P99 diagnostic run, draw
+then stand without aim/movement for15s. Identify copied cmd6 clip IDs and
+cmd7/9/11 folds at early/late samples, compare pre/post+408 geometry, and find
+the first incompatible stage. A complete record is not a repaired hand;
+group0 does not capture the later finger groups, and instantaneous state2 is
+not proof of steady idle. Add track/master route metadata only separately if
+the actual command IDs cannot resolve the composition. Latest COOP_STATUS
+records launch admission, build/PID and remaining evidence; do not guess.
 
 CURRENT hand-repair work (2026-10-08): right-hand NPC4CAA7420/row149 was decoded
 with corrected opcode24 and compared on the same4328 Nadine/P99 surface cohort.

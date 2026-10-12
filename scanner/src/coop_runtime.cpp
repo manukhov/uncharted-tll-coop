@@ -44,6 +44,8 @@
 #include "nadine_p99_group_budget.h"
 #include "nadine_p99_group_ingress.h"
 #include "nadine_p99_group_fiber.h"
+#include "nadine_p99_consumed_commands.h"
+#include "nadine_p99_consumed_frame.h"
 #include "nadine_p99_group_native_frame.h"
 #include "nadine_p99_source_observation.h"
 #include "nadine_p99_observation_arm.h"
@@ -65202,6 +65204,9 @@ bool install_legacy_nadine_p99_chloe_grip_transfer() {
 }
 
 #include "nadine_p99_group_runtime.inl"
+#include "nadine_p99_consumed_owner.inl"
+#include "nadine_p99_consumed_runtime.inl"
+#include "nadine_p99_consumed_install.inl"
 #include "nadine_p99_wrist_read_runtime.inl"
 #include "nadine_p99_wrist_observation_runtime.inl"
 #include "nadine_p99_wrist_worker_runtime.inl"
@@ -81567,7 +81572,11 @@ DWORD WINAPI install_hook(void*) {
         }
     }
     boot_log_line(
-        "TLL co-op runtime init 2026-10-09p99-reach-safe "
+#if defined(TLL_P99_CONSUMED_CENSUS_EXAM)
+        "TLL co-op runtime init 2026-10-12p99-consumed-census "
+#else
+        "TLL co-op runtime init 2026-10-12p99-consumed-safe "
+#endif
         "(completed read-only reach census disabled; rejected support-target and elbow-roll writers disabled; stock arm/finger paths; appearance and AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
         boot_log_line(
@@ -82139,6 +82148,12 @@ DWORD WINAPI install_hook(void*) {
     log_line("local-player resolver installed; this is not local appearance confirmation");
     log_line("one-shot split render activation ENABLED after login_state==3");
     const bool state_net_started = start_state_net();
+    if constexpr (kEnableP99ConsumedCensus && !kEnableRejectedNadineWeaponRuntimeProbes) {
+        const bool ready = state_net_started && install_p99_consumed_census();
+        boot_log_line(ready
+            ? "P99-CONSUMED READY read-only normal group0 + whole408 arms; max8 attempts, spaced late samples; no grip correction"
+            : "P99-CONSUMED SKIPPED combined package; stock-only");
+    }
     if constexpr (kEnableP99SourceObservation && !kEnableRejectedNadineWeaponRuntimeProbes) {
         const bool installed = state_net_started && install_p99_group_package(true);
         const bool waiting = installed && start_p99_source_observation_arm_wait();
@@ -82149,7 +82164,7 @@ DWORD WINAPI install_hook(void*) {
         boot_log_line(ready ? "P99-GROUP READY state2; owned 21-row source; cmd16 shadows only; early-owner gate; validation budget 1ms"
                             : "P99-GROUP SKIPPED combined package");
     } else if constexpr (!kEnableP99GroupShadow) {
-        boot_log_line("P99-GROUP DISABLED after AGR crash; no Async/Process/cmd16 hooks installed");
+        boot_log_line("P99-GROUP DISABLED after AGR crash; old AsyncJointBlend/group-shadow package not installed");
     }
     if constexpr (kEnableLegacyNadineP99ChloeGripTransfer &&
                   !kEnableRejectedNadineWeaponRuntimeProbes) {

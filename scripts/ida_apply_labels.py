@@ -8,6 +8,16 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-10-12: owned normal-Perform invocation, not job-pointer identity ---
+    0x141782B20: (
+        "AnimManager_SyncVisitPerformBlendAndDispatchPostBlendJob",
+        "STATIC: synchronous iterator callback selected at141783213 and invoked "
+        "at14178348A. Loads *RDX into RCX as job, advances *RDX by0x38 at "
+        "141782B27, and tail-jumps141A928F0 at141782B2A. Independent asynchronous "
+        "producer141781560 loads that same complete native outer callback. "
+        "Replacing these callback values need not relocate its unwind-described "
+        "prologue. These two producers do not prove every possible entry covered.",
+    ),
     # --- 2026-10-09: snapshot metadata is not always the emitted clip ---
     0x140DB9D90: (
         "PlayerOverheadMoveController_Initialize",
@@ -3962,8 +3972,12 @@ FUNCTIONS = {
         "args5..7=[RDI+0x18/+0x20/+0x28], where RDI is native job reloaded "
         "at141A926E4 and R12 is the0x20-byte segment. Context+0x10=&Fg+0x1C0 "
         "allows Fg recovery and job+8 cross-check. Job/segment registers are "
-        "NOT extra C++ ABI arguments: a callsite adaptor must explicitly "
-        "forward them. Segment pointers are not a published post-Perform log.",
+        "NOT extra C++ ABI arguments. An adaptor must forward registers if used; "
+        "the narrower STATIC alternative is an owned outer return-slot R: "
+        "outer reserves0x28, Perform pushes0x28 and reserves0x190, and LEA "
+        "141A92745 is bodySP+0x140; therefore context+0xA8==R identifies the "
+        "exact wrapped invocation without RDI/R12 operands. Segment pointers "
+        "are not a published post-Perform log.",
     ),
     0x1418C4FB0: (
         "FgAnimData_AllocateAndSwapSkinningBuffers",
@@ -3997,7 +4011,14 @@ FUNCTIONS = {
         "retained owner at141A929A1. Do not infer OS-thread/TLS continuity "
         "through Perform or treat job pointer/flags2000 as a generation id. "
         "An observation ticket must close on missing Process/owner callback "
-        "and all return paths; copying native commands is not pose repair.",
+        "and all return paths; copying native commands is not pose repair. "
+        "STATIC owned-frame proof: ordinary call bridge publishes native entry "
+        "return-slot R. Process context+0xA8==R; at141A929A1 a stack-neutral "
+        "JMP relay into a noinline wrapper gives wrapperReturnSlot+0x30==R. "
+        "Use fiber-local scope, not OS-thread TLS. The entire native function "
+        "returns at141A929F5 or restores its stack then tail-jumps14015A850 "
+        "at141A929EC; outer finally covers both and native unwind. Arm rows "
+        "around+0x408 delimit ALL procedural postblend, not Feather alone.",
     ),
     0x1415A9040: (
         "TaggedHeapAllocator_Init",

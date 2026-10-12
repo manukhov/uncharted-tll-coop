@@ -8,6 +8,13 @@ through torso and incorrect right-hand pistol grip. All later infrastructure
 NEXT statements are parked history, not authority to continue that detour.
 Keep left support-target/arm chain separate from the21 right distal rows.
 
+CURRENT continuation (2026-10-12): bounded READ-ONLY normal Process/group0
+command census joined to pre/post WHOLE Player+408 arms through exact owned
+native frame equality. No new grip/pose writer. The final entry records the
+implementation, tests, explicit exam option and runtime status; do not mistake
+collector readiness for a visible repair or this whole-postblend delta for a
+Feather-only measurement. Provider/loader expansion remains parked.
+
 CURRENT (2026-10-09): read-only exact1418F1C43 exam PID17512 completed4pairs.
 Native T is INSIDE reach by.0002585..0005684asset units, NOT beyond it in this
 sample. Full-weight native solve reaches T within.0000081..0000696 and reduces
@@ -40072,3 +40079,121 @@ names; checked Overhead+40 and Blend+78 vtable xrefs and both stream-generator
 callers. Label AST is valid; all11 additions have unique keys (the existing
 unrelated duplicate keys were not changed). No tll process is running.
 Preexisting tmp/ remains untouched.
+
+### 2026-10-12 STATIC: bind consumed P99 commands to one complete native postblend invocation
+
+P0 remains both broken hands. This is a bounded read-only measurement, not a
+grip fix; no new pose writer is introduced. It supersedes the previous claim
+that an RDI/RSI-operand adaptor is required: those registers are not ABI
+arguments, but exact native stack-address equality gives a narrower join.
+
+**Competing boundaries and three independent evidence kinds.**
+
+1. Call graph: async callback producer141781560 and synchronous iterator
+   thunk141782B20 both enter complete141A928F0. The thunk loads *RDX into RCX,
+   advances the cursor by38 and tail-jumps at141782B2A. Its pointer is selected
+   at141783213 and invoked at14178348A. The outer calls Perform141A92260 at
+   141A92905, then dispatches retained owner+408 at141A929A1. This does not
+   prove every possible callback producer is covered; unwrapped calls stay stock.
+2. Disassembly/ABI: with native outer entry return-slot R, outer SUB28 and
+   Perform five pushes+SUB190 give Perform bodySP=R-1E8. Context LEA141A92745
+   uses bodySP+140, hence context+A8==R at Process141A92759. At the postblend
+   CALL, wrapper return-slot+30==R. A noinline wrapper through a stack-neutral
+   JMP relay preserves this equality even when FF90+408 is replaced by E8+NOP.
+   Compare addresses only; never scan the stack or inspect saved return PCs.
+3. Independent structural ownership: context+0 is the target ArtItemSkeleton,
+   context+10=&Fg+1C0, job+8=Fg, job+0=*(Fg+10), and the Fg retained handle/id
+   agrees with the local Player and current weapon generation. The job+0
+   state pointer is NOT Fg+18 target skeleton. Player+408 is the complete
+   procedural postblend boundary, not only Feather or final rendering.
+
+Job/Fg pointer equality alone and thread-local tickets are REJECTED as enough:
+jobs can be reused and Perform can yield. Exact frame equality rejects a nested
+or old unwrapped invocation even with the SAME job/Fg. A private FLS stack scope
+survives fiber migration; a single capture lease excludes concurrent samples.
+Whole-outer finally expires the return slot/FLS/lease on absent Process, absent
+owner callback and exception. Native outer has ordinary RET141A929F5 or restores
+its stack then tail-jumps14015A850 at141A929EC; both are inside the wrapper call.
+Its original five chained unwind ranges remain untouched. The existing ordinary
+assembly bridge gets an integer-return alias at the SAME entry/instructions to
+preserve full RAX; no copied game prologue or synthetic return continuation.
+
+**Read-only census implementation contract.**
+
+- Capture group0 only at the exact normal Process call; forward all seven
+  original arguments once and return its result. Preserve the original+408
+  virtual call and outer result. Do not catch/retry native exceptions.
+- Own at most4096 DWORDs and512 decoded commands; unknown/plugin forms remain
+  explicit incomplete raw evidence. cmd6 sample bits are NOT normalized phase;
+  cmd7 retains both lanes/output/mode/weight; cmd9 and11 remain distinct.
+  Recognized shapes do NOT prove valid grammar, masks or source provenance.
+- Copy at most64 distinct cmd6 clip header identities before native Process,
+  while the input resources are in scope. No later dereference of copied
+  addresses, stream helpers, resolvers or getters. GetWeaponBySlot1410A1F90
+  writes weapon+72 on successful weak resolution; use field-only current-slot
+  weak handle/id validation instead.
+- Copy raw48-byte group0 arm rows18..30 before/after the WHOLE+408 callback,
+  with repeated owner/weapon/Fg/pose checks. Preserve S/Q/T and opaque W bits.
+  This is neither a Feather-only delta nor a residual finger-group observation.
+- Small fiber-stack scope, large fixed owned capture storage, bounded log lines.
+  At most8 admitted attempts: early pair then2s spacing. Owner probes at most
+  once200ms, max600 and120s after first local-Fg match, then irreversible stop.
+  State2/neutral input is instantaneous eligibility, NOT proof of settled idle.
+  Retain timestamps and report missing/duplicate/incomplete captures explicitly.
+- Observer-only QPC charges exclude native execution; a1ms budget is checked
+  between read/decode/clip and arm-copy stages. Crossing it makes the record
+  incomplete and stops collection. This is an abort threshold, not a hard
+  real-time guarantee for one memory operation. A prestarted log worker owns
+  the single value buffer after publication; no synchronous disk formatting/
+  WriteFile loop remains on the animation worker. Slow logging drops further
+  capture opportunities rather than queueing more buffers or blocking gameplay.
+- All four retail instruction intervals fit one aligned8 word (offset/size:
+  0/7,2/5,1/5,1/6). Capture untouched neighbours, recheck under suspension,
+  publish/rollback by compare-exchange, then verify exact stock/patched words,
+  cache flush and original protections. No own half-written instruction is
+  admitted. Unknown external words are never overwritten by guessed rollback;
+  they are explicit unsafe/no-GO, not claimed pass-through.
+
+**Falsifiable diagnostic prediction, not a correction claim.**
+
+With local Nadine, draw the P99, release movement/aim and stand about15s. If the
+join is correct, separated samples contain one returned normal group0 Process
+and one returned matching+408 with copied commands and arm rows. A foreign
+owner/group, direct Perform, missing callback or duplicate must not become a
+complete pair. Stock gameplay and attachments must remain unchanged.
+
+The defect alternatives remain upstream composition versus later procedural
+modification. A changing emitted partial/fold across early and late samples
+supports a transition explanation; repeated settled clear/inheritance opposes
+an active outgoing partial. Comparing pre/post+408 narrows whether the visible
+bad arm arrangement already exists before procedural work or emerges within
+it. Command lanes alone do not name Hands/Partial tracks; identify copied clip
+IDs against the existing assets and keep route metadata a separate next join.
+Neither a READY log nor complete samples prove a visual hand repair.
+
+**Verification and admission checkpoint.**
+
+MSVC Release builds the main DLL with the new collector OFF, and all8 scoped
+CTest suites pass (the five new suites plus existing group ingress/FLS/native
+bridge regressions). New suite detail: decoder7 cases/13051 checks; native frame
+242 checks; real owner read/copy/SEH41; actual aligned8 installer helpers34;
+actual included runtime callbacks/FLS/worker3778. Tests cover exact arguments
+and full-width returns, ordinary/tail/exception closure, direct unwrapped and
+wrapped recursion, missing/duplicate callbacks, raw rows and opaque W bits,
+resource-read refusal, max sizes, sparse late samples, 600/8/120s caps, QPC
+failure/over-budget stop, blocked/faulted logger and worker-only disk output.
+Installer helper fault after two stores leaves all words exactly stock/patched,
+not partial instructions; changed foreign words are not clobbered. These are
+isolated tests, NOT native gameplay or a visible fix. Main-code/source review
+keeps all native execution outside diagnostic SEH handlers.
+
+Only ida/tll.i64 was updated: new141782B20 sync-visitor name plus Perform/outer
+frame comments. .codex/ida_apply_p99_consumed_frame_20261012.log reports1954
+functions/81data/3types and save_database returned True. Restarted MCP resolves
+the new name, confirms its141783213 xref, and resolves141A928F0. No parallel IDB.
+
+The explicit diagnostic exam is admitted once the final callback ABI review
+and fresh EXAM=ON build complete; launch ONE instance immediately then let only
+the user perform the written scenario. Startup must report four-site INSTALLED
+and READY. On UNSAFE startup, stop that exact newly launched instance and do not
+ask the user to run the scenario. Later build/PID/results are recorded below.
