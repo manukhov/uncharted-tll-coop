@@ -23,7 +23,7 @@ constexpr bool kEnableLegacyNadinePistolPoseGripRepair = false;
 constexpr std::uintptr_t kProcessAnimCmdListSegmentRva = 0x1AB97C0;
 std::uintptr_t g_module = 0;
 bool g_enable_aim_case6_probe = false;
-std::atomic<bool> g_p99_consumed_ready{false}, g_p99_consumed_failed{false};
+std::atomic<bool> g_p99_consumed_installed{false}, g_p99_consumed_ready{false}, g_p99_consumed_failed{false};
 bool initialize_p99_consumed_census() { return false; }
 std::uintptr_t hooked_p99_consumed_outer(void*) { return 0; }
 std::uint32_t hooked_p99_consumed_process(const std::uint32_t*, std::uint32_t,
@@ -56,6 +56,8 @@ bool all_words(const std::array<P99ConsumedInstallSite, 4>& sites, bool patched)
 int main() {
     namespace frame = coop::p99_consumed_frame;
     check(!install_p99_consumed_census(), "disabled install cannot publish");
+    check(!g_p99_consumed_installed && !g_p99_consumed_ready,
+        "disabled installer publishes neither installed nor armed");
     check(!seh_p99_consumed_install_layout(), "null image refused");
     auto* allocation = static_cast<std::uint8_t*>(VirtualAlloc(nullptr, 0x4000,
         MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));

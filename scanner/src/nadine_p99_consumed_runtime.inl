@@ -6,7 +6,8 @@ constexpr bool kEnableP99ConsumedCensus = true; // Explicit isolated test/exam b
 #else
 constexpr bool kEnableP99ConsumedCensus = false;
 #endif
-std::atomic<bool> g_p99_consumed_ready{false};
+std::atomic<bool> g_p99_consumed_installed{false}, g_p99_consumed_ready{false};
+std::uint64_t g_p99_consumed_arm_ms = 0; // Immutable after ready release publication.
 std::atomic<bool> g_p99_consumed_failed{false}, g_p99_consumed_finished{false};
 coop::p99_consumed_frame::Native g_p99_consumed_outer = nullptr;
 coop::p99_process_native_frame::Native g_p99_consumed_process = nullptr;
@@ -29,7 +30,7 @@ static_assert(sizeof(P99ConsumedFrame) < 512);
 coop::p99_group_fiber::Slot<P99ConsumedFrame> g_p99_consumed_fiber;
 std::atomic_flag g_p99_consumed_lease = ATOMIC_FLAG_INIT;
 // Access ONLY while holding lease; no frame pointers survive the invocation.
-std::uint64_t g_p99_consumed_first_local = 0, g_p99_consumed_next_probe = 0;
+std::uint64_t g_p99_consumed_next_probe = 0;
 std::uint64_t g_p99_consumed_next_sample = 0;
 unsigned g_p99_consumed_probes = 0, g_p99_consumed_attempts = 0;
 unsigned g_p99_consumed_slow_probes = 0, g_p99_consumed_probe_reports = 0;
@@ -348,6 +349,13 @@ std::uintptr_t __fastcall hooked_p99_consumed_outer(void* job) {
         g_p99_consumed_failed.load(std::memory_order_acquire) ||
         g_p99_consumed_finished.load(std::memory_order_acquire) ||
         g_p99_consumed_fiber.failed()) return native(job);
+    // Check the arm-relative lifetime BEFORE reading even the reject-only Fg
+    // prefilter. An absent/late local Player must not extend the capture window.
+    const auto entry_tick = GetTickCount64();
+    if (entry_tick < g_p99_consumed_arm_ms || entry_tick - g_p99_consumed_arm_ms >= 120000) {
+        g_p99_consumed_finished.store(true, std::memory_order_release);
+        return native(job);
+    }
     if (auto* nested = g_p99_consumed_fiber.current()) {
         nested->ambiguous = true; return native(job);
     }
@@ -368,13 +376,12 @@ std::uintptr_t __fastcall hooked_p99_consumed_outer(void* job) {
     bool transferred = false;
     __try {
         const auto now = GetTickCount64();
-        if (!g_p99_consumed_first_local) g_p99_consumed_first_local = now;
-        const auto elapsed = now - g_p99_consumed_first_local;
+        const auto elapsed = now - g_p99_consumed_arm_ms;
         bool selected = false;
-        if (now < g_p99_consumed_first_local || elapsed > 120000 ||
+        if (now < g_p99_consumed_arm_ms || elapsed >= 120000 ||
             g_p99_consumed_probes >= 600 || g_p99_consumed_attempts >= 8)
             g_p99_consumed_finished.store(true, std::memory_order_release);
-        if (now >= g_p99_consumed_first_local && elapsed <= 120000 &&
+        if (now >= g_p99_consumed_arm_ms && elapsed < 120000 &&
             g_p99_consumed_probes < 600 && g_p99_consumed_attempts < 8 &&
             now >= g_p99_consumed_next_probe) {
             g_p99_consumed_next_probe = now + 200;
@@ -431,8 +438,10 @@ std::uintptr_t __fastcall hooked_p99_consumed_outer(void* job) {
 }
 
 bool initialize_p99_consumed_census() {
-    // Main installs/validates all four sites and publishes ready separately.
-    if (!g_module || g_p99_consumed_ready.load(std::memory_order_acquire)) return false;
+    // Main installs/validates all four sites. Only the later arm worker may
+    // publish ready; installation and initialization cannot admit game reads.
+    if (!g_module || g_p99_consumed_installed.load(std::memory_order_acquire) ||
+        g_p99_consumed_ready.load(std::memory_order_acquire)) return false;
     LARGE_INTEGER frequency{};
     if (!QueryPerformanceFrequency(&frequency) || frequency.QuadPart < 1000) return false;
     g_p99_consumed_cost_limit = static_cast<std::uint64_t>(frequency.QuadPart) / 1000;

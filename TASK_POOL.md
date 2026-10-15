@@ -122,14 +122,19 @@ NEXT do not repeat automatic-start exams: assess reuse of existing one-shot
 PID/creation arm (2026-09-20 late-arm; prior PID18204 never armed) for this census,
 preserving full owner guards/budget. Current-reader isolated timing is not a
 live-cost admission. No new game launch/rearm/input/writer is justified yet.
-Current-reader optional benchmark is implemented/test-only; final8/8 suites pass,
-1152 saved measured calls have no integrity errors and do not reproduce the
-game delay. Late-arm integration remains design, not code. Both exam options
-are OFF in cache, but census-r2 DLL is unchanged because PID12588 was still
-present at last inspection. Collector terminal; do not rearm/kill/reinject.
-After exit rebuild normal OFF DLL. Next code seam: split installed/ready in
-consumed_install, reuse bounded event worker with distinct census namespace and
-120s from arm; no unchecked prefilter or owner/budget relaxation.
+Current-reader optional benchmark is implemented/test-only;1152 saved measured
+calls have no integrity errors and do not reproduce the game delay.
+2026-10-15 IMPLEMENTED late-arm: installed!=ready; distinct census event and
+exact PID/creation/image CLI; one300s waiter after installer resumes threads;
+120s observation lifetime from arm, terminal state/counters never reset.
+No owner/budget/callback change. All11 scoped CTest suites pass, runtime4146/0,
+installer35/0, three CLI variants146/0 each; independent emitted-fixture ABI
+review passes. Old PID12588 is absent; normal EXAM=OFF DLL rebuilt successfully.
+Fresh diagnostic exam admitted by latest COOP_STATUS prediction: after EXAM=ON
+build launch ONE process, require INSTALLED/ARM-WAIT/WAITING with zero probes.
+Only after user draws P99 and reports ready, WITHOUT closing game, signal exact
+live census event once. Require runtime ARMED then collect15s. No rearm or
+second game if refused/expired. This remains observation, not a grip fix.
 NEXT only after actual complete records: identify copied cmd6 clip IDs and
 cmd7/9/11 folds at early/late samples, compare pre/post+408 geometry, and find
 the first incompatible stage. A complete record is not a repaired hand;

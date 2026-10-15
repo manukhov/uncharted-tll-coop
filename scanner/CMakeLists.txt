@@ -20,6 +20,8 @@ add_executable(tll_crash_watch src/crash_watch.cpp)
 add_executable(tll_p99_observation_arm src/p99_observation_arm.cpp)
 add_executable(tll_p99_wrist_arm src/p99_observation_arm.cpp)
 target_compile_definitions(tll_p99_wrist_arm PRIVATE TLL_P99_WRIST_ARM=1)
+add_executable(tll_p99_consumed_arm src/p99_observation_arm.cpp)
+target_compile_definitions(tll_p99_consumed_arm PRIVATE TLL_P99_CONSUMED_ARM=1)
 # Read-only external transport, built without private fixture seams. Not linked
 # into a game-side installer and never opens/attaches to a process by itself.
 add_library(tll_p99_wrist_remote_read STATIC src/nadine_p99_wrist_remote_read.cpp)
@@ -78,6 +80,7 @@ foreach(
     tll_crash_watch
     tll_p99_observation_arm
     tll_p99_wrist_arm
+    tll_p99_consumed_arm
     tll_coop_runtime
 )
     target_compile_features(${target} PRIVATE cxx_std_20)
@@ -270,6 +273,8 @@ if(BUILD_TESTING)
     set_tests_properties(crash_watch PROPERTIES TIMEOUT 90)
     add_test(NAME p99_observation_arm COMMAND tll_p99_observation_arm --self-test)
     add_test(NAME p99_wrist_arm COMMAND tll_p99_wrist_arm --self-test)
+    add_test(NAME p99_consumed_arm COMMAND tll_p99_consumed_arm --self-test)
+    set_tests_properties(p99_consumed_arm PROPERTIES TIMEOUT 20)
     set_tests_properties(p99_wrist_arm PROPERTIES TIMEOUT 20)
     set_tests_properties(p99_observation_arm PROPERTIES TIMEOUT 20)
     add_executable(

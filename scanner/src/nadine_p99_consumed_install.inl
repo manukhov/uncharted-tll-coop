@@ -118,8 +118,7 @@ bool install_p99_consumed_census() {
     namespace frame = coop::p99_consumed_frame;
     if constexpr (!kEnableP99ConsumedCensus) return false;
     if (!g_p99_consumed_install_gate.begin())
-        return g_p99_consumed_ready.load(std::memory_order_acquire);
-    g_p99_consumed_ready.store(false, std::memory_order_release);
+        return g_p99_consumed_installed.load(std::memory_order_acquire);
 
     std::array<P99ConsumedInstallSite, 4> sites{};
     const auto fail_unpublished = [&](const char* reason) {
@@ -275,7 +274,7 @@ bool install_p99_consumed_census() {
         !g_p99_consumed_failed.load(std::memory_order_acquire) &&
         seh_p99_consumed_install_match(sites, true);
     const bool clean = !ready && known_safe && seh_p99_consumed_install_match(sites, false);
-    if (ready) g_p99_consumed_ready.store(true, std::memory_order_release);
+    if (ready) g_p99_consumed_installed.store(true, std::memory_order_release);
     else g_p99_consumed_failed.store(true, std::memory_order_release);
     resume_suspended_process_threads(suspended);
 
@@ -287,7 +286,7 @@ bool install_p99_consumed_census() {
         site.allocation = nullptr;
     }
     boot_log_line(ready
-        ? "P99-CONSUMED INSTALLED four sites; native prologues intact; observation only; pose_writes=0"
+        ? "P99-CONSUMED INSTALLED four sites; UNARMED stock-only; native prologues intact; observation only; pose_writes=0"
         : clean && known_safe ? "P99-CONSUMED SKIPPED stock or verified rollback; no retry"
         : known_safe ? "P99-CONSUMED PARTIAL exact stock/patched words; hooks inert; relays retained"
         : "P99-CONSUMED UNSAFE code/cache/protection state; no runtime GO; relays retained");

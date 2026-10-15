@@ -65206,6 +65206,7 @@ bool install_legacy_nadine_p99_chloe_grip_transfer() {
 #include "nadine_p99_group_runtime.inl"
 #include "nadine_p99_consumed_owner.inl"
 #include "nadine_p99_consumed_runtime.inl"
+#include "nadine_p99_consumed_arm.inl"
 #include "nadine_p99_consumed_install.inl"
 #include "nadine_p99_wrist_read_runtime.inl"
 #include "nadine_p99_wrist_observation_runtime.inl"
@@ -81573,9 +81574,9 @@ DWORD WINAPI install_hook(void*) {
     }
     boot_log_line(
 #if defined(TLL_P99_CONSUMED_CENSUS_EXAM)
-        "TLL co-op runtime init 2026-10-12p99-consumed-census-r2 "
+        "TLL co-op runtime init 2026-10-15p99-consumed-late-arm "
 #else
-        "TLL co-op runtime init 2026-10-12p99-consumed-safe-r2 "
+        "TLL co-op runtime init 2026-10-15p99-consumed-safe "
 #endif
         "(completed read-only reach census disabled; rejected support-target and elbow-roll writers disabled; stock arm/finger paths; appearance and AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
@@ -82149,10 +82150,11 @@ DWORD WINAPI install_hook(void*) {
     log_line("one-shot split render activation ENABLED after login_state==3");
     const bool state_net_started = start_state_net();
     if constexpr (kEnableP99ConsumedCensus && !kEnableRejectedNadineWeaponRuntimeProbes) {
-        const bool ready = state_net_started && install_p99_consumed_census();
-        boot_log_line(ready
-            ? "P99-CONSUMED READY read-only normal group0 + whole408 arms; max8 attempts, spaced late samples; no grip correction"
-            : "P99-CONSUMED SKIPPED combined package; stock-only");
+        const bool installed = state_net_started && install_p99_consumed_census();
+        const bool waiting = installed && start_p99_consumed_arm_wait();
+        boot_log_line(waiting
+            ? "P99-CONSUMED WAITING load/draw P99 first; explicit PID/creation-bound arm required; stock-only until ARMED; no grip correction"
+            : "P99-CONSUMED NOT ARMED; see install/wait status; no runtime GO");
     }
     if constexpr (kEnableP99SourceObservation && !kEnableRejectedNadineWeaponRuntimeProbes) {
         const bool installed = state_net_started && install_p99_group_package(true);

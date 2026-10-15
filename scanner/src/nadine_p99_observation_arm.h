@@ -14,6 +14,12 @@ namespace coop::p99_observation_arm {
     return L"Local\\TLL-P99-Wrist-Arm-v1-" + std::to_wstring(pid) +
         L"-" + std::to_wstring(creation);
 }
+// The consumed-command census has its own one-shot readiness protocol. Neither
+// source nor wrist observation signals may arm this separate collector.
+[[nodiscard]] inline std::wstring census_event_name(DWORD pid, std::uint64_t creation) {
+    return L"Local\\TLL-P99-Consumed-Arm-v1-" + std::to_wstring(pid) +
+        L"-" + std::to_wstring(creation);
+}
 
 [[nodiscard]] inline bool creation_stamp(HANDLE process, std::uint64_t& creation) noexcept {
     creation = 0;

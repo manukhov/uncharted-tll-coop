@@ -17,8 +17,15 @@ struct Handle {
     explicit operator bool() const { return value && value != INVALID_HANDLE_VALUE; }
 };
 enum class Result : int { kSent, kArguments = 2, kProcess, kCreation, kImage, kEvent, kSignal };
-enum class Protocol { kSource, kWrist };
-#if defined(TLL_P99_WRIST_ARM) && TLL_P99_WRIST_ARM
+enum class Protocol { kSource, kWrist, kCensus };
+constexpr std::array kProtocols{Protocol::kSource, Protocol::kWrist, Protocol::kCensus};
+#if defined(TLL_P99_WRIST_ARM) && TLL_P99_WRIST_ARM && \
+    defined(TLL_P99_CONSUMED_ARM) && TLL_P99_CONSUMED_ARM
+#error Select exactly one P99 arming protocol
+#elif defined(TLL_P99_CONSUMED_ARM) && TLL_P99_CONSUMED_ARM
+constexpr auto kProtocol = Protocol::kCensus;
+constexpr auto kProgramName = L"tll_p99_consumed_arm";
+#elif defined(TLL_P99_WRIST_ARM) && TLL_P99_WRIST_ARM
 constexpr auto kProtocol = Protocol::kWrist;
 constexpr auto kProgramName = L"tll_p99_wrist_arm";
 #else
@@ -27,8 +34,12 @@ constexpr auto kProgramName = L"tll_p99_observation_arm";
 #endif
 
 std::wstring event_name(Protocol protocol, DWORD pid, std::uint64_t creation) {
-    return protocol == Protocol::kWrist ? arm::wrist_event_name(pid, creation) :
-        arm::event_name(pid, creation);
+    switch (protocol) {
+    case Protocol::kSource: return arm::event_name(pid, creation);
+    case Protocol::kWrist: return arm::wrist_event_name(pid, creation);
+    case Protocol::kCensus: return arm::census_event_name(pid, creation);
+    }
+    return {};
 }
 
 bool decimal(std::wstring_view text, std::uint64_t maximum, std::uint64_t& value) noexcept {
@@ -43,7 +54,7 @@ bool decimal(std::wstring_view text, std::uint64_t maximum, std::uint64_t& value
     return value != 0;
 }
 
-// The explicit protocol is private to this TU so self-test can exercise both
+// The explicit protocol is private to this TU so self-test can exercise all
 // namespaces. The command-line path always uses its compile-time protocol.
 Result signal_existing_for(Protocol protocol, DWORD pid, std::uint64_t creation, const fs::path& expected) {
     if (pid == 0 || creation == 0 || !expected.is_absolute()) return Result::kArguments;
@@ -85,13 +96,15 @@ int self_test() {
         check(!decimal(invalid, maximum, value), "strict positive decimal");
     check(arm::event_name(12, 345) == L"Local\\TLL-P99-Source-Arm-v1-12-345", "exact event name");
     check(arm::wrist_event_name(12, 345) == L"Local\\TLL-P99-Wrist-Arm-v1-12-345", "exact wrist event name");
-    check(arm::event_name(12, 345) != arm::wrist_event_name(12, 345), "source/wrist protocols separated");
-    check(arm::event_name(12, 345) != arm::event_name(13, 345), "PID names separated");
-    check(arm::event_name(12, 345) != arm::event_name(12, 346), "creation names separated");
-    check(arm::event_name(1, 23) != arm::event_name(12, 3), "decimal components separated");
-    check(arm::wrist_event_name(12, 345) != arm::wrist_event_name(13, 345), "wrist PID names separated");
-    check(arm::wrist_event_name(12, 345) != arm::wrist_event_name(12, 346), "wrist creation names separated");
-    check(arm::wrist_event_name(1, 23) != arm::wrist_event_name(12, 3), "wrist decimal components separated");
+    check(arm::census_event_name(12, 345) == L"Local\\TLL-P99-Consumed-Arm-v1-12-345", "exact census event name");
+    for (const auto protocol : kProtocols) {
+        check(event_name(protocol, 12, 345) != event_name(protocol, 13, 345), "PID names separated");
+        check(event_name(protocol, 12, 345) != event_name(protocol, 12, 346), "creation names separated");
+        check(event_name(protocol, 1, 23) != event_name(protocol, 12, 3), "decimal components separated");
+        for (const auto other : kProtocols)
+            if (other != protocol)
+                check(event_name(protocol, 12, 345) != event_name(other, 12, 345), "protocol namespaces separated");
+    }
 
     const DWORD pid = GetCurrentProcessId();
     std::uint64_t creation = 0;
@@ -102,7 +115,8 @@ int self_test() {
     const fs::path executable(std::wstring_view(image.data(), length));
     const auto source_name = arm::event_name(pid, creation);
     const auto wrist_name = arm::wrist_event_name(pid, creation);
-    for (const auto protocol : {Protocol::kSource, Protocol::kWrist}) {
+    const auto census_name = arm::census_event_name(pid, creation);
+    for (const auto protocol : kProtocols) {
         const auto name = event_name(protocol, pid, creation);
         {
             Handle absent(OpenEventW(SYNCHRONIZE, FALSE, name.c_str()));
@@ -114,18 +128,40 @@ int self_test() {
     }
     check(signal_existing(pid, creation, executable) == Result::kEvent, "selected CLI protocol also refuses missing event");
     // Event creation is confined to this private test and this process identity.
+    for (const auto protocol : kProtocols) {
+        const auto name = event_name(protocol, pid, creation);
+        Handle existing(CreateEventW(nullptr, FALSE, FALSE, name.c_str()));
+        if (!existing || GetLastError() == ERROR_ALREADY_EXISTS) return 1;
+        for (const auto other : kProtocols) {
+            if (other == protocol) continue;
+            check(signal_existing_for(other, pid, creation, executable) == Result::kEvent,
+                "other existing protocol does not substitute for absent selected event");
+            check(WaitForSingleObject(existing.value, 0) == WAIT_TIMEOUT,
+                "missing protocol signal leaves other existing event untouched");
+            Handle absent(OpenEventW(SYNCHRONIZE, FALSE, event_name(other, pid, creation).c_str()));
+            check(!absent, "missing protocol remains absent after refusal");
+        }
+    }
     Handle source(CreateEventW(nullptr, FALSE, FALSE, source_name.c_str()));
     if (!source || GetLastError() == ERROR_ALREADY_EXISTS) return 1;
-    check(signal_existing_for(Protocol::kWrist, pid, creation, executable) == Result::kEvent,
-        "source event does not substitute for absent wrist event");
-    check(WaitForSingleObject(source.value, 0) == WAIT_TIMEOUT, "missing wrist signal leaves source untouched");
     Handle wrist(CreateEventW(nullptr, FALSE, FALSE, wrist_name.c_str()));
     if (!wrist || GetLastError() == ERROR_ALREADY_EXISTS) return 1;
+    Handle census(CreateEventW(nullptr, FALSE, FALSE, census_name.c_str()));
+    if (!census || GetLastError() == ERROR_ALREADY_EXISTS) return 1;
+    const auto selected_event = [&](Protocol protocol) {
+        switch (protocol) {
+        case Protocol::kSource: return source.value;
+        case Protocol::kWrist: return wrist.value;
+        case Protocol::kCensus: return census.value;
+        }
+        return static_cast<HANDLE>(nullptr);
+    };
     const auto unchanged = [&] {
         check(WaitForSingleObject(source.value, 0) == WAIT_TIMEOUT, "refusal did not signal source event");
         check(WaitForSingleObject(wrist.value, 0) == WAIT_TIMEOUT, "refusal did not signal wrist event");
+        check(WaitForSingleObject(census.value, 0) == WAIT_TIMEOUT, "refusal did not signal census event");
     };
-    for (const auto protocol : {Protocol::kSource, Protocol::kWrist}) {
+    for (const auto protocol : kProtocols) {
         check(signal_existing_for(protocol, 0, creation, executable) == Result::kArguments, "zero PID refused");
         unchanged();
         check(signal_existing_for(protocol, MAXDWORD, creation, executable) == Result::kProcess, "invalid PID refused");
@@ -139,14 +175,16 @@ int self_test() {
         check(signal_existing_for(protocol, pid, creation, executable.parent_path()) == Result::kImage, "different existing image refused");
         unchanged();
         check(signal_existing_for(protocol, pid, creation, executable) == Result::kSent, "only existing selected protocol event signalled");
-        const auto selected = protocol == Protocol::kWrist ? wrist.value : source.value;
-        const auto other = protocol == Protocol::kWrist ? source.value : wrist.value;
+        const auto selected = selected_event(protocol);
         check(WaitForSingleObject(selected, 0) == WAIT_OBJECT_0, "selected protocol signal observed");
         check(WaitForSingleObject(selected, 0) == WAIT_TIMEOUT, "one auto-reset signal only");
-        check(WaitForSingleObject(other, 0) == WAIT_TIMEOUT, "signal never crosses protocol namespace");
+        for (const auto other : kProtocols)
+            if (other != protocol)
+                check(WaitForSingleObject(selected_event(other), 0) == WAIT_TIMEOUT,
+                    "signal never crosses protocol namespace");
     }
     check(signal_existing(pid, creation, executable) == Result::kSent, "compile-time CLI protocol signals existing event");
-    check(WaitForSingleObject(kProtocol == Protocol::kWrist ? wrist.value : source.value, 0) == WAIT_OBJECT_0,
+    check(WaitForSingleObject(selected_event(kProtocol), 0) == WAIT_OBJECT_0,
         "compiled CLI selects correct namespace");
     unchanged();
     check(WaitForSingleObject(GetCurrentProcess(), 0) == WAIT_TIMEOUT, "own process remains live");

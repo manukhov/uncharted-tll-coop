@@ -40404,3 +40404,95 @@ and loaded artifact remain census-r2 SHA FE7530CB...EE28DFB5, not a rebuilt OFF
 DLL. No launch/injection/input/runtime patch this turn. Next safe work is the
 isolated readiness integration above; after game exit rebuild the normal OFF
 DLL before any unrelated launch. The only pre-existing untracked path is tmp/.
+
+### 2026-10-15 STATIC: separate census installation from explicit post-Draw arming
+
+Continuation starts at source1a369a1, no live tll.exe. Both actual hand defects
+remain unresolved. This is the narrow readiness change specified above, not
+another support/roll/grip writer or provider/loader expansion. No new native
+animation function or field is claimed; existing sole-IDB labels remain current
+(last saved consumed-frame labels2026-10-12, save_database returned True).
+
+Hypothesis: publishing census sampling-ready at installation causes the finite
+probe budget to be spent during loading/holstered operation. A one-shot explicit
+arm after the user's draw/stand report separates that phase without replacing
+any owner or cost admission. It does NOT assert that post-Draw reads fit1ms.
+Competing hypotheses remain an independently slow read/query/scheduling
+interval or another real Control refusal in the user's drawn state. The earlier
+PROBE reason7 cannot distinguish those. Automatic elapsed delay, an unchecked
+prefilter and a forced slot/state are rejected alternatives: none proves the
+user finished drawing, and the latter two would weaken current admission.
+
+Evidence retained for this different orchestration exam:
+1. Native callgraph/vtable and writes already documented: Draw action invokes
+   CommitDrawn1410AAF20 through+248 and writes current at1410AAF89, but state2
+   is published separately by ApplyState1410AAFB0 at1410AB701. Installation,
+   a current slot or mere postblend callback cannot stand in for completed Draw.
+2. Actual wrapper dataflow: 141A928F0 wrapper tests ready before local-Fg, owner,
+   capture or native-frame binding; when false it directly calls stock once.
+   Splitting the installer publication leaves all four native sites and their
+   context+A8/return-slot+30 invocation proof unchanged.
+3. Structural agreement with the existing source/wrist arm protocol and the
+   earlier WAITING-only PID18204 result: exact process creation/image and an
+   existing event select WHEN to inspect, not WHAT owner is accepted. Fresh
+   three-protocol self-tests preserve source/wrist isolation and verify the
+   separate Local\\TLL-P99-Consumed-Arm-v1-PID-creation namespace.
+
+Written falsifiable prediction BEFORE a fresh game exam: successful installation
+reports INSTALLED plus ARM-WAIT/WAITING, but zero PROBE/sample/arm rows before
+an explicit census signal. User loads Nadine, draws P99, stands and reports ready
+WITHOUT closing the game. Only then signal the exact live PID/creation/image
+once. Require a fresh ARMED marker; CLI exit0 alone is not evidence of arming.
+Subsequent120s window retains <=600 probes/8 attempts and the combined1ms limit.
+If loading-time observation was the only barrier, actual joined command/pre/post
+samples can now appear. If post-arm refusal/budget remains, retain the terminal
+reason and return to analysis without rearm/reinjection or relaxing guards.
+No visible hand change is predicted; attachments/native behavior must remain.
+
+Preparation/tests/review and any actual launch/result are recorded below.
+
+Implementation is complete: consumed installer publishes installed only; main
+starts start_p99_consumed_arm_wait AFTER installer return/resume. A separate
+worker owns one initially-unsignalled auto-reset event, waits at most300s and
+closes it exactly once. Identity/event-existing/create/thread/wait/clock failures
+terminate without retries. Only that worker writes the arm timestamp and ready;
+monotonic failed/finished flags are never cleared by arming. Checks around ready
+publication and independent outer terminal gates prevent new admission after
+terminal; this does not cancel native/capture work already in flight. No game
+pointers are read by the waiter. The outer's120s boundary is now >=120000 from
+arm and is checked before even the local-Fg prefilter, not first-local activity.
+
+The shared signaling CLI gained a third compile-time protocol and executable
+tll_p99_consumed_arm. Source and wrist behavior remains separate. A source or
+wrist signal cannot open/substitute/consume a census event. Production CLI still
+requires exact live PID, creation FILETIME and equivalent absolute image, opens
+ONLY an existing event, rechecks liveness, and signals once. Test-created events
+belong only to the test process; no game was signalled in offline verification.
+
+Fresh CMake Release normal DLL (both examsOFF) builds, replacing the prior r2
+disk exam after its process exited. All11 scoped CTest suites pass: the previous
+eight census/frame/owner/install/FLS/bridge suites plus all three arm tools.
+Included runtime fixture4146checks/0, installer35/0, each signaling CLI146/0.
+Cases include unarmed no-observation/native-once, successful joined capture,
+300s timeout/fault/stale event/create failures, exact120s and backwards clocks,
+finished/failed before signal and during ARMED logging, preserved counters and
+no rearm. Owner predicates, native sites, clip decoding, raw arm rows,1ms combined
+budget and single slow-refusal retry are unchanged.
+
+Independent optimized fixture-code review passes: Process still forwards all
+seven arguments and EAX; post entryRSP+30 still matches the outer return slot
+and preserves RAX; outer stock/bridge calls are exclusive and raw RAX survives;
+transferred logger lease is not released by the caller. Local evidence:
+reports/p99_consumed_runtime_20261015_object.asm. Fixture EXE SHA256
+CD3B5BEF0F61F66D15CB52B9E61D6D90AB306D2882EB7DA09B231C957F9CE942.
+This is the actual included wrapper compiled with fixture owner/timing seams,
+not final main-DLL byte identity, live performance admission or a visible fix.
+The new NOT ARMED startup failure message no longer calls an UNSAFE code state
+stock-only; on such a startup stop the exact fresh process and do not test.
+
+The changed diagnostic exam is admitted on the above retained static evidence,
+falsifiable prediction, passing tests and independent review. After a fresh
+EXAM=ON build launch/inject exactly ONE process immediately, then require
+INSTALLED/ARM-WAIT/WAITING and ZERO pre-signal probes. Do not signal before the
+user's fresh drawn-P99 readiness report, and do not ask them to close this process
+before its post-arm capture. Actual PID/creation/build and later results follow.
