@@ -135,14 +135,19 @@ build launch ONE process, require INSTALLED/ARM-WAIT/WAITING with zero probes.
 Only after user draws P99 and reports ready, WITHOUT closing game, signal exact
 live census event once. Require runtime ARMED then collect15s. No rearm or
 second game if refused/expired. This remains observation, not a grip fix.
-LIVE2026-10-15: source8278b73 pushed; fresh late-arm EXAM=ON launched/injected
-ONE PID12356, creation134365517392338645 (18:28:59.2338645 Moscow). Startup
-INSTALLED/UNARMED + ARM-WAIT/WAITING, zero ARMED/PROBE/sample. DO NOT auto-arm.
-User must draw P99, stand, report ready and keep game open. After fresh report
-verify exact live process/image/creation and unexpired300s waiter; only then use
-tll_p99_consumed_arm --pid 12356 --creation 134365517392338645 --expected-image
-the exact absolute tll.exe path recorded in latest COOP_STATUS. Require ARMED,
-then collect15s. No stale signal/rearm/second instance. Main disk/cache examON.
+RESULT2026-10-15: source8278b73, PID12356/creation134365517392338645 was armed
+ONCE after exact identity/hash checks and user-ready warning about auto-holster.
+Actual ARMED then ONLY two Control refusals at0/2000ms,43.7366/23.7300ms elapsed
+QPC; second terminal, ZERO commands/arms. Do not signal/rearm/reinject/restart
+this process or ask the user to repeat the terminal scenario. Chat-ready timing
+is REJECTED; exact Control predicate and elapsed-cost cause remain unknown.
+NEXT design pre-request -> next fresh existing state2/current-slot P99-art scalar
+notification in send_local_player_state, with no new game reads/native hook;
+preserve full owner admission and1ms. Add only already-read Control trace
+metadata with transcript-equivalence tests; see latest COOP_STATUS for gates
+and alternatives. Neither design is implemented or a new runtime GO.
+PID12356 remains alive. Cache both examsOFF; disk/loaded DLL still examON until
+the process exits and normal OFF is rebuilt. Do not kill it just to relink.
 NEXT only after actual complete records: identify copied cmd6 clip IDs and
 cmd7/9/11 folds at early/late samples, compare pre/post+408 geometry, and find
 the first incompatible stage. A complete record is not a repaired hand;

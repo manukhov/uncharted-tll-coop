@@ -15,6 +15,12 @@ implementation, tests, explicit exam option and runtime status; do not mistake
 collector readiness for a visible repair or this whole-postblend delta for a
 Feather-only measurement. Provider/loader expansion remains parked.
 
+LATEST exam result (2026-10-15): PID12356 was explicitly armed after the user
+reported ready, then stopped after two Control refusals,43.7366/23.7300ms,
+with ZERO arm/command samples. Chat-ready is not a reliable drawn-state trigger
+because P99 can auto-holster. Do not rearm/reinject this terminal process. See
+the final entry for the narrower timing candidate and remaining admission gap.
+
 CURRENT (2026-10-09): read-only exact1418F1C43 exam PID17512 completed4pairs.
 Native T is INSIDE reach by.0002585..0005684asset units, NOT beyond it in this
 sample. Full-weight native solve reaches T within.0000081..0000696 and reduces
@@ -40519,3 +40525,69 @@ Require fresh ARMED, then read about15s of only PID12356 consumed records,
 prioritizing refusal/budget/incomplete evidence. If already expired/closed,
 do not signal a stale identity, rearm, reinject or start another game by default.
 Main cache/disk DLL now examON; return to normal OFF after this bounded exam.
+
+### 2026-10-15 REJECTED: chat-ready arm at141A928F0 does not yield a P99 census
+
+The above WAITING checkpoint is superseded. User reported ready but warned P99
+would likely auto-holster before inspection. Rechecked exact PID12356/creation
+134365517392338645/image, loaded module path, unchanged main/helper hashes,
+and absence of a previous arm/terminal marker; signalled the existing event
+ONCE. Actual ARMED was logged, not inferred from helper exit0. No game input,
+rearm, reinjection, restart or new game instance was used.
+
+CONFIRMED orchestration result, reports/locomotion_hook.log104893..104895:
+- ARMED explicit signal,120s from arm,8samples/600probes,combined1ms,pose_writes0.
+- PROBE1 tick63702750 elapsed0 end63702796 admitted0 reason7 cost437366,
+  limit10000 clock1 budget1 slow1 retry63704750 terminal0 capture=none.
+- PROBE2 tick63704750 elapsed2000 end63704765 admitted0 reason7 cost237300,
+  limit10000 clock1 budget1 slow2 retry0 terminal1 capture=none.
+These costs are43.7366/23.7300ms elapsed QPC intervals, not measured CPU work.
+One-shot arming and the single2s retry worked; ZERO command/clip/arm samples
+were admitted. Neither hand defect is fixed or newly characterized by this run.
+REJECTED practical protocol: draw, reply in chat, then expect the later signal
+to inspect the drawn pose. Late arming alone did not satisfy live admission.
+
+Nearby independent logs show controller-2/5, verified P99 hip handoff at104882,
+then controller-1/0 at104884..104891 before ARMED. This is consistent with the
+user's auto-holster warning, NOT same-probe owner/scalar/timestamp evidence.
+Reason7 spans controller pointer/vtable/backref, current slot, draw state and
+grenade-controller checks, including read refusal. A negative current slot
+short-circuits BEFORE reading draw state. Do not claim the exact failed field,
+prove a null controller from zeroed output, or attribute elapsed cost to VQ,
+CPU work or scheduling without additional evidence.
+
+STATIC existing-code timing candidate (design ONLY, not implemented):
+send_local_player_state already reads current-slot draw_slot/draw_state and
+cur_art at coop_runtime.cpp21457..21464. A roleB/state2/valid-slot/P99-art8075397D
+scalar notification here would add no game reads or getter calls. net_tick
+calls the sender at >=16ms intervals; enabled/peer_set, local player, valid
+position and world-stability gates still apply, but no received peer is needed.
+Use these immediate locals, NOT fallback held_art or a cached packet. This is
+timing only, not owner/steady-idle authority. Current full field-only double
+owner admission and all deadlines/counters/1ms gates must remain unchanged.
+Do not call GetWeaponBySlot1410A1F90 again: its successful path writes weapon+72.
+
+Competing triggers: cold-hip's existing state read is weaker (no P99 art yet);
+new ApplyState1410AAFB0 interception is unnecessary risk (state2 writeAB701 is
+followed by refreshAB717, with holster branches elsewhere); CommitDrawnAAF20
+alone remains insufficient. A user-owned external hotkey removes chat delay
+but does not select state2 and requires a conflict-free binding; existing F-key/
+numpad mappings must not be reused blindly. No synthesized game input.
+
+NEXT bounded preparation, not permission for another unchanged exam: define a
+pre-request/next-qualifying-observation one-shot protocol with freshness and
+terminal/deadline tests, no retained live pointers or reset of budget. Also
+distinguish the existing Control predicates using ONLY values already read:
+snapshot1/2, active check, read-refused/value-mismatch/SEH, validity-tagged slot/
+draw/grenade scalars. Preserve short-circuit read order and zeroed rejected
+owner; offline tests must compare exact read/query transcripts. This narrows
+the refusal without claiming to solve the separate elapsed-cost failure.
+Only a new documented prediction and reviewed tests can admit a new exam.
+
+At handoff PID12356 still lives; collection is terminal, not a wait for another
+draw. Cache is now configured both examsOFF. Main DLL was NOT relinked while
+loaded: disk/loaded SHA remainsE4F3596A1D23E8383E183F1A6FFDFD4757AACC67AE2EF389CC12E5A73EFD4E59,
+still the late-arm exam. Rebuild normal OFF after this process exits and before
+any unrelated launch; do not kill it just to replace the DLL. No new native
+entity/label or IDB write; existing sole-IDB labels remain current. Pre-existing
+untracked tmp/ is untouched.
