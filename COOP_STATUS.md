@@ -40496,3 +40496,26 @@ EXAM=ON build launch/inject exactly ONE process immediately, then require
 INSTALLED/ARM-WAIT/WAITING and ZERO pre-signal probes. Do not signal before the
 user's fresh drawn-P99 readiness report, and do not ask them to close this process
 before its post-arm capture. Actual PID/creation/build and later results follow.
+
+**2026-10-15 live checkpoint: installed, WAITING, not armed.**
+
+Source8278b73 committed/pushed before the exam. Fresh main EXAM=ON/sourceOFF
+build2026-10-15p99-consumed-late-arm, SHA256
+E4F3596A1D23E8383E183F1A6FFDFD4757AACC67AE2EF389CC12E5A73EFD4E59.
+Immediately launched/injected ONE PID12356, creation FILETIME134365517392338645,
+2026-10-15 18:28:59.2338645 Europe/Moscow. No previous tll process existed.
+Exact startup reports INSTALLED four sites/UNARMED, ARM-WAIT with that creation,
+timeout300000, probes0, then WAITING. No UNSAFE, ARMED, PROBE or sample at this
+checkpoint. Old group-shadow stays disabled; appearance/back profiles retained.
+No game input or arm signal was sent. This is installation only, not capture.
+
+User was instructed to load local Nadine, draw P99, stand without aim/movement,
+reply ready and KEEP THE GAME OPEN. On that fresh reply: verify same live PID,
+creation and image, unchanged DLL, and no ARM-STOP/previous ARMED/terminal marker.
+Then run ONCE (only if the300s waiter has not expired):
+`scanner/build/tll_p99_consumed_arm.exe --pid 12356 --creation 134365517392338645 --expected-image "C:\UNCHARTED Legacy of Thieves Collection (2016-2017-2022)\Uncharted Legacy of Thieves Collection\tll.exe"`
+Helper SHA256 FBB503423C4292722ED7093BCA2AA5AAF55970EB0210778800CD113552A5AC23.
+Require fresh ARMED, then read about15s of only PID12356 consumed records,
+prioritizing refusal/budget/incomplete evidence. If already expired/closed,
+do not signal a stale identity, rearm, reinject or start another game by default.
+Main cache/disk DLL now examON; return to normal OFF after this bounded exam.
