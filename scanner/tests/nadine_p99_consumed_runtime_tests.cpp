@@ -13,6 +13,7 @@
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <thread>
 
 extern "C" std::uintptr_t p99_consumed_fixture_outer(void*);
 extern "C" void p99_consumed_fixture_perform(void*);
@@ -29,6 +30,7 @@ std::atomic<bool> g_local_reload_level{false};
 std::uintptr_t g_module = 0;
 constexpr std::uintptr_t kRetainedSlotTableRva = 0x10;
 constexpr std::uintptr_t kPlayerFgAnimDataOffset = 0x30;
+constexpr std::uint32_t kCoopPistolArtId = 0x8075397D;
 struct P99ConsumedOwner {
     std::uintptr_t job = 0, player = 0, weapon = 0, fg = 0, local_pose = 0;
     std::uintptr_t target_skeleton = 0, job_state = 0;
@@ -38,6 +40,19 @@ enum class P99ConsumedOwnerReject : std::uint32_t {
     None, Disabled, Input, LocalPlayer, NativeJob, RetainedFg,
     Skeleton, Control, Weapon, Motion, Changed, ReadFault
 };
+enum class P99ConsumedControlCheck : std::uint32_t {
+    None, WeaponPointer, WeaponVtable, WeaponOwner, Slot, Draw,
+    GrenadePointer, GrenadeVtable, GrenadeOwner, GrenadeState
+};
+enum class P99ConsumedControlOutcome : std::uint32_t { None, ReadRefused, ValueMismatch, Seh, Passed };
+struct P99ConsumedControlTrace {
+    std::uint32_t snapshot = 0;
+    P99ConsumedControlCheck check = P99ConsumedControlCheck::None;
+    P99ConsumedControlOutcome outcome = P99ConsumedControlOutcome::None;
+    std::uint32_t valid = 0;
+    std::int32_t slot = -1;
+    std::uint32_t draw = 0, grenade = 0;
+};
 bool same_owner(const P99ConsumedOwner& a, const P99ConsumedOwner& b) {
     return a.job == b.job && a.player == b.player && a.weapon == b.weapon &&
         a.fg == b.fg && a.local_pose == b.local_pose &&
@@ -45,7 +60,11 @@ bool same_owner(const P99ConsumedOwner& a, const P99ConsumedOwner& b) {
         a.player_id == b.player_id && a.weapon_id == b.weapon_id;
 }
 std::uint64_t mock_tick = 10000;
-ULONGLONG mock_ticks() { return mock_tick; }
+void (*tick_side_effect)() = nullptr;
+ULONGLONG mock_ticks() {
+    if (tick_side_effect) tick_side_effect();
+    return mock_tick;
+}
 std::int64_t mock_qpc = 0, mock_qpc_step = 0;
 unsigned mock_qpc_calls = 0, mock_jump_call = 0;
 bool mock_qpc_ok = true, native_cost = false;
@@ -59,6 +78,7 @@ P99ConsumedOwner mock_owner{};
 unsigned owner_calls = 0, arm_calls = 0, process_calls = 0, post_calls = 0;
 unsigned log_calls = 0, raw_lines = 0, arm_lines = 0, complete_lines = 0;
 unsigned budget_lines = 0, probe_lines = 0, sample_zero_lines = 0;
+unsigned slot_trace_lines = 0, empty_trace_lines = 0;
 std::size_t max_log = 0;
 DWORD main_thread = 0;
 std::atomic<bool> block_logs{false}, log_started{false}, fault_log{false};
@@ -90,6 +110,10 @@ void boot_log_line(const char* line) {
     complete_lines += std::strstr(line, " complete=1 ") != nullptr;
     budget_lines += std::strstr(line, " budget=1 ") != nullptr;
     probe_lines += std::strstr(line, "P99-CONSUMED PROBE ") != nullptr;
+    slot_trace_lines += std::strstr(line,
+        "ctl_snapshot=1 ctl_check=4 ctl_outcome=2 ctl_valid=1 ctl_slot=-1 ctl_draw=0 ctl_grenade=0 capture=none") != nullptr;
+    empty_trace_lines += std::strstr(line,
+        "ctl_snapshot=0 ctl_check=0 ctl_outcome=0 ctl_valid=0 ctl_slot=-1 ctl_draw=0 ctl_grenade=0 capture=none") != nullptr;
     sample_zero_lines += std::strstr(line, "sample=0 ") != nullptr;
 }
 // Controlled owner/read seams. The companion owner suite covers the real raw
@@ -105,11 +129,15 @@ struct P99ConsumedRead {
     }
 };
 bool seh_read_p99_consumed_owner(void* job, P99ConsumedOwner* out,
-    P99ConsumedOwnerReject* reason = nullptr) {
+    P99ConsumedOwnerReject* reason = nullptr, P99ConsumedControlTrace* trace = nullptr) {
     ++owner_calls; *out = {};
+    if (trace) *trace = {1, P99ConsumedControlCheck::Slot,
+        P99ConsumedControlOutcome::ValueMismatch, 1, -1, 0, 0};
     if (reason) *reason = P99ConsumedOwnerReject::Control;
     if (!owner_allowed || reinterpret_cast<std::uintptr_t>(job) != mock_owner.job) return false;
     if (reason) *reason = P99ConsumedOwnerReject::None;
+    if (trace) *trace = {2, P99ConsumedControlCheck::None,
+        P99ConsumedControlOutcome::Passed, 7, 0, 2, 0};
     *out = mock_owner; return true;
 }
 bool seh_copy_p99_consumed_arms(const P99ConsumedOwner& owner,
@@ -133,6 +161,10 @@ bool seh_copy_p99_consumed_arms(const P99ConsumedOwner& owner,
 bool arm_creation_ok = true, arm_event_ok = true, arm_event_existing = false;
 bool arm_thread_ok = true, arm_wait_fault = false, terminal_during_arm_log = false;
 bool fault_during_arm_log = false, failed_during_arm_log = false;
+bool terminal_during_request_log = false, expire_during_request_log = false;
+bool emit_draw_on_poll = true;
+unsigned arm_poll_calls = 0, requested_records = 0;
+void mock_arm_sleep(DWORD milliseconds);
 DWORD arm_wait_result = WAIT_OBJECT_0;
 unsigned arm_event_calls = 0, arm_thread_calls = 0, arm_event_closes = 0;
 unsigned arm_thread_closes = 0, arm_wait_calls = 0, armed_records = 0;
@@ -142,6 +174,12 @@ void* arm_argument = nullptr;
 HANDLE mock_arm_event() { return reinterpret_cast<HANDLE>(0x1000); }
 HANDLE mock_arm_thread() { return reinterpret_cast<HANDLE>(0x2000); }
 void arm_log_side_effect(const char* line) {
+    if (std::strstr(line, "P99-CONSUMED ARM-REQUESTED ")) {
+        ++requested_records;
+        check(!g_p99_consumed_ready, "request log is not admission");
+        if (terminal_during_request_log) g_p99_consumed_finished.store(true);
+        if (expire_during_request_log) mock_tick += 300000;
+    }
     if (!std::strstr(line, "P99-CONSUMED ARMED ")) return;
     ++armed_records;
     if (terminal_during_arm_log) g_p99_consumed_finished.store(true);
@@ -185,6 +223,7 @@ namespace {
 #define CreateThread mock_arm_create_thread
 #define CloseHandle mock_arm_close
 #define WaitForSingleObject mock_arm_wait
+#define Sleep mock_arm_sleep
 #include "nadine_p99_consumed_arm.inl"
 #undef creation_stamp
 #undef GetTickCount64
@@ -192,6 +231,17 @@ namespace {
 #undef CreateThread
 #undef CloseHandle
 #undef WaitForSingleObject
+#undef Sleep
+
+void mock_arm_sleep(DWORD milliseconds) {
+    check(milliseconds == 10, "only dedicated worker polls at10ms");
+    ++arm_poll_calls;
+    if (!emit_draw_on_poll) { mock_tick += 100000; return; }
+    const auto token = p99_consumed_draw_token();
+    const auto logs_before = log_calls;
+    observe_p99_consumed_draw(token, 0, 2, kCoopPistolArtId);
+    check(log_calls == logs_before, "draw tap never logs");
+}
 
 struct Job {
     std::uintptr_t vtable = 0, fg = 0;
@@ -253,18 +303,24 @@ void reset() {
     g_p99_consumed_slow_probes = g_p99_consumed_probe_reports = 0;
     owner_calls = arm_calls = process_calls = post_calls = log_calls = 0;
     raw_lines = arm_lines = complete_lines = budget_lines = probe_lines = sample_zero_lines = 0;
+    slot_trace_lines = empty_trace_lines = 0;
     max_log = 0;
     owner_allowed = arm_allowed = read_allowed = true;
     throw_process = throw_post = do_nested = do_old_nested = duplicate_process = corrupt_context = false;
-    nested_depth = 0; mock_tick = 10000; job.flags = 0;
+    nested_depth = 0; mock_tick = 10000; tick_side_effect = nullptr; job.flags = 0;
     mock_qpc = mock_qpc_step = 0; mock_qpc_calls = mock_jump_call = 0;
     mock_qpc_ok = true; native_cost = false;
     block_logs = log_started = fault_log = false;
-    g_p99_consumed_arm_wait_started = g_p99_consumed_arm_published = false;
+    g_p99_consumed_arm_wait_started = false;
+    g_p99_consumed_arm_phase = P99ConsumedArmPhase::Dormant;
     g_p99_consumed_arm_wait_ms = 0;
+    g_p99_consumed_request_ms = g_p99_consumed_draw_begin_ms = 0;
+    g_p99_consumed_arm_slot = -1;
     arm_creation_ok = arm_event_ok = arm_thread_ok = true;
     arm_event_existing = arm_wait_fault = terminal_during_arm_log = fault_during_arm_log = false;
     failed_during_arm_log = false;
+    terminal_during_request_log = expire_during_request_log = false;
+    emit_draw_on_poll = true; arm_poll_calls = requested_records = 0;
     arm_wait_result = WAIT_OBJECT_0;
     arm_event_calls = arm_thread_calls = arm_event_closes = arm_thread_closes = 0;
     arm_wait_calls = armed_records = 0;
@@ -365,6 +421,10 @@ void worker_and_cost() {
         !g_p99_consumed_capture.clips_complete && budget_lines == 1 && arm_calls == 0,
         "clip checkpoint stops after bounded current metadata read");
     reset(); mock_qpc_ok = false; invoke_catching();
+    check(empty_trace_lines == 1 && slot_trace_lines == 0 &&
+        g_p99_consumed_log_frame.control_trace.snapshot == 0 &&
+        g_p99_consumed_log_frame.control_trace.valid == 0,
+        "no owner read means no invented Control fields in worker log");
     check(g_p99_consumed_finished && budget_lines == 1 &&
         !g_p99_consumed_log_frame.probe_clock && owner_calls == 0,
         "invalid initial QPC fails closed before owner reads with explicit log");
@@ -387,6 +447,13 @@ void rejected_probe_recovery() {
         g_p99_consumed_log_frame.probe_reason == P99ConsumedOwnerReject::Control &&
         !g_p99_consumed_log_frame.probe_terminal && g_p99_consumed_log_frame.probe_retry_tick == 12000,
         "refused probe leaves old buffer untouched and logs only its own metadata");
+    check(slot_trace_lines == 1 && empty_trace_lines == 0 &&
+        g_p99_consumed_log_frame.control_trace.snapshot == 1 &&
+        g_p99_consumed_log_frame.control_trace.check == P99ConsumedControlCheck::Slot &&
+        g_p99_consumed_log_frame.control_trace.outcome == P99ConsumedControlOutcome::ValueMismatch &&
+        g_p99_consumed_log_frame.control_trace.valid == 1 &&
+        g_p99_consumed_log_frame.control_trace.slot == -1,
+        "value-only worker transfer preserves exact current Control refusal");
     owner_allowed = true; mock_qpc_step = 0; mock_tick += 1999; invoke_catching();
     check(owner_calls == 1 && g_p99_consumed_attempts == 0, "no owner read during 2s retry cooldown");
     ++mock_tick; invoke_catching();
@@ -462,10 +529,17 @@ void delayed_arm_lifecycle() {
         "exact creation stamp selects distinct census protocol");
     check(!start_p99_consumed_arm_wait() && arm_event_calls == 1 && arm_thread_calls == 1,
         "duplicate start cannot create another waiter");
+    const auto old_token = p99_consumed_draw_token();
+    observe_p99_consumed_draw(old_token, 0, 2, kCoopPistolArtId);
+    check(old_token == UINT64_MAX && !g_p99_consumed_ready && owner_calls == 0,
+        "pre-request drawn observation is not cached or armed");
     mock_tick += 100000;
     check(arm_entry(arm_argument) == 0 && g_p99_consumed_ready &&
         g_p99_consumed_arm_ms == 110000 && arm_event_closes == 1 && armed_records == 1,
-        "successful explicit signal publishes one immutable arm timestamp");
+        "request plus fresh observed draw publishes one immutable arm timestamp");
+    check(requested_records == 1 && arm_poll_calls == 1 && owner_calls == 0 &&
+        g_p99_consumed_draw_begin_ms == 110000 && g_p99_consumed_request_ms == 110000,
+        "signal alone waits until later sender observation without owner reads");
     invoke_catching();
     check(complete_lines == 1 && g_p99_consumed_log_frame.elapsed == 0,
         "first actual capture joins from arm, not startup");
@@ -479,7 +553,7 @@ void delayed_arm_lifecycle() {
     arm_entry(arm_argument); --mock_tick; invoke_catching();
     check(g_p99_consumed_finished && owner_calls == 0, "backwards armed callback clock fails closed");
 
-    for (unsigned mode = 0; mode < 10; ++mode) {
+    for (unsigned mode = 0; mode < 13; ++mode) {
         reset(); g_p99_consumed_ready = false;
         check(start_p99_consumed_arm_wait(), "failure-case waiter starts");
         g_p99_consumed_probes = 37; g_p99_consumed_attempts = 3;
@@ -493,6 +567,9 @@ void delayed_arm_lifecycle() {
         if (mode == 7) fault_during_arm_log = true;
         if (mode == 8) g_p99_consumed_failed = true;
         if (mode == 9) failed_during_arm_log = true;
+        if (mode == 10) terminal_during_request_log = true;
+        if (mode == 11) expire_during_request_log = true;
+        if (mode == 12) emit_draw_on_poll = false;
         arm_entry(arm_argument); invoke_catching();
         check(!g_p99_consumed_ready && (g_p99_consumed_finished || g_p99_consumed_failed) && arm_event_closes == 1 &&
             owner_calls == 0 && arm_calls == 0 && process_calls == 1 && post_calls == 1,
@@ -513,6 +590,85 @@ void delayed_arm_lifecycle() {
         check(arm_event_closes == (mode >= 2 ? 1u : 0u), "failed startup closes only acquired event");
         check(!start_p99_consumed_arm_wait(), "failed arm startup cannot retry");
     }
+}
+void draw_request_edges() {
+    auto waiting = [] {
+        reset(); g_p99_consumed_ready = false;
+        g_p99_consumed_request_ms = g_p99_consumed_arm_wait_ms = mock_tick;
+        g_p99_consumed_arm_phase = P99ConsumedArmPhase::WaitingDraw;
+    };
+    waiting();
+    const auto token = p99_consumed_draw_token();
+    const auto before_logs = log_calls;
+    observe_p99_consumed_draw(UINT64_MAX, 0, 2, kCoopPistolArtId);
+    observe_p99_consumed_draw(token - 1, 0, 2, kCoopPistolArtId);
+    observe_p99_consumed_draw(token, -1, 2, kCoopPistolArtId);
+    observe_p99_consumed_draw(token, 18, 2, kCoopPistolArtId);
+    observe_p99_consumed_draw(token, 0, 0, kCoopPistolArtId);
+    observe_p99_consumed_draw(token, 0, 1, kCoopPistolArtId);
+    observe_p99_consumed_draw(token, 0, 4, kCoopPistolArtId);
+    observe_p99_consumed_draw(token, 0, 5, kCoopPistolArtId);
+    observe_p99_consumed_draw(token, 0, 2, 0);
+    observe_p99_consumed_draw(token, 0, 2, 0xC7CB8F0E);
+    g_net_role_b = false;
+    check(p99_consumed_draw_token() == UINT64_MAX, "other role cannot begin hint");
+    observe_p99_consumed_draw(token, 0, 2, kCoopPistolArtId);
+    g_net_role_b = true;
+    check(!g_p99_consumed_ready && g_p99_consumed_arm_phase == P99ConsumedArmPhase::WaitingDraw &&
+        owner_calls == 0 && mock_qpc_calls == 0 && log_calls == before_logs,
+        "nonqualifying locals never consume request, call owner or log");
+    mock_tick += 101;
+    observe_p99_consumed_draw(token, 0, 2, kCoopPistolArtId);
+    observe_p99_consumed_draw(mock_tick + 1, 0, 2, kCoopPistolArtId);
+    check(!g_p99_consumed_ready && g_p99_consumed_arm_phase == P99ConsumedArmPhase::WaitingDraw,
+        "over-age and future hints do not consume request");
+    const auto fresh = p99_consumed_draw_token();
+    mock_tick += 100;
+    observe_p99_consumed_draw(fresh, 17, 2, kCoopPistolArtId);
+    check(g_p99_consumed_ready && g_p99_consumed_arm_slot == 17 &&
+        g_p99_consumed_arm_ms == mock_tick && g_p99_consumed_draw_begin_ms == fresh,
+        "100ms inclusive timing policy accepts qualified locals without reads");
+    const auto arm_tick = g_p99_consumed_arm_ms;
+    ++mock_tick; observe_p99_consumed_draw(p99_consumed_draw_token(), 0, 2, kCoopPistolArtId);
+    check(g_p99_consumed_arm_ms == arm_tick && g_p99_consumed_arm_slot == 17,
+        "additional sender observations cannot rearm");
+
+    for (unsigned mode = 0; mode < 6; ++mode) {
+        waiting();
+        g_p99_consumed_probes = 37; g_p99_consumed_attempts = 3;
+        if (mode == 0) mock_tick += 300000;
+        if (mode == 1) g_p99_consumed_finished = true;
+        if (mode == 2) g_p99_consumed_failed = true;
+        if (mode == 3) g_p99_consumed_installed = false;
+        if (mode == 4) tick_side_effect = [] {
+            if (g_p99_consumed_arm_phase == P99ConsumedArmPhase::Claimed)
+                g_p99_consumed_arm_phase = P99ConsumedArmPhase::Stopped;
+        };
+        if (mode == 5) tick_side_effect = [] {
+            if (g_p99_consumed_arm_phase == P99ConsumedArmPhase::Claimed) mock_tick += 300000;
+        };
+        observe_p99_consumed_draw(p99_consumed_draw_token(), 0, 2, kCoopPistolArtId);
+        tick_side_effect = nullptr;
+        check(!g_p99_consumed_ready && g_p99_consumed_arm_phase == P99ConsumedArmPhase::Stopped &&
+            g_p99_consumed_probes == 37 && g_p99_consumed_attempts == 3 && owner_calls == 0,
+            "deadline/terminal/lost-claim/publication stall never publish ready or reset counts");
+    }
+    waiting();
+    std::array<std::thread, 16> contenders;
+    std::atomic<bool> release{false};
+    for (unsigned i = 0; i < contenders.size(); ++i) {
+        contenders[i] = std::thread([&release, i] {
+            const auto candidate = p99_consumed_draw_token();
+            while (!release.load(std::memory_order_acquire)) std::this_thread::yield();
+            observe_p99_consumed_draw(candidate, static_cast<int>(i), 2, kCoopPistolArtId);
+        });
+    }
+    release.store(true, std::memory_order_release);
+    for (auto& contender : contenders) contender.join();
+    check(g_p99_consumed_ready && g_p99_consumed_arm_phase == P99ConsumedArmPhase::Armed &&
+        g_p99_consumed_arm_slot >= 0 && g_p99_consumed_arm_slot < 16 &&
+        g_p99_consumed_arm_ms == mock_tick && owner_calls == 0 && log_calls == 0,
+        "concurrent sender observations commit one scalar gate without callback logs");
 }
 void parser_and_logging() {
     reset(); words[0] = 0; invoke_catching();
@@ -583,7 +739,7 @@ int main() {
     check(g_p99_consumed_capture.raw.front() == 0 && g_p99_consumed_capture.raw.back() == 0 &&
         !g_p99_consumed_ready, "own capture storage is pre-touched before ready publication");
     basic_and_failures(); time_and_limits(); parser_and_logging(); worker_and_cost(); rejected_probe_recovery();
-    delayed_arm_lifecycle();
+    delayed_arm_lifecycle(); draw_request_edges();
     reset(); // Final cleanup audit, including after the largest capture.
     fault_log = true; invoke_catching(); // Last: worker failure is intentionally irreversible.
     check(g_p99_consumed_failed && g_p99_consumed_finished,

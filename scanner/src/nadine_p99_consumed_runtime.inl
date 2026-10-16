@@ -21,6 +21,7 @@ struct P99ConsumedFrame : coop::p99_group_fiber::Binding {
     unsigned sample = 0, process0_count = 0, post_count = 0;
     unsigned probe = 0, slow_probes = 0;
     P99ConsumedOwnerReject probe_reason = P99ConsumedOwnerReject::None;
+    P99ConsumedControlTrace control_trace{};
     bool ambiguous = false, process_returned = false, post_returned = false;
     bool budget_exceeded = false, clock_valid = true;
     bool probe_only = false, probe_admitted = false, probe_budget = false;
@@ -276,14 +277,18 @@ void p99_consumed_log(const P99ConsumedFrame& frame) {
         std::snprintf(line, sizeof(line),
             "P99-CONSUMED PROBE index=%u tick=%llu elapsed=%llu end=%llu admitted=%u "
             "reason=%u cost=%llu budget=%u clock=%u limit=%llu slow=%u retry=%llu "
-            "terminal=%u capture=none",
+            "terminal=%u ctl_snapshot=%u ctl_check=%u ctl_outcome=%u ctl_valid=%u "
+            "ctl_slot=%d ctl_draw=%u ctl_grenade=%u capture=none",
             frame.probe, static_cast<unsigned long long>(frame.tick),
             static_cast<unsigned long long>(frame.elapsed), static_cast<unsigned long long>(frame.end_tick),
             static_cast<unsigned>(frame.probe_admitted), static_cast<unsigned>(frame.probe_reason),
             static_cast<unsigned long long>(frame.probe_ticks), static_cast<unsigned>(frame.probe_budget),
             static_cast<unsigned>(frame.probe_clock), static_cast<unsigned long long>(g_p99_consumed_cost_limit),
             frame.slow_probes, static_cast<unsigned long long>(frame.probe_retry_tick),
-            static_cast<unsigned>(frame.probe_terminal));
+            static_cast<unsigned>(frame.probe_terminal), frame.control_trace.snapshot,
+            static_cast<unsigned>(frame.control_trace.check),
+            static_cast<unsigned>(frame.control_trace.outcome), frame.control_trace.valid,
+            frame.control_trace.slot, frame.control_trace.draw, frame.control_trace.grenade);
         boot_log_line(line);
         return;
     }
@@ -390,7 +395,8 @@ std::uintptr_t __fastcall hooked_p99_consumed_outer(void* job) {
                 frame.tick = now; frame.elapsed = elapsed; frame.probe = g_p99_consumed_probes;
                 const auto start = p99_consumed_cost_start();
                 if (start.valid)
-                    frame.probe_admitted = seh_read_p99_consumed_owner(job, &frame.owner, &frame.probe_reason);
+                    frame.probe_admitted = seh_read_p99_consumed_owner(job, &frame.owner,
+                        &frame.probe_reason, &frame.control_trace);
                 const bool probe_ok = p99_consumed_probe_charge(frame, start);
                 if (frame.probe_admitted && probe_ok) {
                     // Successful admission is part of the same 1ms sample
@@ -438,8 +444,8 @@ std::uintptr_t __fastcall hooked_p99_consumed_outer(void* job) {
 }
 
 bool initialize_p99_consumed_census() {
-    // Main installs/validates all four sites. Only the later arm worker may
-    // publish ready; installation and initialization cannot admit game reads.
+    // Main installs/validates all four sites. Only a fresh sender observation
+    // after an explicit request may publish ready; initialization cannot.
     if (!g_module || g_p99_consumed_installed.load(std::memory_order_acquire) ||
         g_p99_consumed_ready.load(std::memory_order_acquire)) return false;
     LARGE_INTEGER frequency{};

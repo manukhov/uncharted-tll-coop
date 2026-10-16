@@ -42,6 +42,12 @@ std::wstring event_name(Protocol protocol, DWORD pid, std::uint64_t creation) {
     return {};
 }
 
+constexpr std::string_view sent_message(Protocol protocol) noexcept {
+    return protocol == Protocol::kCensus ?
+        "Census request sent to existing event; a fresh eligible observation is still required. Not an ARMED or admission confirmation.\n" :
+        "Signal sent to existing event; not an ARMED or admission confirmation.\n";
+}
+
 bool decimal(std::wstring_view text, std::uint64_t maximum, std::uint64_t& value) noexcept {
     value = 0;
     if (text.empty()) return false;
@@ -96,7 +102,15 @@ int self_test() {
         check(!decimal(invalid, maximum, value), "strict positive decimal");
     check(arm::event_name(12, 345) == L"Local\\TLL-P99-Source-Arm-v1-12-345", "exact event name");
     check(arm::wrist_event_name(12, 345) == L"Local\\TLL-P99-Wrist-Arm-v1-12-345", "exact wrist event name");
-    check(arm::census_event_name(12, 345) == L"Local\\TLL-P99-Consumed-Arm-v1-12-345", "exact census event name");
+    check(arm::census_event_name(12, 345) == L"Local\\TLL-P99-Consumed-Request-v2-12-345", "exact census request event name");
+    check(arm::census_event_name(12, 345) != L"Local\\TLL-P99-Consumed-Arm-v1-12-345",
+        "census request differs from old immediate-arm protocol");
+    check(sent_message(Protocol::kCensus) ==
+        "Census request sent to existing event; a fresh eligible observation is still required. Not an ARMED or admission confirmation.\n",
+        "census sent message confirms only request, not arming");
+    for (const auto protocol : {Protocol::kSource, Protocol::kWrist})
+        check(sent_message(protocol) == "Signal sent to existing event; not an ARMED or admission confirmation.\n",
+            "source and wrist sent messages unchanged");
     for (const auto protocol : kProtocols) {
         check(event_name(protocol, 12, 345) != event_name(protocol, 13, 345), "PID names separated");
         check(event_name(protocol, 12, 345) != event_name(protocol, 12, 346), "creation names separated");
@@ -128,6 +142,22 @@ int self_test() {
     }
     check(signal_existing(pid, creation, executable) == Result::kEvent, "selected CLI protocol also refuses missing event");
     // Event creation is confined to this private test and this process identity.
+    const auto old_census_name = L"Local\\TLL-P99-Consumed-Arm-v1-" +
+        std::to_wstring(pid) + L"-" + std::to_wstring(creation);
+    {
+        Handle absent(OpenEventW(SYNCHRONIZE, FALSE, old_census_name.c_str()));
+        if (absent) { std::cerr << "Old census self-test event unexpectedly exists; refusing to alter it\n"; return 1; }
+    }
+    Handle old_census(CreateEventW(nullptr, FALSE, FALSE, old_census_name.c_str()));
+    if (!old_census || GetLastError() == ERROR_ALREADY_EXISTS) return 1;
+    check(signal_existing_for(Protocol::kCensus, pid, creation, executable) == Result::kEvent,
+        "old immediate-arm event does not substitute for absent census request event");
+    check(WaitForSingleObject(old_census.value, 0) == WAIT_TIMEOUT,
+        "census request never signals old immediate-arm event");
+    {
+        Handle absent(OpenEventW(SYNCHRONIZE, FALSE, census_name.c_str()));
+        check(!absent, "old immediate-arm event does not create a census request event");
+    }
     for (const auto protocol : kProtocols) {
         const auto name = event_name(protocol, pid, creation);
         Handle existing(CreateEventW(nullptr, FALSE, FALSE, name.c_str()));
@@ -148,6 +178,11 @@ int self_test() {
     if (!wrist || GetLastError() == ERROR_ALREADY_EXISTS) return 1;
     Handle census(CreateEventW(nullptr, FALSE, FALSE, census_name.c_str()));
     if (!census || GetLastError() == ERROR_ALREADY_EXISTS) return 1;
+    check(SetEvent(old_census.value) != FALSE, "private old immediate-arm fixture signal succeeds");
+    check(WaitForSingleObject(census.value, 0) == WAIT_TIMEOUT,
+        "old immediate-arm signal never becomes a census request");
+    check(WaitForSingleObject(old_census.value, 0) == WAIT_OBJECT_0,
+        "old immediate-arm fixture signal stays in its own namespace");
     const auto selected_event = [&](Protocol protocol) {
         switch (protocol) {
         case Protocol::kSource: return source.value;
@@ -160,6 +195,7 @@ int self_test() {
         check(WaitForSingleObject(source.value, 0) == WAIT_TIMEOUT, "refusal did not signal source event");
         check(WaitForSingleObject(wrist.value, 0) == WAIT_TIMEOUT, "refusal did not signal wrist event");
         check(WaitForSingleObject(census.value, 0) == WAIT_TIMEOUT, "refusal did not signal census event");
+        check(WaitForSingleObject(old_census.value, 0) == WAIT_TIMEOUT, "operation did not signal old census event");
     };
     for (const auto protocol : kProtocols) {
         check(signal_existing_for(protocol, 0, creation, executable) == Result::kArguments, "zero PID refused");
@@ -182,6 +218,8 @@ int self_test() {
             if (other != protocol)
                 check(WaitForSingleObject(selected_event(other), 0) == WAIT_TIMEOUT,
                     "signal never crosses protocol namespace");
+        check(WaitForSingleObject(old_census.value, 0) == WAIT_TIMEOUT,
+            "selected protocol signal never reaches old immediate-arm census");
     }
     check(signal_existing(pid, creation, executable) == Result::kSent, "compile-time CLI protocol signals existing event");
     check(WaitForSingleObject(selected_event(kProtocol), 0) == WAIT_OBJECT_0,
@@ -205,7 +243,7 @@ int wmain(int argc, wchar_t** argv) {
     }
     const auto result = signal_existing(static_cast<DWORD>(pid), creation, fs::path(argv[6]));
     if (result == Result::kSent)
-        std::cout << "Signal sent to existing event; not an ARMED or admission confirmation.\n";
+        std::cout << sent_message(kProtocol);
     else
         std::cerr << "Signal refused/failed; code=" << static_cast<int>(result) << '\n';
     return static_cast<int>(result);

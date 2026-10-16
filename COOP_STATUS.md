@@ -40591,3 +40591,96 @@ still the late-arm exam. Rebuild normal OFF after this process exits and before
 any unrelated launch; do not kill it just to replace the DLL. No new native
 entity/label or IDB write; existing sole-IDB labels remain current. Pre-existing
 untracked tmp/ is untouched.
+
+### 2026-10-16 STATIC: request census at141A928F0 from a fresh observed P99 draw
+
+Continuation starts at2fdb215; old PID12356 is absent. Both hand defects remain
+open. No pose/attachment/provider change and no new native hook or IDB entity.
+The old chat-ready timing protocol is not repeated. Existing sole-IDB labels
+remain current; this unit changes our observer orchestration and diagnostics.
+
+Hypothesis: a one-shot request accepted BEFORE the user's draw, then gated by
+the sender's next fresh state2/current-slot/P99-art observation, eliminates the
+chat and worker-log delays from selecting the initial probe. It does NOT prove
+steady idle, owner lifetime or that the unchanged reader fits its1ms limit.
+Competing explanations remain (a) real owner/control mismatch despite a drawn
+P99, (b) stale/changed values between sender and animation callbacks, and
+(c) independent slow probe interval. Exact Control trace distinguishes some
+refusals; elapsed QPC alone still cannot assign CPU/VQ/scheduling cost.
+
+Three retained evidence kinds for this narrowly changed exam:
+1. Native disassembly/writes:1410AAF20 publishes current slot at1410AAF89;
+   ApplyState1410AAFB0 publishes state2 at1410AB701, then refreshes at1410AB717.
+   A requested slot/CommitDrawn alone cannot replace a state2 observation.
+2. Call/data flow in existing mod: hooked_update -> net_tick ->
+   send_local_player_state already reads Player+1D88/controller+120/+134 and
+   resolves actual current-slot art. Token is acquired BEFORE those reads;
+   notification consumes their immediate locals after the existing art getter.
+   No additional game read/getter/write or native-site change was introduced.
+3. Structural/runtime consistency: the installed-but-unarmed path was stock-only
+   in PID12356; the arm-relative outer already gates all owner/Fg/capture work.
+   Exact owner read/query transcripts now match traced/untraced fixtures for
+   both snapshots. No sender hint replaces that full independent admission.
+
+Implemented protocol: Local\\TLL-P99-Consumed-Request-v2-PID-creation, still
+accessed through tll_p99_consumed_arm with exact PID/creation/absolute image.
+Old v1 direct-arm events and source/wrist events cannot substitute. Worker
+receives the request, logs ARM-REQUESTED, rechecks deadline/terminal state, then
+release-publishes WaitingDraw. No earlier/in-flight sender values are cached.
+Sender token precedes the existing reads; roleB/state2/slot0..17/art8075397D
+and <=100ms hint age are required.100ms is a conservative timing policy, NOT
+a finding about steady idle. Stale/nonqualifying hints consume no census probe.
+CAS WaitingDraw->Claimed, a fresh final clock check, then CAS Claimed->Armed
+precede ready release; a cancellation winner can never transiently enable
+ready. No log, wait or handle call occurs in the scalar tap. Immutable values
+are published to the worker; its ARMED marker is ASYNC and may FOLLOW a probe.
+Marker carries begin/request/arm ticks plus ready/terminal observations, not
+an admission promise. Total admission wait is300s from installation; capture
+is120s from observed arm. OS/log blocking is not a guaranteed worker-exit SLA.
+Terminal flags/counters,8samples/600probes, one slow-refusal retry,1ms combined
+allowance, native frames/sites and failed writer OFF states are unchanged.
+
+Control trace is value-only metadata in the existing initial timed owner read:
+snapshot1/2; ctl_check1weapon-pointer,2vtable,3owner,4slot,5draw,
+6grenade-pointer,7vtable,8owner,9state;0none. ctl_outcome1read-refused,
+2value-mismatch,3SEH,4Control-passed,0not-established. ctl_valid bits1slot,
+2draw,4grenade tell which scalar reads completed in THAT snapshot. Negative
+slot still short-circuits before draw read. Later owner recopy readers remain
+untraced; rejected owner output stays zero. PROBE worker prints copied values
+only and never inspects an earlier capture buffer. No new game reads/timers.
+
+Fresh normal both-examsOFF main DLL built after old process exit, SHA256
+A6CCE774382516B7370725DF0DFA047F102BFE9F4858FB4E6AFE97234C30DE3C.
+All11 scoped CTest suites pass; runtime4259checks/0 repeated8times, owner441/0,
+installer35/0, each source/wrist/census CLI178/0. Tests cover request without
+observation, no replay, wrong art/state/role/slot,100ms/300s/120s boundaries,
+clock stalls, cancellation before ready,16 concurrent hints, terminal/no rearm,
+exact Control worker log and identical read/query transcripts. Owner SEH tests
+use real protected-memory loads; controlled refusal hook exists ONLY in tests.
+Independent source review caught and closed ready-before-CAS and stale-clock
+races. Independent final optimized-fixture ABI review passes: Process still
+forwards7args/EAX with context+A8; post still uses entryreturnslot+30 and full
+RAX; outer native/bridge branches and FLS/lease cleanup remain exclusive.
+Only frame flag offsets movedA8..AB->C4..C7 for the28-byte ControlTrace.
+Final OBJ05EDA7BB08C75959A28B1A3FB795695A2C1E27AE7898EEAAEC3C4B329AE67FA3,
+EXEFDB879618085543CC4D3B1E59BBB28AD42568304D43EE18F4CBBA787A5932412.
+Local dump: reports/p99_consumed_request_v2_abi_final_object.txt. All four
+ordered wrapper/finally blocks match the reviewed prior build exactly. This
+is fixture ABI evidence, not main-DLL byte identity or live cost admission.
+
+Falsifiable prediction BEFORE fresh game: install emits UNARMED/ARM-WAIT with
+request-v2 and no probes. Signal the exact fresh event ONCE before user Draw;
+require ARM-REQUESTED, still no probes until a later qualifying observation.
+User loads local Nadine, draws P99, releases controls and stands without aim
+or movement for about15s; no chat reply is needed to START capture. Expect an
+observed-draw ARMED and either actual admitted command/arm samples or precise
+current Control/budget refusal. A second slow refusal is terminal, not a reason
+to redraw/rearm/reinject. If no fresh eligible hint appears by300s, stop without
+probing. This distinguishes delayed-chat timing from persistent admission
+failure; it predicts NO visible hand correction. Preserve native behavior.
+
+Final review passed; this bounded diagnostic exam is admitted. Commit/push
+this unit, build fresh EXAM=ON
+and immediately launch/inject ONE instance, then request once after verified
+ARM-WAIT. No second instance or game input. Record exact hashes/PID/creation
+and checkpoint/result below. Do not revert to a chat-ready signal.

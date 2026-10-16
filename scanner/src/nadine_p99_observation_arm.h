@@ -14,10 +14,11 @@ namespace coop::p99_observation_arm {
     return L"Local\\TLL-P99-Wrist-Arm-v1-" + std::to_wstring(pid) +
         L"-" + std::to_wstring(creation);
 }
-// The consumed-command census has its own one-shot readiness protocol. Neither
-// source nor wrist observation signals may arm this separate collector.
+// This requests the consumed-command census; it does not arm it immediately.
+// A fresh eligible observation is still required. The v2 namespace cannot
+// signal the old immediate-arm census or either source/wrist observer.
 [[nodiscard]] inline std::wstring census_event_name(DWORD pid, std::uint64_t creation) {
-    return L"Local\\TLL-P99-Consumed-Arm-v1-" + std::to_wstring(pid) +
+    return L"Local\\TLL-P99-Consumed-Request-v2-" + std::to_wstring(pid) +
         L"-" + std::to_wstring(creation);
 }
 

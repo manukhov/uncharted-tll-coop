@@ -8,6 +8,22 @@ enum class P99ConsumedOwnerReject : std::uint32_t {
     Control, Weapon, Motion, Changed, ReadFault
 };
 
+enum class P99ConsumedControlCheck : std::uint32_t {
+    None, WeaponPointer, WeaponVtable, WeaponOwner, Slot, Draw,
+    GrenadePointer, GrenadeVtable, GrenadeOwner, GrenadeState
+};
+enum class P99ConsumedControlOutcome : std::uint32_t {
+    None, ReadRefused, ValueMismatch, Seh, Passed
+};
+struct P99ConsumedControlTrace {
+    std::uint32_t snapshot = 0;
+    P99ConsumedControlCheck check = P99ConsumedControlCheck::None;
+    P99ConsumedControlOutcome outcome = P99ConsumedControlOutcome::None;
+    std::uint32_t valid = 0; // 1=slot, 2=draw, 4=grenade; only this snapshot.
+    std::int32_t slot = -1;
+    std::uint32_t draw = 0, grenade = 0;
+};
+
 void p99_consumed_owner_stage(P99ConsumedOwnerReject* reason,
     P99ConsumedOwnerReject stage) {
     if (reason != nullptr) *reason = stage;
@@ -80,13 +96,29 @@ struct P99ConsumedRead {
         return true;
     }
     template<class T> bool read(std::uintptr_t base, std::size_t offset, T& output) {
+#if defined(TLL_P99_CONSUMED_OWNER_TEST)
+        if (!p99_consumed_fixture_read(base, offset, sizeof(T))) return false;
+#endif
         return base != 0 && offset <= std::numeric_limits<std::uintptr_t>::max() - base &&
             copy(base + offset, &output, sizeof(output));
     }
 };
 
+template<class T> bool p99_read_consumed_control(P99ConsumedRead& reader,
+    std::uintptr_t base, std::size_t offset, T& output, P99ConsumedControlTrace* trace,
+    P99ConsumedControlCheck check) {
+    if (trace) { trace->check = check; trace->outcome = P99ConsumedControlOutcome::None; }
+    if (reader.read(base, offset, output)) return true;
+    if (trace) trace->outcome = P99ConsumedControlOutcome::ReadRefused;
+    return false;
+}
+bool p99_consumed_control_matches(bool matches, P99ConsumedControlTrace* trace) {
+    if (!matches && trace) trace->outcome = P99ConsumedControlOutcome::ValueMismatch;
+    return matches;
+}
+
 bool p99_read_consumed_owner_fields(void* job, P99ConsumedOwner& value,
-    P99ConsumedOwnerReject* reason = nullptr) {
+    P99ConsumedOwnerReject* reason = nullptr, P99ConsumedControlTrace* trace = nullptr) {
     value = {};
     p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::Disabled);
     if (g_module == 0 || !g_state_net.enabled || !g_net_role_b) return false;
@@ -137,16 +169,34 @@ bool p99_read_consumed_owner_fields(void* job, P99ConsumedOwner& value,
         !r.read(value.fg, kFgAnimDataJointCacheLocalPoseOffset, value.local_pose) ||
         !r.range(value.local_pose, 31 * 48)) return false;
     p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::Control);
-    if (!r.read(value.player, kPlayerWeaponControllerOffset, value.control) ||
-        !r.read(value.control, 0, p) || p != g_module + kPlayerWeaponControllerVtableRva ||
-        !r.read(value.control, 0x108, p) || p != value.player ||
-        !r.read(value.control, kWeaponCtrlCurrentSlotOffset, value.slot) ||
-        value.slot < 0 || value.slot >= 18 ||
-        !r.read(value.control, kWeaponCtrlDrawStateOffset, word) || word != 2 ||
-        !r.read(value.player, kPlayerFastGrenadeControllerOffset, value.grenade_control) ||
-        !r.read(value.grenade_control, 0, p) || p != g_module + kFastGrenadeControllerVtableRva ||
-        !r.read(value.grenade_control, 0x108, p) || p != value.player ||
-        !r.read(value.grenade_control, 0x120, word) || word != 0) return false;
+    using Control = P99ConsumedControlCheck;
+    // Same reads, order and short-circuit predicates as the original chain.
+    // Trace copies ONLY already-read scalars; it never fills in skipped fields.
+    if (!p99_read_consumed_control(r, value.player, kPlayerWeaponControllerOffset,
+            value.control, trace, Control::WeaponPointer) ||
+        !p99_read_consumed_control(r, value.control, 0, p, trace, Control::WeaponVtable) ||
+        !p99_consumed_control_matches(p == g_module + kPlayerWeaponControllerVtableRva, trace) ||
+        !p99_read_consumed_control(r, value.control, 0x108, p, trace, Control::WeaponOwner) ||
+        !p99_consumed_control_matches(p == value.player, trace) ||
+        !p99_read_consumed_control(r, value.control, kWeaponCtrlCurrentSlotOffset,
+            value.slot, trace, Control::Slot)) return false;
+    if (trace) { trace->slot = value.slot; trace->valid |= 1u; }
+    if (!p99_consumed_control_matches(value.slot >= 0 && value.slot < 18, trace) ||
+        !p99_read_consumed_control(r, value.control, kWeaponCtrlDrawStateOffset,
+            word, trace, Control::Draw)) return false;
+    if (trace) { trace->draw = word; trace->valid |= 2u; }
+    if (!p99_consumed_control_matches(word == 2, trace) ||
+        !p99_read_consumed_control(r, value.player, kPlayerFastGrenadeControllerOffset,
+            value.grenade_control, trace, Control::GrenadePointer) ||
+        !p99_read_consumed_control(r, value.grenade_control, 0, p, trace, Control::GrenadeVtable) ||
+        !p99_consumed_control_matches(p == g_module + kFastGrenadeControllerVtableRva, trace) ||
+        !p99_read_consumed_control(r, value.grenade_control, 0x108, p, trace, Control::GrenadeOwner) ||
+        !p99_consumed_control_matches(p == value.player, trace) ||
+        !p99_read_consumed_control(r, value.grenade_control, 0x120, word,
+            trace, Control::GrenadeState)) return false;
+    if (trace) { trace->grenade = word; trace->valid |= 4u; }
+    if (!p99_consumed_control_matches(word == 0, trace)) return false;
+    if (trace) { trace->check = Control::None; trace->outcome = P99ConsumedControlOutcome::Passed; }
     // Native1410A1F90 uses these weak records but writes weapon+72 on success.
     // Read ONLY the current slot; neither call that vslot nor scan other arts.
     const auto record_offset = 0x148 + static_cast<std::size_t>(value.slot) * 0x10;
@@ -172,14 +222,17 @@ bool p99_read_consumed_owner_fields(void* job, P99ConsumedOwner& value,
 }
 
 bool seh_read_p99_consumed_owner(void* job, P99ConsumedOwner* output,
-    P99ConsumedOwnerReject* reason = nullptr) {
+    P99ConsumedOwnerReject* reason = nullptr, P99ConsumedControlTrace* trace = nullptr) {
+    if (trace) *trace = {};
     p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::Input);
     if (output == nullptr) return false;
     *output = {};
     __try {
         P99ConsumedOwner before{}, after{};
-        if (!p99_read_consumed_owner_fields(job, before, reason) ||
-            !p99_read_consumed_owner_fields(job, after, reason)) return false;
+        if (trace) trace->snapshot = 1;
+        if (!p99_read_consumed_owner_fields(job, before, reason, trace)) return false;
+        if (trace) { *trace = {}; trace->snapshot = 2; }
+        if (!p99_read_consumed_owner_fields(job, after, reason, trace)) return false;
         p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::Changed);
         if (!same_owner(before, after)) return false;
         *output = after;
@@ -187,6 +240,8 @@ bool seh_read_p99_consumed_owner(void* job, P99ConsumedOwner* output,
         return true;
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         *output = {};
+        if (trace && trace->check != P99ConsumedControlCheck::None)
+            trace->outcome = P99ConsumedControlOutcome::Seh;
         p99_consumed_owner_stage(reason, P99ConsumedOwnerReject::ReadFault);
         return false;
     }

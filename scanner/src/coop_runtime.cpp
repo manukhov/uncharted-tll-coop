@@ -1991,6 +1991,9 @@ void* get_weapon_from_slot(void* player, int slot);
 bool seh_find_exact_controller_inventory_art_raw(
     void* controller, std::uint32_t art, void** weapon_out, int* slot_out);
 bool read_weapon_draw_state(void* player, int& slot, std::uint32_t& state);
+std::uint64_t p99_consumed_draw_token();
+void observe_p99_consumed_draw(std::uint64_t token, int slot,
+    std::uint32_t state, std::uint32_t art);
 std::uint32_t weapon_art_id_from_object(void* weapon);
 bool seh_weapon_parent_resolves_to_owner(void* weapon, void* owner);
 bool seh_read_weapon_attachment_state(
@@ -21454,11 +21457,15 @@ void send_local_player_state() {
         int draw_slot = -1;
         std::uint32_t draw_state = 0;
         bool suppress_held_weapon_wire = false;
+        const auto census_draw_token = p99_consumed_draw_token();
         if (read_weapon_draw_state(weapon_src, draw_slot, draw_state)) {
             if ((draw_state == 2 || draw_state == 4) && draw_slot >= 0 &&
                 draw_slot < 18) {
                 const std::uint32_t cur_art = weapon_art_id_from_object(
                     get_weapon_from_slot(weapon_src, draw_slot));
+                // Timing only: reuse these fresh locals, never add a getter or
+                // use the held_art fallback. Census ownership is checked later.
+                observe_p99_consumed_draw(census_draw_token, draw_slot, draw_state, cur_art);
                 if (cur_art != 0) {
                     held_art = cur_art;
                     weapon_mode = static_cast<std::uint8_t>(draw_slot);
@@ -81574,9 +81581,9 @@ DWORD WINAPI install_hook(void*) {
     }
     boot_log_line(
 #if defined(TLL_P99_CONSUMED_CENSUS_EXAM)
-        "TLL co-op runtime init 2026-10-15p99-consumed-late-arm "
+        "TLL co-op runtime init 2026-10-16p99-consumed-draw-request "
 #else
-        "TLL co-op runtime init 2026-10-15p99-consumed-safe "
+        "TLL co-op runtime init 2026-10-16p99-consumed-safe "
 #endif
         "(completed read-only reach census disabled; rejected support-target and elbow-roll writers disabled; stock arm/finger paths; appearance and AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {
@@ -82153,7 +82160,7 @@ DWORD WINAPI install_hook(void*) {
         const bool installed = state_net_started && install_p99_consumed_census();
         const bool waiting = installed && start_p99_consumed_arm_wait();
         boot_log_line(waiting
-            ? "P99-CONSUMED WAITING load/draw P99 first; explicit PID/creation-bound arm required; stock-only until ARMED; no grip correction"
+            ? "P99-CONSUMED WAITING request capture before draw; explicit PID/creation-bound request then fresh P99 state2 required; no grip correction"
             : "P99-CONSUMED NOT ARMED; see install/wait status; no runtime GO");
     }
     if constexpr (kEnableP99SourceObservation && !kEnableRejectedNadineWeaponRuntimeProbes) {

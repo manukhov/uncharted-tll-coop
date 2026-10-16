@@ -30,6 +30,27 @@ enum class Interference { none, turn_over, fault_after_query, fault_owner_after_
 Interference interference = Interference::none;
 std::uintptr_t trigger_address = 0, fixture_base = 0;
 unsigned query_count = 0, interfere_at_query = 0;
+struct ReaderOperation {
+    unsigned kind = 0;
+    std::uintptr_t base = 0;
+    std::size_t offset = 0, size = 0;
+    bool operator==(const ReaderOperation& other) const {
+        return kind == other.kind && base == other.base && offset == other.offset && size == other.size;
+    }
+};
+std::array<ReaderOperation, 512> reader_operations{};
+std::size_t reader_operation_count = 0;
+bool record_reader_operations = false, reader_operations_overflow = false;
+enum class ControlFault { None, ReadRefused, Mismatch, Protect };
+ControlFault control_fault = ControlFault::None;
+std::uintptr_t control_fault_address = 0;
+std::uint64_t control_fault_value = 0;
+unsigned control_fault_snapshot = 0, observed_snapshot = 0;
+void record_reader_operation(unsigned kind, std::uintptr_t base, std::size_t offset, std::size_t size) {
+    if (!record_reader_operations) return;
+    if (reader_operation_count == reader_operations.size()) { reader_operations_overflow = true; return; }
+    reader_operations[reader_operation_count++] = {kind, base, offset, size};
+}
 // Opt-in fixture measurements: real VirtualQuery/reader, no mocked latency.
 // These single-thread counters are bounded; printing is outside timed spans.
 bool benchmark_active = false, benchmark_clock_valid = true;
@@ -38,7 +59,28 @@ unsigned benchmark_queries = 0;
 template<class T> void put(std::uintptr_t address, T value) {
     std::memcpy(reinterpret_cast<void*>(address), &value, sizeof(value));
 }
+bool p99_consumed_fixture_read(std::uintptr_t base, std::size_t offset, std::size_t size) {
+    if (!record_reader_operations) return true;
+    record_reader_operation(1, base, offset, size);
+    if (base == fixture_base && offset == 0) ++observed_snapshot;
+    if (control_fault == ControlFault::None || observed_snapshot != control_fault_snapshot ||
+        base + offset != control_fault_address) return true;
+    const auto action = control_fault;
+    control_fault = ControlFault::None;
+    if (action == ControlFault::ReadRefused) return false; // Controlled range/read-refusal seam.
+    if (action == ControlFault::Mismatch) {
+        std::memcpy(reinterpret_cast<void*>(base + offset), &control_fault_value, size);
+    } else if (action == ControlFault::Protect) {
+        // The reader already cached this committed region. Changing protection
+        // now exercises its actual volatile load and actual enclosing SEH.
+        DWORD old = 0;
+        VirtualProtect(reinterpret_cast<void*>((base + offset) & ~std::uintptr_t{0xFFF}),
+            0x1000, PAGE_NOACCESS, &old);
+    }
+    return true;
+}
 SIZE_T WINAPI fixture_query(LPCVOID address, PMEMORY_BASIC_INFORMATION mbi, SIZE_T size) {
+    record_reader_operation(2, reinterpret_cast<std::uintptr_t>(address), 0, size);
     LARGE_INTEGER begin{}, end{};
     const bool measure = benchmark_active;
     const bool clock_begin = !measure || QueryPerformanceCounter(&begin) != FALSE;
@@ -77,7 +119,9 @@ SIZE_T WINAPI fixture_query(LPCVOID address, PMEMORY_BASIC_INFORMATION mbi, SIZE
     return result;
 }
 #define VirtualQuery fixture_query
+#define TLL_P99_CONSUMED_OWNER_TEST
 #include "nadine_p99_consumed_owner.inl"
+#undef TLL_P99_CONSUMED_OWNER_TEST
 #undef VirtualQuery
 
 namespace {
@@ -102,6 +146,10 @@ struct Fixture {
         fixture_base = base;
         interference = Interference::none;
         trigger_address = interfere_at_query = query_count = 0;
+        record_reader_operations = reader_operations_overflow = false;
+        reader_operation_count = 0; observed_snapshot = 0;
+        control_fault = ControlFault::None; control_fault_address = 0;
+        control_fault_value = 0; control_fault_snapshot = 0;
         g_state_net.enabled = true; g_net_role_b = true;
         g_local_reload_level.store(false); g_cached_local_input_buttons.store(0);
         put(base, base + 0x100); put(base + 8, std::uint32_t{0x123u});
@@ -148,6 +196,128 @@ struct Fixture {
             same_owner(owner, P99ConsumedOwner{}) && reason == expected, name);
     }
 };
+
+struct ControlTraceRun {
+    std::array<ReaderOperation, 512> operations{};
+    std::size_t count = 0;
+    P99ConsumedOwner owner{};
+    Reject reason = Reject::None;
+    P99ConsumedControlTrace trace{};
+    bool accepted = false;
+};
+ControlTraceRun run_control_trace(Fixture& f, bool traced, unsigned snapshot,
+    std::size_t offset, ControlFault fault, std::uint64_t bad_value = 0) {
+    f.reset();
+    record_reader_operations = true; control_fault_snapshot = snapshot;
+    control_fault_address = f.base + offset; control_fault = fault;
+    control_fault_value = bad_value;
+    ControlTraceRun result{};
+    result.owner.player = 42; result.owner.slot = 12;
+    result.trace.snapshot = 77; result.trace.valid = 7;
+    result.trace.slot = 9; result.trace.draw = result.trace.grenade = 123;
+    result.accepted = seh_read_p99_consumed_owner(f.job(), &result.owner, &result.reason,
+        traced ? &result.trace : nullptr);
+    check(!reader_operations_overflow, "bounded read/query transcript does not truncate");
+    result.count = reader_operation_count;
+    std::copy_n(reader_operations.begin(), result.count, result.operations.begin());
+    record_reader_operations = false;
+    return result;
+}
+void compare_control_runs(const ControlTraceRun& plain, const ControlTraceRun& traced) {
+    check(plain.accepted == traced.accepted && plain.reason == traced.reason &&
+        same_owner(plain.owner, traced.owner), "trace preserves acceptance, reason and exact owner");
+    check(plain.count == traced.count &&
+        std::equal(plain.operations.begin(), plain.operations.begin() + plain.count, traced.operations.begin()),
+        "traced/untraced logical reads and VirtualQuery calls are identical and ordered");
+}
+void control_trace_tests(Fixture& f) {
+    using Check = P99ConsumedControlCheck;
+    using Outcome = P99ConsumedControlOutcome;
+    const std::array<std::size_t, 9> offsets{
+        0x2D88, 0x7000, 0x7108, 0x7120, 0x7134, 0x2E50, 0x8000, 0x8108, 0x8120};
+    for (unsigned snapshot : {1u, 2u}) for (unsigned i = 0; i < offsets.size(); ++i) {
+        const auto check_id = static_cast<Check>(i + 1);
+        for (const auto fault : {ControlFault::ReadRefused, ControlFault::Protect}) {
+            const auto plain = run_control_trace(f, false, snapshot, offsets[i], fault);
+            const auto traced = run_control_trace(f, true, snapshot, offsets[i], fault);
+            compare_control_runs(plain, traced);
+            const auto valid = i <= 3 ? 0u : i == 4 ? 1u : 3u;
+            check(!traced.accepted && same_owner(traced.owner, P99ConsumedOwner{}) &&
+                traced.reason == (fault == ControlFault::Protect ? Reject::ReadFault : Reject::Control) &&
+                traced.trace.snapshot == snapshot && traced.trace.check == check_id &&
+                traced.trace.outcome == (fault == ControlFault::Protect ? Outcome::Seh : Outcome::ReadRefused),
+                "every Control read distinguishes refusal from real SEH in both snapshots");
+            check(traced.trace.valid == valid &&
+                ((valid & 1) || traced.trace.slot == -1) &&
+                ((valid & 2) || traced.trace.draw == 0) && traced.trace.grenade == 0,
+                "read failure preserves only already-completed scalar reads of this snapshot");
+            const auto& last = traced.operations[traced.count - 1];
+            check(last.kind == 1 && last.base + last.offset == f.base + offsets[i],
+                "failed Control read short-circuits all later reads and queries");
+        }
+        if (i == 0 || i == 5) continue; // Pointer reads have no separate non-null predicate.
+        const auto bad = i == 3 ? UINT64_C(0xFFFFFFFF) : i == 8 ? 1u : 0u;
+        const auto plain = run_control_trace(f, false, snapshot, offsets[i], ControlFault::Mismatch, bad);
+        const auto traced = run_control_trace(f, true, snapshot, offsets[i], ControlFault::Mismatch, bad);
+        compare_control_runs(plain, traced);
+        const auto valid = i < 3 ? 0u : i == 3 ? 1u : i < 8 ? 3u : 7u;
+        check(!traced.accepted && same_owner(traced.owner, P99ConsumedOwner{}) &&
+            traced.reason == Reject::Control && traced.trace.snapshot == snapshot &&
+            traced.trace.check == check_id && traced.trace.outcome == Outcome::ValueMismatch &&
+            traced.trace.valid == valid, "every Control value predicate reports both snapshots exactly");
+        if (i == 3) check(traced.trace.slot == -1 && traced.trace.draw == 0 &&
+            traced.trace.grenade == 0, "negative slot is valid evidence, draw/grenade remain unread");
+        if (i == 4) check(traced.trace.slot == 0 && traced.trace.draw == 0 &&
+            traced.trace.grenade == 0, "draw mismatch captures value without reading grenade state");
+        if (i == 8) check(traced.trace.slot == 0 && traced.trace.draw == 2 &&
+            traced.trace.grenade == 1, "grenade mismatch retains all three read scalars");
+        const auto& last = traced.operations[traced.count - 1];
+        check(last.kind == 1 && last.base + last.offset == f.base + offsets[i],
+            "mismatched Control value never executes a later read");
+    }
+    for (unsigned snapshot : {1u, 2u}) {
+        const auto plain = run_control_trace(f, false, snapshot, 0x7120, ControlFault::Mismatch, 18);
+        const auto traced = run_control_trace(f, true, snapshot, 0x7120, ControlFault::Mismatch, 18);
+        compare_control_runs(plain, traced);
+        check(traced.trace.snapshot == snapshot && traced.trace.check == Check::Slot &&
+            traced.trace.outcome == Outcome::ValueMismatch && traced.trace.valid == 1 && traced.trace.slot == 18,
+            "upper slot bound remains a distinct observed value");
+        for (const auto offset : {0x2D88u, 0x2E50u}) {
+            const auto null_plain = run_control_trace(f, false, snapshot, offset, ControlFault::Mismatch);
+            const auto null_traced = run_control_trace(f, true, snapshot, offset, ControlFault::Mismatch);
+            compare_control_runs(null_plain, null_traced);
+            check(null_traced.trace.snapshot == snapshot && null_traced.reason == Reject::Control &&
+                null_traced.trace.check == (offset == 0x2D88 ? Check::WeaponVtable : Check::GrenadeVtable) &&
+                null_traced.trace.outcome == Outcome::ReadRefused,
+                "null controller remains a failed subsequent vtable read, not a new pointer guard");
+        }
+    }
+    const auto plain = run_control_trace(f, false, 0, 0, ControlFault::None);
+    const auto traced = run_control_trace(f, true, 0, 0, ControlFault::None);
+    compare_control_runs(plain, traced);
+    check(traced.accepted && traced.trace.snapshot == 2 && traced.trace.check == Check::None &&
+        traced.trace.outcome == Outcome::Passed && traced.trace.valid == 7 &&
+        traced.trace.slot == 0 && traced.trace.draw == 2 && traced.trace.grenade == 0,
+        "successful owner exposes only second-snapshot Control values");
+    // Verify the unchanged nine-read subsequence independently of traced-vs-
+    // untraced equality, so both paths cannot silently acquire extra fields.
+    unsigned found = 0;
+    for (std::size_t n = 0; n < traced.count; ++n) {
+        const auto& operation = traced.operations[n];
+        if (operation.kind != 1) continue;
+        const auto absolute = operation.base + operation.offset;
+        if (std::find(offsets.begin(), offsets.end(), absolute - f.base) == offsets.end()) continue;
+        check(absolute == f.base + offsets[found % offsets.size()], "Control read order matches original chain");
+        ++found;
+    }
+    check(found == 18, "exactly nine Control reads in each of two successful snapshots");
+    f.reset();
+    P99ConsumedControlTrace early{}; early.snapshot = 99; early.valid = 7;
+    Reject reason{}; P99ConsumedOwner owner{};
+    check(!seh_read_p99_consumed_owner(nullptr, &owner, &reason, &early) &&
+        early.snapshot == 1 && early.valid == 0 && early.check == Check::None && early.outcome == Outcome::None,
+        "failure before Control cannot leak a stale trace");
+}
 }
 
 namespace {
@@ -333,6 +503,7 @@ int main(int argc, char** argv) {
         reason == Reject::NativeJob &&
         !seh_read_p99_consumed_owner(f.job(), nullptr, &reason) && reason == Reject::Input &&
         !seh_copy_p99_consumed_arms(owner, nullptr), "null arguments");
+    control_trace_tests(f);
     std::printf("P99 consumed owner: %u checks, %u failures\n", checks, failures);
     return failures ? 1 : 0;
 }

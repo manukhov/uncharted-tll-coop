@@ -141,13 +141,16 @@ Actual ARMED then ONLY two Control refusals at0/2000ms,43.7366/23.7300ms elapsed
 QPC; second terminal, ZERO commands/arms. Do not signal/rearm/reinject/restart
 this process or ask the user to repeat the terminal scenario. Chat-ready timing
 is REJECTED; exact Control predicate and elapsed-cost cause remain unknown.
-NEXT design pre-request -> next fresh existing state2/current-slot P99-art scalar
-notification in send_local_player_state, with no new game reads/native hook;
-preserve full owner admission and1ms. Add only already-read Control trace
-metadata with transcript-equivalence tests; see latest COOP_STATUS for gates
-and alternatives. Neither design is implemented or a new runtime GO.
-PID12356 remains alive. Cache both examsOFF; disk/loaded DLL still examON until
-the process exits and normal OFF is rebuilt. Do not kill it just to relink.
+IMPLEMENTED2026-10-16: request-v2 -> next fresh existing state2/current-slot
+P99-art scalar notification. Pre-read token,100ms hint-age policy, one-shot
+CAS-before-ready, async ARMED log; no new game reads/native hook/writer. Full
+owner admission and1ms retained. Precise Control trace uses only already-read
+values and snapshot-local validity bits; read/query-equivalence tests pass.
+All11 scoped CTest pass; runtime4259/0 repeated8times, owner441/0, each CLI178/0.
+Old PID12356 absent; normal OFF DLL rebuilt. Latest COOP_STATUS defines fresh
+exam prediction and launch gates: request BEFORE user's draw, not after chat.
+After final ABI review/commit/push and fresh EXAM=ON build, launch/inject ONE
+instance and request ONCE after verified ARM-WAIT. No rearm/input/second game.
 NEXT only after actual complete records: identify copied cmd6 clip IDs and
 cmd7/9/11 folds at early/late samples, compare pre/post+408 geometry, and find
 the first incompatible stage. A complete record is not a repaired hand;
