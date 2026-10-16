@@ -96,8 +96,10 @@ void observation(const obs::Observation& o, obs::Status status) {
     std::printf("{\"status\":\"%s\",\"record\":", obs::status_name(status)); pointer(o.entry.record);
     std::printf(",\"id\":%u,\"actor\":", o.entry.id); pointer(o.actor);
     std::printf(",\"debug_name_abbreviated_not_identity\":"); json_text(o.debug_name.data(), o.debug_name.size());
-    std::printf(",\"process_flags\":%u,\"owner_flags360\":%u,\"hp\":", o.process_flags, o.owner_flags360);
-    if (o.health_known) std::printf("%d", o.hp); else std::printf("null");
+    std::printf(",\"process_flags\":%u,\"owner_flags360\":%u,\"raw_hp38\":", o.process_flags, o.owner_flags360);
+    if (o.health_known) std::printf("%d", o.raw_hp38); else std::printf("null");
+    std::printf(",\"previous_effective_hp3c\":");
+    if (o.health_known) std::printf("%d", o.previous_effective_hp3c); else std::printf("null");
     std::printf(",\"composite\":"); pointer(o.composite);
     std::printf(",\"ragdoll_unfollowed\":"); pointer(o.ragdoll);
     std::printf(",\"optional_body_unfollowed\":"); pointer(o.optional_body);
@@ -112,7 +114,9 @@ void observation(const obs::Observation& o, obs::Status status) {
         std::printf("%s", obs::has_root_import_mapping(o) ? "true" : "false");
     else std::printf("null");
     std::printf(",\"local_pose\":"); floats(o.local_pose);
-    std::printf(",\"derived_pose\":"); floats(o.derived_pose);
+    std::printf(",\"world_position240\":"); floats(o.world_position240);
+    std::printf(",\"raw_local250\":"); floats(o.raw_local250);
+    std::printf(",\"raw_offset_point280\":"); floats(o.raw_offset_point280);
     std::printf(",\"bodies\":[");
     for (std::size_t i = 0; i < o.copied_bodies; ++i) {
         const auto& b = o.bodies[i];
@@ -172,7 +176,7 @@ int wmain(int argc, wchar_t** argv) {
         return 3;
     }
     const auto creation = (static_cast<std::uint64_t>(created.dwHighDateTime) << 32) | created.dwLowDateTime;
-    std::printf("{\"type\":\"scope\",\"schema\":1,\"pid\":%lu,\"creation_filetime\":%llu,\"base\":", pid,
+    std::printf("{\"type\":\"scope\",\"schema\":2,\"pid\":%lu,\"creation_filetime\":%llu,\"base\":", pid,
                 static_cast<unsigned long long>(creation)); pointer(base);
     std::printf(",\"read_only\":true,\"atomic_snapshot\":false,\"write_admission\":false,"
                 "\"max_rows\":64,\"max_bodies\":32,\"max_bindings\":32,\"rounds\":%lu}\n", rounds);
@@ -201,7 +205,7 @@ int wmain(int argc, wchar_t** argv) {
             if (!both_ok) ++refusals;
             if (second_status == obs::Status::ok) ++observed;
             if (repeat) ++repeated;
-            if (repeat && first.health_known && second.health_known && first.hp > 0 && second.hp > 0) ++positive_hp;
+            if (repeat && first.health_known && second.health_known && first.raw_hp38 > 0 && second.raw_hp38 > 0) ++positive_hp;
             std::printf("{\"type\":\"row\",\"round\":%lu,\"index\":%zu,\"same_roster_row\":%s,"
                         "\"repeated_configuration_not_lease\":%s,\"first\":", round, i,
                         same_row ? "true" : "false", repeat ? "true" : "false");
@@ -221,7 +225,7 @@ int wmain(int argc, wchar_t** argv) {
         if (round + 1 < rounds) Sleep(500);
     }
     std::printf("{\"type\":\"summary\",\"observed_exact_pirate_rows\":%u,\"repeated_config_rows\":%u,"
-                "\"repeated_positive_hp_rows\":%u,\"unique_enemy_count\":null,\"behavior_validated\":false}\n",
+                "\"repeated_positive_raw_hp38_rows\":%u,\"unique_enemy_count\":null,\"behavior_validated\":false}\n",
                 observed, repeated, positive_hp);
     return positive_hp ? 0 : 5; // No qualifying data is inconclusive, not a passed exam.
 }

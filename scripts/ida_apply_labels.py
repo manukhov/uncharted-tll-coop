@@ -7089,10 +7089,11 @@ FUNCTIONS = {
         "Character_UpdateDerivedWorldTransformFromLocalRoot",
         "Common Player/NadineBuddy/Pirate/NdAttachableObject vtable slot +0x2B8. "
         "For ProcessWeapon this is the last proven placement writer downstream "
-        "of the selected attachment. Derives world transform "
-        "at +0x240 and root/capsule output at +0x280 from local root +0x130, "
+        "of the selected attachment. Derives world translation "
+        "at +0x240 and an offset world POINT at +0x280 from local root +0x130, "
         "local rotation +0x140, and optional parent transform +0x110/+0x120; "
-        "also mirrors local root to +0x250. Null authored parent handle does not "
+        "+0x250 copies local +0x130, and +0x280 is NOT a quaternion. "
+        "Null authored parent handle does not "
         "prove identity cached +0x110/+0x120. No physics publication proven here; "
         "exact Pirate +0x208 is empty, not a physics completion callback.",
     ),
@@ -7394,13 +7395,33 @@ FUNCTIONS = {
     ),
     0x141FCB510: (
         "HealthSystemIsDead",
-        "HealthSystem virtual +0x30. Returns whether virtual +0xB8 current "
-        "health is <= 0.",
+        "STATIC exact HealthSystem virtual +0x30. Calls effective current-health "
+        "getter +0xB8 at141FCB517, then signed <=0 test at141FCB51D/51F. "
+        "Does not read previous-health +0x3C and does not itself execute an "
+        "actor death/ragdoll transition.",
     ),
     0x141FCAFA0: (
         "HealthSystemGetCurrentHealth",
-        "HealthSystem virtual +0xB8. Returns current health, including the "
-        "system's bounded regeneration adjustment.",
+        "STATIC exact HealthSystem virtual +0xB8. Reads signed int32 raw "
+        "current HP at +0x38 (141FCAFB5), conditionally adds regeneration "
+        "for positive HP below maximum, then caps against virtual +0xC0 "
+        "(int32 +0x44 plus +0x48). Raw +0x38 is not necessarily the full "
+        "effective return; +0x3C is PREVIOUS effective HP, not current HP.",
+    ),
+    0x141FCADD0: (
+        "HealthSystemSetCurrentHealthWithHistory",
+        "STATIC descriptive name; exact HealthSystem virtual +0x68. Calls "
+        "effective current-health getter +0xB8 at141FCADE2, stores that OLD "
+        "int32 value to +0x3C at141FCADE8, updates decrease/increase time "
+        "at +0x20/+0x28, and tail-calls +0x1C0 with the requested new int32 HP. "
+        "Previous-health +0x3C must not be used as a current-health probe.",
+    ),
+    0x141FCAE40: (
+        "HealthSystemStoreCurrentHealthAndHistory",
+        "STATIC descriptive name; exact HealthSystem virtual +0x1C0. Stores "
+        "new signed int32 HP to +0x38 at141FCAE54; if history pointer +0x58 "
+        "exists, updates its value/time ring with index +0x60. This storage "
+        "helper does not itself execute an actor death/ragdoll transition.",
     ),
     0x141FCA9C0: (
         "HealthSystemGetMaxHealth",

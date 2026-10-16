@@ -41355,3 +41355,108 @@ bounded probe with explicit PID and save its JSONL in ignored reports/.
 Inspect refusals, roster coverage, typed HP, all copied bodies/bindings and
 the discriminating criterion above; record the actual result before selecting
 an apply seam. Startup/injection success is NOT an enemy-sync result.
+
+## 2026-10-16 — Observe mixed Pirate bodies; correct HP and derived-vector diagnostics
+
+User reported ready and explicitly confirmed that the enemies were alive.
+PID24184/creation FILETIME134366413878490897 matched the prepared launch.
+Two bounded external RPM-only captures ran, with no game input, new injection,
+engine calls, HP/AI changes or enemy movement writes. Appearance stayed parked.
+
+**REJECTED diagnostic interpretation: HealthSystem+3C is not current HP.**
+The first report, reports/enemy_physics_24184_20261016.jsonl (schema1), exited5
+because all36 accepted observations read history+3C as zero. This is an
+observer bug inherited from the obsolete enemy-offset constant, not evidence
+of dead enemies. The detailed FINDINGS_ARCHIVE already records this correction
+at the HealthSystem setter analysis and the2026-06-29 false-death entry; the
+new probe incorrectly reused the older summary instead of that correction.
+Do not repeat or reinterpret zero history as death.
+
+Rechecked STATIC evidence: exact HealthSystem142BBE128+B8=141FCAFA0 reads
+signed int32 raw current HP+38 at141FCAFB5. Setter+68=141FCADD0 calls that
+effective getter, stores OLD effective HP to+3C at141FCADE8, then invokes
++1C0=141FCAE40, which writes new raw HP+38 at141FCAE54. The effective getter
+also applies regeneration and caps against max+44 plus bonus+48. Native
+IsDead141FCB510 calls the effective getter and tests signed<=0; raw+38 alone
+is not a complete death/transition predicate. No getter/setter was called by
+the external observer. The disabled legacy runtime kCurrentHpOffset=3C is
+still incorrect and must not be revived with the old enemy/kill writers.
+
+The probe now emits schema2 with distinct raw_hp38 and previous_effective_hp3c.
+Regression fixtures use positive+38/zero+3C and nonpositive+38/positive+3C,
+plus exact-vtable and partial-read refusals. This prevents a self-consistent
+fixture from merely reproducing the historical wrong offset.
+
+**CONFIRMED runtime configuration only: mixed joint/root primary collection.**
+First capture: six local record/id identities,36 repeated pairs in six rounds;
+14 bodies for debug labels bridge-3/5/6,11 for bridge-1/4/2. These are bounded
+debug labels, not full authored keys. Each14-body collection has13 source3
+joint bodies plus source1 root body at index13; each11-body collection has10
+source3 joint bodies plus source1 root body at index10. All observed body
+owners matched, desired mode2, native motion4, native world nonnull, blend0,
+handle indices nonzero and explicit-transform flag bit0 clear. This source/
+mode evidence is unaffected by the history-HP bug, but this report cannot
+independently qualify each actor with positive current HP.
+
+Corrected capture reports/enemy_physics_24184_20261016_schema2.jsonl exited0:
+one exact Pirate record0x10e0210498/id6014 (bridge-2), repeated in all six
+rounds, raw HP120 and previous effective HP0. Its11-body collection again
+contains10 joint bodies and one matching-owner source1 root body at index10,
+desired mode2, native motion4 and nonnull in-world native body. Thus the
+prepared owner-root/keyframed candidate criterion PASSES for this sampled
+living actor. It does NOT establish that moving a root synchronizes enemies,
+nor that all collision geometry is root-only. Seven other roster rows were
+non-Pirate; their class/death state was not classified by this tool.
+
+For both captures, primary+238 binding count=0, root selector=-1, auxiliary
++120 null, flags0=0B, flags2=01, gate18=body count and gate24=0. Primary
+root-import binding potential is absent in these observations. +580 is
+nonnull but deliberately not followed; its import behavior remains open.
+Optional single body+698 is null. This rejects using+698 as the observed
+ordinary collider and a single-body model of+238, not all other encounters.
+It does not revive the rejected pre+408 root override.
+
+All six rounds in each report covered the eight-row roster without a cap,
+changed row, failed accepted subread or incomplete body list. The first has
+12 non-Pirate refusals; the corrected report42. In the first, each record/id
+was seen at three distinct actor addresses (18 addresses total); the corrected
+record/id was seen at two addresses. The reason for address changes is NOT
+established. Fresh resolution is necessary; address equality within two reads
+still does not prove lifetime/ABA safety. GetTickCount64 reported0..16ms per
+round in the first report and0..15ms in the corrected one; this coarse external
+measurement is not proof of frame overhead or lag-free operation.
+
+**STATIC / diagnostic correction: derived offsets are not a pose quaternion.**
+141BB8320 writes cached world translation to+240 at141BB8602, copies local
++130 to+250 at141BB860B, and writes a transformed unit-Z offset POINT to+280
+at141BB8614. The point comes from rotating(0,0,1,0) by composed rotation then
+adding world translation at141BB8519. Neither+250 nor+280 is a world quaternion.
+Schema1 derived_pose was a misleading name for contiguous+240..25F. Schema2
+separates world_position240, raw_local250 and raw_offset_point280; fourth
+lanes remain opaque. Existing root/body raw pose arrays are unchanged. No writer
+used this erroneous diagnostic field; tests now use distinct vector fixtures.
+
+**Next bounded static step:** retain the owner-root candidate but account for
+the ten/thirteen joint-driven bodies. Trace native root/parent change into
+joint-world cache invalidation/recomputation before141CF0A00 consumes it at
+game-to-physics publication. Close remaining+580 import and exact eligible
+after-import/before-publication scope; do not late-write only root collider
+or trust a cached actor address. Complete full authored spawn identity and
+world/session invalidation independently before any A->B write. No new game
+scenario is needed for this recorded observation; user was told the game can
+be closed. Enemy synchronization is still OFF, not declared repaired.
+
+Verification: corrected probe/test targets rebuilt in initialized MSVC Release;
+13/13 observation groups and10/10 policy groups pass, CTest2/2. Independent
+review checked all12 accepted first/second schema2 samples and found no
+blocking offset/classification/claim issue. Main runtime source/DLL unchanged
+this turn; only the standalone external reader was rebuilt, with no restart
+or reinjection. Both captures remain local ignored artifacts, and the durable
+results above distinguish configuration from movement behavior.
+
+Stopped MCP, applied labels to sole ida/tll.i64, and verified
+reports/enemy_config_health_fix_labels_20261016.txt:2028 functions,83 data
+names,3 types, save_database returned True. Restarted MCP resolved both new
+health setter labels and all three clarified existing functions; exact vtable
+data xrefs142BBE190(+68) and142BBE2E8(+1C0) were rechecked. Syntax/diff
+checks pass with no introduced duplicate label keys. No new pose/HP writer.

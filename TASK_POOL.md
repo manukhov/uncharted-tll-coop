@@ -53,7 +53,7 @@ world pose, but11 fixed controller+38 callbacks at+15D0 follow that refresh.
 Primary CompositeBody+238 has native creation at141BC03F0. +410 game-driven
 publication141E5AEE0 ->141E5A980 ->141CF57D0/141CF0EE0 queues pose without
 explicit-transform bit0; mode2 FrameSyncEnd uses141F808E0 keyframe pose AND
-velocities, not141F80AC0 teleport. Actual living-encounter modes remain untested.
+velocities, not141F80AC0 teleport. Runtime configuration is recorded below.
 Latest pass: +15D0 is an eleven-slot AnimModifierSet. Exact initial Pirate
 table has five modifiers; only LegModifier+38=140624400 is nonempty. Inspected
 callback/helper bodies update foot state and parent cache, not direct actor
@@ -61,14 +61,21 @@ root or Havok pose. Other descendants/table replacement remain separate.
 Composite+238 can retain its address while141E56800 shuts down bodies/counts;
 pointer equality is not retention. Body+C6==1 selects owner root; other than
 1/4 with signed+C4>=0 selects a joint; kind4 remains unclassified.
-NEXT: bounded external RPM-only configuration observation using
-scanner/build/tll_enemy_physics_probe.exe --pid <explicit PID> --rounds 6.
-One copy and user-loaded combat encounter suffice; no new hook, writer,
-AI pause, game input, or enemy network packet is enabled. Repeated values are
-not atomic/coherent frame snapshots, full identity or write admission. Read
-the appended COOP_STATUS prediction before this exam. Capture all statuses,
-positive typed HP, complete bounded bodies/bindings and raw motion enums.
-Then choose the native after-import/before-publication seam from actual modes.
+Runtime configuration exam completed on PID24184: six initial exact Pirate
+identities have mixed11/14-body collections (10/13 source3 joints plus one
+source1 root), desired mode2/native motion4, primary bindings0, optional+698
+null. Corrected schema2 confirms one living record/id6014 with raw HP120,
+11 bodies and root index10 in six repeated pairs. The first schema's HP read
+was WRONG: +3C is previous effective HP, raw current is signed+38. This old
+offset mistake was already corrected in the detailed archive; never reuse it.
+Derived+240/+250 are world/local position vectors, and+280 is an offset point,
+not a world quaternion. Schema2/tests now distinguish these fields.
+NEXT: trace root/parent change -> joint-world cache invalidation/recomputation
+before141CF0A00 consumes joint poses, and close+580 import behavior before
+selecting the exact native seam. A root-only body write is not sufficient.
+Repeated RPM values are not atomic snapshots, lifetime or write admission;
+actor addresses changed between rounds while local record/id stayed stable.
+No further unchanged census, new launch, AI pause, HP or enemy writer needed.
 Full authored-key capture is still a separate implementation: consume actual
 PSI at141D227B1 and join the same native invocation to publication141D22889
 (141D22883 only loads the pair); exact GameInfo14029AEE0 returns null, but

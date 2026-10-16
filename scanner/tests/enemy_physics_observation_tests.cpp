@@ -105,7 +105,8 @@ FakeReader fixture() {
     read.put(kActor + 0x580, std::uintptr_t{0x81000});
     read.put(kActor + 0x698, std::uintptr_t{0x82000});
     read.put(kHealth, kBase + observation::kHealthVtableRva);
-    read.put(kHealth + 0x3c, std::int32_t{123});
+    read.put(kHealth + 0x38, std::int32_t{123});
+    read.put(kHealth + 0x3c, std::int32_t{0});
     read.put(kComposite + 8, kActor);
     read.put(kComposite + 0x10, std::uint32_t{2});
     read.put(kComposite + 0x18, std::uint32_t{1});
@@ -206,7 +207,9 @@ bool moving_pose_and_transient_flags_are_not_identity() {
     const auto first = configuration();
     auto second = first;
     second.local_pose[0] = 50.0F;
-    second.derived_pose[6] = 0.5F;
+    second.world_position240[2] = 0.5F;
+    second.raw_local250[1] = 50.0F;
+    second.raw_offset_point280[1] = -20.0F;
     second.bodies[0].pose[1] = -20.0F;
     second.bodies[1].pose[3] = 1.0F;
     second.bodies[0].blend = 0.2F;
@@ -214,7 +217,8 @@ bool moving_pose_and_transient_flags_are_not_identity() {
     second.flags0 ^= 0x82u;
     second.flags2 ^= 0x30u;
     second.process_flags ^= 0x10u;
-    second.hp = 99;
+    second.raw_hp38 = 99;
+    second.previous_effective_hp3c = 98;
     CHECK(observation::repeated_configuration(first, second));
     return true;
 }
@@ -267,7 +271,12 @@ bool complete_capture_copies_typed_fields() {
     const std::array<char, 32> name{'t', 'e', 's', 't'};
     read.put(kActor + 8, name);
     read.put(kActor + 0x130, pose);
-    read.put(kActor + 0x240, pose);
+    const std::array<float, 4> world{11, 12, 13, 14};
+    const std::array<float, 4> local{21, 22, 23, 24};
+    const std::array<float, 4> point{31, 32, 33, 34};
+    read.put(kActor + 0x240, world);
+    read.put(kActor + 0x250, local);
+    read.put(kActor + 0x280, point);
     read.put(kBodies, pose);
     read.put(kBodies + 0x9c, 0.25F);
     Observation value;
@@ -277,14 +286,15 @@ bool complete_capture_copies_typed_fields() {
     CHECK(value.copied_bodies == 2 && value.copied_bindings == 2);
     CHECK(value.gate18 == 1 && value.gate24 == 1 && value.root_selector == 9);
     CHECK(value.ragdoll == 0x81000 && value.optional_body == 0x82000);
-    CHECK(value.local_pose == pose && value.derived_pose == pose);
+    CHECK(value.local_pose == pose && value.world_position240 == world);
+    CHECK(value.raw_local250 == local && value.raw_offset_point280 == point);
     CHECK(value.debug_name == name && value.bodies[0].pose == pose);
     CHECK(value.bodies[0].blend == 0.25F);
     CHECK(value.bodies[0].native == kNative && value.bodies[0].native_motion == 4);
     CHECK(value.bodies[0].in_world && !value.bodies[1].in_world);
     CHECK(value.bodies[0].handle_id == 80 && value.bodies[0].handle_index == 10);
     CHECK(value.bodies[0].joint == -1 && value.bodies[1].joint == 12);
-    CHECK(value.health_known && value.hp == 123);
+    CHECK(value.health_known && value.raw_hp38 == 123 && value.previous_effective_hp3c == 0);
     return true;
 }
 
@@ -384,18 +394,23 @@ bool partial_outputs_count_only_complete_subrows() {
 
 bool hp_requires_exact_type_and_complete_read() {
     auto read = fixture();
-    read.put(kHealth + 0x3c, std::int32_t{-27});
+    read.put(kHealth + 0x38, std::int32_t{-27});
+    read.put(kHealth + 0x3c, std::int32_t{700});
     Observation value;
     CHECK(observation::capture(read, kBase, entry(), value) == Status::ok);
-    CHECK(value.health_known && value.hp == -27); // Signed integer, not float.
+    CHECK(value.health_known && value.raw_hp38 == -27); // Signed integer, not float.
+    CHECK(value.previous_effective_hp3c == 700); // History is NOT current HP.
+    read.put(kHealth + 0x38, std::int32_t{0});
+    CHECK(observation::capture(read, kBase, entry(), value) == Status::ok);
+    CHECK(value.raw_hp38 == 0 && value.previous_effective_hp3c == 700);
     read.put(kHealth, kBase + observation::kHealthVtableRva + 8);
     CHECK(observation::capture(read, kBase, entry(), value) == Status::ok);
-    CHECK(!value.health_known && value.hp == 0);
+    CHECK(!value.health_known && value.raw_hp38 == 0 && value.previous_effective_hp3c == 0);
     read = fixture();
     read.fail_address = kHealth;
     read.partial_failure = true;
     CHECK(observation::capture(read, kBase, entry(), value) == Status::ok);
-    CHECK(!value.health_known && value.hp == 0);
+    CHECK(!value.health_known && value.raw_hp38 == 0 && value.previous_effective_hp3c == 0);
     read = fixture();
     read.put(kActor + 0x4a8, std::uintptr_t{0});
     CHECK(observation::capture(read, kBase, entry(), value) == Status::ok);

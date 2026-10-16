@@ -54,11 +54,13 @@ struct Observation {
     std::uintptr_t ragdoll{}, optional_body{}; // Observe inline only; never follow.
     std::uint32_t process_flags{}, body_count{}, binding_count{}, gate18{}, gate24{};
     std::uint32_t copied_bodies{}, copied_bindings{};
-    std::int32_t root_selector{-1}, hp{};
+    std::int32_t root_selector{-1}, raw_hp38{}, previous_effective_hp3c{};
     bool health_known{};
     std::uint8_t flags0{}, flags2{}, owner_flags360{};
     std::array<char, 32> debug_name{};
-    std::array<float, 8> local_pose{}, derived_pose{};
+    std::array<float, 8> local_pose{};
+    // +250 and +280 are NOT the second half of a world position/quaternion.
+    std::array<float, 4> world_position240{}, raw_local250{}, raw_offset_point280{};
     std::array<Body, kMaxBodies> bodies{};
     std::array<Binding, kMaxBindings> bindings{};
 };
@@ -127,7 +129,9 @@ Status capture(Reader& read, std::uintptr_t base, Entry entry, Observation& out)
     out.owner_flags360 = field<std::uint8_t>(actor, 0x360);
     out.debug_name = field<std::array<char, 32>>(actor, 8);
     out.local_pose = field<std::array<float, 8>>(actor, 0x130);
-    out.derived_pose = field<std::array<float, 8>>(actor, 0x240);
+    out.world_position240 = field<std::array<float, 4>>(actor, 0x240);
+    out.raw_local250 = field<std::array<float, 4>>(actor, 0x250);
+    out.raw_offset_point280 = field<std::array<float, 4>>(actor, 0x280);
     out.composite = field<std::uintptr_t>(actor, 0x238);
     out.ragdoll = field<std::uintptr_t>(actor, 0x580);
     out.optional_body = field<std::uintptr_t>(actor, 0x698);
@@ -149,7 +153,10 @@ Status capture(Reader& read, std::uintptr_t base, Entry entry, Observation& out)
     std::array<std::byte, 0x48> health_bytes{};
     if (health && read(health, health_bytes.data(), health_bytes.size()) &&
         field<std::uintptr_t>(health_bytes, 0) == base + kHealthVtableRva) {
-        out.health_known = true; out.hp = field<std::int32_t>(health_bytes, 0x3c);
+        out.health_known = true;
+        // The effective native getter additionally applies regeneration/caps.
+        out.raw_hp38 = field<std::int32_t>(health_bytes, 0x38);
+        out.previous_effective_hp3c = field<std::int32_t>(health_bytes, 0x3c);
     }
     if (!out.composite) return recheck(); // Preserve observed absence.
     std::array<std::byte, 0x128> comp{};
