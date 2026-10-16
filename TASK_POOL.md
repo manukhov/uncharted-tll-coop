@@ -80,11 +80,20 @@ normal phase40 publishes Fg+1C0, then JointBlend reset141A92BA5 copies it into
 the joint cache before+410. Exact Pirate allocator defaults phase40 ON, but
 live flags and normal-path admission remain required. The existing phase40
 callsite141A8FC00 also occurs before+408 in Step, not only after it in Perform.
-NEXT: close actual Pirate group0 workspace/parameter bounds and output/
-dependency completion for collider joints3/4/5/6/19/22/23/24/25/34. Exclude
-custom Fg+2A0, skipped blend and unresolved residual jobs; do not borrow C39
-counts/masks or infer freshness from index range. Then specify bounded
-same-invocation observation owner root -> Fg root -> cache -> queued bodies.
+Latest STATIC pass CLOSED export/range contract: executed cmd24/id248B1AAE
+at141937D20 exports all N=u16(group0+10) rows into current E0. N differs from
+local parameter count P. Effective-mode2 normal JointBlend processes group0
+at141A92E78, then removes bit0 from later masks before+410. Skipped/custom/
+null-control paths can still reach+410; Process return alone is not export proof.
+Cmd24 does not clear validbits/D8: selected valid Locators need consistency checks.
+Pure-byte audit now covers npc-normal-base(BD7EEE2F) and npc-medium-base
+(FC65A17A), each first0/N90/P55; these are candidates, NOT proven live Pirate assets.
+NEXT: implement one bounded READONLY normal-mode2 JointBlend observation:
+exact active Art/raw/program identity, cache-reset witness, actual group0 cmd24
+entry/normal return to current E0, selected validbits/D8 and primary body consumption.
+Use fixed storage/six samples/1ms budget; exclude custom/skip/null-control/reentry
+and initial cached-prepass. Do not add another unchanged RPM census or pose writer.
+Perform and JointBlend are separate calls; do not stitch post+408 with pointer/time.
 No writer exam is admitted. Generic1416860A0 converts world to local but
 does not invalidate the cache; missing parent keys retain cached parent,
 not identity. Existing Player writer/baseline remains unchanged.

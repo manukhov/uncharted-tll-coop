@@ -41586,3 +41586,126 @@ destructor141E993EF. Rel32 audit display name follows the generic helper rename.
 Independent phase-path review found no blocking issue. Python syntax/diff
 checks pass; existing enemy observation/policy CTest suites pass2/2. Main DLL
 and player behavior are unchanged; these checks are not enemy-sync validation.
+
+## 2026-10-16 — Resolve group0 matrix export and audit NPC skeleton candidates
+
+Continuation from3904137, enemy P0 only. STATIC/offline analysis; no game
+launch, injection, enemy transform/HP write or AI pause. Existing Player
+synchronization and parked appearance work are untouched.
+
+**STATIC group0 has a distinct matrix-export contract.** JointCache allocation
+141686CD0 reads rawSkeleton=ArtItemSkeleton+40; group0 is raw+u32(raw+2C).
+N=u16(group0+10) controls32*N locator and64*N matrix allocations at141686DB9
+and141686DE4. P=u16(group0+12) is a parameter count, not the joint-matrix
+bound; the persistent local JP allocation separately uses Art+3C.
+Process cmd0 installs raw+u32(raw+2C)+32*groupOrdinal at Segment+38 at
+141AB9A92. Cmd15 expands JP workspace through14217BF30, allocates64*(N+1)
+matrix bytes at141ABA8EE and seeds only reserved matrix row0 at
+141ABA929/935/942/957. Cmd16 executes authored programs; it does not validate
+that every exported row has a producer. Therefore export coverage and actual
+matrix computation are separate claims.
+
+Build141A91490 puts the supplied cache E0 pointer in CreateContext+58 at
+141A9153B. Only group0 with context+78&4 and flags+11&1 emits cmd24 with
+joint-conversion id248B1AAE (tests141A90130/13B/154, payload141A90222/231).
+Process skips cmd24 if context+20 bit0 is set or callback is null; actual
+call141ABAC66 returns141ABAC69, and the callback return value is ignored.
+Game1406CD220 forwards this id to Nd141937D20 at1406CD2DC. Its branch
+141937EEC..141937F77 reads first=u16(Segment.descriptor+0), count=u16(+10),
+and synchronously transposes all count source matrices from workspace+40
+into destination+64*(first+i); stores141937F5B/F63/F68/F6D. No per-joint
+mask, bounds check or asynchronous dispatch exists in this branch. Native
+group0 destination is E0, not the rendering palette. A nonzero count and
+matching callback entry/normal return prove exported range, not its source
+initialization. Evidence kinds: concrete allocator/consumer dataflow, exact
+callback stores/dispatch, and source/string identity plus the independent
+physics consumer141CF0D33.
+
+**STATIC normal mode2 closes group0 before later group dispatch.** JointBlend
+141A92A00 work gate is (job+14==0 || Fg+8&08) && raw Fg+6!=0. Custom Fg+2A0
+at141A92B4D or null job+0 control bypasses normal reset. Effective mode2 is
+raw mode2, or forced2 only when (143682F49 || Fg.flags&2) and Fg+100 is
+nonnull. Its first Build141A92D47 selects mask1 set141A92CB5; group0 Process
+141A92E78 returns141A92E7D before bit0 is cleared from BOTH subsequent masks
+at141A92EEC/EF8. Later inline/prepass/residual work does not reselect group0.
+Other modes are not covered by this restricted observation contract.
+
+**REJECTED +410 as proof that normal group0 ran.** Owner dispatch141A934D5
+has its own job/phase/retained-owner/class/process checks; skipped, custom
+and null-control paths can still reach it. A call marker or generic Process
+return cannot substitute for actual reset and cmd24 export witnesses.
+Correction: QueueResidual14177FEB0 stores the complement of incoming selected
+bits at record+24 over Art+30 groups (14177FFA5/FFA7), not that mask unchanged.
+Ready publication141780100 uses current-context+10828 -> structure+8, not
+the normal global category-ready masks. Its downstream consumer is not closed
+by this pass; publication must not be described as a completion fence.
+
+**STATIC stale-locator caveat survives a completed export.** Cmd24 only stores
+E0: it neither clears JointCache validbits+40 nor writes D8 world Locators.
+If a lazy read populated a joint after reset but before export, the bit could
+remain set for its previous E0. This is a conditional hazard, not a proven
+occurrence in a current Pirate. No cmd23->lazy-reader edge was established in
+this bounded pass; the known140624400 reader belongs to later modifier+38.
+The observer must distinguish clear bits (old D8 bytes not consumed) from set
+bits, which require consistency with the new E0 and copied root at the actual
+consumer. Do not call the native lazy getter merely to observe it: that mutates
+the cache. Export-only evidence is insufficient for final collider freshness.
+
+**STATIC candidate assets, not a live actor identification.** Read-only
+actor77.psarc extraction found npc-normal-base.pak (659136 bytes, raw5EB80,
+skeletonBD7EEE2F, SHA256
+a72079fd5f3b691ea790f153808c8b3a42079be355668220048028a518f1b5a8) and
+npc-medium-base.pak (258720 bytes, raw1980, skeletonFC65A17A, SHA256
+d8b5452fc413d977c13c0f33729155d09ff24b8fcfb69052856f95c78271d13a).
+Both have6 groups/557 joints and group0 first0/N90/P55, with one program at
+relative5340. These are independent NPC assets, not borrowed C39 counts.
+The reproducible pure-byte audit is scripts/enemy_group0_matrix_audit.py;
+it uses previously decoded native opcode layouts, never executes retail code.
+Its claim is matrix producer/parent ordering and range/survival for these
+exact asset hashes, NOT current animation input freshness or actor residency.
+Other scalar/shared-scratch allocation bounds remain outside this audit.
+
+Offline audit result:47 operators,820 decoded destinations and108 op40
+records including padding produce90 unique local matrices in EACH candidate.
+Every matrix parent is reserved row0 or an earlier produced matrix; no non40
+operator writes the matrix bank. All ten previously observed collider indices
+are covered. Bank0 writes fit90*48=4320 bytes; bank1 writes fit91*64=5824,
+including reserved row0. Programs are bounded to directory u16+2 size40B0.
+Program SHA256 normal=eefeb3067ed1e47ba98c0fe2f629e27f6193037ca20b636ceb4e6a7b4afc6710,
+medium=84082e471fa7a253c10888b38a9ec421b935e04f16077ccca7808d4dd58c429a.
+Decoded destination/parent trace is identical, SHA256
+0d3306d2402a070258d46ea5cf3bf5535f4b7a35027a8a53665d65e729824712;
+this does not mean identical numerical inputs or complete animation behavior.
+
+**HYPOTHESIS / next bounded observation, not a writer test.** First limit the
+exam to ONE normal effective-mode2 JointBlend invocation: match current
+owner/Fg/Art/raw, witness reset, executed group0 cmd24 export and normal
+Process return, then compare selected cache/body data before native primary
+publication. Actual collider indices must all fit the matched exported range;
+do not hardcode the prior ten indices as a whitelist of all possible bodies.
+Capture exact active skeleton/program identity so candidate audit results can
+be joined to the live instance. Exclude custom, null-control, skipped mode,
+reentry, unmatched links and initially cached-prepass paths. Use fixed storage,
+one actor, at most six samples and the existing cumulative1ms observer budget;
+no worker I/O, allocation, game getter, wait, HP/AI or transform operation.
+
+Falsifiable prediction: an admitted sample has cache root copied from that
+invocation's Fg root, executed export to its current E0 with actual body-joint
+coverage, and selected lazy/body poses consistent at their native consumption.
+Missing export, valid-but-stale D8 or skipped branch must reject, even if +410
+runs. Native primary-call return141BBE119 alone is only a post-call snapshot:
+internal gates can skip refresh, so require a concrete refresh witness before
+claiming queued-body agreement. Perform and JointBlend are separate calls;
+pointer/time matching does NOT extend this scope back to141A929A7. The earlier
+post-import root-write candidate still needs its own generation/identity join.
+Full authored peer identity, epochs/load invalidation and combat authority also
+remain unresolved for network writes. No runtime observer is enabled here.
+
+Verification/handoff:19 asset-independent mutation tests PASS, both exact
+candidate archive audits PASS, existing enemy observation/policy CTest2/2
+PASS. Independent code/dataflow review found no blockers. Python syntax and
+diff checks pass. Eight existing IDA entries were clarified; MCP stopped,
+sole ida/tll.i64 saved, reports/enemy_group0_export_labels_20261016.txt confirms
+2033 functions/83 data names/3 types and save_database returned True. Restarted
+MCP resolves all eight names; readback verifies export/residual corrections
+and game-dispatch xref1406CD2DC. No new DLL, hook or runtime test in this unit.

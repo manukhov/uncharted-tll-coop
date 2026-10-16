@@ -817,7 +817,13 @@ FUNCTIONS = {
         "Initializes JointCache at FgAnimData+0x30. Config 2 allocates the "
         "local JointParams bank at Fg+0x100 as 48*u16(ArtItemSkeleton+0x3C) "
         "at 0x141686DF5..0x141686E28. World Locators +0x108 and matrices "
-        "+0x110 use 32/64*group0.workspace_count. C39 has local 66 rows, "
+        "+0x110 use 32/64*group0.workspace_count. STATIC raw skeleton comes "
+        "from ArtItemSkeleton+0x40; group0 is raw+u32(raw+0x2C), and its "
+        "u16 +0x10 count is read at141686D47 for the locator/matrix allocations "
+        "at141686DB9/141686DE4 (configs1/2 with nonzero count). This count is "
+        "distinct from group0.parameter_count at+0x12 and the Art+0x3C local "
+        "allocation count. Require actual skeleton/range consistency; do not "
+        "infer Pirate extents from C39. C39 has local 66 rows, "
         "world/matrix 104 rows; neither is the full 580-joint workspace or "
         "426-row packed reference pose. Readable virtual memory beyond the "
         "3168-byte C39 local allocation grants no row ownership.",
@@ -2681,6 +2687,19 @@ FUNCTIONS = {
         "the evaluator workspace and writes converted matrices to the command "
         "destination; it does not write WorkBuffer pose lanes. Other ids include "
         "bounding-sphere and joint-retarget operations and are not interchangeable. "
+        "STATIC id248B1AAE branch141937EEC reads Segment+0x38 group descriptor, "
+        "first=u16(descriptor+0), count=u16(descriptor+0x10), source=Segment+0x58 "
+        "workspace and destination=payload qword0. It transposes each source "
+        "row at workspace+0x40+64*i into destination+64*(first+i); all four "
+        "float4 stores are141937F5B/F63/F68/F6D. Count0 exits; otherwise the "
+        "synchronous loop has no per-joint mask, bounds check or decline. "
+        "Normal group0 destination is JointCache+0xE0, not the skin palette. "
+        "Matching entry/normal return proves this range was exported, not "
+        "that an arbitrary authored program initialized every source row. "
+        "This branch does not clear JointCache valid bits or write its D8 "
+        "world Locators. If a lazy reader populated a selected joint between "
+        "reset and export, export alone cannot establish that Locator freshness; "
+        "observe selected validity/Locator consistency at the consumer. "
         "STATIC counterexample to generic read-only postpose: id03D27700 tested "
         "at141937D5F loads JP from Segment+50 at141937F82; selected records "
         "write T at141937FCC, Q at141937FE8 and broadcast S at141938006. "
@@ -2758,7 +2777,8 @@ FUNCTIONS = {
         "command-3/4 close and before command 15. "
         "Opcode 27 (0x6001B) is emitted only if the selected flags permit "
         "export and packedFirst+parameterCount <= CreateContext+0x50 "
-        "(0x141A9046E). Destination is context+0x48 plus 48*packedFirst "
+        "(compare141A90466/branch141A9046A; nonzero count test141A9046E). "
+        "Destination is context+0x48 plus 48*packedFirst "
         "when flags&4, otherwise 48*workspaceFirst (0x141A90484). Perform "
         "supplies Fg+0x100 with capacity group0.parameter_count: C39 group1 "
         "66+38 exceeds 66 and is never exported there. Normal builder return "
@@ -2783,7 +2803,12 @@ FUNCTIONS = {
         "STATIC export27 at141A90474..4BE immediately precedes export26 "
         "at141A90543..5AE, without interveningworkpose mutation. A complete "
         "normal list exportslocal JP andskinpalette fromone workpose; this "
-        "does not prove later ED0A70/read-render samegeneration.",
+        "does not prove later ED0A70/read-render samegeneration. STATIC matrix "
+        "cache export is separate: group ordinal0 plus context+0x78 &0x4 and "
+        "flags+0x11 &0x1 (tests141A90130/13B/154) emit six-word cmd24 with "
+        "joint-conversion id248B1AAE. The payload pointer is context+0x58 "
+        "loaded141A9015C and stored141A90222/231. Neither a normal Process "
+        "return nor a cmd26 palette export proves this conditional callback ran.",
     ),
     0x141A91490: (
         "AnimManager_BuildCommandSegmentsForObjectMask",
@@ -2795,7 +2820,13 @@ FUNCTIONS = {
         "the AsyncJointBlend callers supply a6 from FgAnimData+0x08, so the "
         "group-zero post-pose command suffix is instance/screen dependent. "
         "Context qwords 5 and 6 preserve the supplied scalar-bank pointers; the "
-        "normal PerformAnimBlend caller supplies FgAnimData+0x118/+0x120.",
+        "normal PerformAnimBlend caller supplies FgAnimData+0x118/+0x120. "
+        "STATIC arg13 is copied into CreateContext+0x58 at141A9153B; normal "
+        "JointBlend supplies the E0 matrix-bank pointer returned by cache reset, "
+        "not a workspace or skin-palette pointer. Context+0x78 is7 when arg14 "
+        "is false, otherwise1. Group0 uses the primary context at141A915F5; "
+        "nonzero groups use the alternate context. The group0 joint-conversion "
+        "callback additionally requires actual flags+0x11 &0x1.",
     ),
     0x141A90E70: (
         "AnimManager_AllocateCommandSegmentsAndSharedScratch",
@@ -5032,7 +5063,17 @@ FUNCTIONS = {
         "of a cross-list pose handoff. "
         "The workspace allocator uses (group+0x10 + 1) 64-byte rows; the leading row "
         "is initialized as the "
-        "root before decimal command 16. Decimal command 17 runs an authored encoded-"
+        "root before decimal command 16. STATIC cmd0 stores the descriptor "
+        "raw+u32(raw+0x2C)+32*groupOrdinal at Segment+0x38 (141AB9A92). "
+        "Cmd15 allocates (u16(descriptor+0x10)+1)*64 bytes at141ABA8EE, stores "
+        "the pointer141ABA8F3, and seeds only reserved row0 at141ABA929..A957. Cmd16 walks "
+        "authored programs; there is no generic all-workspace-rows initialized "
+        "validation. Cmd24 skips when AnimCmdContext+0x20 bit0 is set or its "
+        "callback is null (141ABAC2C..39), calls synchronously at141ABAC66 "
+        "and ignores the callback return at141ABAC69. For cache publication "
+        "observe actual id248B1AAE entry/normal return and destination/range, "
+        "not merely Process return or a present command. Decimal command 17 "
+        "runs an authored encoded-"
         "scalar copy over JointParams, FgAnimData+0x120 payload, group temp and the "
         "shared scratch. Command 0x17/decimal 23 is the separate plugin callback path. "
         "STATIC P99 source-boundary correction:141AB9B3D is LEA of the custom "
@@ -7022,6 +7063,15 @@ FUNCTIONS = {
         "Custom Fg+2A0 callback141A92B4D or skipped blend bypasses this normal "
         "reset; residual groups can queue141A9336B. Do not infer freshness "
         "of every Pirate body joint without group0 bounds and admission. "
+        "STATIC normal work gate is (job.byte14==0 || (Fg.byte8&0x8)) and "
+        "raw Fg.byte6!=0. Null job.qword0 control selects a separate identity-"
+        "palette path, not normal cache evaluation. In admitted effective "
+        "mode2, build141A92D47 uses mask1 set141A92CB5; only group0 executes "
+        "at141A92E78 and returns141A92E7D. Clearing bit0 at141A92EEC/EF8 "
+        "excludes group0 from subsequent prepass/inline/residual masks. "
+        "Require actual cmd24 cache export; Process return alone is not enough. "
+        "Owner+410 eligibility is tested separately after blend, so its call "
+        "does not prove that the normal matrix-producing path executed. "
         "Independently reads the persistent optional scalar-bank pointers at "
         "FgAnimData+0x118/+0x120 before the joint-blend work. "
         "Both direct BuildCommandSegments calls forward FgAnimData+0x08 as the "
@@ -12885,19 +12935,23 @@ FUNCTIONS = {
     ),
     0x14177FEB0: (
         "AnimMgr_QueueResidualJointBlendGroups",
-        "Special multi-group tail reached from PerformAnimBlend 0x141A927D9. "
-        "Builds the exact 96-byte per-Fg deferred-stage record, stores the "
-        "residual group mask at +0x24 and state 2 at +0x58, then publishes the "
-        "Fg slot through AnimMgr_PublishResidualJointBlendJobReady. These "
-        "groups do not execute at the normal synchronous Process callsite "
-        "0x141A92759.",
+        "Special multi-group tail reached from PerformAnimBlend141A927D9 "
+        "and JointBlend141A9336B. Builds the96-byte per-Fg deferred-stage "
+        "record. STATIC correction: +0x24 stores bits NOT selected in the "
+        "incoming group mask over Art+0x30 groups (14177FFA5/FFA7), not the "
+        "incoming residual mask itself. Sets state2 at+0x58 and publishes "
+        "the Fg slot through AnimMgr_PublishResidualJointBlendJobReady; "
+        "this function does not execute those groups.",
     ),
     0x141780100: (
         "AnimMgr_PublishResidualJointBlendJobReady",
-        "Derives the FgAnimData pool index, takes the residual-stage lock and "
-        "sets that index in the global ready bitset. AnimMgr_SyncUpdate later "
-        "consumes the bitset and dispatches the independent async joint-blend "
-        "job; this is a publication boundary, not pose evaluation.",
+        "Derives the FgAnimData pool index and, under lock1466D0C30, ORs its "
+        "bit at141780194 into the ready bitset obtained from the current "
+        "runtime context (14160C120 result+0x10828, then structure+0x8). "
+        "STATIC correction: this is not a direct store into the normal "
+        "global AnimMgr category-ready masks. The exact downstream consumer "
+        "has not been re-established in this bounded audit; do not infer "
+        "JointBlend completion from this publication boundary.",
     ),
     0x141782B30: (
         "AnimMgr_DispatchAsyncObjectUpdateJointBlendJob",
