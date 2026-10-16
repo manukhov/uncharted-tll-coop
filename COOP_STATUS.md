@@ -40684,3 +40684,27 @@ this unit, build fresh EXAM=ON
 and immediately launch/inject ONE instance, then request once after verified
 ARM-WAIT. No second instance or game input. Record exact hashes/PID/creation
 and checkpoint/result below. Do not revert to a chat-ready signal.
+
+**2026-10-16 live checkpoint: request accepted, waiting for observed P99 draw.**
+
+Source97f52df committed/pushed. Fresh main EXAM=ON/sourceOFF build
+2026-10-16p99-consumed-draw-request SHA256
+F591CE502FD6D4DEBBAB95918E615840E2DA6BB44F03A027CC5A82A2BF554784.
+Immediately launched/injected ONE PID636, creation134366347590447862,
+2026-10-16 17:32:39.0447862 Europe/Moscow; no old tll process existed.
+Injector exit0 and exact module path independently verified, loaded size2109440.
+Fresh log104961..104963: four-site INSTALLED/UNARMED, ARM-WAIT request-v2 with
+that creation, WAITING. No UNSAFE/ARMED/PROBE/sample before request.
+After exact live process/image/creation/module/hash and no-prior-request checks,
+signalled ONCE with tll_p99_consumed_arm. Helper SHA256
+99EA10DBB28D1A765CC105D4A52CC69C2A31C5B1538A5C3BF45B6E6B9608F974.
+Actual ARM-REQUESTED observed at104967. No ARMED/probe/sample at this checkpoint.
+This is accepted orchestration, not a hand sample or repair. No game input.
+
+User scenario already sent: load local Nadine, draw P99, release controls and
+stand without aim/movement for15s, then report completion and keep game open.
+Do NOT signal after their reply: request is already consumed. Read PID636's
+fresh observed-draw ARMED/PROBE/sample/ARM-STOP, remembering ARMED is async and
+may follow a probe. Expiry/refusal/terminal gets no rearm, restart or second
+instance. Main cache/disk/loaded DLL is examON; restore normal OFF only after
+this bounded exam/process exit before any unrelated launch. tmp/ untouched.
