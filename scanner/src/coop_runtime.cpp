@@ -2496,8 +2496,9 @@ struct ClientDmgEvent { std::uint32_t name_hash; float damage; };
 ClientDmgEvent g_client_dmg_ring[64]{};
 std::atomic<std::uint32_t> g_client_dmg_head{0};
 std::uint32_t g_client_dmg_tail = 0;
-// Deferred until player-to-player synchronization is complete. Keep all recovered
-// enemy paths available, but do not let them mutate either world during player work.
+// Enemy synchronization is active research again (2026-10-16), but this legacy
+// switch couples raw world/local-root and HP writes. Keep it OFF until the native
+// apply boundary and cross-world identity/lifecycle are independently admitted.
 volatile bool g_enemy_sync = false;
 // Client->host damage relay master toggle.
 volatile bool g_client_damage_relay = false;
@@ -2514,10 +2515,9 @@ volatile bool g_allow_runtime_ai_toggle = false;
 volatile bool g_enable_client_death_publish = false;
 // Prevent the client-side mirrored death from being relayed back to the host.
 volatile bool g_applying_peer_enemy_death = false;
-// Single-instance validation of the enemy client-apply code path (enumerate +
-// RequestDisableAi + transform write) without needing two instances: freeze all
-// enemies in place with AI off. Toggle NUMPAD5. Default off.
-volatile bool g_enemy_freeze_selftest = false;
+// Rejected: RequestDisableAi crashed at1403F5D47 and guarded pause removes local
+// reactions. The old Num5 freeze writer must not be re-enabled during this track.
+constexpr bool kEnableRejectedEnemyFreezeSelftest = false;
 // Phase 3 recon: periodic CharacterManager dump (off).
 volatile bool g_charmgr_dump_periodic = false;
 // Position offset added to the peer state before applying to the puppet. 0 for
@@ -39043,12 +39043,12 @@ void apply_peer_enemies() {
     }
 }
 
-// Single-instance self-test: exercise the enemy client-apply path (enumerate +
-// RequestDisableAi + transform write) by freezing every enemy at its own current
-// position. If enemies cleanly stop with AI off and no crash, the apply path is
-// validated; the two-instance test then only adds the (low-risk) network transport.
+// Historical rejected experiment, not an admitted enemy-replication test.
+// A local AI freeze/raw root pin cannot prove cross-world identity, physics,
+// damage or animation authority. Both this body and its hotkey are quarantined.
 std::unordered_map<void*, std::array<float, 8>> g_enemy_freeze_pose;  // pos[4]+quat[4]
 void enemy_freeze_selftest() {
+    if constexpr (!kEnableRejectedEnemyFreezeSelftest) return;
     int frozen = 0;
     for_each_character([&](void* obj, const char* /*name*/) {
         if (!is_enemy_object(obj)) return;
@@ -39573,7 +39573,7 @@ void net_tick() {
         last_hp_probe = now;
         enemy_health_probe();
     }
-    if (foreground && g_enemy_freeze_selftest && now - last_freeze >= 16) {
+    if (foreground && kEnableRejectedEnemyFreezeSelftest && now - last_freeze >= 16) {
         last_freeze = now;
         enemy_freeze_selftest();
     }
@@ -40817,11 +40817,7 @@ void __fastcall hooked_update(void* object) {
                          : "manual slot1 apply OFF");
         }
         if ((GetAsyncKeyState(VK_NUMPAD5) & 1) != 0) {
-            g_enemy_freeze_selftest = !g_enemy_freeze_selftest;
-            if (!g_enemy_freeze_selftest) { g_enemy_ai_disabled.clear(); g_enemy_freeze_pose.clear(); }
-            log_line(g_enemy_freeze_selftest
-                         ? "ENEMY-FREEZE selftest ON (enemies AI-off + pinned)"
-                         : "ENEMY-FREEZE selftest OFF");
+            log_line("ENEMY-FREEZE disabled: rejected AI pause/raw transform path; no mutation");
         }
         // Use an explicit up->down edge. GetAsyncKeyState's low bit is affected by
         // keyboard auto-repeat and caused one physical press to publish many attacks.
@@ -81583,7 +81579,7 @@ DWORD WINAPI install_hook(void*) {
 #if defined(TLL_P99_CONSUMED_CENSUS_EXAM)
         "TLL co-op runtime init 2026-10-16p99-consumed-draw-request "
 #else
-        "TLL co-op runtime init 2026-10-16p99-consumed-safe "
+        "TLL co-op runtime init 2026-10-16enemy-sync-safe "
 #endif
         "(completed read-only reach census disabled; rejected support-target and elbow-roll writers disabled; stock arm/finger paths; appearance and AGC back profiles retained)");
     if constexpr (kEnableLegacyNadineMazurEmptyTrackEndpointFiller) {

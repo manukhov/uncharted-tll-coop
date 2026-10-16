@@ -1,8 +1,20 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
-## Current user priority / handoff (2026-09-20)
+## Current user priority / handoff (2026-10-16)
 
-USER PRIORITY RESET (2026-10-08): direct arm/hand repair, NOT further provider/
+USER PRIORITY RESET (2026-10-16): PARK Nadine appearance/arms/weapons work and
+resume ENEMY SYNCHRONIZATION BETWEEN COPIES. Preserve the current player and
+appearance baseline, but do not resume the P99 census or repair writers.
+Enemy work no longer waits for completion of the old appearance/player P0.
+First milestone: prove bounded A->B enemy correspondence and the native living
+Pirate transform boundary, with damage/death/HP writes/AI pause OFF. The old
+g_enemy_sync switch is not a safe implementation: it couples direct world/local
+root and HP writes with incomplete identity/lifecycle handling. See the latest
+enemy entry for audited gaps, offline work and the next static question.
+The appearance CURRENT/NEXT notes below are historical parked context, not
+authority to resume that track while enemy synchronization is active.
+
+PARKED PRIORITY (2026-10-08): direct arm/hand repair, NOT further provider/
 loader infrastructure. User confirms BOTH current defects: left arm/forearm
 through torso and incorrect right-hand pistol grip. All later infrastructure
 NEXT statements are parked history, not authority to continue that detour.
@@ -1722,7 +1734,7 @@ players, not just the clone).
 
 ---
 
-## CURRENT PRIORITY: complete player synchronization first
+## HISTORICAL PRIORITY: complete player synchronization first (superseded2026-10-16)
 
 The current acceptance criterion is no longer a moving positional proxy. Both
 copies must reproduce the other player completely: locomotion and traversal,
@@ -40733,3 +40745,143 @@ records. Timing/request readiness must be re-established before any fresh exam.
 Cache configured both examsOFF after stop; loaded/disk F591CE50...554784 remains
 the exam DLL while PID636 lives. Rebuild normal OFF after exit, not over a loaded
 module, before unrelated launches. Both hand defects remain unresolved.
+
+## 2026-10-16 — Resume enemy synchronization; quarantine legacy writers
+
+USER PRIORITY: park appearance/arms/P99 and synchronize enemies between copies.
+Preserve existing local Chloe A / local Nadine B and player synchronization.
+PID636 has exited; no tll process was present during this pass. This is a static
+audit and offline implementation checkpoint, NOT a successful enemy sync test.
+
+**STATIC / current code audit: old g_enemy_sync is not an admitted switch.**
+It couples raw world+240/local+130/quaternion+140 stores with HealthSystem+3C
+HP writes. It does not establish physics ownership, refresh +250/+280, handle
+parent-space conversion, or resolve premature client death. world_stable()
+only establishes local Player readiness, not each enemy's lifetime. Per-object
+death/AI maps have raw pointer keys without generation or world reset.
+
+CharacterManager143898630 has16-byte {record*,id} entries; record+8 resolves
+object, whose +BC must match id. Existing exact accepted vtables are Pirate
+14294B9D0 and ProcessRagdoll1429137A0. Peer correspondence is only FNV-1a of up
+to64 name bytes from object+8: runtime id is NOT a cross-copy key. Earlier
+13-host/10-client mismatch was explained by skipped local ragdolls, not hash
+mismatch; do not reopen that rejected explanation for that recorded encounter.
+Future duplicates/collisions/world changes remain unresolved. Legacy sender
+silently truncates at32; receiver lacks exact count-derived length, role/peer,
+sequence and value checks; first matching hash wins. No v1 world/session epoch.
+These findings do not prove that any current scene exceeds32 eligible actors.
+
+**REJECTED reuse, not a new live experiment:** RequestDisableAi1403F5D30
+previously crashed at1403F5D47 via NPC+1FC0/+1F88 dependencies; readable guards
+did not make AI pause a complete proxy mode (client reactions disappeared).
+Old NUMPAD5 freeze could still call that path. It now only logs refusal and
+both its tick gate and function entry are constant-disabled. Keep enemy sync,
+damage relay/hook, AI pause and death publication OFF. Historical raw root
+freeze, below-world corpse hiding, copied damage/death templates and npc-kill
+1416A5C20 are not replacement solutions (see FINDINGS_ARCHIVE enemy chronology).
+
+**STATIC native movement alternatives narrowed, not a proven writer:**
+
+- Exact Pirate RTTI at142C85988 -> type143750D08 .?AVPirate@@ and constructor
+  1404A3490 store at1404A34AE identify vtable14294B9D0. Slot+400/128 resolves
+  Npc_PostAnimApplyRootTransform14042FB40 -> NavCharacter_ApplyAnimationRootTransform
+  141DE8EC0. This is not Player+400, nor proof that NadineBuddy MoveTo transfers
+  safely to a Pirate.
+- Pirate+5E8/189 = Npc_EvaluateNativeControlBranchGate140434820. False when
+  global143E02054 is set, matching native record byte+BC is set, or nonnull
+  NPC+F140 virtual+18 rejects. TRUE selects ordinary native/controller branch;
+  FALSE selects alternate net-animation path. Direct local-root stores
+  141DE9608/+130 and141DE9610/+140 belong to the FALSE branch. Reject these as
+  evidence of the ordinary campaign root writer; do not flip this gate.
+- Its NetProcess_FindRecordByOwnerAndTouchResolvedProcesses140A97450 is gated
+  by HIBYTE(g_NetModeFlags), traverses143E01AA8/143E01B28/143E01B38 with weak
+  pointer/id checks, and marks EACH valid resolved object+72=1 before testing
+  owner equality. It is not a read-only observer helper.
+- Pirate+208/65 is empty nullsub_3851401D4E10, not physics completion.
+  Pirate+1E8/61 = NavCharacter_ProcessParentTransformChange141DE4000, which
+  validates/reselects parent, compares via1401D5320, computes parent-relative
+  delta and calls141E7D1F0 / owner+BD8. Not a generic physics-refresh callback;
+  broader effects remain unresolved.
+- Pirate+2B8/87 = Character_UpdateDerivedWorldTransformFromLocalRoot141BB8320
+  derives +240/+250/+280 from +130/+140 and cached parent+110/+120. It does not
+  itself establish physics publication. Null authored parent handle does not
+  prove identity cached parent: old cache can survive failed lookup. Therefore
+  world+240 cannot simply be copied into local+130, even with this helper.
+- Registry Step141A911A0 dispatches phase8 at141A913E5 before phase40 at141A913F9.
+  Retained-owner dispatcher141A8F9D0 checks record/object+BC, process class and
+  killed flag; phase8 call141A8FCCC uses owner+400 with current-process TLS.
+  Post-Pirate+400/pre-phase40 is a READ-ONLY observation candidate. Neither this
+  ordering nor derived-transform refresh proves worker/physics mutation safety.
+
+Evidence kinds: exact RTTI/constructor/vtable identity; callers/callees and
+branch-specific disassembly/pseudocode; structural agreement with retained-owner
+dispatcher and existing local/parent/world transform findings. These eliminate
+alternate-branch/root-only shortcuts, not all competing final movement owners.
+Ordinary path uses141E12F90 and141DEC4B0 (size1710, callsites
+141DE9133/141DE96F6/141DE979F). Narrow follow-up found exact source assertion
+at141DEC64C, nav-character.cpp:3478: NavCharacter::UpdateRootLocator. It is now
+named NavCharacter_UpdateRootLocator. Tail141DEDA11 calls141E7D0D0 to copy32
+bytes into local+130/+140 and notify+208;141DEDA20 calls unresolved141DEB500;
+141DEDA46 calls141E7D1D0 to copy16 bytes into+140 and notify+208. The two small
+helpers are labeled ObjectTransform_CopyLocalRootAndNotify208 and
+ObjectTransform_CopyLocalRotationAndNotify208; exact Pirate notification is
+empty, so neither completes physics publication. Caller and callee queries
+also distinguish the generic root helper's separate interaction use.
+
+The presumed owner+15B8 final-output lead is narrowed:141DECE69 passes it to
+141E12610 with predicate141DEC410; the source-identified DynamicNavBlocker heap
+enumeration builds blocker bits, not the final root publication. Do not confuse
+that input with the output owner.141DEB500 hashes "base", scans records and
+nested node+108 bit400; its fallthrough calls141DEAF00 and141E7CDA0. This is
+not enough to name the overall operation or call it on network data. Rare
+141DED664 virtual+C48 reaches native teleport140416B20, not ordinary movement.
+
+**STATIC combat authority conflict:** ClientDamagePacket has no sequence,
+session, event ID or replay protection; receive ring has no full check, and
+hook does not restrict attacker to local B. Raw AttackInfo+20 is not established
+actual health loss. Meanwhile current FirePacket -> button fallback -> stock
+Player fire140E2C730 already emits native projectiles through141519B50 and
+bullet probe14152C9B0; grenade14154B3B0 also remains a real physics projectile.
+Direct safe_replay_player_fire is OFF; do not confuse it with active fallback.
+There is no B-side visual-only health/death gate. Adding scalar damage relay
+can count an attack twice; merely choosing flags cannot yield host-only combat.
+Square relay proves remote melee presentation, not victim/death authority.
+Preferred hypothesis: A simulates damage from both local and replayed remote
+attacks, B presents replicated results. Native B health/death suppression with
+preserved presentation still needs proof. Do not enable combat in movement work.
+Legacy lethal routing also falls back to base damage when HP is unknown/zero;
+HP0 snapshots can cause npc-die early return without corpse transition.
+
+**OFFLINE implementation, NOT live packet integration:**
+enemy_snapshot_policy.h now provides observation-only admission and matching:
+exact wire length/header/count, configured peer/client role, local age/token,
+wrap-aware sequence, finite bounded pose/quaternion norm policy, flags/HP and
+duplicate remote hashes. Complete local enumeration rejects ambiguity/aliased
+records/objects all-or-nothing; bindings compare fresh local record/id/object
+and token. Missing actors are counts, not spawn/despawn operations. No game
+reads, writes, object retention, native calls or network changes. Unique32-bit
+hash still does not prove full name equality or cross-world identity. The local
+token fences caches only: a delayed old-world v1 packet after reset remains
+indistinguishable. An explicit test preserves that limitation. Numerical limits
+are conservative policy choices, not newly confirmed engine invariants.
+
+Fresh normal main build2026-10-16enemy-sync-safe succeeded, both P99 exams OFF.
+DLL SHA256 AB1C89D73A1B7B8E4939903E60A83B2D29E82DA0035E572A962EC9851B5FB077.
+New /W4 /WX test target passed10/10 groups; CTest enemy_snapshot_policy passed.
+Independent code review found no blockers for offline-only scope/quarantine.
+No launch, injection or game input; no new runtime prediction is admitted yet.
+Labels/comments applied to the sole ida/tll.i64 through stopped-MCP headless
+pipeline: reports/enemy_sync_labels_20261016.txt records save_database returned
+True. Additional root-locator labels used the same stopped-MCP pipeline;
+reports/enemy_sync_labels_20261016_final.txt records1960 functions and
+save_database returned True. Reopened MCP verified all six new function names,
+Pirate gate/parent vtable xrefs, native-registry callers and all three root-
+locator callsites. Only ida/tll.i64 was opened or written.
+
+NEXT: follow NavCharacter_UpdateRootLocator141DEC4B0 tail141DEDA20 into
+141DEB500 ->141DEAF00/141E7CDA0, establish its input provenance/parent-binding
+effect and the separate final physics publisher. Resolve exact Pirate slot/
+owner, phase40/later overwriters and per-enemy retention. In parallel close full
+cross-copy actor key/world epoch and complete-enumeration contract. Only then
+admit one bounded two-copy no-combat test with distinct matching/movement
+predictions. No legacy g_enemy_sync, AI freeze or scalar damage shortcut.

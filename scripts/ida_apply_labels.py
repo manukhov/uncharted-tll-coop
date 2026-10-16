@@ -3789,9 +3789,54 @@ FUNCTIONS = {
     0x141DE8EC0: (
         "NavCharacter_ApplyAnimationRootTransform",
         "NavCharacter/AiCharacter vtable +0x400 post-animation path. Npc override "
-        "0x14042FB40 reaches it; when virtual +0x5E8 permits the direct branch it derives "
-        "and writes local root position +0x130 and rotation +0x140, then calls "
-        "virtual +0x208/+0x1E8. Player vtable +0x400 instead resolves to 0x1410E9210.",
+        "0x14042FB40 reaches it. FALSE virtual +0x5E8 selects alternate net-animation "
+        "branch with direct local-root stores 141DE9608/+0x130 and 141DE9610/+0x140; "
+        "TRUE selects ordinary native/controller path through 141E12F90/141DEC4B0. "
+        "Not a proven network transform setter. Exact Pirate +0x208 is nullsub_385; "
+        "+0x1E8 is parent-transform change processing. Player +0x400 is 1410E9210.",
+    ),
+    0x140434820: (
+        "Npc_EvaluateNativeControlBranchGate",
+        "STATIC: RTTI-confirmed Pirate vtable +0x5E8. False for global143E02054, "
+        "matching native record byte+0xBC, or nonnull NPC+0xF140 whose virtual+0x18 "
+        "returns false; true otherwise. 141DE8EC0 uses true for ordinary native/"
+        "controller branch, false for alternate net-animation path. Not a safe "
+        "runtime switch; call to140A97450 is not read-only.",
+    ),
+    0x141DEC4B0: (
+        "NavCharacter_UpdateRootLocator",
+        "STATIC exact nav-character.cpp:3478 source assertion at141DEC64C names "
+        "NavCharacter::UpdateRootLocator. Reached by141DE8EC0 at141DE9133/141DE96F6/"
+        "141DE979F. Tail copies local root via141E7D0D0, calls unresolved141DEB500, "
+        "then copies local rotation via141E7D1D0. Not a generic packet setter; "
+        "ordinary-path final physics publication and phase ordering remain open.",
+    ),
+    0x141E7D0D0: (
+        "ObjectTransform_CopyLocalRootAndNotify208",
+        "STATIC copies supplied32bytes to object+0x130/+0x140, then tail-calls "
+        "virtual+0x208. Called by NavCharacter_UpdateRootLocator at141DEDA11 and "
+        "BuildInteractHookRuntimeStateFromLiveObject. Exact Pirate+208 is empty; "
+        "this helper alone does not publish Pirate physics.",
+    ),
+    0x141E7D1D0: (
+        "ObjectTransform_CopyLocalRotationAndNotify208",
+        "STATIC copies supplied16bytes to object+0x140, then tail-calls "
+        "virtual+0x208. NavCharacter_UpdateRootLocator calls it at141DEDA46. "
+        "Exact Pirate+208 is empty; not an independently safe network writer.",
+    ),
+    0x140A97450: (
+        "NetProcess_FindRecordByOwnerAndTouchResolvedProcesses",
+        "STATIC: gated by HIBYTE(g_NetModeFlags); searches native registry "
+        "143E01AA8/143E01B28/143E01B38, validates weak pointer/id against object+0xBC. "
+        "Marks EACH valid traversed object+0x72=1 before owner comparison; returns "
+        "matching entry+0x18 or null. Not a read-only lookup or observation helper.",
+    ),
+    0x141DE4000: (
+        "NavCharacter_ProcessParentTransformChange",
+        "STATIC: exact Pirate vtable+0x1E8. Receives authored transform pointer, "
+        "validates/reselects parent, compares current binding via1401D5320, computes "
+        "old/new parent-relative delta, calls141E7D1F0 and owner+0xBD8. Not a generic "
+        "physics refresh; broader side effects remain unresolved.",
     ),
     0x1403D13E0: (
         "GameCharacter_PostAnimApplyRootTransform",
@@ -3801,7 +3846,7 @@ FUNCTIONS = {
     ),
     0x14042FB40: (
         "Npc_PostAnimApplyRootTransform",
-        "Npc and NadineBuddy vtable +0x400 override. Runs the shared NavCharacter "
+        "Npc, NadineBuddy and RTTI-confirmed Pirate vtable +0x400 override. Runs the shared NavCharacter "
         "root-transform apply and additional NPC post-animation state; this is not "
         "the Player post-animation method.",
     ),
@@ -6589,12 +6634,14 @@ FUNCTIONS = {
     ),
     0x141BB8320: (
         "Character_UpdateDerivedWorldTransformFromLocalRoot",
-        "Common Player/NadineBuddy/NdAttachableObject vtable slot +0x2B8. "
+        "Common Player/NadineBuddy/Pirate/NdAttachableObject vtable slot +0x2B8. "
         "For ProcessWeapon this is the last proven placement writer downstream "
         "of the selected attachment. Derives world transform "
         "at +0x240 and root/capsule output at +0x280 from local root +0x130, "
         "local rotation +0x140, and optional parent transform +0x110/+0x120; "
-        "also mirrors local root to +0x250.",
+        "also mirrors local root to +0x250. Null authored parent handle does not "
+        "prove identity cached +0x110/+0x120. No physics publication proven here; "
+        "exact Pirate +0x208 is empty, not a physics completion callback.",
     ),
     0x141837CD0: (
         "Joypad_IsCommandActive",
@@ -15041,6 +15088,30 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x141DEDA20: (
+        "STATIC UpdateRootLocator tail:141DEDA11 copies local root, this invokes "
+        "unresolved141DEB500,141DEDA46 copies local rotation. 141DEB500 searches "
+        "base records and tests nested node+108 bit400 before141DEAF00/141E7CDA0. "
+        "Do not infer generic physics publication from its position in this chain."
+    ),
+    0x141DE9608: (
+        "STATIC local-root +130 store in FALSE virtual+5E8 alternate net-animation "
+        "branch, not ordinary campaign Pirate native/controller branch. Do not "
+        "use as a network writer without final physics/lifetime/phase proof."
+    ),
+    0x141DE9610: (
+        "STATIC local-root +140 quaternion store paired with141DE9608, alternate "
+        "net-animation branch. World+240 and local+130 are not interchangeable."
+    ),
+    0x141A8FCCC: (
+        "STATIC phase8 retained-owner virtual+400; exact Pirate resolves14042FB40. "
+        "Phase40 follows at141A913F9. Post-return is an observation candidate only, "
+        "not proven safe for transform/physics writes."
+    ),
+    0x1401D4E10: (
+        "STATIC exact RTTI-confirmed Pirate vtable+208 is this empty callback. "
+        "Calling it after a root write cannot publish/refresh Pirate physics."
+    ),
     0x1418F1DEE: (
         "STATIC left post-solve/pre-commit seam: wrist rotation finished at "
         "1418F1DE3, DL=1 at1DE8, RCX=left set at1DEA. Forward BOTH arguments "

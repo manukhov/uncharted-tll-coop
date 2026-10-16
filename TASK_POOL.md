@@ -2,14 +2,37 @@
 
 ## Primary Objective
 
-Полноценный кооп кампании между двумя копиями игры. Текущий порядок работ:
+Full campaign co-op between two game copies. Current user-directed order:
 
-- локальная Chloe на первой копии и локальная Nadine на второй;
-- полное представление удалённого игрока в обеих копиях;
-- синхронизация всего состояния и всех действий игроков;
-- синхронизация противников только после игроков.
+- Preserve local Chloe in copy A, local Nadine in copy B and current player sync.
+- Work on enemy synchronization now; appearance/hand repair is PARKED.
+- First prove A->B enemy correspondence and a safe native living-NPC movement
+  boundary; keep enemy damage/death/HP writes and AI pause OFF.
+- Complete combat authority and remaining player/appearance work separately.
 
-## P0 CURRENT: correct local Nadine pistol grip (2026-08-27)
+## P0 CURRENT: Enemy Synchronization (2026-10-16)
+
+User explicitly moved priority from appearance to enemies between copies.
+Do not simply enable old g_enemy_sync: it performs raw world/local/HP writes;
+RequestDisableAi and the old freeze test are not admitted. Current investigation:
+exact unique actor correspondence, full packet admission, local generation and
+world-lifecycle boundary, then Pirate native root/physics ownership. The old
+client damage relay can duplicate receiver-native attacks and remains OFF.
+Latest COOP_STATUS records concrete findings and the next step.
+
+2026-10-16 checkpoint: normal main DLL built with both P99 exams OFF; Num5
+rejected freeze is hard-disabled. Offline observation-only snapshot admission/
+matching passes10/10 groups and is NOT wired into runtime. Protocol v1 cannot
+prove world/session identity, even with a fresh local observation token.
+Exact Pirate+5E8 gate140434820 proves direct stores141DE9608/10 are the
+alternate net-animation branch, not ordinary campaign movement. Pirate+208
+is empty; +1E8 parent handling and +2B8 derived transform are not physics proof.
+141DEC4B0 is source-identified NavCharacter_UpdateRootLocator. Its owner+15B8
+lead enumerates DynamicNavBlocker inputs, not final transform publication.
+NEXT: tail141DEDA20 ->141DEB500 ->141DEAF00/141E7CDA0 input/parent effect,
+separate root/physics publication and phase40 ordering. No runtime test admitted.
+
+## PARKED: correct local Nadine pistol grip (2026-08-27)
 
 USER PRIORITY RESET (2026-10-08): fix the actual arms/hands. User explicitly
 confirmed BOTH defects: left arm/forearm passes through the torso and right
@@ -2986,9 +3009,9 @@ admission, not a proved whole-job state freeze. No new runtime test is earned.
 - [ ] Оружие Нэдин: СТЕНА — asset/skeleton-AP (холстер-точка из дефа оружия требует
       сустав на скелете look'а). Не code-fixable (`487a3c3`).
 
-## P1: Enemy Synchronization (DEFERRED)
+## Enemy Synchronization: prior deferred track (resumed as P0 on2026-10-16)
 
-- [ ] Не продолжать до закрытия P0.
+- [x] User explicitly lifted the old player/appearance prerequisite on2026-10-16.
 - [x] Сохранить найденные безопасные пути урона и `npc-die` в коде, отчёте и IDA.
 - [x] Выключить отправку/применение противников и передачу их урона по умолчанию.
 
