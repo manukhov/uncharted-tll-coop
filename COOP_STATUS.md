@@ -40708,3 +40708,28 @@ fresh observed-draw ARMED/PROBE/sample/ARM-STOP, remembering ARMED is async and
 may follow a probe. Expiry/refusal/terminal gets no rearm, restart or second
 instance. Main cache/disk/loaded DLL is examON; restore normal OFF only after
 this bounded exam/process exit before any unrelated launch. tmp/ untouched.
+
+**2026-10-16 correction/result: auto-holster prevents the requested15s hold.**
+
+User clarifies P99 auto-holsters after about5s; the instruction to keep it drawn
+for15s was inappropriate. Do not ask for aiming, repeated draw, input spam or
+an auto-holster patch to manufacture steady state. Short single-draw capture
+is still useful: current scheduling admits the first due sample, then200ms,
+then2s gaps (roughly0/.2/2.2/4.2s IF admission succeeds). This is not evidence
+of a10s late/steady pose and does not complete all8 attempted samples.
+
+PID636 remains live, but log104968 now reports ARM-STOP
+reason=draw-timeout-or-clock; stock-only; no rearm; pose_writes=0. No ARMED,
+PROBE, commands or arm samples appeared after its ARM-REQUESTED. CONFIRMED:
+the request was accepted but no qualifying timing gate was committed before
+terminal stop. The combined stop string does not independently identify a
+clock anomaly versus normal wait expiry, nor prove the user never drew P99.
+Do not present this as a live Control failure or an evaluated hand pose.
+REJECTED user scenario:15s continuously drawn non-ADS P99. No new launch,
+signal, reinjection or game input this turn; do not repeat in this terminal
+process. Future scenario is ONE draw then hands-off through natural holster,
+with the short drawn interval clearly separated from subsequent holstered
+records. Timing/request readiness must be re-established before any fresh exam.
+Cache configured both examsOFF after stop; loaded/disk F591CE50...554784 remains
+the exam DLL while PID636 lives. Rebuild normal OFF after exit, not over a loaded
+module, before unrelated launches. Both hand defects remain unresolved.

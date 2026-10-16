@@ -151,13 +151,21 @@ Old PID12356 absent; normal OFF DLL rebuilt. Latest COOP_STATUS defines fresh
 exam prediction and launch gates: request BEFORE user's draw, not after chat.
 After final ABI review/commit/push and fresh EXAM=ON build, launch/inject ONE
 instance and request ONCE after verified ARM-WAIT. No rearm/input/second game.
-LIVE2026-10-16: source97f52df pushed; fresh EXAM=ON launched/injected ONE
+PREVIOUS LIVE2026-10-16: source97f52df pushed; fresh EXAM=ON launched/injected ONE
 PID636, creation134366347590447862,17:32:39.0447862 Moscow. Exact identity/hash/
 loaded module verified; INSTALLED/UNARMED + ARM-WAIT request-v2. Requested ONCE;
 actual ARM-REQUESTED at log104967, no ARMED/PROBE/sample yet. User must draw P99
 and stand15s; NO chat-triggered signal. On completion read fresh PID636 records;
 no rearm/reinject/restart/second game after any terminal/expiry. Main cache/disk
 examON; normal OFF must be rebuilt after process exit before unrelated launch.
+RESULT: PID636 log104968 ARM-STOP draw-timeout-or-clock, no ARMED/probes/samples.
+Request accepted but no qualifying observation committed; NOT a Control or
+pose result. User reports auto-holster at~5s, so15s continuous drawn scenario is
+REJECTED. Next scenario ONE draw, hands-off through natural holster; initial
+0/.2/2.2/4.2s samples are potentially useful, not a10s steady-pose conclusion.
+Current process terminal: no signal/rearm/reinjection/repeat. Re-establish
+request timing before any fresh exam. Cache both examsOFF; loaded/disk exam
+unchanged until process exits and normal OFF is rebuilt. See latest registry.
 NEXT only after actual complete records: identify copied cmd6 clip IDs and
 cmd7/9/11 folds at early/late samples, compare pre/post+408 geometry, and find
 the first incompatible stage. A complete record is not a repaired hand;
