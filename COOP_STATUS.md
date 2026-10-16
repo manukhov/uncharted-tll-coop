@@ -40983,9 +40983,10 @@ Full-name provenance: SpawnInfo1428D5D60 slot0=1417C3660 returns explicit+30
 name, else SpawnInfo+58 ->EntitySpawner+20 name, else caller fallback.
 NdGameObject initialization141E7C9F2 stores spawner at object+150 if spawner
 exists and+51 bit08 is clear; Pirate+168=1401D5C80 returns that pointer.
-Reciprocal lookup uses spawner+60 ->holder+30(record)/+38(id), record+8 and
-object+BC. Native resolver marks object+72; it is not a read-only getter or
-retention lease. Missing spawner/explicit override/indexed respawn/duplicates
+CORRECTION from the next lifecycle pass: OWN reciprocal lookup uses directly
+spawner+30(record)/+38(id), record+8 and object+BC. Spawner+60 is the PARENT
+spawner, so141D21DE0 resolves its actor and also marks object+72; it is not a
+read-only getter or retention lease. Missing spawner/explicit override/indexed respawn/duplicates
 remain cases to reject or identify, not permissive matching fallbacks.
 
 Separate IDs: local generation+BC comes from base ctor1416A3393 and atomic
@@ -41031,3 +41032,135 @@ Existing observation-policy tests re-ran successfully (10/10 groups, CTest1/1);
 only its identity warning changed, no runtime behavior or wire format changed.
 No new DLL was needed/built for this static-only unit. Normal main build and
 all enemy/appearance experiment OFF states remain as recorded in874aa4b.
+
+## 2026-10-16 — Close normal frame barrier; correct spawner and optional-body assumptions
+
+Enemy P0 continues fromc4e1e31. Appearance remains PARKED. This is static
+analysis, not a synchronization success: no game launch, injection or input.
+
+**STATIC normal animation -> postrender physics completion is closed.**
+Source GameLoopUpdate1401676D0 submits-and-WAITS UpdateProcesses14015F020 at
+1401677FB through1415B5210; return140167800 precedes postrender submission
+1401678DE. Helper submits1415B52CA, waits1415B52D7 and releases1415B52E4.
+Async manager1417816B0 waits three spawner counters in each of two sets at
+1417829B9/C6/D4. Spawner1415C51E0 waits children1415C53F9 before releasing
+original counters1415C541C; worker completion follows callback invocation.
+Thus Perform141A928F0's +408/phase40 and JointBlend141A92A00's phase20
+owner+410141A934D5/+418141A934E8 finish before manager return. Exact Pirate
++418 waits/releases/zeros owner+210. Bucket5 drains escaped disabled jobs
+146AF2798 at14015EAA6/AAE. SyncUpdate141782B40 directly tail-calls the same
+joint-blend callback through141782B30; CORRECTION: not a separately submitted
+async job in this branch. Independent evidence: source identity, concrete
+counter decrement/wait dataflow, callback graph and Pirate vtable slots.
+This is an ordinary-frame ordering proof, NOT global package-job exclusion,
+an injection quiescence point, or an object/resource retention guarantee.
+
+**STATIC authored identity/lifecycle correction.** Own actor reciprocal pair
+is directly EntitySpawner+30(record)/+38(id); record+8 yields actor, validated
+against actor+BC. RequestKill141D22240 and ResetActors141EDAFF0 independently
+use it. EntitySpawner+60 is its PARENT spawner:141E7C9DE names current/parent
+in the parenting failure message;141D231E0 recursively composes parent pose.
+141D21DE0 and141D21E20 resolve/touch the parent's actor, not the current one.
+
+141D22420 is EntitySpawner_Spawn, NOT a read-only roster resolver. It sets
+PSI+58=spawner at141D22712; game callback141D22721 and optional141D227A7 can
+replace/modify actual PSI, with explicit ID/index at141D2275E/77F. After
+Process::SpawnProcess141D227B1 returns it publishes actor+A8/+BC to spawner
++30/+38 at141D22874..883, unless arg4 suppresses publication. Exact Pirate
++60 PostInit140402670 runs inside SpawnProcess1417C40A0 and adds Character
+at140402904, BEFORE that reciprocity exists. REJECTED as sufficient census
+seams: PostInit and AddCharacter cannot simultaneously prove that link.
+
+SpawnerGroup Update141EDA990 holds146AA1B20 between141EDAA05..141EDAF42 and
+spawns at141EDAD75, but package logout141CC323A and group teardown141EDA8CA
+reset/kill spawners without taking that same lock locally. Outer resource
+retention is unresolved; object+150 is a raw pointer, not a demonstrated lease.
+Existing hooked_update covers Player/Nadine, not Pirate. A future census must
+use actual resolved PSI from the same spawn invocation, direct reciprocity,
+full bounded name, explicit override/index/missing/duplicate rejection and
+complete coverage. Double-reading pointer/id/name does not replace lifetime
+proof. No census or network write exam is admitted from these checks alone.
+
+**STATIC +698 ownership narrowed; campaign activation remains HYPOTHESIS.**
+Character ctor141E98C70 stamps Character vtable and zeros+698 at141E98D88.
+Character destructor141E991F0 loads it at141E993C0, calls141CEFB80 at141E993CF
+and frees0x110 bytes at141E993DD. Shutdown clears the body's work bit, resets
+native body+40, and frees registered handle through141CECD70. Source
+RigidBodyHandle::FreeHandle clears table14386FD00[index+54], allocation bit,
+body+54 and+50 under146A59B50. Character_RelocateOwnedPointers141E9FF90 may
+rebase+698 at141EA0145; this is not creation. Three independent kinds: RTTI
+construction/teardown graph, concrete stores/free sizes, source handle contract.
+No live-Pirate producer was found. Direct-offset candidates were other owners
+(AiWeaponController1405A9E1B, coordinator search allocation140601554, biased
+physical-interaction buffers141354975/C96, JoypadState14183674B, Gesture
+aggregate1420F34F9, SimpleCrowdGoal14213F66E, NCA::System142431008).
+This is NOT proof+698 stays null: indirect/reflection/bulk initialization may
+exist. The previous optional queue-to-Havok chain remains valid conditionally,
+not sufficient evidence for the ordinary campaign collision path.
+
+**STATIC +410 is not one final root-writer seam.** Pirate1404AA090 calls
+14042FCF0 ->141DE9AD0 ->141E9C480 ->141BBDF70. At141BBE107, virtual+2B8
+resolves141BB8320: local+130/+140 reads141BB8381/83E0 produce world+240/+250/
++280 stores141BB8602/860B/8614. This is recomposition, not inherently rollback.
+Later141DE9B31 invokes+38 on11 fixed controllers at owner+15D0; their exact
+types/remaining writes are unresolved. ControlHost helper140422760 writes a
+different entity, not this owner root. Do not call the derived refresh final.
+
+**STATIC primary CompositeBody and bidirectional synchronization distinguished.**
+NdGameObject_InitCompositeBody141BC03F0 is exact Pirate+450, invoked from NPC
+initialization14042A88F. It allocates0x180, constructs141E53690, stores owner
++238 at141BC0459 and calls source CompositeBody::Init141E54FE0, which stores
+owner atComposite+8. In contrast, Character::InitializeRagdoll141E9D490 has
+exact m_pRagdoll assertion, allocates0x180 and stores owner+580 at141E9D531;
+NPC caller is gated by byte+1CA9 bit10. Ragdoll is not the primary collider.
+Evidence kinds: source assertions, allocation/store dataflow, exact Pirate
+vtable and independent initialization/update callers.
+
+At+408,141BBDE8D(+238) and141E9C465(+580) call source
+CompositeBody::SyncPhysicsToGame141E59160. World, nonzero binding count+60,
+lock+160 and body-status/flag gates apply. Early exit: !(byte0&2), maximum
+body status<=1 and !(byte0&80). Binding array+58 stride50; body array+48
+stride110. If first binding DWORD=-1, body index+4 selects body pose, and
+141E5998E/996 write owner+130/+140 before virtual+208. Otherwise signed
+Composite+E8>=0 can select a binding;141E59C36 ->1416860A0(owner+100) writes
+descriptor+30/+40 at141686105/110, again owner+130/+140, then+208.
+These branches are not yet shown active in the selected living encounter.
+REJECTED: before-+408 root replacement as a generally preserving seam; native
+physics import can overwrite it. Merely finding a shared source is insufficient.
+
+At+410,141BBE119(+238) and141E9C4CD(+580) call141E5AEE0. Under world-present,
+it resets history for missing/unworlded bodies if byte+2 bit20, and calls
+141E5A980 when Composite+120 is null OR binding count+60 is zero.141E5A980
+loops bodies when DWORD+18+DWORD+24!=0 or byte+2 bit10, calling141CF57D0 at
+141E5A9E7. The incomplete decompiler is not gate evidence here: disassembly
+shows nativebody+40 and motion-state gating; A0 bit0 clear and float+9C<=0
+lead to141CF586D ->141CF0EE0(body,0). This obtains owner/joint world141CF0A00,
+converts141CF05A0, stores141CF3790 and marks146A5C380 at141CF0FEA under lock
+146A5C780 for nonzero body+54 index. Mode4000 also uses pose-change thresholds.
+Unlike141CF36B0, it does NOT set explicit-transform A0 bit0.
+
+Ordinary mode2 FrameSyncEnd therefore calls141F808E0 at141F81486, not the
+explicit-transform141F80AC0 branch. Chain141F808E0 ->141F80430 ->141F80100
+updates native swept pose+1B0/+1C0/+1D0/+1E0, basis via142229D50 and position
++1A0 at141F80680;14237BC50/70 write motion+E0/+F0 (=nativebody+230/+240)
+linear/angular velocities. This is keyframed movement, not a teleport shortcut.
+
+**Next bounded step / remaining HYPOTHESIS:** establish living-Pirate primary
++238 bindings, motion/import modes, and concrete fixed+15D0 controller+38
+writers before selecting an after-import/before-game-publication seam. A
+read-only phase comparison could distinguish (A) body driven from owner root,
+(B) joint-driven collider, (C) physics-imported root, but capture admission and
+the exact qualifying gates are not implemented. Separately prove post-spawn
+actual-PSI capture and resource lifetime; no arbitrary Player tick census.
+World/session epoch, parent conversion and combat authority remain separate
+requirements. All legacy enemy/AI-pause/HP/damage writers remain OFF. No new
+runtime exam, DLL build or behavioral success is claimed in this static unit.
+
+Handoff: independent identity/physics reviews found no blockers; wording fixes
+were applied. Sole ida/tll.i64 saved through stopped-MCP headless pipeline;
+reports/enemy_native_phase_labels_20261016_final.txt records2015 functions,
+83 data names,3 types and save_database returned True. Reopened MCP verified
+all29 new/renamed function names and both +238/+580 import and forward-path
+caller xrefs. AST/diff checks pass; no new duplicate label keys. No runtime
+source/binary changed or new gameplay test performed. Existing untracked tmp/
+was preserved untouched.

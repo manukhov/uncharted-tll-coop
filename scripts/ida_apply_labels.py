@@ -125,6 +125,15 @@ FUNCTIONS = {
         "identity or bind transforms and does not imply a missing Hands layer.",
     ),
     # --- 2026-09-28: native animation phase drains, not installation gates ---
+    0x1401676D0: (
+        "GameLoop_UpdateAndWaitFramePhases",
+        "STATIC exact GameLoopUpdate source common-game-loop.cpp:5810/5830. "
+        "At1401677FB submits-and-waits UpdateProcessBuckets14015F020 through "
+        "1415B5210; return140167800 precedes postrender140165B50 submission "
+        "at1401678DE. Normal animation callbacks and bucket5 escaped-job drain "
+        "therefore complete before normal postrender HavokStep. Not global "
+        "producer exclusion, package-unload retention or an installer gate.",
+    ),
     0x1415B5210: (
         "Ndjob_SubmitSingleJobAndWait",
         "STATIC: constructs one callback/data record, allocates a one-job "
@@ -142,7 +151,8 @@ FUNCTIONS = {
         "for ordered buckets0..8 at0x14015F058..14015F35B. Bucket5 drains "
         "the escaped bucket3 counter146AF2798 at0x14015EAA6/AAE; normal "
         "manager spawner counters are waited separately. Submitted-and-waited "
-        "by0x1401677FB->0x1415B5210. Phase completion does not exclude "
+        "by0x1401677FB->0x1415B5210, before1401678DE submits postrender physics. "
+        "Phase completion does not exclude "
         "package-login AnimateObject/Process paths or stop future producers; "
         "not an installer gate for the shared cmd16 callsite.",
     ),
@@ -3836,13 +3846,178 @@ FUNCTIONS = {
         "via+30 and optional owner+15C8 collection via+48; tail-calls141E9C220 "
         "at141DE99BC. Retained postblend dispatch, not a pure transform setter.",
     ),
+    0x141E53690: (
+        "CompositeBody_Ctor",
+        "STATIC constructs0x180-byte CompositeBody; shared allocation paths "
+        "NdGameObject_InitCompositeBody141BC03F0 (+238) and "
+        "Character_InitializeRagdoll141E9D490 (+580). Distinct owned fields "
+        "can belong to the same Character.",
+    ),
+    0x141BC03F0: (
+        "NdGameObject_InitCompositeBody",
+        "STATIC exact source identity. Allocates0x180, calls141E53690, stores "
+        "owner+238 at141BC0459 and initializes via141E54FE0. Exact Pirate "
+        "vtable+450 resolves here; NPC initialization calls at14042A88F. "
+        "Primary CompositeBody, not optional Character+698 single body.",
+    ),
+    0x141E54FE0: (
+        "CompositeBody_Init",
+        "STATIC exact CompositeBody::Init composite-body.cpp:685. Stores "
+        "owner atComposite+8; bodies+48 stride110, bindings+58 stride50. "
+        "Used by both primary owner+238 and optional ragdoll+580.",
+    ),
+    0x141E9D490: (
+        "Character_InitializeRagdoll",
+        "STATIC exact Character::InitializeRagdoll, m_pRagdoll assertion "
+        "character.cpp:961. Allocates0x180 at141E9D515; constructs141E53690, "
+        "stores owner+580 at141E9D531, initializes141E54FE0 at141E9D641. "
+        "Error cleanup141E56800 zeros+580. NPC caller gated by+1CA9 bit10. "
+        "This is ragdoll, NOT the primary CompositeBody at+238.",
+    ),
+    0x141E59160: (
+        "CompositeBody_SyncPhysicsToGame",
+        "STATIC exact source composite-body.cpp:2062/2098. PHYSICS->GAME "
+        "import in +408 for primary+238 and ragdoll+580. Gated by world, "
+        "bindings+60, lock+160 and body statuses/flags. First binding key=-1 "
+        "directly writes owner+130/+140 at141E5998E/996 then+208. Alternate "
+        "signed+E8>=0 binding uses1416860A0(owner+100) at141E59C36, also "
+        "root writes, then+208. Selected living-Pirate gates not established. "
+        "Can overwrite a pre+408 network root; not forward collision publishing.",
+    ),
+    0x141E5AEE0: (
+        "CompositeBody_SyncGameDrivenBodies",
+        "STATIC +410 callers141BBE119(primary+238),141E9C4CD(ragdoll+580). "
+        "Requires Havok world. Byte+2 bit20 resets body history for missing/"
+        "unworlded native bodies. Calls141E5A980 only if+120 null OR binding "
+        "count+60 zero; do not assume unconditional transform publication.",
+    ),
+    0x141E5A980: (
+        "CompositeBody_UpdateGameDrivenBodyTransforms",
+        "STATIC when DWORD+18+DWORD+24 nonzero OR byte+2 bit10, loops+10 "
+        "bodies at+48 stride110 and calls141CF57D0 at141E5A9E7. Clears "
+        "request bit10. Native game-driven path, distinct from+408 import.",
+    ),
+    0x141CF57D0: (
+        "RigidBody_UpdateGameDrivenTransform",
+        "STATIC nativebody+40 required; native/desired motion gates. Under "
+        "A0 bit0 clear and float+9C<=0 calls141CF0EE0(body,0) at141CF586D. "
+        "Decompiler omits substantial asm tail: use disassembly for gates. "
+        "Called byCompositeBody141E5A980; not arbitrary-thread permission.",
+    ),
+    0x141CF0A00: (
+        "RigidBody_GetOwnerOrJointWorldTransform",
+        "STATIC obtains world pose from body owner/joint binding for141CF0EE0. "
+        "Separate from explicit input transform setter141CF36B0; parent, "
+        "joint and binding modes remain part of native contract.",
+    ),
+    0x141CF0EE0: (
+        "RigidBody_RefreshGameTransformAndQueue",
+        "STATIC obtains141CF0A00 owner/joint world, converts141CF05A0, stores "
+        "141CF3790 and marks146A5C380 at141CF0FEA under146A5C780 for nonzero "
+        "+54 index. DOES NOT set explicit-transform A0 bit0. Desired mode4000 "
+        "also uses pose-change thresholds. Not equivalent to141CF36B0 teleport.",
+    ),
+    0x141F808E0: (
+        "RigidBody_ApplyKeyframedTransform",
+        "STATIC ordinary mode2 FrameSyncEnd call141F81486 with explicit A0 "
+        "bit0 clear. Calls141F80430 then141F80100 chain for swept pose and "
+        "velocities. Distinct from explicit-transform141F80AC0 branch.",
+    ),
+    0x141F80430: (
+        "Havok_RebaseSweptPoseAndSetKeyframe",
+        "STATIC updates nativebody swept+1B0/+1C0/+1D0/+1E0 and basis via "
+        "142229D50; position+1A0 store141F80680. Calls141F80100 to derive "
+        "keyframe velocities; not the explicit teleport141F80770 path.",
+    ),
+    0x141F80100: (
+        "Havok_SetKeyframeTargetAndVelocities",
+        "STATIC derives desired linear/angular velocities;14237BC50/70 write "
+        "native motion+E0/+F0 (=body+230/+240). Downstream of141F80430/"
+        "141F808E0 normal keyframed publication; do not force-call externally.",
+    ),
+    0x14237BC50: (
+        "HavokMotion_SetLinearVelocity",
+        "STATIC stores native motion+E0, body+230 when motion=body+150. "
+        "Called from keyframe target/velocity path141F80100.",
+    ),
+    0x14237BC70: (
+        "HavokMotion_SetAngularVelocity",
+        "STATIC stores native motion+F0, body+240 when motion=body+150. "
+        "Called from keyframe target/velocity path141F80100.",
+    ),
+    0x141E98C70: (
+        "Character_Construct",
+        "STATIC calls NdGameObject_Construct at141E98C83 and stamps Character "
+        "vtable at141E98CA2. Null-initializes optional +580 at141E98D64 and "
+        "+698 at141E98D88. Shared base of NavCharacter141DE1600 and "
+        "BasePlayer140CBFB30; initialization alone does not make physics ready.",
+    ),
+    0x141E991F0: (
+        "Character_Destroy",
+        "STATIC stamps Character vtable at141E9921C; reached from NavCharacter "
+        "teardown141DE20F0. Optional body+698 loaded141E993C0 is shut down via "
+        "141CEFB80 at141E993CF and freed as0x110 bytes at141E993DD. Separate "
+        "+580 cleanup follows141E993EF. Never retain body across owner destruction.",
+    ),
+    0x141E9FF90: (
+        "Character_RelocateOwnedPointers",
+        "STATIC range relocation(delta,begin,end): optional+580 relocates via "
+        "141E5AF60; optional+698 calls141CEFA00 at141EA0126 and rebases pointer "
+        "at141EA0145 if in range. This is relocation, NOT body creation. "
+        "Owner/body raw address is not a lifetime identity.",
+    ),
+    0x141CEFB80: (
+        "RigidBody_ShutdownAndReset",
+        "STATIC destroys underlying Havok resources, clears registered work bit "
+        "at141CEFCBC, resets body+40 at141CEFD48 and frees nonzero handle through "
+        "141CECD70 at141CEFD65 before resetting fields141CEE3C0. Character "
+        "destructor calls this for optional+698 then frees0x110 storage. "
+        "Not a safe foreign-thread callable or a proven NPC creation counterpart.",
+    ),
+    0x141CECD70: (
+        "RigidBodyHandle_FreeHandle",
+        "STATIC exact source RigidBodyHandle::FreeHandle rigid-body.cpp:228/229. "
+        "Under146A59B50 lock clears table14386FD00[body+54] at141CECE60, "
+        "allocation bitmap146A58F50 then body+54/index and+50/id at141CECE8A/8E. "
+        "Distinct from process record/id and physics workbitmap146A5C380.",
+    ),
+    0x141D22240: (
+        "EntitySpawner_RequestKill",
+        "STATIC source EntitySpawner::RequestKill; resolves OWN spawner+30 "
+        "record/+38 id, record+8 object and object+BC at141D22253..27E. "
+        "Different from parent spawner+60. Mutates flags and queues kill work "
+        "through141EDB150, not an observer.",
+    ),
+    0x140402670: (
+        "Npc_PostInit",
+        "STATIC exact Pirate14294B9D0 slot+60, called by SpawnProcess1417C40A0 "
+        "after successful+58 Init. Adds CharacterManager at140402904 BEFORE "
+        "outer EntitySpawner_Spawn publishes own actor pair141D22883. "
+        "PostInit is too early to validate spawner+30/+38 reciprocity.",
+    ),
+    0x141EDA990: (
+        "EntitySpawnerGroup_Update",
+        "STATIC holds writer lock146AA1B20 from141EDAA05 to141EDAF42; calls "
+        "EntitySpawner_Spawn at141EDAD75. This local lock is not a demonstrated "
+        "resource-retention barrier: package logout141CC323A and group teardown "
+        "141EDA8CA reset actors on separate paths without this local lock.",
+    ),
+    0x141EDAFF0: (
+        "EntitySpawnerGroup_ResetActors",
+        "STATIC resolves OWN spawner+30 record/+38 id, record+8 actor/+BC; "
+        "called by package logout141CC323A and group teardown141EDA8CA. "
+        "Do not confuse current actor with parent-spawner+60 resolver; reset "
+        "is a lifecycle mutator, not an observer or retention operation.",
+    ),
     0x141E9C220: (
         "Character_PostAnimBlendPublishRigidBody",
         "STATIC common postblend reached by Pirate141DE9910 and Player1410EBAEE. "
         "After141BBDE60, owner+698 receives override via virtual+388/+398 or "
         "composed parent/local transform through141CF36B0 at141E9C442. Resets "
         "body history bit40 on mode switch; also updates optional owner+580. "
-        "Queueing is not final physics commit or permission for a foreign caller.",
+        "Queueing is not final physics commit or permission for a foreign caller. "
+        "+698 is OPTIONAL: ctor141E98D88 zeros it, no campaign producer proven. "
+        "Do not confuse +580 ragdoll physics-to-game import with this queue.",
     ),
     0x141CF36B0: (
         "RigidBody_SetTransformAndMarkDirty",
@@ -3942,7 +4117,9 @@ FUNCTIONS = {
         "GameFramePostRenderUpdate",
         "STATIC source-identified frame stage. Builds callback140164F10 at1401666AF "
         "and submits via1415B5140 at1401666FC (common-game-loop.cpp:5058). Callback "
-        "calls HavokStep141D800C0 at1401653A7; not the Player network tick.",
+        "calls HavokStep141D800C0 at1401653A7. Outer1401676D0 waits normal "
+        "process/animation buckets before submitting this stage at1401678DE; "
+        "not the Player network tick or a global mutation gate.",
     ),
     0x1403D1460: (
         "GameCharacter_PostAlignControllerUpdates",
@@ -8762,15 +8939,17 @@ FUNCTIONS = {
         "success result.",
     ),
     0x141D21DE0: (
-        "ResolveLiveEntityFromRetainedPair60",
-        "Resolves the live entity referenced by the retained/runtime pair at "
-        "object+0x60, validates entity+0xBC against the stored runtime id at "
-        "pair+0x38, marks the entity active via byte +0x72, and returns the "
-        "live entity pointer on success.",
+        "EntitySpawner_ResolveParentActorAndTouch",
+        "STATIC input is EntitySpawner; +60 is its PARENT spawner, not own "
+        "actor holder. Resolves parent+30 record/+38 id through record+8 and "
+        "object+BC, writes object+72=1. Own actor pair is directly spawner+30/+38. "
+        "Parent identity independently proven by141E7C9DE diagnostic and "
+        "141D231E0 recursive parent transform. Not read-only or a retention lease.",
     ),
     0x141D21E20: (
-        "ResolveLiveEntityFromRetainedPair60_GatedByRegistryBit",
-        "Extends ResolveLiveEntityFromRetainedPair60 with a second registry-bit "
+        "EntitySpawner_ResolveEnabledParentActorAndTouch",
+        "STATIC resolves PARENT spawner+60's actor, same mutating +72 touch "
+        "as141D21DE0, then adds a registry-bit "
         "gate through the entity-owned bitset at entity+0x30 and global index "
         "0x146920B54. Returns null when the live entity exists but is not "
         "enabled in that registry mask.",
@@ -9849,10 +10028,12 @@ FUNCTIONS = {
         "resolved live entity.",
     ),
     0x141D22420: (
-        "ResolveRetainedRosterEntity",
-        "Resolves a live entity from a retained roster/slot entry. Walks nested "
-        "lists, checks script/runtime flags, and can recurse until a valid live "
-        "entity handle is found.",
+        "EntitySpawner_Spawn",
+        "STATIC builds/resolves SpawnInfo, PSI+58=spawner at141D22712. Game "
+        "callback141D22721 and optional141D227A7 can override actual PSI. Calls "
+        "Process::SpawnProcess1417C3790 at141D227B1; only AFTER Init/PostInit "
+        "return publishes object+A8/+BC to spawner+30/+38 at141D22874..883 "
+        "unless nonzero arg4 suppresses it. Not a read-only roster resolver.",
     ),
     0x141EB8950: (
         "DestroyManagedPointerArrayNodes_2NPlus3",
@@ -12083,16 +12264,13 @@ FUNCTIONS = {
         "label was incorrect.",
     ),
     0x141E994C0: (
-        "SharedBasePlayerUpperHandoffIntoDrawControlAndUpperStateBands",
-        "Large shared/base upper Player handoff called from 0x140CBFF50 after "
-        "player+0x15A4..+0x15B0 and player+0x1B10 are initialized. It seeds "
-        "fixed upper defaults around +0x1510/+0x1530/+0x1550, invokes "
-        "0x141BB4280 as the broader draw-control/upper-lifecycle stage, then "
-        "continues through player virtual +0x788, resets late flags, "
-        "materializes player+0x4A8, and allocates a fresh 0x2B0 upper owner "
-        "family. This makes it a strong shared/base handoff into the upper "
-        "Player lifecycle, still upstream of mounted verb subsystems but "
-        "already downstream of the compact init packet.",
+        "Character_Init",
+        "STATIC exact Character::Init source character.cpp:261/267/273. Shared "
+        "Character initialization, not Player-only upper handoff. Invokes "
+        "NdGameObject_Init141BB4280 at141E9959F, owner virtual+788 at141E995DA "
+        "(empty141E9C0D0 on exact Pirate), initializes health owner+4A8 and "
+        "other shared state. Player base140CBFF50 is only one caller. Does not "
+        "establish optional body+698 creation/readiness.",
     ),
     0x1410C6F00: (
         "ConstructPlayer_Size49E0OrInitializeExistingStorage",
@@ -12557,9 +12735,10 @@ FUNCTIONS = {
         "AnimMgr_SyncUpdate",
         "Exact AnimMgr::SyncUpdate(unsigned int,bool) source identity. Consumes "
         "the category ready masks and at 0x14178327D dispatches the residual "
-        "joint-blend callback 0x141782B30. This proves special Perform groups "
-        "queued by 0x14177FEB0 run in a separate async job with independent "
-        "Process callsites 0x141A92E78/0x141A932F8.",
+        "joint-blend callback 0x141782B30. That thunk tail-calls141A92A00 "
+        "SYNCHRONOUSLY here, not a separate job submission. Its independently "
+        "named joint-blend callback contains Process callsites141A92E78/141A932F8. "
+        "AsyncUpdate waits normal spawner counters separately at1417829B9/C6/D4.",
     ),
     0x14181A4B0: (
         "FgDrawMgr_AttachInstanceToAnimData",

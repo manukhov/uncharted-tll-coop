@@ -30,16 +30,35 @@ is empty; +1E8 parent handling and +2B8 derived transform are not physics proof.
 141DEC4B0 is source-identified NavCharacter_UpdateRootLocator. Its owner+15B8
 lead enumerates DynamicNavBlocker inputs, not final transform publication.
 2026-10-16 next pass CLOSED tail141DEB500 as conditional upright cleanup, not
-physics. Exact Pirate+408 ->141DE9910 ->141E9C220 queues owner+698's RigidBody through
+physics. Exact Pirate+408 ->141DE9910 ->141E9C220 conditionally queues optional
+owner+698's RigidBody through
 141CF36B0; HavokStep141D800C0 ->141CF7B70 ->141F80F80 ->141F80AC0 ->141F80770
 reaches native physical-body stores. Wait146B49FA8 is DESTRUCTION PROBES, not
-animation completion. Full dependency/owner readiness/AI phase proof is open.
+animation completion. Normal animation -> physics ordering is now CLOSED by
+GameLoop1401676D0: waited UpdateProcesses returns140167800 BEFORE postrender
+submission1401678DE; manager child counters and bucket5 drain all complete.
+This does not establish object/resource retention or global producer exclusion.
 Identity correction: object+8 is32-byte middle-abbreviated debug name, not full
 authored name. Candidate provenance is object+150's spawner(fullname+20/id+28), object
 +D8/+DC plus local record/+BC; D8 can be rewritten by native network setup.
-NEXT: exact animation completion relative to140165B50/140164F10 physics job,
-and a complete read-only authored-key census design. World/load invalidation
-and wire epoch remain required before writes. No runtime test admitted.
+Current actor reciprocity is directly spawner+30/+38, NOT via+60(parent).
+EntitySpawner_Spawn141D22420 publishes it only after Init/PostInit return;
+PostInit140402670/AddCharacter are too early for that census check. Actual PSI
+can be replaced by a game callback. Resource-unload retention remains open.
++698 is optional, ctor-zeroed and destructor-owned; its ordinary Pirate creation
+is NOT established. +580 is ragdoll, not a substitute primary collider. +408
+CompositeBody calls can import physics back into owner root. Before-+408 root
+override therefore lacks a preservation guarantee. +410 refreshes derived
+world pose, but11 fixed controller+38 callbacks at+15D0 follow that refresh.
+Primary CompositeBody+238 has native creation at141BC03F0. +410 game-driven
+publication141E5AEE0 ->141E5A980 ->141CF57D0/141CF0EE0 queues pose without
+explicit-transform bit0; mode2 FrameSyncEnd uses141F808E0 keyframe pose AND
+velocities, not141F80AC0 teleport. Actual living-encounter modes remain untested.
+NEXT: identify these concrete callbacks/writers, retain primary CompositeBody
+ownership and mode gates, then select an observation/apply seam after import
+and before native game-to-physics publication. In parallel close native
+post-spawn full-key capture/resource lifetime. World/load invalidation and wire
+epoch remain required before writes. No runtime test admitted.
 
 ## PARKED: correct local Nadine pistol grip (2026-08-27)
 
