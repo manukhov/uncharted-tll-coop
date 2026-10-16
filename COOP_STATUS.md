@@ -41709,3 +41709,138 @@ sole ida/tll.i64 saved, reports/enemy_group0_export_labels_20261016.txt confirms
 2033 functions/83 data names/3 types and save_database returned True. Restarted
 MCP resolves all eight names; readback verifies export/residual corrections
 and game-dispatch xref1406CD2DC. No new DLL, hook or runtime test in this unit.
+
+## 2026-10-16 — Pin enemy JointBlend observer ABI and fail-closed trace policy
+
+Continuation from95189ac; enemy synchronization only. No game launch/injection,
+new runtime DLL, transform/HP write or AI pause. Appearance remains parked.
+
+**STATIC callback provenance and ABI correction.** The postpose registry is
+aligned qword1466D0C58, NOT1466D0C60. AnimMgr initialization14177F660 stores
+Nd141937D20 at14177F77C; game initialization140157E84 and tiny setter
+14177F7D0/7D7 install Game1406CD220. The setter has no current caller xrefs,
+so no reset frequency is inferred. Async141781EE3/EEA and sync141783173/17A
+copy the slot into job+20. Phase callback is job+18 and validation is job+28.
+JointBlend forwards them as Process arguments5/6/7. Process has SEVEN input
+arguments and a uint32 result. Cmd24's actual indirect call141ABAC66 is
+FF55 28 (three bytes), returning141ABAC69; its callback has SIX arguments:
+WorkBuffer, Segment, AnimCmdContext, StringId, payload and JointSet/null.
+The fallback1406CD2DC forwards both stack arguments. Callback return is
+ignored by Process and is not an export-success code.
+
+The independent original Process return-slot is Segment+1628: seven pushes
+and the native dynamic stack allocation establish the frame relation. A bridge
+must publish the ORIGINAL native slot before entering Process. Computing an
+"expected" slot from the observed Segment would be a tautology; a C++ wrapper
+return-slot is also wrong. Importantly, the VALUE in that original native slot
+returns into the DLL bridge, not game E7D/2FD. Check game call-site identity at
+the separate wrapper-entry return PC. Conflating these two rejects every real
+bridged invocation; this was caught and corrected by offline review.
+Reuse the pinned native bridges/owns predicates,
+not P99's group-admission policy. JointBlend reset call141A92BA5 returns
+141A92BAA with the E0 pointer in RAX; Process calls return141A92E7D/141A932FD.
+Normal effective-mode2 group0 must use the first site.
+
+**STATIC actual body-store witness, not queue/commit proof.** Primary call
+141BBE119 passes only RCX=owner+238 composite; its return is141BBE11E.
+Correction to earlier wording:141BBE119 is the CALL, not the return address,
+and no external RDX=HavokWorld argument is established.141E5AEE0 loads world
+internally. Inside refresh141CF0EE0, getter141CF0F17 and converter141CF0F29
+precede store141CF0F36 ->141CF3790, returning141CF0F3B. RCX is body and RDX
+is a converted32-byte pose; preserve the full int EAX result. This store
+updates xyz/quaternion, preserves position W and conditionally advances
+history. It does NOT prove the later conditional dirty bitmap/queue work or
+Havok commit. Nor may converted body pose be compared directly with a raw
+joint Locator without accounting for141CF05A0/body+D0.
+
+The refresh prologue pushes RBX and subtractsA0. Therefore the original
+refresh entry-return-slot is nested-store entry-return-slot+B0; a separately
+read value141CF5872 there identifies the UpdateGameDrivenTransform call.
+Require exact direct return141CF0F3B, independent native/fiber scope, current
+primary composite and body_array+110*index membership as well. These narrow
+witnesses avoid replacing the cross16-byte-boundary body call141CF586D.
+
+**STATIC alternatives and publication limits.** Process-return-only and
+primary-return-only remain REJECTED as body/export evidence (skipped paths
+exist). Patching cmd24's three-byte indirect call with a five-byte CALL is
+REJECTED. Fallback call1406CD2DC and refresh call141CF586D cross16-byte patch
+blocks, so the bounded whole-word planner rejects them. The selected seven
+code spans fit16-byte aligned blocks; their exact bytes, rel32 targets and
+returns are pinned in enemy_jointblend_native_contract.h. This value-only
+planner preserves neighboring bytes; it is NOT a concurrent code installer.
+An installer still needs full stock/preflight validation, RIP exclusion,
+atomic publication/rollback and protection/cache handling.
+
+The callback-slot candidate must compare/exchange only the exact Game pointer,
+never Nd/unknown values. Already queued jobs may retain Game and miss an
+observer event; reject the incomplete trace. Conversely, queued jobs may retain
+the wrapper after the registry is restored. No drain fence is proven: keep
+wrapper/relay/DLL storage alive, never infer unload safety from restoration.
+A native initializer overwriting the slot means missing evidence, not authority
+to silently reinstall. Evidence kinds: registry writer/reader xrefs, concrete
+six/seven-argument call-site disassembly and stack layouts, source-identified
+native cache/physics consumers, and independent async/sync callback-copy paths.
+
+**STATIC owner/cache identity remains weak, not retained.** AnimControl getter
+141728AF0 is source-identified by anim-control.cpp:178 and returns control+20
+(Fg)+30. Require owner+1A0==job+0==Fg+10 and control+20==Fg, in addition to
+exact Pirate vtable and record/id/owner/Fg reciprocity. Cache initialization
+141686D10/D31 writes Art/raw to cache+C0/C8 (Fg+F0/F8). Require
+Fg+18==Fg+1A0==Fg+F0==Art and Art+40==Fg+F8==raw. Allocation/group bounds
+must come from this raw skeleton, never C39/P99. The Fg record/id assignment
+14177F94E/95A/975 copies weak identity; repeated validation and SEH are not
+retention/ABA proof. Keep dereferences inside the native invocation, publish
+only copied values, and do not join Perform to JointBlend by pointer/time.
+
+**OFFLINE implementation, not runtime validation.** Added portable POD
+enemy_jointblend_observation.h and mutation tests: staged entry/reset/
+Process/export/primary/body-store closure, repeated identity checks, one-actor
+selection, six attempted samples including rejection, fixed body/joint bounds,
+and cumulative observer-only ticks capped at1ms per invocation. Native-call
+duration is not charged as observer overhead; a budget check is not preemption.
+Unknown program fingerprints cannot inherit the candidate producer proof.
+Program-directory admission is deliberately restricted to first index0/count1
+for these group0 layouts: group+6 is a GLOBAL directory index while group+F
+is this group's count, so a general index<count validator would be incorrect.
+Locator classifications preserve capture timing; a post-store valid bit cannot
+establish pre-consumer freshness. The policy performs no transform mathematics
+and grants no numerical-consistency, lifetime, peer-identity or write admission.
+Added an independent portable native-contract fixture for exact stock bytes,
+range/overflow/neighbor preservation, original-frame and ancestor checks.
+Both headers are test-only consumers at this checkpoint; neither is linked
+into coop_runtime or installs a hook. They do not change visible enemy behavior.
+
+**HYPOTHESIS / next step.** Integrate these contracts into a separate default-OFF
+enemy FLS observer with stock-once forwarding/exception cleanup and bounded
+owned capture buffers. P99's WindowsApi bootstrap slot is shared: use an
+isolated slot implementation or enforce mutually exclusive packages. Do not
+reuse P99 Control, retained slot0, eight-group gates or source-only installer.
+Add PID/creation-bound late arm and worker-only output. Before runtime, test
+wrapper ABI/unwind and transactional publication offline, then build the fresh
+explicit exam DLL. No separate launch approval is required once this is ready.
+Prediction: an admitted normal mode2 invocation records matching reset, actual
+group0 export entry/normal return and concrete primary body stores; skipped,
+old queued, nested, mismatched and partial paths reject even when +410 runs.
+Numerical E0/copied-root/D8/converted-body agreement is a separate calculation
+that must be implemented and checked before claiming collider freshness. The
+native pose writer and cross-copy authored identity/epoch work remain unadmitted.
+
+Verification/handoff: MSVC C++20 Release /W4 /WX build PASS. New policy17/17
+groups and native ABI/site11/11 groups PASS; focused CTest6/6 also includes
+the prior enemy observation/snapshot policies and both actual MASM bridge
+fixtures. Existing NPC matrix-audit mutation tests19/19 PASS. Independent
+review corrections include body-store/queue distinction, one-actor selection,
+owner/body membership, game-PC versus native-bridge-slot separation and exact
+x64 alignment; final review has no blockers. A final narrow program-index
+correction was rebuilt and both new CTest suites passed again. These are
+offline safety/contract checks, NOT visible enemy synchronization validation.
+
+Updated three new function names, three callback globals and existing native
+comments. MCP stopped before each sole-IDB write; final local log
+reports/enemy_jointblend_observer_contract_labels_20261016.txt reports2036
+functions/86 data names/3 types and save_database returned True. Restarted
+MCP readback verifies new names/globals and callback/store xrefs. The sibling
+GetJointCache at141728A80 already had the base name;141728AF0 is explicitly
+AnimControl_GetJointCache_Assert178 (no implicit _0 collision). Player/runtime
+sources and the main DLL remain unchanged. Preexisting untracked tmp/ was
+left untouched and is not part of this unit.

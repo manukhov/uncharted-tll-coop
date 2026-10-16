@@ -822,7 +822,10 @@ FUNCTIONS = {
         "u16 +0x10 count is read at141686D47 for the locator/matrix allocations "
         "at141686DB9/141686DE4 (configs1/2 with nonzero count). This count is "
         "distinct from group0.parameter_count at+0x12 and the Art+0x3C local "
-        "allocation count. Require actual skeleton/range consistency; do not "
+        "allocation count. Stores Art at cache+C0/Fg+F0 at141686D10 and "
+        "raw at cache+C8/Fg+F8 at141686D31. Matching active Fg+18/+1A0 "
+        "alone does not establish this backing-cache identity. Require "
+        "actual skeleton/range consistency; do not "
         "infer Pirate extents from C39. C39 has local 66 rows, "
         "world/matrix 104 rows; neither is the full 580-joint workspace or "
         "426-row packed reference pose. Readable virtual memory beyond the "
@@ -2678,7 +2681,13 @@ FUNCTIONS = {
         "Game-side callback used by top-level animation command 24 after the "
         "current processing block is finalized. Dispatches several leg modes "
         "and falls back to Nd_ProcessAnimPostPosePluginFunc; command ids must "
-        "be resolved individually before treating this callback as a pose writer.",
+        "be resolved individually before treating this callback as a pose writer. "
+        "STATIC ABI has SIX inputs: WorkBuffer, Segment, AnimCmdContext, "
+        "StringId, payload and JointSet/null. Installed at1466D0C58 by "
+        "140157E84 and14177F7D7, copied into job+20 (not+28). Actual "
+        "Process indirect call141ABAC66 is FF 55 28, returning141ABAC69. "
+        "Fallback call1406CD2DC crosses a16-byte block boundary; it forwards "
+        "all six arguments to Nd. Callback return is not a success witness.",
     ),
     0x141937D20: (
         "Nd_ProcessAnimPostPosePluginFunc",
@@ -4041,7 +4050,9 @@ FUNCTIONS = {
         "STATIC +410 callers141BBE119(primary+238),141E9C4CD(ragdoll+580). "
         "Requires Havok world. Byte+2 bit20 resets body history for missing/"
         "unworlded native bodies. Calls141E5A980 only if+120 null OR binding "
-        "count+60 zero; do not assume unconditional transform publication.",
+        "count+60 zero; do not assume unconditional transform publication. "
+        "Primary call141BBE119 returns141BBE11E with ONE input RCX=composite; "
+        "Havok world is loaded inside, not supplied as an established RDX arg.",
     ),
     0x141E5A980: (
         "CompositeBody_UpdateGameDrivenBodyTransforms",
@@ -4079,7 +4090,14 @@ FUNCTIONS = {
         "STATIC obtains141CF0A00 owner/joint world, converts141CF05A0, stores "
         "141CF3790 and marks146A5C380 at141CF0FEA under146A5C780 for nonzero "
         "+54 index. DOES NOT set explicit-transform A0 bit0. Desired mode4000 "
-        "also uses pose-change thresholds. Not equivalent to141CF36B0 teleport.",
+        "also uses pose-change thresholds. Not equivalent to141CF36B0 teleport. "
+        "STATIC nested calls: getter141CF0F17, converter141CF0F29, store "
+        "141CF0F36 returns141CF0F3B. Store receives the converted32-byte pose, "
+        "not a raw joint Locator. Prologue pushRBX/subRSP,A0 makes original "
+        "refresh return-slot equal nested-store entry return-slot+0xB0. "
+        "Value141CF5872 there identifies normal UpdateGameDrivenTransform "
+        "caller. Store return proves neither dirty queue insertion nor Havok "
+        "commit; subsequent mode/threshold/index gates still apply.",
     ),
     0x141F808E0: (
         "RigidBody_ApplyKeyframedTransform",
@@ -4207,7 +4225,11 @@ FUNCTIONS = {
         "STATIC: flag+A0 bit80 suppresses history advance once; bit40 chooses "
         "copy-old versus seed-new history at+20/+30. Writes current xyz/+10 "
         "quaternion preserving position W. InitFixed and141CF36B0 share this "
-        "layout; this helper does not commit the Havok body.",
+        "layout; this helper does not commit the Havok body. STATIC ABI "
+        "RCX=body, RDX=converted32-byte input, returns int EAX flags. Exact "
+        "normal refresh call141CF0F36 is E8 55 28 00 00, return141CF0F3B. "
+        "Preserve the full result, not bool. Current xyz/quaternion writes "
+        "are unconditional here; history gates do not establish queueing.",
     ),
     0x141CEE6A0: (
         "RigidBody_InitFixed",
@@ -5024,6 +5046,13 @@ FUNCTIONS = {
         "Exact ProcessAnimCmdListSegment source assertion in anim-commands.cpp:822. "
         "Per-layer animation-command evaluator reached from PerformAnimBlend and the "
         "normal joint-blend producers; consumes AnimCmdContext and drives palette "
+        "output. STATIC seven inputs: command words, count, context, group, "
+        "phase callback, postpose callback, validation callback; uint32 result. "
+        "JointBlend forwards callbacks from job+18/+20/+28. Cmd24's "
+        "Segment pointer plus0x1628 equals the original native Process entry "
+        "return-slot (not a wrapper frame). Independent bridge publication "
+        "of that slot is required; deriving it from Segment is tautological. "
+        "The evaluator also drives palette "
         "output including aim-add-* parameter lookup. Its stack SegmentContext keeps "
         "the joint-program skeleton at +0x28 (loaded by `RAX=[AnimCmdContext+0x00]; "
         "R15=[RAX+0x40]` at 0x141AB9852 and stored at 0x141AB9A68), shared "
@@ -12915,6 +12944,31 @@ FUNCTIONS = {
         "entries with hashed ids at entry+0x10, which pins +0x3BD0 as a real "
         "hashed owner-local runtime registry rather than a passive state blob.",
     ),
+    0x141728AF0: (
+        "AnimControl_GetJointCache_Assert178",
+        "STATIC exact anim-control.cpp:178 AnimControl::GetJointCache "
+        "assertion. Requires control+20 FgAnimData and returns that pointer "
+        "+30 at141728B4D. Independent consumer tying owner+1A0 AnimControl "
+        "to the Fg+30 cache; caller140624591 is LegModifier's lazy read path. "
+        "Do not call this asserting getter merely to observe memory.",
+    ),
+    0x14177F660: (
+        "AnimMgr_InitializeFgPoolAndDefaultPlugins",
+        "STATIC descriptive name: allocates1536*0x380 FgAnimData bytes, "
+        "initializes slots and publishes pool1466D0200. Installs default "
+        "Nd phase/postpose callbacks at1466D0C50/58 (14177F76E/77C), clears "
+        "validation slot1466D0C60. A later native initialization can replace "
+        "an observer callback; no automatic reinstall is admitted.",
+    ),
+    0x14177F7D0: (
+        "AnimMgr_SetGamePostPosePluginCallback",
+        "STATIC tiny setter stores Game_ProcessAnimPostPosePluginFunc "
+        "1406CD220 into1466D0C58 at14177F7D7, returning that pointer. "
+        "No current caller xrefs; do not invent an active reset frequency. "
+        "Native game initialization independently writes the same slot at "
+        "140157E84. Existing jobs copy the callback, so restoring this "
+        "global alone cannot prove queued-wrapper references drained.",
+    ),
     0x14177F7F0: (
         "AnimMgr_AllocateAnimData",
         "Exact AnimMgr::AllocateAnimData(unsigned int, Process*) source "
@@ -15204,6 +15258,27 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x1466D0C50: (
+        "g_AnimMgrPhasePluginCallback",
+        "STATIC first qword of three-callback registry; copied into job+18, "
+        "then Process argument5. Distinct from postpose+8 and validation+10.",
+    ),
+    0x1466D0C58: (
+        "g_AnimMgrPostPosePluginCallback",
+        "STATIC aligned qword. Default Nd141937D20 writer14177F77C; Game "
+        "1406CD220 writers140157E84/14177F7D7. Async141781EE3/EEA and "
+        "sync141783173/17A copy it into job+20, then Process argument6. "
+        "Cmd24 invokes this copy at141ABAC66. A compare/exchange expecting "
+        "the exact Game pointer can publish a reader wrapper; old jobs may "
+        "bypass it and queued new jobs may retain it after global restore. "
+        "This is not an unload/drain fence; never free the wrapper from "
+        "global-pointer restoration alone.",
+    ),
+    0x1466D0C60: (
+        "g_AnimMgrValidationCallback",
+        "STATIC third registry qword, initialized null at14177F783, copied "
+        "into job+28 then Process argument7. NOT the cmd24 postpose slot.",
+    ),
     0x146B49FA8: (
         "g_HavokDestructionProbeJobCounter",
         "STATIC created by KickDestructionProbes141B416A0 /141D7F580 with callback "

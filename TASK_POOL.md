@@ -88,11 +88,26 @@ null-control paths can still reach+410; Process return alone is not export proof
 Cmd24 does not clear validbits/D8: selected valid Locators need consistency checks.
 Pure-byte audit now covers npc-normal-base(BD7EEE2F) and npc-medium-base
 (FC65A17A), each first0/N90/P55; these are candidates, NOT proven live Pirate assets.
-NEXT: implement one bounded READONLY normal-mode2 JointBlend observation:
-exact active Art/raw/program identity, cache-reset witness, actual group0 cmd24
-entry/normal return to current E0, selected validbits/D8 and primary body consumption.
-Use fixed storage/six samples/1ms budget; exclude custom/skip/null-control/reentry
-and initial cached-prepass. Do not add another unchanged RPM census or pose writer.
+Current implementation unit: value-only normal-mode2 JointBlend trace policy
+and pinned native ABI/site contracts, tested OFFLINE and not linked into the DLL.
+The seven code sites are1417815B7/141782B3A (ingress),141A92BA5 (reset),
+141A92E78/141A932F8 (Process),141BBE119 (primary) and141CF0F36 (body store).
+Postpose is aligned callback1466D0C58, copied to job+20, not job+28. Forward
+six callback args and seven Process args; primary takes ONLY RCX=composite.
+The concrete store returns141CF0F3B with original int EAX; its refresh ancestor
+return is141CF5872 at independent store-entry-return-slot+0xB0. This witnesses
+a body pose store, NOT Havok queueing or numerical joint/body agreement.
+NEXT: wire these separate enemy contracts to native FLS/MASM wrappers and a
+transactional installer, default OFF. Independently published original Process
+return-slot must equal cmd24 Segment+1628. Snapshot selected cache data with
+explicit capture points: post-store bits cannot prove pre-getter cache validity.
+Add PID/creation late arm and fixed owned capture storage/worker publication;
+six attempted samples of one actor, cumulative1ms observer work per invocation.
+No P99 Control/selector/8-group policy; do not call install_p99_group_package(true).
+Exclude custom/skip/null-control/reentry and initial cached-prepass. Old queued
+callbacks may bypass the observer; later queued wrappers can survive global
+restore, so no DLL unload/free without a separately proven drain fence. No
+runtime observer, unchanged RPM census, game launch or pose writer yet.
 Perform and JointBlend are separate calls; do not stitch post+408 with pointer/time.
 No writer exam is admitted. Generic1416860A0 converts world to local but
 does not invalidate the cache; missing parent keys retain cached parent,
