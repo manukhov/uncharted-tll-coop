@@ -38170,8 +38170,9 @@ constexpr std::size_t kHealthSystemOffset = 0x4a8;
 constexpr std::size_t kCurrentHpOffset = 0x3c;
 constexpr std::size_t kMaxHpOffset = 0x44;
 
-// FNV-1a over the actor name (bounded). Both instances hash the same name string,
-// so this is a stable cross-instance key (does not need to match the game's hash).
+// Legacy FNV-1a over the bounded debug label. Native object+8 abbreviates long
+// names, so this is NOT a complete authored identity or safe cross-copy key.
+// Enemy replication remains disabled pending full identity/lifecycle admission.
 std::uint32_t coop_name_hash(const char* s, std::size_t maxlen) {
     std::uint32_t h = 2166136261u;
     for (std::size_t i = 0; i < maxlen && s[i] != '\0'; ++i) {

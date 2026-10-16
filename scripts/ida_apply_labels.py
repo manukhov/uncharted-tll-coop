@@ -3842,9 +3842,65 @@ FUNCTIONS = {
     ),
     0x141DE9910: (
         "NavCharacter_PostAnimBlendControllersAndRigidBody",
-        "STATIC exact Pirate+408. Invokes11 fixed controllers from owner+15D0 "
-        "via+30 and optional owner+15C8 collection via+48; tail-calls141E9C220 "
+        "STATIC exact Pirate+408. Walks eleven AnimModifierSet slots through "
+        "owner+15D0 via+30 and optional owner+15C8 collection via+48; tail-calls141E9C220 "
         "at141DE99BC. Retained postblend dispatch, not a pure transform setter.",
+    ),
+    0x141BBDF70: (
+        "NdGameObject_PostJointUpdateAsync",
+        "STATIC exact NdGameObject::PostJointUpdate_Async source "
+        "nd-game-object.cpp:3247. At141BBE107 calls owner virtual+2B8 "
+        "(Pirate141BB8320 derived world refresh), then optional primary "
+        "CompositeBody+238 through141E5AEE0 at141BBE119. Later NavCharacter "
+        "modifier+38 callbacks remain; this is not a final root-writer boundary.",
+    ),
+    0x1404073A0: (
+        "GameCharacter_CreateAiAnimModifiers",
+        "STATIC descriptive name; exact Pirate virtual+B80. Allocates modifier "
+        "data at Fg+288 and populates set indices0 Eye,1 Leg,2 WeaponGrip,4 Stride "
+        "and10 Climb. The other six entries remain clear on this path. Called "
+        "during NavCharacter initialization through virtual+B80 at141DE2C29; "
+        "not eleven locomotion-controller instances.",
+    ),
+    0x1403CFB80: (
+        "NavCharacter_GetAnimModifierSet",
+        "STATIC descriptive name; exact Pirate virtual+3C0. Returns the "
+        "AnimModifierSet pointer stored at owner+15D0 (load1403CFB87), "
+        "not an embedded controller array or a retention operation.",
+    ),
+    0x14192BD00: (
+        "AnimModifierSet_ConstructElevenSlots",
+        "STATIC descriptive name. Clears first0x58 bytes (eleven pointers), "
+        "allocates shared0x460-byte storage at set+58 and zeros joint tree+60 "
+        "and count+E8. NavCharacter initialization constructs/stores this set "
+        "at141DE2C0C/141DE2C12 before creating concrete modifiers.",
+    ),
+    0x14192BF60: (
+        "AnimModifierSet_InitializeAndBuildJointTree",
+        "STATIC descriptive name. Walks eleven slots, invokes modifier+10 "
+        "initialization and+70 joint-ID collection, deduplicates at most32 "
+        "joints and builds the joint tree at set+60. Successful initialization "
+        "publishes Fg+2C0 and dispatches modifier+18 finish callbacks. Called "
+        "from NavCharacter initialization at141DE2C39.",
+    ),
+    0x140624400: (
+        "LegModifier_PostJointUpdateFootState",
+        "STATIC descriptive name; shared AiLegModifier/LegModifier/"
+        "NetCharacterLegModifier virtual+38. Direct outputs are foot state, "
+        "modifier+4C0/+4D0 and parent cache. This does not establish global "
+        "exclusion of owner-root writers in other callbacks or descendants.",
+    ),
+    0x140624D60: (
+        "LegModifier_GetEmbeddedFootState",
+        "STATIC descriptive name; leg-modifier virtual+80. Returns the "
+        "embedded state address modifier+50 at140624D64, not a separate owner "
+        "or a retained pointer.",
+    ),
+    0x141936100: (
+        "AnimModifier_IsEnabled",
+        "STATIC descriptive name; modifier virtual+60 gate. At14193610A "
+        "returns byte[modifier+8 data pointer +14] &1. This data-backed enable "
+        "bit is not proof that the whole owner or physics body is ready.",
     ),
     0x141E53690: (
         "CompositeBody_Ctor",
@@ -3866,12 +3922,21 @@ FUNCTIONS = {
         "owner atComposite+8; bodies+48 stride110, bindings+58 stride50. "
         "Used by both primary owner+238 and optional ragdoll+580.",
     ),
+    0x141E56800: (
+        "CompositeBody_ShutdownBodiesAndResetCounts",
+        "STATIC descriptive shutdown helper. Calls141CEFB80 for bodies at "
+        "+48, stride110, at141E5684D; resets body count+10 at141E56904 and "
+        "qword+60 (binding count) at141E56914. Composite and array pointers "
+        "can survive this in-place reset; pointer equality is not readiness "
+        "or lifetime proof. Caller controls owner-field clearing and freeing.",
+    ),
     0x141E9D490: (
         "Character_InitializeRagdoll",
         "STATIC exact Character::InitializeRagdoll, m_pRagdoll assertion "
         "character.cpp:961. Allocates0x180 at141E9D515; constructs141E53690, "
         "stores owner+580 at141E9D531, initializes141E54FE0 at141E9D641. "
-        "Error cleanup141E56800 zeros+580. NPC caller gated by+1CA9 bit10. "
+        "Error path calls141E56800 at141E9D659, then caller clears owner+580 "
+        "at141E9D65E. NPC caller gated by+1CA9 bit10. "
         "This is ragdoll, NOT the primary CompositeBody at+238.",
     ),
     0x141E59160: (
@@ -3907,8 +3972,20 @@ FUNCTIONS = {
     0x141CF0A00: (
         "RigidBody_GetOwnerOrJointWorldTransform",
         "STATIC obtains world pose from body owner/joint binding for141CF0EE0. "
-        "Separate from explicit input transform setter141CF36B0; parent, "
-        "joint and binding modes remain part of native contract.",
+        "Source byte+C6==1 at141CF0A3A uses owner body+68 and owner root "
+        "+110/+120/+130/+140. Sources other than1/4 read signed16+C4 at "
+        "141CF0BA8: >=0 uses owner+1A8 joint cache and141687C90 at141CF0D33. "
+        "Source4 follows deeper nativebody+E8 chain; source4 and negative "
+        "joint eligibility remain unresolved, not an owner-root fallback. "
+        "Separate from explicit input transform setter141CF36B0.",
+    ),
+    0x141CF4EE0: (
+        "RigidBody_SyncPhysicsPoseAndGetStatus",
+        "STATIC descriptive name. CompositeBody141E59160 calls at141E592FA "
+        "and takes max status0/1/2. Checks body+40, A0 mode/flags and native "
+        "world+10; mode6000 can import swept pose through141CF3790 at "
+        "141CF5459. Other branches refresh game transforms at141CF4F2F and "
+        "modify flags. Not a read-only getter or status inferable from mode alone.",
     ),
     0x141CF0EE0: (
         "RigidBody_RefreshGameTransformAndQueue",
@@ -3992,7 +4069,7 @@ FUNCTIONS = {
         "Npc_PostInit",
         "STATIC exact Pirate14294B9D0 slot+60, called by SpawnProcess1417C40A0 "
         "after successful+58 Init. Adds CharacterManager at140402904 BEFORE "
-        "outer EntitySpawner_Spawn publishes own actor pair141D22883. "
+        "outer EntitySpawner_Spawn publishes own actor pair141D22889. "
         "PostInit is too early to validate spawner+30/+38 reciprocity.",
     ),
     0x141EDA990: (
@@ -4005,7 +4082,8 @@ FUNCTIONS = {
     0x141EDAFF0: (
         "EntitySpawnerGroup_ResetActors",
         "STATIC resolves OWN spawner+30 record/+38 id, record+8 actor/+BC; "
-        "called by package logout141CC323A and group teardown141EDA8CA. "
+        "shares reset/kill helper141D22150 with package logout141CC323A "
+        "and group teardown141EDA8CA. "
         "Do not confuse current actor with parent-spawner+60 resolver; reset "
         "is a lifecycle mutator, not an observer or retention operation.",
     ),
@@ -4143,6 +4221,15 @@ FUNCTIONS = {
         "SpawnInfo_GetExplicitOrSpawnerName",
         "STATIC SpawnInfo1428D5D60 slot0: explicit+30 string else+58 spawner->+20 "
         "name else caller fallback. Full-name source before debug abbreviation.",
+    ),
+    0x14029AEE0: (
+        "GameInfo_NoSpawnerSpawnInfoOverride",
+        "STATIC descriptive name; exact GameInfo vtable1429040B8 slot+E0 "
+        "at142904198 returns zero. GameConfig calls constructor140297AE0 at "
+        "140150646 and publishes it to143FE1070 at1401506D0. Thus this exact "
+        "callback preserves EntitySpawner_Spawn's stack PSI selection; optional "
+        "callback141D227A7 can still modify it. Other implementations must not "
+        "inherit this conclusion without validation.",
     ),
     0x1401D5C80: (
         "Object_GetEntitySpawner",
@@ -10032,8 +10119,12 @@ FUNCTIONS = {
         "STATIC builds/resolves SpawnInfo, PSI+58=spawner at141D22712. Game "
         "callback141D22721 and optional141D227A7 can override actual PSI. Calls "
         "Process::SpawnProcess1417C3790 at141D227B1; only AFTER Init/PostInit "
-        "return publishes object+A8/+BC to spawner+30/+38 at141D22874..883 "
-        "unless nonzero arg4 suppresses it. Not a read-only roster resolver.",
+        "return copies object+A8/+BC at141D22874/7F, loads the pair141D22883 "
+        "and publishes spawner+30/+38 at141D22889 unless nonzero arg4 suppresses "
+        "it. Post-store141D2288E has RBX=spawner/RDI=actor; default stack PSI "
+        "is native RSP+50 but need not be the selected PSI. Exact GameInfo "
+        "callback14029AEE0 returns null; optional callback still needs refusal. "
+        "Not a read-only roster resolver or a cross-call retention lease.",
     ),
     0x141EB8950: (
         "DestroyManagedPointerArrayNodes_2NPlus3",

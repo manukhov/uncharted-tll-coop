@@ -13,6 +13,7 @@ add_executable(tll_remote_input_client src/remote_input_client.cpp)
 add_executable(tll_runtime_code_dump src/runtime_code_dump.cpp)
 add_executable(tll_netplayer_probe src/netplayer_probe.cpp)
 add_executable(tll_memory_reader src/memory_reader.cpp)
+add_executable(tll_enemy_physics_probe src/enemy_physics_probe.cpp)
 add_executable(tll_dword_writer src/dword_writer.cpp)
 add_executable(tll_dword_scanner src/dword_scanner.cpp)
 add_executable(tll_input_slot_dump src/input_slot_dump.cpp)
@@ -74,6 +75,7 @@ foreach(
     tll_runtime_code_dump
     tll_netplayer_probe
     tll_memory_reader
+    tll_enemy_physics_probe
     tll_dword_writer
     tll_dword_scanner
     tll_input_slot_dump
@@ -147,6 +149,11 @@ set_target_properties(tll_p99_provider_preparation PROPERTIES PREFIX "")
 include(CTest)
 set(TLL_P99_NATIVE_INVENTORY_DIR "" CACHE PATH "Explicit generated TEST-ONLY native inventory header directory")
 if(BUILD_TESTING)
+    add_executable(tll_enemy_physics_observation_tests tests/enemy_physics_observation_tests.cpp)
+    target_include_directories(tll_enemy_physics_observation_tests PRIVATE src)
+    target_compile_features(tll_enemy_physics_observation_tests PRIVATE cxx_std_20)
+    target_compile_options(tll_enemy_physics_observation_tests PRIVATE /W4 /WX /permissive- /EHsc)
+    add_test(NAME enemy_physics_observation COMMAND tll_enemy_physics_observation_tests)
     add_executable(tll_enemy_snapshot_policy_tests tests/enemy_snapshot_policy_tests.cpp)
     target_include_directories(tll_enemy_snapshot_policy_tests PRIVATE src)
     target_compile_features(tll_enemy_snapshot_policy_tests PRIVATE cxx_std_20)

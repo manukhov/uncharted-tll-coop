@@ -41164,3 +41164,194 @@ all29 new/renamed function names and both +238/+580 import and forward-path
 caller xrefs. AST/diff checks pass; no new duplicate label keys. No runtime
 source/binary changed or new gameplay test performed. Existing untracked tmp/
 was preserved untouched.
+
+## 2026-10-16 — Resolve fixed modifiers; prepare bounded read-only physics census
+
+Enemy P0 continues from0a02b5e. Appearance remains PARKED. The findings below
+are STATIC; the proposed external observation is not a successful runtime
+test and does not admit an enemy transform, AI, health or damage writer.
+
+**STATIC fixed modifier provenance and concrete +38 callbacks are closed for
+the initial exact Pirate table.** NavChar initialization141DE2180 allocates
+0xF0 at141DE2BFA, calls14192BD00 at141DE2C0C and stores owner+15D0 at141DE2C12.
+Constructor14192BD00 zeroes11 pointers (0x58 bytes), allocates0x460 shared data
+at set+58 and initializes the optional joint-tree/count fields. Owner virtual
++B80 at141DE2C29 is exact Pirate14294B9D0+B80=1404073A0; its virtual+3C0
+getter1403CFB80 returns owner+15D0. This builder creates modifier data at
+Fg+288 and fills only five of the eleven slots:
+
+| Index | Concrete type / vtable | +38 callback |
+| --- | --- | --- |
+| 0 | AiEyeModifier14296D8B0 | empty140616C80 |
+| 1 | AiLegModifier14296DD50 | 140624400 |
+| 2 | AiWeaponGripModifier14296E370 | empty140616C80 |
+| 4 | StrideModifier14296E168 | empty140616C80 |
+| 10 | AiClimbModifier14296D770 | empty140616C80 |
+
+The other six slots remain null after this construction. Stores are
+140407473/574/4CC/522/5B9 for indices0/1/2/4/10 respectively. Initialization
+14192BF60, called at141DE2C39, invokes modifier+10, gathers/deduplicates up to32
+joint IDs through modifier+70, initializes the optional JointTree and publishes
+it to Fg+2C0 at14192C189, then invokes modifier+18. This proves initial table
+identity, not that later replacement or an exotic owner subtype is impossible.
+
+The only nonempty +38 callback140624400 is shared LegModifier code, also
+referenced by NetCharacterLegModifier14296DE18 and LegModifier14296E060.
+Its +60 enable query141936100 reads modifier-data+14 mask0x01; its +80 getter
+140624D60 returns embedded state at modifier+50. It validates the retained
+owner record/id, touches owner+72 and can refresh parent cache+110/+120.
+It reads two joint-world values through AnimControl::GetJointCache141728AF0
+and lazy joint-cache accessor141687C90; optional NavMesh::FindNearestPointLs
+141E087D0, reached through140624050, projects supplied stack foot vectors,
+not owner root. Stores1406247B4/7C2 update modifier+4C0/+4D0. The tail updates
+embedded foot state through141FEB2C0/141FEB920/141FEB320 and waits/releases/
+zeros its counter through141FEB740. The inspected callback/helper bodies
+contain no direct owner+130/+140/+240/+250 store or body-publication call.
+Waiting for a foot-state job is not proof that arbitrary concurrent writers
+are excluded, and the state is not assigned an unproven exact source class.
+
+The relevant indirect queries were resolved, not assumed harmless:
+owner+9B0=140439820 selects dynamic controller index4, exact
+MeleeActionController14295CEF0+C8=140538C30, a retained-owner getter;
+owner+828=141DEE6E0 selects AnimationControllers1429302D0 slots+28/+38/+48,
+respectively index0 AiLocomotion, index26 AiSwim and index1 AiClimb. Their
++138 queries are1405124D0(return0),140591350(return4), and1404CC570, whose
++160 target1404CC5C0 reads a controller flag. The ordinary ready-nav branch
+of owner+7D0 uses owner+15B8; its exceptional missing-nav fallback is not a
+claim of complete global writer exclusion. Independent evidence comprises
+allocation/store provenance, concrete RTTI/vtable slots, both-direction call
+graphs and instruction-level destination inspection. Conditional prediction:
+the initial fixed loop at141DE9B31 should preserve local root+130/+140 while
+parent cache, joint cache and foot state may change. A different table or root
+delta falsifies that scoped prediction; no phase hook or comparison has run.
+
+**STATIC primary-body source, mode and lifetime distinctions.**
+141CF0A00 tests body source byte+C6==1 at141CF0A3A: it reads owner=body+68
+and combines owner+110/+120 with local+130/+140 to obtain root world pose.
+Source4 follows a native-body+E8 chain at141CF0B67 and remains specially
+unclassified here. Other source kinds use signed16 joint+C4 at141CF0BA8;
+nonnegative values read owner+1A8 and the joint cache through141687C90 at
+141CF0D33. A negative joint is unresolved, NOT an owner-root fallback.
+Desired mode=(body+A0 flags>>13)&3 is distinct from the native motion-type
+enum at nativebody+160. Equal numeric values must not be treated as identical
+contracts, nor does either value alone prove which import/update gate ran.
+
+Primary allocation141BC03F0 occurs only when owner+238 is absent; its failure
+path clears+238 at141BC05F6. Independently,141BC7F80 calls141E56800 at
+141BC8038, shutting owned bodies down IN PLACE while retaining the Composite
+pointer; teardown resets body count+10 at141E56904 and binding count at+60
+at141E56914. Pointer equality therefore cannot establish live body contents.
+Full replacement/free exclusion remains open. Source-identified
+NdGameObject::PostJointUpdate_Async141BBDF70 (assertion141BBE04B) queues
+141BBDEE0 before primary+238 publication; an arbitrary broad +410 entry/return
+is not automatically a coherent capture seam. The +410 caller141A934D5 proves
+RCX=retained owner, not the decompiler's speculative second floating argument.
+
+Root-import mapping POTENTIAL requires a nonzero, complete binding list with
+valid body indices: first binding key==-1, OR signed Composite+E8>=0 with an
+actual matching key in binding array+58 (stride0x50). This is not evidence
+that SyncPhysicsToGame141E59160 executed its root-write branch, satisfied
+maximum-status/world/flag gates, or imported this frame. Zero bindings means
+no primary root-binding route in this path, not absence of ragdoll/joint
+imports elsewhere. Allocation/teardown callers, source assertions, concrete
+data offsets and the opposing import/export consumers independently support
+these distinctions.
+
+**STATIC exact identity publication correction and default callback closure.**
+In EntitySpawner_Spawn141D22420,141D22883 only loads xmm0 from[rsp+40]. The
+actual five-byte publication is141D22889, vmovups[rbx+30],xmm0
+(C5 F8 11 43 30); the first post-store instruction is141D2288E. At this seam
+RBX is spawner, RDI actor, RSI arg6 and R15B arg4; default PSI is nativeRSP+50.
+This corrects the previous imprecise141D22874..883 store range.
+
+GameConfig140150540 has the common-game-config.cpp source identity and
+allocates20128 bytes;140150646 calls GameInfo constructor140297AE0, which
+installs vtable1429040B8 at140297B1A.1401506D0 publishes1437E0258 to143FE1070.
+Its exact +E0 entry142904198 is14029AEE0, constant return0 (also referenced
+at1429043B8). Thus this exact default GameInfo callback does not replace PSI.
+Optional arg6 callback141D227A7 still can modify/select it; actual PSI in RCX
+at141D227B1 is the stronger lexical copy point while consumed. A later stack
+copy alone does not prove actual selection with an unknown callback. This
+read-only lexical event does not itself require a whole-world epoch, but
+does not establish complete existing-encounter coverage, a retained binding,
+cross-copy identity or writer admission.
+
+**HYPOTHESIS / bounded external read-only exam, not a synchronization test.**
+The next tool is scanner/src/enemy_physics_probe.cpp with pure observation
+policy in enemy_physics_observation.h and offline tests. It targets an
+explicit PID using only PROCESS_VM_READ|PROCESS_QUERY_LIMITED_INFORMATION.
+The test distinguishes competing explanations for a living exact-Pirate
+primary+238 body configuration:
+
+- A: body+68 matches actor and source+C6==1: game pose input is owner root.
+- B: matching owner, source!=1 and!=4, signed joint+C4>=0: input is joint pose.
+- C: source4, negative joint, foreign owner, absent/incomplete configuration
+  or changed identity: unclassified/rejected observation, not a permissive
+  fallback to A. Root-import mapping potential is recorded separately from
+  A/B; either can coexist with an import-capable mapping.
+
+The evidence quota is met for this CONFIGURATION observation only: concrete
+source/getter offset branches, exact Pirate initialization/vtable ownership,
+independent creation/in-place shutdown and import/export consumers, and
+source assertions. It is not quota for a transform writer or proof of dynamic
+frame ordering at the sampled instant. Prediction before launch: after the
+user loads a combat encounter, valid repeated rows will expose which source
+cases and desired/native modes actually exist, or explicitly report absence,
+instability, caps/read failure or unclassified data. They will NOT establish
+that an import branch executed or that moving the root synchronizes enemies.
+If all rows are absent/unstable/unclassified, no writer candidate is promoted.
+
+Specific discriminating criterion for the owner-root/keyframed candidate:
+repeated positive typed-HP Pirate observations must include a primary body
+with matching owner, source1, desired mode2 and a nonnull in-world native body.
+Only joint-driven/special bodies, no primary body, or a different desired mode
+reject that candidate for this sampled configuration; do not call those cases
+confirmation. A positive row only retains the candidate for the next static
+seam analysis. It does not show a root write took effect or admit one.
+
+Limits are64 actors,32 bodies and32 bindings per actor, and6 rounds. Truncated
+or invalid binding sets must not become positive root-import classifications.
+Actor record/id, exact vtable, Composite ownership and array/configuration
+fields are rechecked; repeated values reduce accidental mixed observations
+but remain best-effort RPM reads, NOT an atomic snapshot, ABA exclusion,
+resource lease, cross-copy identity or permission to write. Pose equality is
+not required for repeated configuration. Optional+580/+698 are reported as
+pointers only, not traversed or treated as proven primary bodies.
+
+The probe performs no injection, game-memory writes, HP/AI changes, input or
+engine calls, and does not arm legacy writers. Main will launch one copy only
+after the probe is ready/built; the user loads and plays the combat scenario.
+No runtime result, build/test result or IDB-save result is claimed in this
+entry; verification and the user's observed outcome must be recorded later.
+
+**Verification / handoff for the prepared exam:** the standalone probe and
+normal DLL build in Release. Observation tests pass13/13 offline groups
+(including partial-subrow counters, missing E8 matches, late identity changes
+and incomplete copied lists); existing snapshot-policy tests pass10/10.
+CTest enemy-only selection passes2/2. CLI rejects invalid PID/round counts,
+missing processes, and a non-tll process before reading a roster. Independent
+review found no blocking read-only/JSON/classification issue. These tests are
+not game configuration evidence or proof of synchronization.
+
+MCP was stopped; sole ida/tll.i64 received11 new STATIC function labels.
+reports/enemy_configuration_labels_20261016.txt records2026 functions,
+83 data names,3 types and save_database returned True. Restarted MCP verified
+all11 new names plus post-joint callers, leg-modifier vtables and GameInfo
+callback xrefs. No new duplicate label keys were introduced. Existing20
+duplicates were not part of this change.
+
+Both P99 exam options and all legacy enemy/HP/damage/AI-pause writers remain
+OFF. The only coop_runtime.cpp change is correction of the misleading legacy
+debug-name-hash comment; no runtime algorithm changed. Fresh main DLL SHA256:
+3ACCA2A17891BA1D5CA14EC39CC0024827556BE71B5DE0E22E9C227063BBD710.
+After the successful build, launch_coop.ps1 -Count1 launched PID24184 and
+the injector reported DLL loaded. Process was present/responding afterward
+(local start2026-10-16 19:23:07, creation FILETIME134366413878490897).
+No agent game input was sent. User was asked
+to load a combat encounter with live enemies and say ready; no prolonged
+weapon hold is required. The external probe has NOT yet sampled this game.
+NEXT on ready: verify that PID/creation still identify this launch, run the
+bounded probe with explicit PID and save its JSONL in ignored reports/.
+Inspect refusals, roster coverage, typed HP, all copied bodies/bindings and
+the discriminating criterion above; record the actual result before selecting
+an apply seam. Startup/injection success is NOT an enemy-sync result.

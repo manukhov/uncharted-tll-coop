@@ -54,11 +54,26 @@ Primary CompositeBody+238 has native creation at141BC03F0. +410 game-driven
 publication141E5AEE0 ->141E5A980 ->141CF57D0/141CF0EE0 queues pose without
 explicit-transform bit0; mode2 FrameSyncEnd uses141F808E0 keyframe pose AND
 velocities, not141F80AC0 teleport. Actual living-encounter modes remain untested.
-NEXT: identify these concrete callbacks/writers, retain primary CompositeBody
-ownership and mode gates, then select an observation/apply seam after import
-and before native game-to-physics publication. In parallel close native
-post-spawn full-key capture/resource lifetime. World/load invalidation and wire
-epoch remain required before writes. No runtime test admitted.
+Latest pass: +15D0 is an eleven-slot AnimModifierSet. Exact initial Pirate
+table has five modifiers; only LegModifier+38=140624400 is nonempty. Inspected
+callback/helper bodies update foot state and parent cache, not direct actor
+root or Havok pose. Other descendants/table replacement remain separate.
+Composite+238 can retain its address while141E56800 shuts down bodies/counts;
+pointer equality is not retention. Body+C6==1 selects owner root; other than
+1/4 with signed+C4>=0 selects a joint; kind4 remains unclassified.
+NEXT: bounded external RPM-only configuration observation using
+scanner/build/tll_enemy_physics_probe.exe --pid <explicit PID> --rounds 6.
+One copy and user-loaded combat encounter suffice; no new hook, writer,
+AI pause, game input, or enemy network packet is enabled. Repeated values are
+not atomic/coherent frame snapshots, full identity or write admission. Read
+the appended COOP_STATUS prediction before this exam. Capture all statuses,
+positive typed HP, complete bounded bodies/bindings and raw motion enums.
+Then choose the native after-import/before-publication seam from actual modes.
+Full authored-key capture is still a separate implementation: consume actual
+PSI at141D227B1 and join the same native invocation to publication141D22889
+(141D22883 only loads the pair); exact GameInfo14029AEE0 returns null, but
+optional overrides remain. Resource retention, world/load invalidation, peer
+wire epoch, parent conversion and combat authority remain required for writes.
 
 ## PARKED: correct local Nadine pistol grip (2026-08-27)
 
