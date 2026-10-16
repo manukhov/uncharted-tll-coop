@@ -41460,3 +41460,129 @@ names,3 types, save_database returned True. Restarted MCP resolved both new
 health setter labels and all three clarified existing functions; exact vtable
 data xrefs142BBE190(+68) and142BBE2E8(+1C0) were rechecked. Syntax/diff
 checks pass with no introduced duplicate label keys. No new pose/HP writer.
+
+## 2026-10-16 — Close copied joint-root ownership and post-import candidate interval
+
+Enemy P0 continues frombd2f61c; appearance/player baseline is untouched. This
+unit is STATIC analysis, not a new runtime result. No game is launched and no
+new hook, transform writer, health write or AI-control operation is enabled.
+
+**STATIC joint collider cache uses a copied root, not current owner+130.**
+At141CF0D33, source3 physics pose resolution141CF0A00 passes
+*(bodyOwner+1A8)+30 to141687C90. This is FgAnimData -> JointCache; the old
+REJECTED Player+1A8 ->+10 effect-table chain remains rejected, not this +30
+layout. Allocation/reset contracts141686CD0/141687150 independently establish
+the cache banks and authored group0 extents. Do not borrow Nadine/C39 counts
+or dependency masks for the sampled Pirates.
+
+JointCache_GetJointWorldLocatorLazy141687C90 checks matrix bank+E0 and
+per-joint validity bits+40. A miss calls141687970, which multiplies the
+64-byte joint matrix E0[joint] by the copied root matrix at cache+0 at
+1416879A9, writes a32-byte world locator at cache+D8+32*joint at141687A4E/A56,
+and sets the valid bit at141687A64. It neither rereads owner root nor compares
+an owner transform generation. JointCache reset1416878F0 clears the inclusive
+bit range0..group0.workspace_count via14160D8E0, copies the supplied64-byte
+root at14168792C..949 and clears byte+F8. Ordinary callsites are141A9170C,
+141A9257C and141A92BA5. Evidence kinds: concrete dataflow/stores, converging
+physics/animation callers, and separate allocation/layout contracts.
+
+**REJECTED generic late-root fix at Pirate+410/+2B8 (141BB8320).** Changing
+owner+130/+140 there can feed a new root-body pose while joint bodies still
+use the old copied root. Clearing validity bits alone does not fix it: a
+recompute still uses cache+0. Helper141688320 is a different local-pose route
+limited by group0 parameter count, not a generic replacement for native matrix
+publication. Existing Player/Nadine apply_puppet_local_root_pre must not be
+copied as a proven enemy solution; its current baseline is not modified here.
+
+**STATIC full import ordering, including+580.** Exact Pirate+408=141DE9910
+tail-jumps at141DE99BC to141E9C220. It first calls141BBDE60 for primary+238
+import141BBDE8D, then optionally queues+698 at141E9C442, then calls+580
+SyncPhysicsToGame141E59160 at141E9C465. That last caller tests only nonnull
++580 and Havok world146917C20, NOT health or dead state.141E9C46A follows
+this last synchronous import; only the epilogue remains to141E9C47E. This is
+local call ordering, not exclusion of all workers or an object-retention lease.
+
+Import normalizes dirty bindings141E53590 at141E59255 under Composite+160.
+Zero normalized count+60 exits; otherwise maximum body status is computed.
+The early status skip requires ALL of !(flags0&2), maxStatus<=1 and
+!(flags0&80) at141E59371..388. Thus game-driven desired mode2 alone does not
+exclude an import. Source-identified CompositeBody::OnApplyMotionType141E57DA0
+tracks desired3 physics count+1C and desired2 game count+18, then updates
+bindings through141E57950 -> RigidBody::ExportJointMapping141CF5C40. A source1
+body can export root key-1. Empty primary bindings from the runtime census
+cannot be assumed for+580 or retained across transitions. NPC init14042A8BE
+creates+580 under NPC+1CA9 bit10, not exclusively on death. Destructor helper
+1401BABB0 shuts it down1401BABCC and frees0x180 at1401BAC45.
+
+Later Character+410=141E9C480 waits owner+14F8, calls141BBDF70 for derived
+refresh/primary publication, then+580 forward sync141E9C4CD. It also kicks
+penetration1420F0E90, registers pre-frame-sync141E5E960 and updates buoyancy;
+it is not physics-inert. NdGameObject child141BBDEE0 is splash updating, not
+joint blending: it is queued141BBE06C during+410 with raw owner and waited
+through owner+210 by+418. This further rejects calling broad+410 a blanket
+quiescent capture/write scope.
+
+**STATIC candidate interval: full postblend return141A929A7, not late+2B8.**
+Normal Perform141A928F0 invokes complete owner+408 at141A929A1. Return
+141A929A7 precedes phase40 dispatch141A929C1. With live phase40 enabled,
+141A8F9D0 refreshes a valid parent cache, composes parent+110/+120 with local
++130/+140 and calls1418C55D0 at141A8FC00.1418C54D0 unconditionally stores
+four world-matrix rows toFg+1C0..1F0 at1418C54DD/4EA/4F7/5504. It does not
+write the owner local root back. The later normal JointBlend reset141A92BA5
+copies this root intoFg+30 before Process/group work and owner+410141A934D5,
+then+418141A934E8. Separate skipped/custom paths must not inherit this claim.
+
+Existing Player relay at phase40 callsite141A8FC00 is not sufficient to identify
+this interval: the phase dispatcher also runs from Step before+408, as well as
+Perform after+408. Any future observation must prove the enclosing native
+invocation, not infer post-import ordering from a world-publication marker alone.
+
+Phase40 is default rather than root-change detection: exact Pirate+6F0
+(vtable14294B9D0 slot14294C0C0) ->1403D1CD0 ->141BBA060 -> allocation at
+141BBA098; allocator14177F7F0 calls Reset1418C4AD0 at14177F944. Reset writes
+Fg DWORD0=78 at1418C4AEF and ORs200000 at1418C4BDE. Init1418C4840 does not
+clear40; known DisableAsync141728930 clears38, preserving40. Still require
+the LIVE flag and native admission, not an assumption that nobody clears it.
+Evidence kinds: exact Pirate virtual initialization chain, concrete matrix
+stores and reset, and independent Perform/JointBlend source/call ordering.
+
+**STATIC parent conversion is not cache invalidation.**1416860A0 is generic
+BoundTransform world-to-local conversion, not a Player-only promotion helper.
+It refreshes bound+10/+20 only for matching table key+8/generation+C and
+entry+50, then calls Transform_MakeRelative1401990F0 and stores bound+30/+40.
+Missing/mismatched key retains cached parent, NOT identity. Translation-only
+141686120 and rotation-only1416861E0 share that rule. None invalidates the
+joint cache or publishes physics. Local setters141E7D0D0/141E7D1D0 only store
+owner+130/+140 and notify+208 (empty on exact Pirate). Preserve vector service
+lanes; no new world-to-local writer or permissive invalid-parent fallback.
+
+**HYPOTHESIS / remaining admission:** for the ordinary full-postblend path,
+live phase40, stable owner/Fg/parent and valid authored group0 publication,
+a root replacement in the141A929A7..141A929C1 interval should reach BOTH the
+next copied joint-root matrix and the source1 body through native publication.
+The falsifier is mixed old/new roots or a skipped/custom path; success is not
+just a hook marker or changed owner coordinates. Compare alternatives:
+pre+408 can be overwritten by import; late+2B8 can split roots; only the
+post-import/pre-capture interval survives these two static objections.
+
+No writer exam is admitted yet. Fg+2A0 custom callback and skipped blend can
+bypass normal reset; residual groups may be queued at141A9336B. Exact current
+Pirate group0 workspace/parameter bounds, group0 output/dependency completion
+and native eligibility still need closure. Recorded collider joints are
+3/4/5/6/19/22/23/24/25/34 (14-body variant repeats joint34 four times); index
+range alone does not prove bank ownership. NEXT trace those group0 outputs
+and custom/skip exclusions, then define bounded same-invocation observation
+of owner root -> Fg root -> joint cache -> queued bodies. Full authored actor
+identity, peer-agreed epoch/load invalidation and combat authority remain
+separate requirements before network writes. No unchanged census relaunch.
+
+Verification/handoff: updated five new and twelve existing function entries;
+stopped MCP and applied the registry to the sole ida/tll.i64. Local log
+reports/enemy_joint_root_order_labels_20261016.txt reports2033 functions,
+83 data names,3 function types and save_database returned True. Restarted MCP
+resolved all five new names and renamed1416860A0; xrefs include physics
+consumer141CF0D33, mapping caller141E579BC, splash reference141BBDFD0 and
+destructor141E993EF. Rel32 audit display name follows the generic helper rename.
+Independent phase-path review found no blocking issue. Python syntax/diff
+checks pass; existing enemy observation/policy CTest suites pass2/2. Main DLL
+and player behavior are unchanged; these checks are not enemy-sync validation.

@@ -842,8 +842,20 @@ FUNCTIONS = {
     ),
     0x141687970: (
         "JointCache_ComputeJointWorldLocatorAndMarkValid",
-        "Converts one 64-byte JointCache matrix into the 32-byte world Locator "
-        "array and marks that skeleton joint valid in the cache bitset.",
+        "STATIC reads the joint matrix at cache+E0 bank, stride64, and composes "
+        "it with the copied root matrix at cache+0. Converts the result into "
+        "the world Locator at cache+D8 bank, stride32, and sets the joint bit "
+        "in the valid bitset at cache+40. Does not reread owner+130/+140 or "
+        "validate an owner-root generation; a changed actor root alone does "
+        "not refresh the copied root or invalidate cached joint worlds.",
+    ),
+    0x141687C90: (
+        "JointCache_GetJointWorldLocatorLazy",
+        "STATIC descriptive name. If cache+E0 matrix bank is present and the "
+        "joint's valid bit at cache+40 is clear, calls141687970; returns the "
+        "32-byte Locator from cache+D8. Uses the cache's copied root matrix "
+        "at +0 and valid bits, not an owner-root generation check. A cache "
+        "hit can therefore retain a world Locator from before a raw root edit.",
     ),
     0x141688320: (
         "JointCache_RecomputeWorldLocatorFromLocalPose",
@@ -1539,11 +1551,14 @@ FUNCTIONS = {
     ),
     0x1403D1CD0: (
         "Npc_AllocateAnimDataForDrawable",
-        "Concrete Npc/NadineBuddy vtable +0x6F0 wrapper. Calls the generic "
+        "Concrete Npc/NadineBuddy/Pirate vtable +0x6F0 wrapper; exact Pirate "
+        "14294B9D0+6F0 entry14294C0C0 resolves here. Calls the generic "
         "NdDrawableObject_AllocateAndInitFgAnimData allocator and, in the "
         "network mode selected by g_NetModeFlags high byte, sets FgAnimData "
         "+0x2D1. NadineBuddy vtable 0x142949638 resolves this exact slot, "
-        "independently of Player::AllocateAnimData.",
+        "independently of Player::AllocateAnimData. STATIC allocator chain "
+        "141BBA060->141BBA098 reaches allocation/reset; the conditional net "
+        "byte does not make default phase40 a root-change detector.",
     ),
     0x1404A0F40: (
         "NadineBuddy_Create",
@@ -3854,6 +3869,15 @@ FUNCTIONS = {
         "CompositeBody+238 through141E5AEE0 at141BBE119. Later NavCharacter "
         "modifier+38 callbacks remain; this is not a final root-writer boundary.",
     ),
+    0x141BBDEE0: (
+        "NdGameObject_UpdateSplashersJob",
+        "STATIC descriptive name. Receives raw owner, calls source-identified "
+        "SplasherSkeletonInfo::Update141D4E9D0 on owner+1F8 at141BBDEF0 and "
+        "optional141D53EC0 on owner+200 at141BBDF06. Queued by141BBDF70 at "
+        "141BBE06C after owner+210 counter store141BBE054. Exact Pirate+418 "
+        "141BBDF20 waits141BBDF41, releases141BBDF49 and clears141BBDF4E. "
+        "This is not a body transform queue or a retention lease.",
+    ),
     0x1404073A0: (
         "GameCharacter_CreateAiAnimModifiers",
         "STATIC descriptive name; exact Pirate virtual+B80. Allocates modifier "
@@ -3943,11 +3967,43 @@ FUNCTIONS = {
         "CompositeBody_SyncPhysicsToGame",
         "STATIC exact source composite-body.cpp:2062/2098. PHYSICS->GAME "
         "import in +408 for primary+238 and ragdoll+580. Gated by world, "
-        "bindings+60, lock+160 and body statuses/flags. First binding key=-1 "
+        "bindings+60, lock+160 and body statuses/flags. Normalizes dirty "
+        "bindings through141E53590 at141E59255 before the count test. At "
+        "141E59371..388 skips transform import only if !(flags0&2), max body "
+        "status<=1 AND !(flags0&80h); mode2 alone does not exclude import. "
+        "First binding key=-1 "
         "directly writes owner+130/+140 at141E5998E/996 then+208. Alternate "
-        "signed+E8>=0 binding uses1416860A0(owner+100) at141E59C36, also "
-        "root writes, then+208. Selected living-Pirate gates not established. "
+        "signed+E8>=0 with an actual matching binding uses1416860A0(owner+100) "
+        "at141E59C36, also root writes, then+208 (empty for exact Pirate). "
+        "Motion transitions rebuild mappings through141E57DA0/141E57950/"
+        "141CF5C40; a previously empty list is not an immutable property. "
         "Can overwrite a pre+408 network root; not forward collision publishing.",
+    ),
+    0x141E57DA0: (
+        "CompositeBody_OnApplyMotionType",
+        "STATIC exact CompositeBody::OnApplyMotionType source "
+        "composite-body.cpp:1498/1513/1524. Tracks desired mode3 physics-driven "
+        "count+1C and mode2 game-driven count+18, then calls141E57950 to "
+        "rebuild this body's joint/root mappings via141CF5C40. Desired modes "
+        "are not the nativebody+160 enum. Binding eligibility can change "
+        "without replacing the owning Composite pointer.",
+    ),
+    0x141CF5C40: (
+        "RigidBody_ExportJointMapping",
+        "STATIC exact RigidBody::ExportJointMapping source rigid-body.cpp:"
+        "3759/3832/3842. Exports mappings according to requested motion mode, "
+        "body flags, linkage+C6 and joint+C4. Source1 can emit root key=-1 "
+        "through141E533E0 at141CF61BB; source2 emits joint mappings, with "
+        "separate special source4 handling. Called by141E57950 during native "
+        "mapping updates; this is not a read-only eligibility query.",
+    ),
+    0x1401BABB0: (
+        "CompositeBody_ShutdownAndFree",
+        "STATIC descriptive name. Character destructor calls this for "
+        "optional owner+580 at141E993EF. Calls141E56800 shutdown at1401BABCC, "
+        "frees optional Composite helpers including+118/+120 and penetration "
+        "storage, then frees the0x180-byte Composite at1401BAC45. Pointer "
+        "stability in external reads is not a lifetime lease.",
     ),
     0x141E5AEE0: (
         "CompositeBody_SyncGameDrivenBodies",
@@ -4092,7 +4148,12 @@ FUNCTIONS = {
         "STATIC common postblend reached by Pirate141DE9910 and Player1410EBAEE. "
         "After141BBDE60, owner+698 receives override via virtual+388/+398 or "
         "composed parent/local transform through141CF36B0 at141E9C442. Resets "
-        "body history bit40 on mode switch; also updates optional owner+580. "
+        "body history bit40 on mode switch. Finally calls +580 ragdoll "
+        "physics-to-game import141E59160 at141E9C465, gated only by nonnull "
+        "+580 and Havok world146917C20, not health/death.141E9C46A is the "
+        "first post-import instruction; only epilogue remains to141E9C47E. "
+        "This closes that invocation's import only, not global writers or "
+        "lifetime, and is not permission to edit the root. "
         "Queueing is not final physics commit or permission for a foreign caller. "
         "+698 is OPTIONAL: ctor141E98D88 zeros it, no campaign producer proven. "
         "Do not confuse +580 ragdoll physics-to-game import with this queue.",
@@ -4516,7 +4577,12 @@ FUNCTIONS = {
         "Use fiber-local scope, not OS-thread TLS. The entire native function "
         "returns at141A929F5 or restores its stack then tail-jumps14015A850 "
         "at141A929EC; outer finally covers both and native unwind. Arm rows "
-        "around+0x408 delimit ALL procedural postblend, not Feather alone.",
+        "around+0x408 delimit ALL procedural postblend, not Feather alone. "
+        "STATIC Pirate candidate: +408 call141A929A1 returns141A929A7 before "
+        "conditional phase40 call141A929C1. Candidate ordering is after the "
+        "FULL exact Pirate+408, not an interior common-Character return; "
+        "requires job+14==0, current Fg.flags&40h and validated current owner. "
+        "This order alone is not pose-cache freshness or write admission.",
     ),
     0x1415A9040: (
         "TaggedHeapAllocator_Init",
@@ -4873,7 +4939,11 @@ FUNCTIONS = {
     0x1418C54D0: (
         "FgAnimData_PublishWorldMatrix",
         "Publishes a 64-byte world matrix to FgAnimData+0x1C0 and updates the "
-        "current transform snapshot when requested by the caller.",
+        "current transform snapshot when requested by the caller. STATIC "
+        "unconditional row stores to+1C0/+1D0/+1E0/+1F0 at1418C54DD/4EA/"
+        "4F7/5504. With r8b=0 this skips the copied JointCache/current update; "
+        "the normal later JointBlend reset must establish that copy. Matrix "
+        "publication alone does not prove fresh world Locators for all joints.",
     ),
     0x1418C55D0: (
         "FgAnimData_PublishWorldTransform",
@@ -6947,6 +7017,11 @@ FUNCTIONS = {
     0x141A92A00: (
         "AnimManager_AsyncObjectUpdateJointBlendJob",
         "Source-identified anim-mgr-jobs.cpp AsyncObjectUpdate_JointBlend_Job. "
+        "STATIC normal cache capture141A92BA5 copies Fg+1C0 into Fg+30 before "
+        "Process141A92E78/141A932F8 and owner+410141A934D5/+418141A934E8. "
+        "Custom Fg+2A0 callback141A92B4D or skipped blend bypasses this normal "
+        "reset; residual groups can queue141A9336B. Do not infer freshness "
+        "of every Pirate body joint without group0 bounds and admission. "
         "Independently reads the persistent optional scalar-bank pointers at "
         "FgAnimData+0x118/+0x120 before the joint-blend work. "
         "Both direct BuildCommandSegments calls forward FgAnimData+0x08 as the "
@@ -7042,12 +7117,13 @@ FUNCTIONS = {
         "+0x108/+0x10C and resolves qword table 0x14386FD00[key]. A matching "
         "entry generation at +0x50 refreshes the owner's cached 0x20-byte parent "
         "transform +0x110; null/mismatch retains that cache. It then unconditionally "
-        "composes cached parent +0x110 with local +0x130 and calls "
+        "composes cached parent +0x110/+0x120 with local +0x130/+0x140 and calls "
         "FgAnimData_PublishWorldTransform at 0x141A8FC00. ProcessWeapon's later "
         "vtable+0x208 callback is nullsub_385. This is a capable stock publisher, "
         "but runtime afg's target hook could not distinguish no worker/phase reach "
         "from its silent retryable return and therefore did not provide a usable "
-        "cold-path publication discriminator.",
+        "cold-path publication discriminator. STATIC phase40 may refresh the "
+        "parent cache but does not write owner local root+130/+140.",
     ),
     0x1403E3E30: (
         "NpcManager_UpdateSpotActors",
@@ -11373,17 +11449,16 @@ FUNCTIONS = {
         "shape matches the hidden authored pair inside player+0x100.",
     ),
     0x1416860A0: (
-        "RefreshEmbeddedPlayerAuthoredDescriptorState100FromSharedTable",
-        "Consumes the embedded Player subobject rooted at player+0x100. Uses "
-        "the authored key at +0x108/+0x10C to resolve 0x14386FD00, copies the "
-        "matched 0x20-byte record into +0x110, then derives follow-up vector/"
-        "transform state into +0x130/+0x140. In the real Player::Init path "
-        "this is called very early with rdx sourced from incoming_packet+0x20, "
-        "making player+0x100 the strongest current container for the hidden "
-        "promotion pair. Its key/generation/table contract independently matches "
-        "the ProcessWeapon phase-0x40 parent refresh, but the helper itself must "
-        "not be reused there because its later writes would overwrite weapon "
-        "+0x130/+0x140.",
+        "BoundTransform_SetWorldTransformRelativeToParent",
+        "STATIC descriptive name; shared BoundTransform helper, not Player-"
+        "specific. Resolves bound+8 key/+C generation through table14386FD00 "
+        "and entry+50; only a valid match refreshes cached parent+10/+20, "
+        "otherwise it retains the cache. Calls1401990F0 to compose inverse "
+        "parent with requested world transform, then stores local+30/+40. "
+        "Actor bound+100 therefore writes owner+130/+140; used by physics "
+        "import141E59C36 and NPC/Player paths. No owner callback, joint-cache "
+        "invalidation or Havok queue is performed by this helper. A null key "
+        "does not establish an identity cached parent.",
     ),
     0x1416858E0: (
         "BuildCompactDescriptorCarrierFromRuntimeObject50_54",
@@ -12876,7 +12951,10 @@ FUNCTIONS = {
         "FgAnimData_Reset",
         "Resets a reusable 0x380-byte FgAnimData pool slot. It clears every qword "
         "in the optional pointer band +0xF8..+0x120 before later Init and is called "
-        "both by pool setup and AnimMgr_AllocateAnimData.",
+        "both by pool setup and AnimMgr_AllocateAnimData. STATIC writes flags "
+        "DWORD=78h at1418C4AEF, then ORs200000h at1418C4BDE; allocator calls "
+        "Reset at14177F944. Phase40 is therefore part of default reset flags, "
+        "not an owner-root-change detection signal.",
     ),
     0x1418C4E00: (
         "FgAnimData_RelocateInternalPointers",
@@ -14581,12 +14659,16 @@ FUNCTIONS = {
     0x141686120: (
         "BoundTransform_SetTranslationWs",
         "Converts a requested world translation through the inverse cached parent "
-        "rotation and stores the resulting TranslationPs at bound+0x30.",
+        "rotation and stores the resulting TranslationPs at bound+0x30. "
+        "Null/mismatched parent key does not establish identity cached parent; "
+        "do not substitute world coordinates directly for the local result.",
     ),
     0x1416861E0: (
         "BoundTransform_SetRotationWs",
         "Converts a requested world quaternion through the inverse cached parent "
-        "rotation and stores the resulting RotationPs at bound+0x40.",
+        "rotation and stores the resulting RotationPs at bound+0x40. "
+        "Null/mismatched parent key does not establish identity cached parent; "
+        "do not substitute world rotation directly for the local result.",
     ),
     0x14152C9B0: (
         "ProjectileBulletInstant_ProbeKick",

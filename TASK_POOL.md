@@ -70,9 +70,24 @@ was WRONG: +3C is previous effective HP, raw current is signed+38. This old
 offset mistake was already corrected in the detailed archive; never reuse it.
 Derived+240/+250 are world/local position vectors, and+280 is an offset point,
 not a world quaternion. Schema2/tests now distinguish these fields.
-NEXT: trace root/parent change -> joint-world cache invalidation/recomputation
-before141CF0A00 consumes joint poses, and close+580 import behavior before
-selecting the exact native seam. A root-only body write is not sufficient.
+Latest STATIC pass CLOSED copied-root ownership:141CF0A00 reads joint worlds
+through owner+1A8(Fg)+30 JointCache.141687C90/141687970 use copied cache+0,
+not current owner root. Late+410/+2B8 root writes and validity-only clearing
+can split root/joint poses. Full Pirate+408 ends with optional+580 import at
+141E9C465; neither its caller nor mode2 alone makes this a dead-only path.
+Candidate interval is full+408 return141A929A7 before phase40 at141A929C1:
+normal phase40 publishes Fg+1C0, then JointBlend reset141A92BA5 copies it into
+the joint cache before+410. Exact Pirate allocator defaults phase40 ON, but
+live flags and normal-path admission remain required. The existing phase40
+callsite141A8FC00 also occurs before+408 in Step, not only after it in Perform.
+NEXT: close actual Pirate group0 workspace/parameter bounds and output/
+dependency completion for collider joints3/4/5/6/19/22/23/24/25/34. Exclude
+custom Fg+2A0, skipped blend and unresolved residual jobs; do not borrow C39
+counts/masks or infer freshness from index range. Then specify bounded
+same-invocation observation owner root -> Fg root -> cache -> queued bodies.
+No writer exam is admitted. Generic1416860A0 converts world to local but
+does not invalidate the cache; missing parent keys retain cached parent,
+not identity. Existing Player writer/baseline remains unchanged.
 Repeated RPM values are not atomic snapshots, lifetime or write admission;
 actor addresses changed between rounds while local record/id stayed stable.
 No further unchanged census, new launch, AI pause, HP or enemy writer needed.

@@ -13,7 +13,7 @@ TARGETS = {
     0x1410F3B20: "PromoteRetainedPlayerSlot",
     0x1410C9F20: "InitializeEmbeddedPlayerAuthoredDescriptorState100",
     0x1410C9F50: "ZeroEmbeddedPlayerAuthoredDescriptorKey_8_10",
-    0x1416860A0: "RefreshEmbeddedPlayerAuthoredDescriptorState100FromSharedTable",
+    0x1416860A0: "BoundTransform_SetWorldTransformRelativeToParent",
     0x141E7C5F0: "PostRefreshEmbeddedPlayerAuthoredDescriptorState100",
     0x141E7C600: "ComparePostRefreshDescriptorCarriers_141E7C600",
     0x141686120: "RefreshEmbeddedDescriptorStateFromExplicitVector_141686120",
