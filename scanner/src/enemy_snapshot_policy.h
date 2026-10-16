@@ -15,6 +15,9 @@
 // world packets after a reset remain unresolved without a future wire epoch and
 // handshake. Never use a peer runtime object id as the token, or assume names
 // are globally unique. All successful results here are OBSERVATION ONLY.
+// STATIC 2026-10-16: legacy name_hash is derived from object+8's32-byte debug
+// label (14 prefix + "..." +14 suffix for long names), not the full spawn name.
+// Even a collision-free stronger hash cannot restore the omitted name bytes.
 namespace coop::enemy_snapshot_policy {
 
 inline constexpr std::size_t kCapacity = kMaxEnemies;

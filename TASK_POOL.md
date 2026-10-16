@@ -29,8 +29,17 @@ alternate net-animation branch, not ordinary campaign movement. Pirate+208
 is empty; +1E8 parent handling and +2B8 derived transform are not physics proof.
 141DEC4B0 is source-identified NavCharacter_UpdateRootLocator. Its owner+15B8
 lead enumerates DynamicNavBlocker inputs, not final transform publication.
-NEXT: tail141DEDA20 ->141DEB500 ->141DEAF00/141E7CDA0 input/parent effect,
-separate root/physics publication and phase40 ordering. No runtime test admitted.
+2026-10-16 next pass CLOSED tail141DEB500 as conditional upright cleanup, not
+physics. Exact Pirate+408 ->141DE9910 ->141E9C220 queues owner+698's RigidBody through
+141CF36B0; HavokStep141D800C0 ->141CF7B70 ->141F80F80 ->141F80AC0 ->141F80770
+reaches native physical-body stores. Wait146B49FA8 is DESTRUCTION PROBES, not
+animation completion. Full dependency/owner readiness/AI phase proof is open.
+Identity correction: object+8 is32-byte middle-abbreviated debug name, not full
+authored name. Candidate provenance is object+150's spawner(fullname+20/id+28), object
++D8/+DC plus local record/+BC; D8 can be rewritten by native network setup.
+NEXT: exact animation completion relative to140165B50/140164F10 physics job,
+and a complete read-only authored-key census design. World/load invalidation
+and wire epoch remain required before writes. No runtime test admitted.
 
 ## PARKED: correct local Nadine pistol grip (2026-08-27)
 

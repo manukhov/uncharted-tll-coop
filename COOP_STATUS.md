@@ -40885,3 +40885,149 @@ owner, phase40/later overwriters and per-enemy retention. In parallel close full
 cross-copy actor key/world epoch and complete-enumeration contract. Only then
 admit one bounded two-copy no-combat test with distinct matching/movement
 predictions. No legacy g_enemy_sync, AI freeze or scalar damage shortcut.
+
+## 2026-10-16 — Trace enemy root cleanup, RigidBody publication and authored identity
+
+Continuation of enemy P0 from874aa4b. Appearance remains PARKED; no game was
+running, launched, injected or controlled. This pass closes native publication
+to physical-body stores, but does NOT enable enemy synchronization.
+
+**STATIC root-cleanup chain closed; correction to previous input hypothesis.**
+141DEC5A7/5AE saves owner+1A0 AnimControl; this, not a pending-parent pointer,
+is argument2 at141DEDA20 ->141DEB500. The callee looks up active "base", scans
+base+4F8/count+500 and nested nodes; flags+108 bit400 suppresses its correction.
+Otherwise141DEAF00 copies0x50 BoundTransform from owner+100. Mode owner+18B0=0
+projects WORLD quaternion to normalize(0,qY,0,qW), mode1 does so in the owner's
+parent frame, other modes preserve input. Independent1404C1D60 repeats the
+same projection. Bit400's authored meaning and the mode's symbolic name are
+not established. Missing base can reach a null+500 dereference: no external
+readiness contract exists here.
+
+141E7CDA0 tests resolved-frame compatibility via141685930. Compatible case
+copies0x50 bytes into owner+100..14F and calls+208, empty for exact Pirate.
+Mismatch invokes Pirate+1F0=141E7D550 ->+1E8=141DE4000, then derives new local
+pose. Tail141DEDA2F/3B/46 reads, normalizes and re-stores resulting local
+quaternion; it is NOT rollback. REJECTED alternatives:141DEB500 is neither an
+ordinary translation setter nor final physics publication. It is conditional
+upright-root cleanup with generic parent-rebinding behavior in its helper.
+
+**STATIC separate animation/physics publications, with actual downstream stores.**
+Exact Pirate slots: +400=14042FB40, +408=141DE9910, +410=1404AA090,
++418=NdGameObject_WaitUpdateCounter141BBDF20. Source/vtable/caller evidence:
+
+1. Pirate+408141DE9910 runs fixed controller+30 and dynamic collection+48
+   callbacks, then tail-calls141E9C220 at141DE99BC. This common postblend path
+   is also called by Player1410EBAEE. When owner+698 exists,141E9C442 queues its
+   RigidBody via141CF36B0 with either virtual+388/+398 override or world pose
+   composed from cached parent/local root. A change of mode resets history.
+2. RigidBody_SetTransformAndMarkDirty141CF36B0 converts the owner input through
+   141CF05A0 (type/shape or body+D0 offset), stores current/history via141CF3790,
+   marks+A0 bits1000001 and optional+70 dirty, then sets its ushort+54 work bit
+   in146A5C380 under146A5C780. Source-asserted RigidBody::InitFixed141CEE6A0
+   independently uses this storage layout. A queue write is not a Havok commit.
+3. Source-identified GameFramePostRenderUpdate140165B50 builds140164F10 at
+   1401666AF and submits through1415B5140 at1401666FC (common-game-loop:5058).
+   Callback1401653A7 calls HavokStep141D800C0. Its141D8049A invokes
+   RigidBody_FrameSyncEndMarkedBodies141CF7B70, between141E5EA60/141E5F1B0 and
+   before HavokStepInternal141D7EB90 at141D80588. Gates: dt146917DC4 greater
+   than epsilon142BE8B18 (34000000), InputManager+80 nonzero, world146917C20
+   nonnull. Native source independently names dt condition HK_REAL_EPSILON.
+4.141CF7B70 scans128qwords/8192 work bits, bounds by143685710, resolves each
+   body via shared14386FD00 and calls RigidBody::FrameSyncEnd141F80F80 at
+   141CF7CAD. It then calls RigidBody::BatchApplyChangedMotion141CF6BB0.
+   Source assertions: rigid-body-fse.cpp:472 and rigid-body.cpp:4155.
+5. Ordinary transform bit0 at141F81496 calls141F80AC0, converting stored
+   body[0]/[10] through world frame146917B40;141F80CFE calls source-identified
+   HavokSetPositionRotationAndSync141F80770. This validates finite position/
+   quaternion (source lines252/253), calls141F7FFC0(nativebody), then
+   14237BC00(nativebody+150,pos,quat) ->142234120(pos,quat,nativebody+170).
+   Concrete native-body stores: position+1A0, quaternion+1D0/+1E0, basis+170
+   through142229D50, derived center+1B0/+1C0, zero+200. No unresolved virtual
+   transform call remains in this ordinary publication segment.142379EE0 is
+   used in OTHER motion-transition branches, not needed for this proof.
+
+Work bitmap is not simply pending transforms:141F80F80 may retain a bit when
+motion type(A0>>13)&3==2 and native linear/angular velocities+230/+240 are
+nonzero; clear141F8163D/41 is conditional. Shared pointer table14386FD00 also
+serves these bodies; preserve existing authored-parent uses, not an enemy-only
+reinterpretation.14010E390 initializes the bitmap, not a getter/flush entry.
+141D99660 composite-body registration and141DA4850 Havok world-space update
+are different paths, not replacements for this work-set consumer.
+
+**REJECTED synchronization-fence shortcut.** HavokStep waits/releases
+146B49FA8 at141D80132/13A, but its producer141B416A0 and duplicate141D7F580
+explicitly say KickDestructionProbes (havok-base.cpp:1730), callback141B41000.
+Wait helper141B41870 waits/releases/zeros that counter. This proves destruction
+probe completion, NOT animation phase40 completion. Full animation -> physics
+job dependency remains an admission gate; do not force FrameSyncEnd manually.
+It can dereference body+40 even after classifying an early null body.
+
+**STATIC competing controller path separated.** Pirate+DE0=1403D1460 is
+GameCharacter_PostAlignControllerUpdates: owner+15C8 collection invokes each
+controller+50; optional+1CA0 invokes+68. Table builder1404063D0 assigns
+AiLocomotionController14295C568 slot50=14051FAE0 (local root/path/FSM updates)
+and AiWeaponController1429673C8 slot50=empty1401786C0. Optional+1CA0 is exactly
+GestureController:1403D0947 initializes141E66090,1403D0951 stores pointer;
+142B91B60+68=141E69BD0, source GestureController::PostAlignUpdate:1201.
+This shared NPC/Player layer publication is not a single physics setter.
+Do not infer that all locomotion descendants are physics-inert.
+
+**STATIC identity correction: short debug label is not full authored name.**
+Materializer1417C3E1D copies into object+8 with capacity32 via141A2BB30.
+Long names become14-byte prefix + "..." +14-byte suffix, then NUL. Exact
+Pirate+28=141841C10 only returns that label. Legacy coop_name_hash(...,64)
+therefore cannot recover full names; wider hashing does not repair the loss.
+This does not reopen the historical unique-name13/10 encounter explanation.
+
+Full-name provenance: SpawnInfo1428D5D60 slot0=1417C3660 returns explicit+30
+name, else SpawnInfo+58 ->EntitySpawner+20 name, else caller fallback.
+NdGameObject initialization141E7C9F2 stores spawner at object+150 if spawner
+exists and+51 bit08 is clear; Pirate+168=1401D5C80 returns that pointer.
+Reciprocal lookup uses spawner+60 ->holder+30(record)/+38(id), record+8 and
+object+BC. Native resolver marks object+72; it is not a read-only getter or
+retention lease. Missing spawner/explicit override/indexed respawn/duplicates
+remain cases to reject or identify, not permissive matching fallbacks.
+
+Separate IDs: local generation+BC comes from base ctor1416A3393 and atomic
+allocator1416A38A0/counter146D81B30. CORRECTION to old label/archive claim:
+1417C3D0E writes+B8, NOT+BC. NdGameObject_Init141BB48A4 hashes full SpawnInfo
+name, chooses explicit+64 or spawner-derived desired ID, writes object+D8 via
+141BB4A04; SpawnInfo+68 ->object+DC at141BB4A0E. Source-identified
+EntitySpawner_GetDesiredProcessId141D22970 handles spawner+28/type/indexed
+suffix. Independent native SendNetEventNpcSpawn140BD7A50 sends NPC+D8 and
+spawner+28 as different fields at140BD7B5C and140BD7C29. Upstream140A96B00
+can replace+D8 with counter-derived
+network ID through140A96CC4/96CF6. Do not use+D8 alone as universal authored key.
+
+**STATIC lifecycle gaps narrowed.** GameRestartCheckpoint1413C9020 queries
+restart-checkpoint1413C91A3, publishes checkpoint-restarted1413C937D, stores
+task143898668 at1413C938E and queues graph1413C93CA. Request/scheduling is
+not load completion or all load routes. Level_Load141EE0BC0 is resource-level
+loading, not one campaign epoch. net-get-current-level140B79380 reaches
+network-player-data initializers, not proven campaign identity. The mod's
+g_local_reload_level is the weapon-reload command, NOT a level-load signal.
+
+**Current hypothesis / next bounded step:** matching must use complete authored
+provenance (full spawner name,+28, object+D8/+DC, class plus local record/+BC),
+with ambiguous/missing rows refused. A complete read-only encounter census
+could validate this subset; it cannot establish world/session safety for writes.
+V1 still needs a peer-agreed wire epoch and proven invalidation on relevant load
+routes. For movement, compare (A) replacing eligible root input before native
+postblend RigidBody queue, (B) body-only queue replacement, (C) late root write.
+Only A preserves the demonstrated common source of visual and body pose in
+principle; B can leave rendered/AI root behind, C can miss the native body queue.
+A is still HYPOTHESIS: establish +698 readiness/ownership, relative-parent
+conversion, local-AI overwrite phases and exact animation/physics dependency.
+Next specific graph: animation job completion and retained-owner lifetime
+relative to140165B50/140164F10 scheduling, NOT the destruction-probe counter.
+No new runtime exam or writer admitted; old flags remain OFF.
+
+Handoff verification: stopped MCP and applied labels to sole ida/tll.i64;
+reports/enemy_physics_identity_labels_20261016.txt records1990 functions,
+83 data labels and save_database returned True. Reopened MCP verified all30
+new function names, the corrected GestureController name, both new globals,
+postblend and marked-body consumer xrefs. Independent review found no blockers.
+Existing observation-policy tests re-ran successfully (10/10 groups, CTest1/1);
+only its identity warning changed, no runtime behavior or wire format changed.
+No new DLL was needed/built for this static-only unit. Normal main build and
+all enemy/appearance experiment OFF states remain as recorded in874aa4b.

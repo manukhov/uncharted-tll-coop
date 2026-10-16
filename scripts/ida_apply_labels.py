@@ -3803,13 +3803,202 @@ FUNCTIONS = {
         "controller branch, false for alternate net-animation path. Not a safe "
         "runtime switch; call to140A97450 is not read-only.",
     ),
+    0x141DEB500: (
+        "NavCharacter_ApplyUprightRootUnlessBaseNodeFlag400",
+        "STATIC:141DEDA20 passes owner+1A0 AnimControl, not parent pointer. Finds "
+        "active base; nested node+108 bit400 suppresses cleanup. Otherwise builds "
+        "bound from owner+100 via141DEAF00 and applies141E7CDA0. Assumes base exists; "
+        "not an external setter. Bit400 authored symbolic meaning unresolved.",
+    ),
+    0x141DEAF00: (
+        "NavCharacter_BuildUprightBoundTransform",
+        "STATIC: copies0x50-byte BoundTransform; owner+18B0 mode0 projects world "
+        "quaternion to normalize(0,qY,0,qW), mode1 projects in owner parent frame, "
+        "other modes preserve input. Independent1404C1D60 repeats projection. "
+        "Not physics publication or translation synchronization.",
+    ),
+    0x141E7CDA0: (
+        "ObjectTransform_ApplyBoundTransformAndNotify208",
+        "STATIC: compatible resolved frames via141685930 copy0x50 bytes to "
+        "owner+100 then virtual+208. Mismatch converts world pose, calls+1F0, "
+        "refreshes parent cache and derives local+130/+140. Pirate+208 is empty; "
+        "+1F0 resolves141E7D550. Not standalone physics synchronization.",
+    ),
+    0x141E7D550: (
+        "ObjectTransform_ResolveBoundParentAndDispatch1E8",
+        "STATIC exact Pirate+1F0. Resolves incoming BoundTransform key/generation "
+        "+8/+C through14386FD00 with entry+50 check; forwards pointer or null to "
+        "owner+1E8 (Pirate141DE4000). Parent rebinding, not physics refresh.",
+    ),
+    0x141DE9910: (
+        "NavCharacter_PostAnimBlendControllersAndRigidBody",
+        "STATIC exact Pirate+408. Invokes11 fixed controllers from owner+15D0 "
+        "via+30 and optional owner+15C8 collection via+48; tail-calls141E9C220 "
+        "at141DE99BC. Retained postblend dispatch, not a pure transform setter.",
+    ),
+    0x141E9C220: (
+        "Character_PostAnimBlendPublishRigidBody",
+        "STATIC common postblend reached by Pirate141DE9910 and Player1410EBAEE. "
+        "After141BBDE60, owner+698 receives override via virtual+388/+398 or "
+        "composed parent/local transform through141CF36B0 at141E9C442. Resets "
+        "body history bit40 on mode switch; also updates optional owner+580. "
+        "Queueing is not final physics commit or permission for a foreign caller.",
+    ),
+    0x141CF36B0: (
+        "RigidBody_SetTransformAndMarkDirty",
+        "STATIC:141CF05A0 converts input,141CF3790 stores current/history; "
+        "ORs+A0 with1000001, marks optional+70 dirty. Nonzero ushort+54 sets "
+        "146A5C380 bit under146A5C780 lock. Same layout identified independently "
+        "by RigidBody::InitFixed. Queued request, not immediate Havok publication.",
+    ),
+    0x141CF05A0: (
+        "RigidBody_ConvertInputTransform",
+        "STATIC:32-byte transform conversion. Type byte+C6==4 uses underlying "
+        "body/shape transform chain; otherwise composes input with body+D0 offset. "
+        "Used before stored history/current writes; not a raw world memcpy.",
+    ),
+    0x141CF3790: (
+        "RigidBody_StoreTransformWithHistory",
+        "STATIC: flag+A0 bit80 suppresses history advance once; bit40 chooses "
+        "copy-old versus seed-new history at+20/+30. Writes current xyz/+10 "
+        "quaternion preserving position W. InitFixed and141CF36B0 share this "
+        "layout; this helper does not commit the Havok body.",
+    ),
+    0x141CEE6A0: (
+        "RigidBody_InitFixed",
+        "STATIC exact rigid-body.cpp:995/996 RigidBody::InitFixed assertions; "
+        "requires pHkBody and hkpMotion::MOTION_FIXED. Uses141CF3790 storage. "
+        "Type-provenance evidence only, not living-NPC setup guidance.",
+    ),
+    0x141CF7B70: (
+        "RigidBody_FrameSyncEndMarkedBodies",
+        "STATIC scans128qwords146A5C380, resolves indexed bodies through14386FD00, "
+        "calls141F80F80 at141CF7CAD, then141CF6BB0. Called by141D800C0 at141D8049A. "
+        "Work bits also retain moving bodies, not just pending transform edits. "
+        "Global physics stage, not a safe network-tick entry point.",
+    ),
+    0x141F80F80: (
+        "RigidBody_FrameSyncEnd",
+        "STATIC exact rigid-body-fse.cpp:472 source assertion. Consumes transform/"
+        "motion flags; ordinary dirty-pose path141F80AC0 ->141F80770. Other "
+        "motion branches use142379EE0. Dirty bit clear141F8163D/41 is conditional; "
+        "body type/velocity/motion branches must remain native.",
+    ),
+    0x141CF6BB0: (
+        "RigidBody_BatchApplyChangedMotion",
+        "STATIC exact rigid-body.cpp:4155 source assertion. Drains changed-motion "
+        "list after dirty FrameSyncEnd pass under native world locking. "
+        "Not an enemy-only operation or an arbitrary-thread update API.",
+    ),
+    0x141F80AC0: (
+        "RigidBody_FrameSyncEndPublishTransformToHavok",
+        "STATIC ordinary FrameSyncEnd dirty-transform path141F81496. Converts "
+        "stored body[0]/[10] using frame146917B40, calls141F80770 at141F80CFE "
+        "on underlying body+40. Distinct from motion-transition142379EE0 paths.",
+    ),
+    0x141F80770: (
+        "HavokSetPositionRotationAndSync",
+        "STATIC exact rigid-body-fse.cpp:252/253 source assertions check "
+        "nextPosition.isOk3()/nextOrientation.isOk(). Calls141F7FFC0(nativebody), "
+        "then14237BC00(nativebody+150,pos,quat) ->142234120(...,nativebody+170). "
+        "Preserve native physics-stage ownership; not a network helper.",
+    ),
+    0x14237BC00: (
+        "HavokMotion_SetPositionAndRotation",
+        "STATIC forwards(position,rotation,motion+20) to142234120.141F80770 "
+        "passes nativebody+150, so downstream motion-state starts at body+170.",
+    ),
+    0x142234120: (
+        "HavokMotionState_StorePositionRotationAndSweptState",
+        "STATIC writes position at state+30, orientations+60/+70, basis via "
+        "142229D50, derived centers+40/+50 and zero+90. Caller14237BC00 maps "
+        "state to nativebody+170. Not a complete direct enemy transform API.",
+    ),
+    0x141D800C0: (
+        "HavokStep",
+        "STATIC exact ndphys/havok.cpp:962/991. Waits/releases146B49FA8 at "
+        "141D80132/13A. Gated dt146917DC4 > epsilon142BE8B18, InputManager+80 "
+        "nonzero and world146917C20: calls141CF7B70 at141D8049A between141E5EA60/"
+        "141E5F1B0, before141D7EB90 at141D80588. Counter is destruction probes, "
+        "NOT animation. Animation/physics dependency still needs proof.",
+    ),
+    0x141B416A0: (
+        "Havok_KickDestructionProbes",
+        "STATIC exact KickDestructionProbes source, havok-base.cpp:1730. Creates "
+        "counter146B49FA8 at141B417EF with callback141B41000; submits141B41801. "
+        "Not an animation-job producer; duplicate sequence in141D7F580.",
+    ),
+    0x141B41870: (
+        "Havok_WaitForDestructionProbes",
+        "STATIC waits/releases/zeros146B49FA8 at141B4188A/92/97. Same counter "
+        "awaited inline by HavokStep. Does not establish animation completion.",
+    ),
+    0x141D7EB90: (
+        "HavokStepInternal",
+        "STATIC exact ndphys/havok.cpp:363 assertion g_havok.m_dt > HK_REAL_EPSILON. "
+        "Called by HavokStep after marked-body FrameSyncEnd processing.",
+    ),
+    0x140165B50: (
+        "GameFramePostRenderUpdate",
+        "STATIC source-identified frame stage. Builds callback140164F10 at1401666AF "
+        "and submits via1415B5140 at1401666FC (common-game-loop.cpp:5058). Callback "
+        "calls HavokStep141D800C0 at1401653A7; not the Player network tick.",
+    ),
+    0x1403D1460: (
+        "GameCharacter_PostAlignControllerUpdates",
+        "STATIC exact Pirate+DE0. Owner+15C8 collection receives each+50 at1403D14A0; "
+        "optional+1CA0 GestureController receives+68/141E69BD0 at1403D14CC. "
+        "Locomotion+50=14051FAE0; Weapon+50 is empty1401786C0. Not one final "
+        "physics setter; locomotion/FSM descendants remain separately relevant.",
+    ),
+    0x141A2BB30: (
+        "String_CopyWithMiddleEllipsis",
+        "STATIC: long names retain prefix/suffix around literal142B256C4 ellipsis, "
+        "last byte NUL.1417C3E1D supplies capacity32 into object+8:14+3+14 bytes. "
+        "Not full authored identity; larger hashes cannot restore omitted bytes.",
+    ),
+    0x141841C10: (
+        "Process_GetShortDebugName",
+        "STATIC exact Pirate+28. Returns object+8,32-byte abbreviated debug "
+        "label filled at1417C3E1D. Does not recover full spawn name.",
+    ),
+    0x1417C3660: (
+        "SpawnInfo_GetExplicitOrSpawnerName",
+        "STATIC SpawnInfo1428D5D60 slot0: explicit+30 string else+58 spawner->+20 "
+        "name else caller fallback. Full-name source before debug abbreviation.",
+    ),
+    0x1401D5C80: (
+        "Object_GetEntitySpawner",
+        "STATIC exact Pirate+168 returns object+150, initialized from SpawnInfo+58 "
+        "at141E7C9F2 only if nonnull spawner+51 bit08 clear. Not retained or "
+        "guaranteed present; pointer is not cross-copy identity.",
+    ),
+    0x141D22970: (
+        "EntitySpawner_GetDesiredProcessId",
+        "STATIC exact source assertion. Uses spawner+28 with type substitutions/"
+        "indexed suffix when+51 bit10. NdGameObject_Init chooses explicit "
+        "SpawnInfo+64/name hash or this id. No global/world uniqueness proof.",
+    ),
+    0x140BD7A50: (
+        "SendNetEventNpcSpawn",
+        "STATIC exact source assertion. NPC+D8 ->event+18 at140BD7B5C; "
+        "spawner+28 ->event+1C at140BD7C29. Upstream140A96B00 can replace+D8 "
+        "with generated network id. Not an admitted campaign replication API.",
+    ),
+    0x1413C9020: (
+        "GameRestartCheckpoint",
+        "STATIC exact source assertion. Queries restart-checkpoint1413C91A3, "
+        "publishes checkpoint-restarted1413C937D, stores task143898668 at1413C938E "
+        "then queues graph1413C93CA. Request only, not load-complete/all-load epoch.",
+    ),
     0x141DEC4B0: (
         "NavCharacter_UpdateRootLocator",
         "STATIC exact nav-character.cpp:3478 source assertion at141DEC64C names "
         "NavCharacter::UpdateRootLocator. Reached by141DE8EC0 at141DE9133/141DE96F6/"
-        "141DE979F. Tail copies local root via141E7D0D0, calls unresolved141DEB500, "
+        "141DE979F. Tail copies local root via141E7D0D0, upright cleanup141DEB500, "
         "then copies local rotation via141E7D1D0. Not a generic packet setter; "
-        "ordinary-path final physics publication and phase ordering remain open.",
+        "physics is queued later through Pirate+408/owner+698. Cross-phase "
+        "dependency and safe remote ownership remain open.",
     ),
     0x141E7D0D0: (
         "ObjectTransform_CopyLocalRootAndNotify208",
@@ -7279,11 +7468,11 @@ FUNCTIONS = {
         "a returned runtime object family, copies packet payload blocks from "
         "+0x20/+0x40 into that object, stores the packet owner/source at "
         "object+0xA0, links the intrusive node back to the object through "
-        "node+0x8, stores that node pointer at object+0xA8, and recomputes "
-        "object+0xBC from descriptor-local state via 0x14161FC60. So the "
-        "canonical +0xA8/+0xBC runtime identity later consumed by Player-side "
-        "camera/state code is generic materializer output, not a direct "
-        "Player ctor field. The returned object still looks more like a "
+        "node+0x8, stores that node pointer at object+0xA8, and writes descriptor "
+        "delta to object+0xB8 at1417C3D0E. CORRECTION: this is NOT +0xBC; local "
+        "generation+BC comes from base constructor1416A3393. Name copy1417C3E1D "
+        "uses32-byte middle-ellipsis helper into object+8, not full authored name. "
+        "The returned object was previously considered more like a "
         "materialized runtime companion to the packet than the final "
         "Player-side external_state itself; the stronger direct shape match "
         "for 0x1418C4840 remains the extended wrapper family at 0x1417C35A0. "
@@ -12180,7 +12369,10 @@ FUNCTIONS = {
         "prebuilt look uses the selected hash through slot+238 at "
         "0x141BB4AE3 and publishes object+170 at 0x141BB4B03; a prebuilt "
         "look bypasses that hash-fed construction, not the getter callback. "
-        "Installing a getter hook after Init cannot retroactively rebuild it.",
+        "Installing a getter hook after Init cannot retroactively rebuild it. "
+        "STATIC identity: full SpawnInfo name hash141BB48A4, explicit+64 or "
+        "spawner desired id ->object+D8 via1416A6B20 at141BB4A04; SpawnInfo+68 "
+        "->object+DC at141BB4A0E. Native network path140A96B00 may replace+D8.",
     ),
     0x141BCD340: (
         "ResolvePlayerAmbientOccluderSelectionAndRefreshDrawControlMeshes",
@@ -12508,8 +12700,9 @@ FUNCTIONS = {
     0x141E66090: (
         "GestureController_Initialize",
         "In-place GestureController initializer. Stamps exact RTTI vtable "
-        "0x142B91B60, stores the Player owner in +0x10 and initializes its "
-        "layer-handler arrays and late state links.",
+        "0x142B91B60, stores owner in +0x10 and initializes layer handlers/links. "
+        "Shared, not Player-only: GameCharacter initializer1403D0947/0951 also "
+        "constructs this object and stores it at owner+1CA0.",
     ),
     0x141E668C0: (
         "GestureController_BindOwnerAndBuildLayerHandlers",
@@ -12554,8 +12747,10 @@ FUNCTIONS = {
         "upper Player AnimSnapshotLayer manager.",
     ),
     0x141E69BD0: (
-        "RebuildUpperPlayerAnimSnapshotManager3FD8EightSlotAggregateAndPublishToHandlers",
-        "Upper Player manager rebuild/publish phase. Reinitializes the shared "
+        "GestureController_PostAlignUpdate",
+        "Exact gesture-controller.cpp:1201 GestureController::PostAlignUpdate. "
+        "Shared Player/GameCharacter controller phase, also NPC+1CA0 virtual+68. "
+        "Reinitializes the shared "
         "state band at +0x170, builds a temporary 8-slot aggregate from "
         "owner-derived state, and then pushes that aggregate back into all "
         "registered handlers through handler->virtual +0xE0. Current typed "
@@ -14582,6 +14777,18 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x146B49FA8: (
+        "g_HavokDestructionProbeJobCounter",
+        "STATIC created by KickDestructionProbes141B416A0 /141D7F580 with callback "
+        "141B41000. Waited by141B41870 and HavokStep. NOT animation completion.",
+    ),
+    0x146A5C380: (
+        "g_RigidBodyFrameSyncEndWorkBits",
+        "STATIC128qwords/8192bits.141CF36B0 marks registered RigidBody+54 index; "
+        "141CF7B70 scans work and141F80F80 conditionally clears it. Moving bodies "
+        "may retain bits, so not exclusively pending transforms.14010E390 only "
+        "memset-initializes it; writers synchronize through146A5C780.",
+    ),
     0x143684E64: (
         "g_ArmIkSolveBypass",
         "Nonzero byte makes SolveArmIk return AL=1 without solving or writing "
@@ -14733,7 +14940,9 @@ DATA_NAMES = {
         "Shared inline qword pointer table indexed by an owner's authored key at "
         "+0x108. When the selected entry's generation DWORD at +0x50 matches owner "
         "+0x10C, its first 0x20 bytes refresh cached parent +0x110. Null/mismatch "
-        "retains that cache, which stock paths still compose with local +0x130.",
+        "retains that cache, which stock paths still compose with local +0x130. "
+        "Also indexes registered RigidBody entries for FrameSyncEnd141CF7B70; "
+        "the table is not exclusively authored objects or enemy transforms.",
     ),
     0x146905C58: (
         "g_ArmIkJointNameIds",
@@ -15088,11 +15297,29 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x1417C3D0E: (
+        "STATIC correction: mov [rbx+B8],r14d writes descriptor delta, NOT local "
+        "runtime id+BC. Base constructor1416A3393 assigns+BC via1416A38A0."
+    ),
+    0x1417C3E1D: (
+        "STATIC32-byte shortened debug name into object+8; long input becomes "
+        "14-byte prefix + ellipsis +14-byte suffix. Not a full authored actor key."
+    ),
+    0x141E9C442: (
+        "STATIC owner+698 RigidBody transform queue. Exact Pirate reaches here "
+        "via+408/141DE9910. Final publication is FrameSyncEnd under HavokStep, "
+        "not this call or phase40 Fg matrix publication alone."
+    ),
+    0x141D8049A: (
+        "STATIC marked-body FrameSyncEnd after146B49FA8 wait/release and before "
+        "HavokStepInternal141D80588; dt/InputManager/world gates apply. Counter "
+        "is destruction probes, NOT an animation fence. Job dependency unresolved."
+    ),
     0x141DEDA20: (
         "STATIC UpdateRootLocator tail:141DEDA11 copies local root, this invokes "
-        "unresolved141DEB500,141DEDA46 copies local rotation. 141DEB500 searches "
-        "base records and tests nested node+108 bit400 before141DEAF00/141E7CDA0. "
-        "Do not infer generic physics publication from its position in this chain."
+        "upright cleanup141DEB500 with owner+1A0 AnimControl.141DEDA46 stores "
+        "normalized resulting local rotation, not a rollback. Base node+108 bit400 "
+        "can suppress cleanup. This chain is not physics publication."
     ),
     0x141DE9608: (
         "STATIC local-root +130 store in FALSE virtual+5E8 alternate net-animation "
