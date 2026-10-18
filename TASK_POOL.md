@@ -12,7 +12,17 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy Synchronization (2026-10-18)
 
-CURRENT IMPLEMENTATION RESET (user: implement sync, not tests): ordinary main
+LATEST RESULT: user reports severe lag in BOTH PID16896/7824. First root-sync
+run is REJECTED as a usable implementation. Emergency terminal stop applied
+and read back in both processes; native logs confirm STOPPED with apply=0.
+Do NOT relaunch hash E19D25EC...: launch_coop now refuses that exact image.
+Source startup is default-OFF; a new build is deferred while two games occupy
+nearly all GPU capacity and leave about1.1GB system RAM available. NEXT: user
+reports whether stopping root-sync improved smoothness; distinguish hook cost
+from shared resource pressure before another enemy-enabled launch. No new
+tests/offer expansion, no damage/AI writer, no automatic rearm.
+
+PREVIOUS IMPLEMENTATION (superseded by rejection above): ordinary main
 DLL now contains native root-only A->B replication through exact Pirate+408
 return141A929A7 and setter141E7D0D0. The isolated observer/offer/transaction
 track below is PARKED. No new standalone tests. Full spawner association,

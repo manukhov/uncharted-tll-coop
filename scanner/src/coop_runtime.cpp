@@ -82178,7 +82178,17 @@ DWORD WINAPI install_hook(void*) {
     log_line("one-shot split render activation ENABLED after login_state==3");
     const bool state_net_started = start_state_net();
 #if defined(TLL_ENEMY_ROOT_SYNC)
-    if (state_net_started) install_enemy_root_sync();
+    // The first two-copy run reported severe lag with ZERO receiver writes.
+    // Keep this experimental hook off on ordinary launches until its cost and
+    // the two-copy resource budget have been separated. Never auto-rearm it.
+    char enemy_root_opt_in[4]{};
+    const DWORD enemy_root_opt_in_size = GetEnvironmentVariableA(
+        "TLL_ENEMY_ROOT_SYNC", enemy_root_opt_in, sizeof(enemy_root_opt_in));
+    if (state_net_started && enemy_root_opt_in_size == 1 && enemy_root_opt_in[0] == '1') {
+        install_enemy_root_sync();
+    } else {
+        boot_log_line("ENEMY-ROOT disabled by default after rejected lagging run");
+    }
 #endif
     if constexpr (kEnableP99ConsumedCensus && !kEnableRejectedNadineWeaponRuntimeProbes) {
         const bool installed = state_net_started && install_p99_consumed_census();

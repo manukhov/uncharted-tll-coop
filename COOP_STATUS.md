@@ -2,6 +2,12 @@
 
 ## Current user priority / handoff (2026-10-18)
 
+LATEST RESULT: both copies severely lag (user report). The first root-sync
+run is REJECTED as usable; the new handler has been terminally stopped in
+both live processes with ZERO receiver applies. Startup is default-OFF in
+source and the launcher refuses the old auto-enabled hash. Read the latest
+entry before any relaunch; no new enemy-enabled exam is prepared/admitted.
+
 USER CORRECTION (2026-10-18): implement enemy synchronization, not additional
 standalone tests or loader/offer infrastructure. The latest entry connects an
 actual root-only A->B channel to the ordinary co-op DLL at Pirate+408 return
@@ -42751,3 +42757,49 @@ Restarted MCP and verified all three new names, the setter/Perform names and
 constructor xrefs (including141BB335F). NEXT is the user-driven same-encounter
 result, not more isolated offer or transport tests. If the writer refuses,
 use its concrete lastGate plus current data; do not weaken guards blindly.
+
+## 2026-10-18 — Reject lagging first root-sync run and stop both handlers
+
+**REJECTED runtime result:** user reports "both copies lag insanely" for
+PID16896(A)/7824(B), main image E19D25ECD090FF5233AE1522C39A46882422F3858FE5AC117C438F271BC93EB5.
+The usable-sync prediction failed. This does NOT isolate the cause to the
+native setter or prove a successful root/physics publication: latest A counter
+capture=90; B received/matched=8; BOTH applied=0. The receiver writer never
+executed. Do not claim movement sync or repeat this unchanged pair.
+
+**CONFIRMED runtime rollback:** scripts/stop_enemy_root_sync.ps1 resolves the
+one-byte enemy_root::stopped symbol from the exact local matching PDB (RVA
+D45CD in this image), checks expected DLL SHA256, loaded path/PE timestamp/
+image size, PID/start time, symbol extent/size and bool value, then writes
+ONLY this terminal flag. InspectOnly first read0 in both. Stop writes/readback
+returned1 in both, and native logs confirm:
+PID7824 STOPPED apply=0 match=8; PID16896 STOPPED apply=0 match=0.
+Later InspectOnly confirms both still1. No game pointers, code, vtable, HP,
+AI state or input was changed. The pinned hook remains a stock forwarder;
+new census/network/native guard work is bypassed, no automatic rearm.
+
+**CONFIRMED resource counters, cause not isolated:** after the rollback, local
+GPU performance counters show both copies on the SAME Graphics_1 engine:
+58%+40%, then58%+41%. Per-process dedicated allocation was about3.35/3.38GB,
+shared about1.18/1.16GB. System available memory was1103MB with455 pages/s
+input (67 page reads/s) in the first sample, then1119MB with zero paging in
+the second. Paging is intermittent, NOT proven continuous. CPU process
+counter snapshot was812%/250% (summed logical-core percentages, NOT normalized
+whole-machine utilization). These measurements demonstrate substantial shared
+resource load even after root-sync stops; they do not quantify its prior cost
+or establish how much the user-visible lag changed. No frame-rate claim.
+
+**Alternatives / next discriminator:** hot-path validation/census overhead may
+have added cost before stop; two full renderers compete for GPU/memory; existing
+player/appearance hooks remain another possible contributor. Stop removes only
+the new enemy work, preserving current players/appearance, so the user's
+before/after smoothness report is the next discriminator. Do not disable broad
+baseline features, change game settings or control the two windows blindly.
+
+Source startup now requires explicit TLL_ENEMY_ROOT_SYNC=1; ordinary launches
+will not install the experimental hook. launch_coop refuses the exact rejected
+old DLL hash so this source change cannot be mistaken for a deployed fix.
+No rebuild/relaunch while both heavy games remain running; current live safety
+comes from the verified terminal stop, NOT a replaced DLL. Build remains the
+next implementation step once those processes are closed. No new game address
+discovery or IDB change, and no new component tests. Existing labels stay saved.

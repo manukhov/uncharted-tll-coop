@@ -16,6 +16,15 @@ if ($LocalPair -and $Count -ne 2) {
     throw "LocalPair requires Count=2"
 }
 
+# Do not relaunch the rejected auto-enabled image while an updated build is
+# pending. Running instances have been stopped through their terminal flag.
+$runtimePath = Join-Path $buildPath 'tll_coop_runtime.dll'
+if ((Test-Path -LiteralPath $runtimePath -PathType Leaf) -and
+    (Get-FileHash -LiteralPath $runtimePath -Algorithm SHA256).Hash -eq
+        'E19D25ECD090FF5233AE1522C39A46882422F3858FE5AC117C438F271BC93EB5') {
+    throw 'Rejected enemy-sync image: close the current games and build the default-disabled runtime before launching again'
+}
+
 if (-not (Test-Path -LiteralPath $GamePath -PathType Leaf)) {
     throw "Game executable not found: $GamePath"
 }
