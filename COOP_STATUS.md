@@ -9,9 +9,10 @@ Menu transition141CDA800 reaches GameTaskGraphMgr_Reset141CB9C40 and exact
 TaskObserver1413C6AF0, which kills the primary Player and resets actors.
 Real DLL A7A98C27...9A072 built; emitted reads/SEH independently verified.
 NOT a lifetime lease or a confirmed fix for the previous menu crash.
-NEXT: bounded baseline two-copy menu-exit regression with enemy root OFF and
-existing crash watchers attached to BOTH roles. Written prediction below;
-no performance verdict under debugger, no enemy-sync success claim.
+RUNTIME PENDING USER RESULT: baseline pair A=25612/B=10364 launched/injected;
+enemy root OFF confirmed by both boot logs. Existing crash watchers on BOTH
+roles report READY. Written prediction/run identities below. User alone loads
+and returns to menu; no performance verdict or enemy-sync success claim.
 
 LATEST RESULT: user reports one copy CRASHED while returning to the main menu.
 Revised PID22652(A)/23592(B) run is REJECTED as usable; both processes are now
@@ -43323,3 +43324,21 @@ causality. This run does NOT validate enemy sync, the stopped Pirate hook, or
 performance (debugger changes timing). No automatic repeat/rearm, no larger
 enemy budget, no game input by the agent. If no second-chance context arrives,
 exit code/handled exceptions alone still cannot identify a crash PC.
+
+**Runtime dispatched, result PENDING:** after commit9d6a3fe was pushed, ran
+launch_coop.ps1 -Count2 -LocalPair WITHOUT -EnemyRootSync. Both successful
+LoadLibrary reports and boot logs identify A=PID25612, creation
+2026-10-18T22:38:40.1395154+03:00; B=PID10364, creation
+2026-10-18T22:38:42.1456123+03:00. Both emit ENEMY-ROOT disabled and
+LOCAL-LOOK READY (requested Chloe A/Nadine B; rendered appearance unverified).
+Existing tll_crash_watch attached22:39:17 with expected full tll.exe path,
+watcher PIDs5128(A)/26244(B),1800second bounds. Both events.txt files report
+READY (attach breakpoint continued); creation FILETIMEs31285048:1187604946
+and31285048:1207665915. Both targets/watchers alive at readiness check.
+Unique artifact root reports/menu-onkill-20261018-2238 contains exact DLL/PDB
+and separate A-PID25612/B-PID10364 watcher directories. Do not overwrite/mix
+these sessions. Boot-log snapshot preserved there as boot-locomotion_hook.log.
+User asked to load same encounter, briefly move, return A then B separately to
+main menu, and leave both open. Agent performed NO game input. NEXT read user
+result and both watcher logs/dumps; no repeat/rearm. Successful injection and
+READY are not evidence that menu-exit regression passed or crash is fixed.

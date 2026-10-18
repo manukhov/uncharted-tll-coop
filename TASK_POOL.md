@@ -24,10 +24,13 @@ positive-duration PreResetter141CDA250 eventually takes the zero-duration path.
 Secondary observer1413C7170 reset is conditional, not proved in the failed run.
 IDB labels/corrections saved/read back. Dormant aux_input_thread is compiled
 OUT; proposed diagnostic gates removed, no such runtime fix is claimed.
-NEXT: bounded ordinary two-copy menu-exit regression with enemy root OFF and
-existing crash watchers on BOTH roles; static quota/prediction in latest
-COOP_STATUS. User alone controls both copies. No performance verdict under
-debugger; success would not prove guard execution or previous crash causality.
+RUNTIME PENDING: baseline A=PID25612/B=PID10364 launched with new DLL and enemy
+root OFF (both boot logs verified). Existing watchers5128/26244 both READY;
+1800second bound, reports/menu-onkill-20261018-2238/A-PID25612 and B-PID10364.
+NEXT read user report after same-save brief movement and A then B menu returns,
+plus both watcher logs/dumps. User alone controls both copies. Static quota/
+prediction in latest COOP_STATUS. No performance verdict under debugger;
+success would not prove guard execution or previous crash causality.
 Post-return pointer lifetime remains open. Do not reopen pointer-address churn
 as corruption or use the cleared request flag as a lifetime/unload guard.
 
