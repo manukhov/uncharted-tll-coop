@@ -12,15 +12,26 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy Synchronization (2026-10-18)
 
-LATEST RESULT: user reports severe lag in BOTH PID16896/7824. First root-sync
+LATEST RESULT: one copy CRASHED on returning to the main menu (user report).
+Revised PID22652(A)/23592(B) run is REJECTED as usable; both processes are gone.
+Both channels stopped in first census at2389/2925us with just2 VQ attempts
+and match/apply0. No new enemy-root writes; this does NOT clear the installed
+shim or baseline hooks of responsibility. Fresh crash.info exists but no new
+dump/exception PC. Exact DLL/PDB/logs preserved under
+reports/enemy-root-menu-crash-20261018-2142. User does not remember the crashed
+role and confirms closing the other manually. No relaunch/rearm/budget raise.
+NEXT: statically inspect menu/world teardown; a later justified reproduction
+must observe both copies with the existing crash watcher, not a new test
+framework. See latest COOP_STATUS for evidence and competing hypotheses.
+
+PREVIOUS RESULT: user reports severe lag in BOTH PID16896/7824. First root-sync
 run is REJECTED as a usable implementation. Emergency terminal stop applied
 and read back in both processes; native logs confirm STOPPED with apply=0.
 Do NOT relaunch hash E19D25EC...: launch_coop now refuses that exact image.
 User now confirms lag DISAPPEARED after that stop with both games still open.
 The active enemy-root path is the regression; GPU-only attribution is rejected.
-Revised main DLL BUILDS, default-OFF; explicit exam now runs PID22652(A) and
-PID23592(B). Both injected/responding; enemy ports31340/31341 and stop-control
-events verified. Empty actor/cost counters so far, awaiting user-loaded scene.
+Revised main DLL BUILDS, default-OFF; the ended exam used PID22652(A) and
+PID23592(B), enemy ports31340/31341 and verified stop-control event existence.
 Enemy transport uses a dedicated nonblocking worker/socket (state ports+2),
 not the player sockets or game-thread sendto. RNG and recurring private-file
 logging also moved off game update. B reserves/copies each packet sequence
@@ -31,11 +42,8 @@ per fixed50ms window, all rejection paths charged; one delayed OS call cannot
 be preempted. Independent PID+creation-bound stop request/ACK is available via
 scripts/stop_enemy_root_channel.ps1 (signals both before waiting; no memory
 writes). Old hash/PDB stop remains restricted. Revised native-root exam has
-written evidence/prediction in latest COOP_STATUS and is ready for two copies.
-NEXT: user alone loads the same living-enemy encounter, no initial shooting/
-reload; compare visible motion/smoothness with enemy_root_22652/23592.log.
-Do not rebuild/reinject running copies. If needed, stop BOTH using
-stop_enemy_root_channel.ps1 -ProcessIds 22652,23592. No rearm after stop.
+written evidence/prediction in COOP_STATUS; the subsequent crash supersedes
+its launch/scene-loading instructions. Do not repeat that exam unchanged.
 Cost cutoff is containment, NOT sync success.
 No standalone tests/offer expansion, damage/AI writer or automatic rearm.
 

@@ -2,22 +2,20 @@
 
 ## Current user priority / handoff (2026-10-18)
 
-LATEST RESULT: both copies severely lag (user report). The first root-sync
-run is REJECTED as usable; the new handler has been terminally stopped in
-both live processes with ZERO receiver applies. Startup is default-OFF in
-source and the launcher refuses the old auto-enabled hash. Read the latest
-entry before any relaunch; no new enemy-enabled exam is prepared/admitted.
-USER FOLLOW-UP: lag DISAPPEARED after this stop in the same two running games.
-The new active enemy-root work is the confirmed regression as a group; GPU
-load alone does NOT explain it. Exact hotspot remains unmeasured. Revised
-exam is now RUNNING in PID22652(A)/23592(B), awaiting user-loaded encounter.
-The revised main DLL BUILDS with default-OFF startup: enemy
-UDP, nonce generation and recurring logging run on an isolated worker; B
-checks each new packet only once. This revision is injected, but visible
-enemy synchronization/performance is NOT runtime-validated.
-The latest entry adds a cumulative guard-work cutoff and PID/creation-bound
-terminal stop; a revised bounded same-encounter exam is now prepared. Read its
-prediction and actual launch/result below; compilation is not gameplay proof.
+LATEST RESULT: user reports one copy CRASHED while returning to the main menu.
+Revised PID22652(A)/23592(B) run is REJECTED as usable; both processes are now
+gone. Both enemy channels terminally stopped at their first census (2.389ms /
+2.925ms, two VQ attempts each), with match/apply0. This excludes an executed
+enemy-root setter, NOT the installed stock-forwarding hook or other baseline
+hooks as crash causes. No fresh exception PC/stack/dump. User does not recall
+which role crashed and confirms manually closing the other copy.
+See latest entry and preserved exact DLL/PDB/logs. No relaunch/rearm or budget
+increase; source remains default-OFF. No visible enemy-sync success.
+
+PREVIOUS RUN: severe lag in PID16896/7824 disappeared after only active enemy
+work was stopped. That active path was the confirmed regression as a group;
+GPU-only attribution remains rejected. The revised worker/cost cutoff does
+not erase that result and has not demonstrated usable performance/sync.
 
 USER CORRECTION (2026-10-18): implement enemy synchronization, not additional
 standalone tests or loader/offer infrastructure. The latest entry connects an
@@ -43044,5 +43042,57 @@ NEXT is the user's SAME living-enemy encounter and visible motion/smoothness
 report. Read reports/enemy_root_22652.log and enemy_root_23592.log. Do not
 rebuild/reinject these running copies or mistake installation/empty counters
 for synchronization success. Emergency command if needed:
-scripts/stop_enemy_root_channel.ps1 -ProcessIds22652,23592 (PowerShell parameter
-syntax requires a space after -ProcessIds). No automatic rearm after any stop.
+scripts/stop_enemy_root_channel.ps1 -ProcessIds 22652,23592.
+No automatic rearm after any stop.
+
+## 2026-10-18 — Reject menu-exit crash run after first-census cost stops
+
+**CONFIRMED user report / REJECTED usable build:** one copy crashed when the
+user returned to the main menu. Both PID22652/23592 are already absent at
+inspection; the agent did not close/kill them. User confirms the other copy
+was manually closed and does not remember which role crashed. No relaunch,
+injection, rearm, game input, code change or new test run in this result turn.
+
+**CONFIRMED runtime counters, narrow containment only:** A's final enemy log
+is STOPPED apply0/match0/costStop2/costSite1/peakScopeUs2389/peakWindowUs2389,
+queries2/peakQueries2; B has the same flags with2925us. Both external0,
+nativeFault0, workerGapMs0. Logs end at21:41:15.616 and21:41:23.149 Moscow.
+Their preceding lines contain actors/paired/capture/receive/match/apply0.
+The new channel stopped in its FIRST census, before root exchange or native
+setter141E7D0D0. QPC is whole scoped wall time: this does NOT prove either VQ
+alone took2.389/2.925ms or exclude scheduling/page-fault cost. Do not raise
+the1ms limit to force admission. No post-stop admitted work is reported;
+quiescent event ACK was not read after exit, so do not claim live ACK validation.
+
+**Fresh crash evidence is insufficient for attribution:** baseline log ends
+21:42:32.769; game Uncharted4_data/crash.info was updated21:42:41.777 with only
+game=1, Crashpad metadata/reports directory21:42:44.374/375. Its only dump is
+still the July12 f07c69b6-8581-40a9-a386-8721dba0eaf7, NOT this crash. No new
+matching Application1000/1001 event, local CrashDumps, WER queue/archive or
+saved-game crash artifact was found. No PID22652/23592 EXCEPTION record exists
+in the mod log: kEnableCrashObserver is false; no external crash watcher was
+attached to this run. A fresh crash marker corroborates a report event, not
+fault address, thread, process identity or cause. No old dump may stand in.
+
+**Evidence preserved locally:** reports/enemy-root-menu-crash-20261018-2142/
+contains the exact DLL (882176 bytes, SHA256
+8006D7169D9C65F104D8BB32569EE778B665CEB0C686645A8E8DF51BD414E4F2), matching
+PDB, both private enemy logs, baseline log and small game crash markers.
+These ignored artifacts are not committed; durable facts are here.
+
+**HYPOTHESES, no winner:** (a) installed Pirate+408 stock-forwarding wrapper/
+unwind or lifecycle interaction despite terminal work stop; (b) a remaining
+player/appearance hook retaining state during world/menu teardown; (c) native
+game/other runtime failure. Zero enemy writes rules out actual new root
+replacement as the direct trigger, but does NOT certify the installed shim
+or prove the new subsystem innocent. No crash PC means speculative patching,
+blanket hook removal or another identical two-copy run is not justified.
+
+NEXT: investigate the menu/world teardown boundary with static evidence; the
+affected role cannot be recovered from current evidence/user recall. Any newly
+justified crash reproduction must observe both copies using the ALREADY
+EXISTING tll_crash_watch (PID/image-bound,
+new per-run output directory, second-chance dump/exit record); do not build
+another observer framework. It changes timing, so that run cannot certify
+performance. Its last handled-exception list also is NOT a crash PC if no
+second-chance context exists. No new IDB function discovery/label this turn.
