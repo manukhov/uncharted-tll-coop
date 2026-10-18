@@ -18,12 +18,17 @@ and read back in both processes; native logs confirm STOPPED with apply=0.
 Do NOT relaunch hash E19D25EC...: launch_coop now refuses that exact image.
 User now confirms lag DISAPPEARED after that stop with both games still open.
 The active enemy-root path is the regression; GPU-only attribution is rejected.
-Source now shares one lexical census cache, filters fresh work before native
-body checks and replaces blocking mailbox waits with TryAcquire. Exact timed
-hotspot remains unproved; remaining VQ misses/sendto are still on game update.
-Source startup stays default-OFF. NEXT: compile after games close; close the
-remaining on-frame blocking risk before any enemy-enabled run. No new tests/
-offer expansion, no damage/AI writer, no automatic rearm or claimed sync success.
+Both games are now CLOSED and the revised main DLL BUILDS, default-OFF.
+Enemy transport uses a dedicated nonblocking worker/socket (state ports+2),
+not the player sockets or game-thread sendto. RNG and recurring private-file
+logging also moved off game update. B reserves/copies each packet sequence
+before deep reads and tries it only once; shared ReadCache stays lexical to
+one postblend, with actual final re-reads preserved. No runtime validation.
+NEXT: bound/time remaining synchronous census/VirtualQuery guard work before
+another enemy-enabled run; add a build-current terminal stop before that exam.
+The old hash/PDB emergency script intentionally rejects this new DLL. Do NOT
+relax it to arbitrary hashes. No new standalone tests/offer expansion, damage/
+AI writer, automatic rearm or claimed visible sync/performance success.
 
 PREVIOUS IMPLEMENTATION (superseded by rejection above): ordinary main
 DLL now contains native root-only A->B replication through exact Pirate+408

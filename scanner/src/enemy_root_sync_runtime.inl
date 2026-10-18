@@ -19,7 +19,7 @@ struct Roster {
 struct Row {
     wire::Packet outgoing{}, incoming{};
     ULONGLONG captured{}, received{}, next_capture{};
-    std::uint32_t last_sequence{};
+    std::uint32_t last_sequence{}, attempted_sequence{};
     bool dirty{};
 };
 SRWLOCK lock = SRWLOCK_INIT;
@@ -27,7 +27,7 @@ Roster roster{};
 std::array<Row, wire::kActors> rows{};
 std::uint64_t session{}, peer{};
 std::uint32_t sequence{}, hello_sequence{};
-ULONGLONG peer_seen{}, last_hello{}, last_tick{}, last_log{};
+ULONGLONG peer_seen{}, last_hello{}, last_tick{};
 ULONGLONG first_apply{};
 bool confirmed{};
 // Owned by the serialized tick. Never lose an invalid/unpublished census while
@@ -38,6 +38,14 @@ std::atomic<bool> active_scope{};
 std::atomic_flag ticking = ATOMIC_FLAG_INIT;
 std::atomic<std::uint64_t> captured{}, received{}, matched{}, applied{}, rejected{};
 std::atomic<unsigned> last_rejection{};
+// The network worker owns its socket. It only copies mailbox values: it never
+// follows a game pointer, runs census/ordinary, or invokes a native setter.
+SOCKET transport_socket = INVALID_SOCKET;
+sockaddr_in transport_peer{};
+std::atomic<std::uint64_t> next_session{}, published_session{};
+std::atomic<ULONGLONG> census_valid_until{};
+std::atomic<ULONGLONG> worker_gap_ms{};
+std::atomic<std::uint64_t> sent{}, send_dropped{};
 
 struct ReadCache {
     struct Region { std::uintptr_t begin{}, end{}; };
@@ -151,17 +159,23 @@ bool census(Roster& out) noexcept {
 }
 void reset_locked() {
     active_scope.store(false, std::memory_order_release);
+    census_valid_until.store(0, std::memory_order_release);
+    published_session.store(0, std::memory_order_release);
     session = peer = 0; confirmed = false; peer_seen = last_hello = 0; hello_sequence = 0;
     roster = {}; rows = {};
 }
-void receive(const void* bytes, int size, const sockaddr_in& source, int source_size) {
-    if (size != sizeof(wire::Packet) || source_size < sizeof(source) || !g_state_net.peer_set ||
-        source.sin_family != g_state_net.peer_addr.sin_family || source.sin_addr.s_addr != g_state_net.peer_addr.sin_addr.s_addr ||
-        source.sin_port != g_state_net.peer_addr.sin_port) return;
+void receive(const void* bytes, int size, const sockaddr_in& source, int source_size, ULONGLONG poll_started) {
+    if (size != sizeof(wire::Packet) || source_size < sizeof(source) ||
+        source.sin_family != transport_peer.sin_family || source.sin_addr.s_addr != transport_peer.sin_addr.s_addr ||
+        source.sin_port != transport_peer.sin_port) return;
     wire::Packet packet{}; std::memcpy(&packet, bytes, sizeof(packet));
     if (!wire::valid(packet) || packet.role_b == static_cast<std::uint8_t>(g_net_role_b)) return;
     const auto now = GetTickCount64();
-    // Enemy UDP is lossy; contention must not stall the shared player receiver.
+    if (now-poll_started > 100) {
+        worker_gap_ms.store(now-poll_started, std::memory_order_relaxed);
+        stopped.store(true); active_scope.store(false, std::memory_order_release); return;
+    }
+    // Enemy UDP is lossy; never wait for a native animation job.
     if (!TryAcquireSRWLockExclusive(&lock)) return;
     if (!session || stopped.load(std::memory_order_relaxed)) { ReleaseSRWLockExclusive(&lock); return; }
     if (packet.kind == wire::Kind::hello) {
@@ -173,7 +187,7 @@ void receive(const void* bytes, int size, const sockaddr_in& source, int source_
                 stopped.store(true); active_scope.store(false); ReleaseSRWLockExclusive(&lock); return;
             }
             peer = packet.sender; confirmed = false;
-            for (auto& row : rows) { row.incoming = {}; row.received = 0; row.last_sequence = 0; }
+            for (auto& row : rows) { row.incoming = {}; row.received = 0; row.last_sequence = row.attempted_sequence = 0; }
         }
         hello_sequence = packet.sequence; peer_seen = now;
         confirmed = packet.receiver == session;
@@ -190,22 +204,10 @@ void receive(const void* bytes, int size, const sockaddr_in& source, int source_
     }
     ReleaseSRWLockExclusive(&lock);
 }
-void send(const wire::Packet& packet) {
-    // Bound socket is essential: the legacy send socket has an ephemeral source
-    // port and cannot pass the exact configured-endpoint check above.
-    sendto(g_state_net.recv_socket, reinterpret_cast<const char*>(&packet), sizeof(packet), 0,
-        reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr), sizeof(g_state_net.peer_addr));
-}
 void tick() {
     if (!installed.load(std::memory_order_acquire) || !g_state_net.enabled || !g_state_net.peer_set) return;
     if (stopped.load()) {
         active_scope.store(false, std::memory_order_release);
-        static std::atomic<bool> reported{};
-        if (!reported.exchange(true)) {
-            std::ostringstream line; line << "ENEMY-ROOT STOPPED apply=" << applied.load() << " match=" << matched.load()
-                << "; native AI/root resumes; no automatic rearm";
-            boot_log_line(line.str().c_str());
-        }
         return;
     }
     if (ticking.test_and_set()) return;
@@ -218,7 +220,6 @@ void tick() {
         active_scope.store(false, std::memory_order_release);
         if (applied.load(std::memory_order_acquire)) stopped.store(true);
     }
-    std::array<wire::Packet, wire::kActors+1> pending{}; std::size_t count{};
     // This runs from Player/Nadine update: never wait for a receiver/native job.
     // An unpublished census must not leave the writer enabled until next tick.
     if (!TryAcquireSRWLockExclusive(&lock)) {
@@ -233,6 +234,9 @@ void tick() {
         if (applied.load(std::memory_order_acquire)) stopped.store(true);
         reset_locked(); census_gap = false;
     }
+    if (session && now > census_valid_until.load(std::memory_order_acquire) && applied.load()) {
+        stopped.store(true); reset_locked();
+    }
     if (stopped.load()) {
         ReleaseSRWLockExclusive(&lock); ticking.clear(); return;
     }
@@ -246,42 +250,158 @@ void tick() {
             stopped.store(true); reset_locked();
         } else if (!session || current != roster) {
             reset_locked();
-            if (BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(&session), sizeof(session), BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0) session = 0;
-            if (session) roster = current;
-        }
-        if (session && now-last_hello >= 200) {
-            wire::Packet hello{}; hello.role_b = static_cast<std::uint8_t>(g_net_role_b);
-            hello.sender = session; hello.receiver = peer; hello.sequence = ++sequence;
-            pending[count++] = hello; last_hello = now;
-        }
-        if (session && confirmed && peer && now-peer_seen <= 1000 && !g_net_role_b) {
-            for (std::uint32_t i = 0; i < roster.count; ++i) {
-                auto& row = rows[i];
-                if (!row.dirty || now-row.captured > 150) continue;
-                auto& packet = pending[count++]; packet = row.outgoing;
-                packet.sender = session; packet.receiver = peer; packet.sequence = ++sequence;
-                row.dirty = false;
+            // A worker-prepared nonce, not a crypto-provider call in game update.
+            // No nonce yet means no session; a later census may try again.
+            session = next_session.exchange(0, std::memory_order_acq_rel);
+            if (session) {
+                roster = current;
+                published_session.store(session, std::memory_order_release);
             }
         }
     }
-    const auto local_count = roster.count; const bool paired = confirmed;
+    census_valid_until.store(valid && session ? now+150 : 0, std::memory_order_release);
     active_scope.store(session && confirmed && now-peer_seen <= 1000 && !stopped.load(), std::memory_order_release);
     ReleaseSRWLockExclusive(&lock);
-    for (std::size_t i = 0; i < count; ++i) send(pending[i]);
-    if (now-last_log >= 2000) {
-        last_log = now; std::ostringstream line;
-        line << "ENEMY-ROOT role=" << (g_net_role_b ? 'B' : 'A') << " actors=" << local_count << " paired=" << paired
-             << " capture=" << captured.load() << " recv=" << received.load() << " match=" << matched.load()
-             << " apply=" << applied.load() << " reject=" << rejected.load();
-        line << " lastGate=" << last_rejection.load() << " stopped=" << stopped.load();
-        boot_log_line(line.str().c_str());
-    }
     ticking.clear();
 }
 
-bool ordinary(std::uintptr_t actor, std::uintptr_t job, std::array<float, 8>& transform, unsigned& gate) noexcept {
-    ReadCache cache{};
-    const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
+DWORD WINAPI transport_worker(void*) {
+    // Worker-private file: do not contend on the baseline g_log_lock while
+    // WriteFile blocks. The game threads never call this logger or own its lock.
+    char path[MAX_PATH]{};
+    std::snprintf(path, sizeof(path), R"(C:\Users\Vladimir\Desktop\TLLCoopResearch\reports\enemy_root_%lu.log)", GetCurrentProcessId());
+    const HANDLE log = CreateFileA(path, FILE_APPEND_DATA, FILE_SHARE_READ, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    const auto write_status = [log](const std::string& line) {
+        if (log == INVALID_HANDLE_VALUE) return;
+        const auto record = line+'\n'; DWORD written{};
+        WriteFile(log, record.data(), static_cast<DWORD>(record.size()), &written, nullptr);
+    };
+    struct Pending { wire::Packet packet; ULONGLONG captured; };
+    ULONGLONG last_send{}, last_log{}, last_poll{};
+    while (!stopped.load(std::memory_order_acquire) && g_state_net.running.load()) {
+        if (!next_session.load(std::memory_order_acquire)) {
+            std::uint64_t nonce{};
+            if (BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(&nonce), sizeof(nonce), BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0 || !nonce) {
+                stopped.store(true); break;
+            }
+            next_session.store(nonce, std::memory_order_release);
+        }
+        if (!installed.load(std::memory_order_acquire)) { Sleep(10); continue; }
+        const auto poll_started = GetTickCount64();
+        // A slow provider, file write or scheduler must not turn a queued old
+        // datagram into a fresh root. No draining/rearming after a worker gap.
+        if (last_poll && poll_started-last_poll > 100) {
+            worker_gap_ms.store(poll_started-last_poll, std::memory_order_relaxed);
+            stopped.store(true); active_scope.store(false, std::memory_order_release); break;
+        }
+        last_poll = poll_started;
+        // Bounded draining, even under unrelated or malformed UDP traffic.
+        // WSAEWOULDBLOCK is normal; always sleep before another poll.
+        for (unsigned i = 0; i < 64 && !stopped.load(); ++i) {
+            wire::Packet packet{}; sockaddr_in source{}; int source_size = sizeof(source);
+            const int bytes = recvfrom(transport_socket, reinterpret_cast<char*>(&packet), sizeof(packet), 0,
+                reinterpret_cast<sockaddr*>(&source), &source_size);
+            if (bytes == SOCKET_ERROR) {
+                const int error = WSAGetLastError();
+                if (error == WSAEWOULDBLOCK) break;
+                if (error == WSAEMSGSIZE || error == WSAECONNRESET) continue;
+                stopped.store(true); break;
+            }
+            receive(&packet, bytes, source, source_size, poll_started);
+        }
+        const auto now = GetTickCount64();
+        std::array<Pending, wire::kActors+1> pending{}; std::size_t count{};
+        if (now-last_send >= 50 && TryAcquireSRWLockExclusive(&lock)) {
+            last_send = now;
+            const bool fresh = session && now <= census_valid_until.load(std::memory_order_acquire) && !stopped.load();
+            if (fresh && now-last_hello >= 200) {
+                wire::Packet hello{}; hello.role_b = static_cast<std::uint8_t>(g_net_role_b);
+                hello.sender = session; hello.receiver = peer; hello.sequence = ++sequence;
+                pending[count++] = {hello, now}; last_hello = now;
+            }
+            if (fresh && active_scope.load(std::memory_order_acquire) && confirmed && peer && now-peer_seen <= 1000 && !g_net_role_b) {
+                for (std::uint32_t i = 0; i < roster.count; ++i) {
+                    auto& row = rows[i];
+                    if (!row.dirty) continue;
+                    row.dirty = false;
+                    if (now-row.captured > 150) continue;
+                    auto packet = row.outgoing;
+                    packet.sender = session; packet.receiver = peer; packet.sequence = ++sequence;
+                    pending[count++] = {packet, row.captured};
+                }
+            }
+            const auto local_count = roster.count; const bool paired = confirmed;
+            ReleaseSRWLockExclusive(&lock);
+            // No lock or game pointer survives into any socket/log/provider call.
+            // A full send buffer drops this snapshot, never queues/retries it.
+            for (std::size_t i = 0; i < count; ++i) {
+                const auto& item = pending[i]; const auto send_now = GetTickCount64();
+                if (stopped.load() || item.packet.sender != published_session.load(std::memory_order_acquire) ||
+                    send_now > census_valid_until.load(std::memory_order_acquire) || send_now-item.captured > 150 ||
+                    (item.packet.kind == wire::Kind::root && !active_scope.load(std::memory_order_acquire))) continue;
+                const int bytes = sendto(transport_socket, reinterpret_cast<const char*>(&item.packet), sizeof(item.packet), 0,
+                    reinterpret_cast<const sockaddr*>(&transport_peer), sizeof(transport_peer));
+                if (bytes == sizeof(item.packet)) sent.fetch_add(1, std::memory_order_relaxed);
+                else send_dropped.fetch_add(1, std::memory_order_relaxed);
+            }
+            if (now-last_log >= 2000) {
+                last_log = now; std::ostringstream line;
+                line << "ENEMY-ROOT role=" << (g_net_role_b ? 'B' : 'A') << " actors=" << local_count << " paired=" << paired
+                     << " capture=" << captured.load() << " recv=" << received.load() << " match=" << matched.load()
+                     << " apply=" << applied.load() << " reject=" << rejected.load() << " sent=" << sent.load()
+                     << " sendDrop=" << send_dropped.load() << " lastGate=" << last_rejection.load() << " stopped=" << stopped.load();
+                write_status(line.str());
+            }
+        }
+        Sleep(10);
+    }
+    stopped.store(true, std::memory_order_release);
+    active_scope.store(false, std::memory_order_release);
+    closesocket(transport_socket); WSACleanup();
+    std::ostringstream line; line << "ENEMY-ROOT STOPPED apply=" << applied.load() << " match=" << matched.load()
+        << " workerGapMs=" << worker_gap_ms.load()
+        << "; native AI/root resumes; no automatic rearm";
+    write_status(line.str());
+    if (log != INVALID_HANDLE_VALUE) CloseHandle(log);
+    return 0;
+}
+
+bool start_transport() {
+    sockaddr_in local{}; int size = sizeof(local);
+    if (!g_state_net.enabled || !g_state_net.peer_set ||
+        getsockname(g_state_net.recv_socket, reinterpret_cast<sockaddr*>(&local), &size) == SOCKET_ERROR ||
+        size != sizeof(local) || local.sin_family != AF_INET) return false;
+    const auto local_port = ntohs(local.sin_port), peer_port = ntohs(g_state_net.peer_addr.sin_port);
+    if ((local_port != coop::kStatePort && local_port != coop::kStatePort+1) ||
+        (peer_port != coop::kStatePort && peer_port != coop::kStatePort+1)) return false;
+    // Derive ports from actual binds, NOT role B: on separate PCs both state
+    // sockets bind31338. Only this socket becomes nonblocking; baseline is intact.
+    local.sin_port = htons(local_port+2);
+    transport_peer = g_state_net.peer_addr; transport_peer.sin_port = htons(peer_port+2);
+    WSADATA data{};
+    if (WSAStartup(MAKEWORD(2, 2), &data)) return false;
+    transport_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    const auto fail = [] {
+        if (transport_socket != INVALID_SOCKET) closesocket(transport_socket);
+        transport_socket = INVALID_SOCKET; WSACleanup(); return false;
+    };
+    if (transport_socket == INVALID_SOCKET) return fail();
+    BOOL exclusive = TRUE; u_long nonblocking = 1;
+    if (setsockopt(transport_socket, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(&exclusive), sizeof(exclusive)) ||
+        ioctlsocket(transport_socket, FIONBIO, &nonblocking) ||
+        bind(transport_socket, reinterpret_cast<const sockaddr*>(&local), sizeof(local))) return fail();
+    const HANDLE thread = CreateThread(nullptr, 0, transport_worker, nullptr, 0, nullptr);
+    if (!thread) return fail();
+    CloseHandle(thread); // pinned module; worker alone closes its socket on stop
+    std::ostringstream line; line << "ENEMY-ROOT dedicated nonblocking UDP local=" << local_port+2 << " peer=" << peer_port+2;
+    boot_log_line(line.str().c_str());
+    return true;
+}
+
+bool ordinary(std::uintptr_t actor, std::uintptr_t job, std::array<float, 8>& transform, unsigned& gate, ReadCache* shared = nullptr) noexcept {
+    ReadCache local_cache{};
+    auto* cache = shared ? shared : &local_cache;
+    const auto read = [cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), cache); };
     gate = 1;
     std::uintptr_t fg{}, record{}, record_actor{}, owner_record{}, control{}, fg_control{}, owner_control{}, control_fg{};
     std::uintptr_t job_fg{}, custom{}, art{}, active_art{}, cache_art{}, raw{}, art_raw{}, composite{}, composite_owner{}, bodies{};
@@ -376,8 +496,10 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     // Metadata-only scheduling first. A roster pointer match is NOT admission:
     // all identity/ordinary/final generation checks below remain mandatory.
     const auto schedule_now = GetTickCount64();
+    if (schedule_now > census_valid_until.load(std::memory_order_acquire)) return;
     if (!TryAcquireSRWLockExclusive(&lock)) return;
     bool due{};
+    wire::Packet scheduled_packet{}; const auto scheduled_session = session;
     if (session && confirmed && schedule_now-peer_seen <= 1000 && !stopped.load()) {
         for (std::size_t i = 0; i < roster.count; ++i) if (roster.rows[i].actor == actor) {
             auto& row = rows[i];
@@ -386,21 +508,31 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
                 if (due) row.next_capture = schedule_now+50;
             } else {
                 due = row.received && schedule_now-row.received <= 200 &&
-                    row.incoming.sender == peer && row.incoming.receiver == session;
+                    row.incoming.sender == peer && row.incoming.receiver == session &&
+                    row.incoming.sequence != row.attempted_sequence;
+                if (due) {
+                    row.attempted_sequence = row.incoming.sequence;
+                    scheduled_packet = row.incoming;
+                }
             }
             break;
         }
     }
     ReleaseSRWLockExclusive(&lock);
     if (!due) return;
+    // Cache protections only for this callback, after stock and before setter.
+    // Repeated identity/eligibility checks below still reread actual game data.
+    ReadCache cache{};
+    const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
     Local local{}; std::array<float, 8> transform{}; unsigned gate{};
-    if (!identity(actor, local) || !ordinary(actor, reinterpret_cast<std::uintptr_t>(native_job), transform, gate)) {
+    if (!identity(actor, local, &cache) || !ordinary(actor, reinterpret_cast<std::uintptr_t>(native_job), transform, gate, &cache)) {
         last_rejection.store(gate, std::memory_order_relaxed);
         rejected.fetch_add(1, std::memory_order_relaxed); return;
     }
     const auto now = GetTickCount64();
     if (!TryAcquireSRWLockExclusive(&lock)) return; // never wait in an animation job
-    if (!session || roster.player != current_player()) {
+    if (!session || session != scheduled_session || !active_scope.load(std::memory_order_acquire) || stopped.load() ||
+        now > census_valid_until.load(std::memory_order_acquire) || roster.player != current_player(&cache)) {
         ReleaseSRWLockExclusive(&lock); return;
     }
     std::size_t index = roster.count;
@@ -413,8 +545,9 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
             std::copy_n(transform.begin(), 3, packet.position.begin()); std::copy_n(transform.begin()+4, 4, packet.rotation.begin());
             if (wire::valid_pose(packet)) { row.outgoing = packet; row.captured = now; row.dirty = true; captured.fetch_add(1, std::memory_order_relaxed); }
         } else if (confirmed && now-peer_seen <= 1000 && row.received && now-row.received <= 200 &&
-            row.incoming.sender == peer && row.incoming.receiver == session) {
-            packet = row.incoming;
+            scheduled_packet.sender == peer && scheduled_packet.receiver == session &&
+            row.incoming.sequence == scheduled_packet.sequence) {
+            packet = scheduled_packet;
             double distance{};
             for (unsigned axis = 0; axis < 3; ++axis) { const double delta = packet.position[axis]-transform[axis]; distance += delta*delta; }
             // First prototype never teleports a mismatched encounter across the map.
@@ -428,21 +561,30 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     // Refresh identity/eligibility after releasing the mailbox, never dereference
     // an actor obtained from the receive thread. Current native caller owns self.
     Local after{}; std::array<float, 8> fresh{};
-    if (!identity(actor, after) || !(after == local) || !ordinary(actor, reinterpret_cast<std::uintptr_t>(native_job), fresh, gate)) return;
+    if (!identity(actor, after, &cache) || !(after == local) || !ordinary(actor, reinterpret_cast<std::uintptr_t>(native_job), fresh, gate, &cache)) return;
     if (!TryAcquireSRWLockExclusive(&lock)) return;
     const auto apply_now = GetTickCount64();
     std::uintptr_t manager{}; std::uint32_t player_id{};
     const bool still_current = !g_dll_inert && active_scope.load(std::memory_order_acquire) && !stopped.load() &&
+        apply_now <= census_valid_until.load(std::memory_order_acquire) &&
         session == local_session && session == packet.receiver && peer == packet.sender &&
         confirmed && apply_now-peer_seen <= 1000 && index < roster.count && roster.rows[index] == local &&
         rows[index].received && apply_now-rows[index].received <= 200 && first_apply && apply_now-first_apply <= 30000 &&
         rows[index].incoming.sequence == packet.sequence &&
-        roster.player == current_player() && read(roster.player+0xBC, player_id) && player_id == roster.player_id &&
+        roster.player == current_player(&cache) && read(roster.player+0xBC, player_id) && player_id == roster.player_id &&
         read(g_module+0x3898630, manager) && manager == roster.manager;
     if (!still_current) { ReleaseSRWLockExclusive(&lock); return; }
     double fresh_distance{};
     for (unsigned axis = 0; axis < 3; ++axis) { const double delta = packet.position[axis]-fresh[axis]; fresh_distance += delta*delta; }
     if (!(fresh_distance <= 100.0)) { ReleaseSRWLockExclusive(&lock); return; }
+    // The final memory reads can themselves be delayed. Do not use a timestamp
+    // captured before them to authorize a write after the packet/scope expired.
+    const auto write_now = GetTickCount64();
+    if (g_dll_inert || stopped.load() || !active_scope.load(std::memory_order_acquire) ||
+        write_now > census_valid_until.load(std::memory_order_acquire) ||
+        write_now-peer_seen > 1000 || write_now-rows[index].received > 200 || write_now-first_apply > 30000) {
+        ReleaseSRWLockExclusive(&lock); return;
+    }
     std::copy_n(packet.position.begin(), 3, fresh.begin()); // keep receiver +13C service lane
     std::copy(packet.rotation.begin(), packet.rotation.end(), fresh.begin()+4);
     using SetLocalRoot = void(__fastcall*)(void*, const void*);
@@ -481,9 +623,14 @@ bool install_enemy_root_sync() {
     HMODULE pinned{};
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
         reinterpret_cast<LPCWSTR>(&TllEnemyRootPostblend), &pinned) || reinterpret_cast<std::uintptr_t>(pinned) != g_self_module) return false;
+    if (!enemy_root::start_transport()) {
+        boot_log_line("ENEMY-ROOT installation refused: dedicated transport unavailable"); return false;
+    }
     auto** slot = reinterpret_cast<void**>(g_module+enemy_root::kPirate+0x408);
     DWORD old{};
-    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) return false;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &old)) {
+        enemy_root::stopped.store(true); return false;
+    }
     auto* expected = reinterpret_cast<void*>(g_module+enemy_root::kPostblend);
     auto* bridge = reinterpret_cast<void*>(&TllEnemyRootPostblendBridge);
     const bool changed = InterlockedCompareExchangePointer(slot, bridge, expected) == expected;
@@ -492,6 +639,7 @@ bool install_enemy_root_sync() {
     // Pointer publication is one aligned atomic exchange, not a torn instruction
     // patch. Already-loaded stock targets remain stock; no relay is freed.
     const bool ready = changed && sealed;
+    if (!ready) enemy_root::stopped.store(true);
     enemy_root::installed.store(ready, std::memory_order_release);
     boot_log_line(ready ? "ENEMY-ROOT native Pirate+408 root replication installed (30-second first slice; no HP/AI writes)" :
         "ENEMY-ROOT installation refused; stock forwarding only");

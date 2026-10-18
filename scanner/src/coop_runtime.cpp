@@ -15619,12 +15619,6 @@ DWORD WINAPI state_recv_thread(void*) {
         if (received < static_cast<int>(sizeof(std::uint32_t))) continue;
         std::uint32_t magic;
         std::memcpy(&magic, buf, sizeof(magic));
-#if defined(TLL_ENEMY_ROOT_SYNC)
-        if (magic == coop::enemy_root_sync::kMagic) {
-            enemy_root::receive(buf, received, source_addr, source_addr_size);
-            continue;
-        }
-#endif
         if (magic == coop::kStatePacketMagic &&
             received == static_cast<int>(sizeof(coop::StatePacket))) {
             coop::StatePacket packet{};
@@ -82179,8 +82173,8 @@ DWORD WINAPI install_hook(void*) {
     const bool state_net_started = start_state_net();
 #if defined(TLL_ENEMY_ROOT_SYNC)
     // The first two-copy run reported severe lag with ZERO receiver writes.
-    // Keep this experimental hook off on ordinary launches until its cost and
-    // the two-copy resource budget have been separated. Never auto-rearm it.
+    // The user confirmed that disabling this work removed the lag in BOTH
+    // existing copies. Keep it off until the revised hot path is admitted.
     char enemy_root_opt_in[4]{};
     const DWORD enemy_root_opt_in_size = GetEnvironmentVariableA(
         "TLL_ENEMY_ROOT_SYNC", enemy_root_opt_in, sizeof(enemy_root_opt_in));

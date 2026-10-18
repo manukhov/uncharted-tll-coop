@@ -9,8 +9,12 @@ source and the launcher refuses the old auto-enabled hash. Read the latest
 entry before any relaunch; no new enemy-enabled exam is prepared/admitted.
 USER FOLLOW-UP: lag DISAPPEARED after this stop in the same two running games.
 The new active enemy-root work is the confirmed regression as a group; GPU
-load alone does NOT explain it. Exact hotspot remains unmeasured. A narrow
-source optimization is recorded below and remains undeployed/default-OFF.
+load alone does NOT explain it. Exact hotspot remains unmeasured. Both games
+are now CLOSED. The revised main DLL BUILDS with default-OFF startup: enemy
+UDP, nonce generation and recurring logging run on an isolated worker; B
+checks each new packet only once. It is NOT injected or runtime-validated.
+Remaining admission item: bound/time the synchronous census and native read
+guards without removing identity/protection checks. Do not launch yet.
 
 USER CORRECTION (2026-10-18): implement enemy synchronization, not additional
 standalone tests or loader/offer infrastructure. The latest entry connects an
@@ -42870,3 +42874,81 @@ build is deferred while the existing games are open; the current on-disk DLL
 and matching PDB remain intact for the verified emergency stop. NEXT: compile
 after those processes close, and close the remaining on-frame blocking risk
 before admitting another enemy-enabled run. No visible optimized-sync result.
+
+## 2026-10-18 — Isolate enemy transport from game update and player sockets
+
+**CONFIRMED build/process state, NOT gameplay:** both tll processes are closed.
+The main tll_coop_runtime target compiled and linked after the previous cache/
+TryAcquire changes, then again after this transport change. Current SHA256:
+46981910F8341BAD3B0CFF1A18A875C75768C241C40FB8E323319744CC5BF13B.
+Startup still requires explicit TLL_ENEMY_ROOT_SYNC=1 and is OFF by default.
+No game was launched/injected and no game input was sent. There is still no
+visible enemy-sync success or measured optimized frame-time result.
+
+**STATIC motivation and alternatives:** hooked_update -> net_tick ->
+enemy_root::tick previously did sendto, BCryptGenRandom and boot_log_line.
+The latter acquires g_log_lock across WriteFile, shared with baseline game
+logging. Moving only sendto to another thread while retaining that lock would
+leave indirect I/O contention. Changing the baseline state recv_socket to
+nonblocking remains REJECTED: state_recv_thread immediately retries errors.
+A worker on that same socket would also retain player transport coupling.
+The chosen own-socket worker removes these specific calls from tick and its
+call graph without moving game-pointer validation/native writes to a worker.
+This does NOT identify any one API as the measured cause of the rejected run.
+
+Independent support: (1) inspected update/receiver/logging callers and lock
+ownership in coop_runtime.cpp; (2) earlier same-process user A/B established
+that the active enemy work, not mere installed stock forwarding, causes lag;
+(3) Winsock explicitly allows a blocking sendto to wait for buffers, whereas
+FIONBIO returns WSAEWOULDBLOCK. Microsoft contracts:
+https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-sendto
+https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-ioctlsocket
+These justify isolating transport, not declaring census/guard cost solved.
+
+**IMPLEMENTED, source-reviewed and built:**
+
+- Pinned-module worker owns an exclusively bound nonblocking UDP socket and
+  its own WSAStartup reference/WSACleanup. Actual getsockname(state recv)+2
+  determines local port; configured peer port+2 determines peer. Local pair
+  uses31340/31341; two PCs both bind31340. Cosmetic role is NOT port identity.
+  No player socket options/lifetimes change. ENR2 dispatch was removed from
+  the shared player receiver; exact source endpoint and wire validation stay.
+- Existing bounded latest-value rows are the only mailbox. Worker copies at
+  most33 owned packets under TryAcquire and releases it before network/RNG/
+  I/O. Pending storage is initialized BEFORE the lock. Nonblocking send failure
+  drops data, not retries/queues it. Original capture time, published session
+  and census lease are rechecked before sending. RX drains at most64 packets
+  per pass, followed by10ms sleep; no WSAEWOULDBLOCK spin.
+- A one-slot atomic spare nonce is generated outside locks by the worker and
+  consumed once by tick. Empty spare leaves session=0, without waiting. The
+  worker never changes local roster/session and never follows game pointers.
+- Recurring counters/STOPPED now use worker-private
+  reports/enemy_root_<PID>.log, not locomotion_hook.log/g_log_lock. Installer
+  banners remain in the baseline log. A worker gap over100ms, including RNG/
+  logging delay or a pause within RX, terminally stops before admitting backlog
+  as fresh. workerGapMs is reported. The200ms packet limit still measures
+  local receive age, NOT synchronized sender age or arbitrary network delay.
+- B reserves and copies the exact sequence/session before heavy reads and
+  tries each sequence once; a newer packet arriving during checks cannot be
+  silently substituted. This changes correction cadence toward source20Hz;
+  B's independent AI can move between packets, so jitter remains unvalidated.
+  No repeated cached-transform write bypasses native eligibility checks.
+- One lexical ReadCache covers identity/ordinary/current-player/final reads
+  inside each postblend, after stock returns and before setter141E7D0D0.
+  Actual identity/body/health/parent fields are reread; caches never cross a
+  callback/native setter. No broad SEH-only page probing was introduced.
+- Successful census has a150ms lease, checked before guards, sends and final
+  write. A missed lease after an apply is terminal, like the existing census
+  gap latch. Time/stop/active/packet/peer/30s-window checks are repeated AFTER
+  all final guarded reads, immediately before the unchanged native setter.
+
+**NOT READY FOR AN ENEMY-ENABLED EXAM:** census and native guard cache misses
+still execute VirtualQuery synchronously. No bounded query/time admission or
+automatic cost cutoff is installed; a single OS call cannot be preempted by
+a post-call budget. Next implement a conservative cumulative work cutoff and
+read-cost accounting in the actual sync path, preserving every ownership/
+generation/physics gate. Prepare a build-current terminal stop before launch:
+the old hash/PDB emergency script deliberately rejects this rebuilt image.
+Do not weaken its hash check or resume separate offer/test infrastructure.
+No new game-address finding: prior Pirate+408/141A929A7/141E7D0D0 labels remain
+saved in the sole IDB; no database rewrite was required for this source change.
