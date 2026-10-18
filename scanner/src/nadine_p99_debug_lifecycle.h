@@ -28,6 +28,16 @@ public:
     State state() const noexcept {return state_;} // owner-thread only
     bool held() const noexcept {return state_==State::Held || state_==State::UnsafeHeld;}
     bool barrier_ready() const noexcept {return state_==State::Held;} // NOT patch admission
+    // UnsafeHeld still owns the same received event: explicit recovery may use
+    // it, but it is not permission to start a fresh installation or release.
+    template<class Ops> bool owned_hold_for(const Ops& ops) const noexcept {
+        static_assert(noexcept(ops.thread()) && noexcept(ops.identity()));
+        return held() && operations_==std::addressof(ops) &&
+            owner_==ops.thread() && ops.identity();
+    }
+    template<class Ops> bool barrier_ready_for(const Ops& ops) const noexcept {
+        return state_==State::Held && owned_hold_for(ops);
+    }
     bool acknowledged() const noexcept {return state_==State::Detached;}
 
     template<class Ops> bool acquire(Ops& ops) noexcept {

@@ -114,12 +114,27 @@ program. Context+0 Art and Segment+00 WorkBuffer/+08 context/+28 raw checks
 are now explicit. WorkBuffer is distinct from Segment+58 matrix workspace.
 Captured authored program identity and cmd24 export do NOT prove cmd16 ran;
 keep execution unverified until a separate native execution witness closes it.
-NEXT: close installer publication safety before runtime wiring: two thread
-censuses plus RIP exclusion are NOT a thread-creation fence. Test recovery
-without logging/heap work while suspended threads may retain locks. Measure
-the full wrapper/FLS/bridge overhead, not only collector callbacks; current1ms
-accounting excludes wrapper overhead and first-touch FLS may allocate. Both
-runtime admission constants remain false. Then add bounded worker timeout,
+2026-10-18 external transaction: enemy_jointblend_remote_install reuses only
+the generic debugger Session/WindowsOps, not P99 installation or actor policy.
+It writes the seven words and1466D0C58 from outside the target under an actual
+received, identity/owner-bound debug event. An owned hidden self-child test
+proves even CreateRemoteThread cannot execute before explicit release. RIP
+exclusion covers whole16-byte words. Partial/foreign words, callback, protection
+or relay changes retain the hold; explicit same-event recovery never guesses
+bytes. Seven real-transport scenarios and60 fault scenarios PASS. This closes
+the enumeration-as-fence gap for the external transport ONLY; the old local
+two-census installer remains unadmitted. No target allocations or lock-taking
+coordinator work occur inside the stopped process. The external class never
+continues/detaches; debugger death is still not crash-atomic. No new game launch.
+NEXT: complete wrapper/FLS/bridge cost accounting, starting BEFORE
+jointblend's g_frames.current() (which can bootstrap FLS even while unarmed)
+and including leave/exception cleanup and MASM bridge bookkeeping. Current1ms
+collector-only accounting excludes these; first-touch FLS may allocate. Keep
+all runtime-admission constants false. Then certify the prepared enemy module,
+native fallbacks/config/relay lifetime and immutable preparation offer before
+connecting the external transaction to an explicit exam. Its byte/protection
+verification is NOT a release certificate or module-identity/retention proof;
+reattach/uninstall after release is unsupported. Add bounded worker timeout,
 quiescent-only owned output and explicit exam startup; no auto retry/unload.
 No P99 Control/selector/8-group policy; do not call install_p99_group_package(true).
 Exclude custom/skip/null-control/reentry and initial cached-prepass. Old queued

@@ -41993,3 +41993,101 @@ functions/86 data names/3 function types and save_database returned True.
 Restarted MCP resolves all six existing function names, reads back the new
 database-ID and raw-scratch comments, and confirms the allocator caller xrefs
 from141A924AB/141A92C1B. Preexisting untracked tmp/ remains untouched.
+
+## 2026-10-18 — Fence enemy hook publication with an external received debug event
+
+**Scope:** enemy synchronization remains P0; appearance/P99 is PARKED. No game
+launch, injection, input, actor write, AI pause, HP write or runtime observer
+activation in this unit. The current player DLL is unchanged. This is the
+external publication prerequisite, not proof of animation capture or enemy sync.
+
+**STATIC hypothesis and alternatives.** A received and still-held debug event
+owned by an external debugger thread is the execution fence for publishing the
+seven previously pinned enemy instruction words and callback1466D0C58. Reusing
+the generic p99_debug_lifecycle::Session/WindowsOps does NOT reuse P99's five-site
+transaction, actor selector or wrist policy. Competing boundaries:
+
+- Two in-process thread censuses/suspension: already REJECTED as a creation
+  fence; no new attempt to admit that path.
+- DebugActiveProcess success without a received event: insufficient; retain
+  existing lifecycle refusal states until event identity has been checked.
+- Received identity-bound event: Windows stops all target threads; debug
+  CREATE_THREAD notification occurs before a new thread starts user-mode work.
+  A snapshot is then only for RIP exclusion, not the execution fence itself.
+
+Evidence: Microsoft's [debugger main-loop contract](https://learn.microsoft.com/en-us/windows/win32/debug/writing-the-debugger-s-main-loop)
+permits remote memory/context inspection and patch/cache work while the event
+holds all threads; [debugging events](https://learn.microsoft.com/en-us/windows/win32/debug/debugging-events)
+specifies new-thread gating. The existing September external lifecycle verifies
+PID, creation time, executable path, initial event main-base and debugger-owner
+thread; acquired attachment alone never grants a hold. The existing native
+contract independently pins seven complete instructions/targets, each within
+one16-byte word, and the aligned8-byte postpose slot. None of this certifies
+the final enemy DLL's identity, ABI configuration or process-lifetime retention.
+
+**STATIC implementation:** scanner/src/enemy_jointblend_remote_install.{h,cpp}
+is an external-only, explicit static library, not linked into coop_runtime.
+Prepared RX relays, wrappers, native fallbacks and FLS must exist BEFORE attach;
+the transport allocates no target resources and executes no target preparation.
+Every access revalidates the exact Session-owned Ops, owner thread and process
+identity. `owned_hold_for` permits explicit recovery in UnsafeHeld, whereas
+`barrier_ready_for` refuses a fresh installation in that state. Both reject
+borrowed/foreign Ops and any attempted Continue revokes their authority.
+
+The transport snapshots target contexts and rejects RIP anywhere in an entire
+16-byte patch word, including unchanged neighbors. It checks stock instructions,
+targets, callback, relay byte content/RX protection and nonaliasing; stages each
+word and callback via exact-count WriteProcessMemory; verifies protection/cache
+restoration; and rereads all final words and relay dependencies. Recovery only
+replaces exact owned full words or the exact owned callback. Partial writes,
+foreign bytes/protections/relays or failed verification do not grant release.
+Failed OS calls are not assumed to have had no effect. No destructor Continue,
+detach, context edit, free or unload exists. Same-event recovery is supported;
+reattachment to undo an already released installation is NOT implemented.
+
+**CONFIRMED — owned Windows fixture only.** The pre-execution prediction encoded
+in the test was that an already-running counter AND a thread created externally
+with CreateRemoteThread would remain inactive throughout install and rollback,
+then run only after explicit checked Continue/detach. The new thread must return
+73 exactly once. Both predictions pass. This extends the earlier debugger fixture,
+which requested target-side thread creation but did not create a thread externally
+while the stop was held. The test creates only its own hidden self-executable,
+checks parent/child PID/creation/image, uses a child-only kill-on-close job and
+accepts no arbitrary PID/executable. Its synthetic allocation imitates the site
+layout; it does NOT execute native enemy functions or claim game ABI validation.
+
+Seven real-library scenarios PASS: normal round-trip, whole-word RIP rejection,
+foreign code, callback, read-only/RWX protection and relay mutation.60 audit scenarios/1337
+checks PASS, including before/after-effect failures at each of8 writes and14
+protection operations, failures at each of7 cache flushes, partial displacement
+publication and persistent flush failure. Exact stock recovery is reverified;
+partial corruption remains unchanged and held. Only owned fixture cleanup kills
+the intentionally damaged child. Production has no such cleanup authority.
+The ordinary library is separately compiled without the audit dispatch macro.
+Review also corrected a stale page-ownership flag: once original protection is
+freshly verified, the transport clears its writable-transition ownership. A
+later external RWX change must reject, not inherit authority from the earlier
+successful install. Both read-only and RWX foreign changes now stay untouched.
+
+Verification: Release /W4 /WX real library and both fixtures PASS. Real transport
+7 scenarios/125 checks, audit60/1337 and generic lifecycle106 checks, all zero
+failures. Focused CTest23/23 PASS, including enemy capture/collector/wrappers,
+local transaction regressions, all arm protocols, both native frame bridges and
+debugger continuation/detachment failures. No fixture or tll process remains.
+Main DLL SHA256 remains
+3ACCA2A17891BA1D5CA14EC39CC0024827556BE71B5DE0E22E9C227063BBD710.
+No new game functions/fields were discovered: the sole IDB's existing labels
+and the preceding saved identity comments need no further write in this unit.
+
+**Not admitted / next specific step:** `memory_state_verified` only certifies
+transaction bytes/protections/cache under the hold. It is NOT a full release
+certificate, trusted preparation offer or module-retention proof. The debugger
+owner's death can auto-detach; no crash-atomicity claim. RuntimeAdmission=false.
+Measure and bound wrapper cost beginning before jointblend's first
+g_frames.current(), including FLS bootstrap/leave, rejection and exception paths
+and both MASM bridges. Collector callback accounting alone is insufficient;
+first-touch FLS can allocate even on the current unarmed ingress. Then close
+prepared enemy DLL integrity/ABI/fallback configuration and permanent lifetime,
+plus bounded worker output/missing-Exit handling, before wiring an exam. Do not
+admit queued-callback unload or abandoned-fiber reuse. Cmd16 execution, actual
+live asset identity and native pose-writing admission still need separate proof.

@@ -8,11 +8,11 @@ void check(bool value,const char* label){++checks;if(!value){++failures;std::cer
 enum Call{Identity,Unattached,Attach,Kill,Receive,EventIdentity,Continue,Detach};
 struct Ops {
     std::uint32_t tid=7;
-    std::array<Call,32> calls{};unsigned count=0,fail=0;
+    mutable std::array<Call,32> calls{};mutable unsigned count=0;unsigned fail=0;
     bool after_effect=false,attached=false,stopped=false,killed_on_exit=true;
     std::uint32_t thread() const noexcept{return tid;}
-    bool record(Call c) noexcept{calls[count++]=c;return count!=fail;}
-    bool identity() noexcept{return record(Identity);}
+    bool record(Call c) const noexcept{calls[count++]=c;return count!=fail;}
+    bool identity() const noexcept{return record(Identity);}
     bool no_debugger() noexcept{return record(Unattached);}
     bool attach() noexcept{const bool okay=record(Attach);if(okay||after_effect)attached=true;return okay;}
     bool disable_kill() noexcept{const bool okay=record(Kill);if(okay||after_effect)killed_on_exit=false;return okay;}
@@ -58,6 +58,20 @@ void test() {
     }
     {
         Ops ops;ops.tid=0;dl::Session s;check(!s.acquire(ops) && !ops.count,"missing owner before OS action");
+    }
+    {
+        Ops ops,other;dl::Session s;
+        check(!s.owned_hold_for(ops) && !s.barrier_ready_for(ops) && !ops.count,"fresh state grants no hold capability");
+        check(s.acquire(ops) && s.owned_hold_for(ops) && s.barrier_ready_for(ops),"exact bound ops grant fresh hold");
+        const auto before=ops.count;
+        check(!s.owned_hold_for(other) && !s.barrier_ready_for(other) && !other.count,"foreign ops get no capability");
+        ops.tid=9;
+        check(!s.owned_hold_for(ops) && !s.barrier_ready_for(ops) && ops.count==before,"wrong owner cannot read hold capability");
+        ops.tid=7;ops.fail=ops.count+1;
+        check(!s.owned_hold_for(ops),"fresh target identity failure rejects hold capability");
+        ops.fail=0;
+        check(!s.release(ops,false) && !s.barrier_ready_for(ops) && s.owned_hold_for(ops),"unsafe hold permits explicit recovery but not fresh installation");
+        check(s.release(ops,true) && !s.owned_hold_for(ops) && !s.barrier_ready_for(ops),"release revokes both capabilities");
     }
     {
         Ops ops;

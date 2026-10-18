@@ -38,5 +38,6 @@ public:
     bool proceed() const noexcept;
     bool detach() const noexcept;
     const DEBUG_EVENT& event() const noexcept {return event_;}
+    HANDLE borrowed_process() const noexcept { return process_; }
 };
 } // namespace coop::p99_debug_lifecycle
