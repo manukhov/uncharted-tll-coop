@@ -1,6 +1,14 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
-## Current user priority / handoff (2026-10-16)
+## Current user priority / handoff (2026-10-18)
+
+USER CORRECTION (2026-10-18): implement enemy synchronization, not additional
+standalone tests or loader/offer infrastructure. The latest entry connects an
+actual root-only A->B channel to the ordinary co-op DLL at Pirate+408 return
+141A929A7, using native local-root setter141E7D0D0. The isolated observer/offer
+track is PARKED. This is a bounded same-checkpoint implementation, not confirmed
+visible synchronization or general campaign/combat authority. HP/death/AI writers
+remain OFF. Preserve local Chloe A/Nadine B and existing player replication.
 
 USER PRIORITY RESET (2026-10-16): PARK Nadine appearance/arms/weapons work and
 resume ENEMY SYNCHRONIZATION BETWEEN COPIES. Preserve the current player and
@@ -42612,3 +42620,134 @@ configuration/lifetime admission before connecting the existing external
 transaction; bounded quiescent worker output and explicit runtime exam remain
 later steps. Enemy correspondence/movement, HP/death/AI writers and P99 remain
 unadmitted; owned tests are not visible enemy synchronization.
+
+## 2026-10-18 — Implement native A->B enemy root replication at141A929A7
+
+**User-directed implementation reset:** stop expanding isolated component tests
+and connect the native movement path. The former offer/remote-transaction NEXT
+is parked, not a prerequisite for this separate aligned-vtable implementation.
+No new test suite or fixture was added. Do not enable legacy g_enemy_sync:
+raw world/HP writes and RequestDisableAi remain rejected/OFF.
+
+**STATIC hypothesis and alternatives.** Exact living Pirate vtable14294B9D0,
+slot+408 at14294BDD8, calls141DE9910. In ordinary Perform141A928F0 its call
+returns141A929A7 after ALL primary/secondary physics imports, before phase40
+141A929C1. Replacing local root through141E7D0D0 here should feed phase40's
+Fg+1C0 publication, normal JointBlend reset141A92BA5, group0 and the later
+game-driven primary-body forward publication. Alternatives remain rejected:
+before+408 can be overwritten by physics import; late+2B8/+410 can split the
+joint cache from the root; raw derived+240 writes do not publish native bodies;
+pausing AI neither establishes correspondence nor closes this ordering.
+
+Independent evidence kinds:
+
+- Virtual identity and callers: exact Pirate+408 target141DE9910; concrete
+  native call141A929A1/return141A929A7, RSI=current job. A stack-neutral MASM
+  bridge passes RSI in RDX, calls stock exactly once, and preserves the opaque
+  stock RAX and LastError. Other callers forward stock without reading RSI.
+- Dataflow/disassembly:141E7D0D0 takes RCX=owner and RDX=contiguous32byte
+  position/quaternion, copies+130/+140 and tail-calls+208. Exact Pirate+208 is
+  empty1401D4E10. Preserve receiver+13C service lane. Phase40 and reset ordering
+  is as recorded above; setter alone is NOT a physics setter.
+- Independent setter callers: NavCharacter_UpdateRootLocator141DEDA11 and
+  BuildInteractHookRuntimeStateFromLiveObject1408BF18F/1E9 use this same ABI.
+  Existing runtime configuration established a living Pirate with primary
+  11 bodies, one source1 root, source3 joints, desired2/native4 and bindings0.
+  This supports candidate coverage, not new runtime success.
+- Job lifetime: async0x38 records allocated141781E76..EAD receive callback+20
+  from1466D0C58 at141781EE3/EEA BEFORE Perform; sync initializes141783173/17A.
+  The SAME record reaches Perform and JointBlend. Checking job+20 is valid at
+  the proposed writer seam, not a read from an uninitialized future record.
+
+**STATIC parent defaults.** Constructor141E7C690, called141BB335F, writes
+QWORD+104=000000007FCCCCCC at141E7C6B4 (upper DWORD+108 zero), then+10C=0.
+Parent+110=zero and+120=(0,0,0,1), verified against constant1428805D0; local
++130/+140 have the same identity defaults. Admission still requires BOTH
+zero key/generation, null inline parent-table14386FD00[0], and identity cache.
+Invalid key alone must never be substituted for this live check.
+
+**IMPLEMENTED, runtime-unverified:** enemy_root_sync_protocol.h,
+enemy_root_sync_runtime.inl and the tiny native MASM bridge are linked ONLY
+into tll_coop_runtime. An aligned atomic Pirate-vtable pointer exchange checks
+retail call/stock/setter/empty-notify bytes and pins the DLL; no executable
+instruction is patched and no retired bridge is freed. The separate P99 and
+enemy observer admission flags are unchanged.
+
+The dedicated ENR2 packet is264bytes, no pointers/HP/AI commands. A sends at
+most20Hz. Match requires the full bounded nontruncated spawner+20 name,
+spawner+28 ID and actor+D8/DC, with unique local roster and reciprocal
+spawner+30/+38 -> record+8/actor+BC identity. This is full SPAWNER association,
+NOT proof of actual PSI+30 provenance or historical game replacement. The first
+scenario therefore requires the SAME authored checkpoint/encounter manually
+loaded in both copies. It is not automatic cross-world matching.
+
+Local roster sessions are random64bit nonces with mutual echo, opposite roles,
+exact configured UDP endpoint, sequence and freshness checks. Roots are sent
+from the bound receiver socket (not the legacy ephemeral send socket). Receiver
+uses packets received within200ms with a peer hello within1s; it revalidates
+current native owner, roster, packet sequence, local generation and ordinary
+animation/physics admission immediately before the native setter. It refuses
+distances over10m and stops after30seconds from its first accepted candidate.
+After any application, local roster invalidation/change or peer nonce change
+is terminal: no automatic rearm across a load/death/spawn. This is bounded
+stale-session rejection, NOT a general world/resource retention guarantee.
+
+Ordinary admission explicitly requires normal Perform/JointBlend, mode2,
+phase40/export flags, current Control/Fg owner, Game callback1406CD220, exact
+Art/raw pairs2628A5DC/BD7EEE2F orF181B564/FC65A17A, group0 first0/N90/P55,
+identity parent, exact HealthSystem vtable142BBE128/current signedHP+38>0,
+optional+698 absent, and bounded game-driven primary bodies. Unsupported paths
+do not receive writes. Readable-region caches live within one lexical guard
+only; every copy is memory-fault guarded. No cache spans native execution.
+
+**STATIC nonempty dormant secondary admission:** requiring+580 empty would
+exclude native initialized living ragdolls. Composite Init sets count+10 and
+disabled-count+24 together141E55A50/5A54. Mode0 without body A0&400h is counted
+in+24 at141E57F1A and emits no joint mapping141CF5DB4/5DC7. Nonnull native
+body with world+10=null exits physics-import status0 at141CF4F51; mode0 also
+excludes the desired3-only off-world velocity tail141CF58C2/58C7. Therefore
+this implementation admits up to32 dormant secondary bodies with reciprocal
+owner, desired0, A0&400 clear, no native world, no bindings+60 or dirty+6C,
+counts+18/+1C zero and+24==body count. Source1 is root; source2/3 share the
+joint getter141CF0BA8/0D33 and require joint0..89. No active ragdoll admitted.
+
+Secondary runtime R=Composite+120 must point back to Composite and have
+byteR+68 zero; P=R+58 must point back likewise and byteP+3E zero. Constructor
+141E7E210 sets R owner141E7E248/+68 zero141E7E27B; initializer1420F03D0 sets
+P owner1420F0400/WORD+3D zero1420F0414. These native dormant defaults exclude
+the later buoyancy141EA1375 and penetration141E9C4E4 paths. This removes the
+unjustified empty-only coverage assumption without allowing active ragdolls.
+
+**Falsifiable first runtime prediction (written before launch):** load the same
+checkpoint with living enemies in A and B; initially do not shoot or reload.
+When one eligible A enemy walks, its uniquely matched B counterpart should
+follow A's location/orientation for the bounded interval while B's model and
+collision remain together, with local player movement unchanged. This must NOT
+produce the pre+408 immediate overwrite or late+2B8 split-root behavior.
+Native capture/match/apply counters are diagnostic only: increasing counters
+with stationary B, visible rubber-banding, model/body disagreement, incorrect
+actor matching, severe lag or crash disproves practical success. Death,
+attacks, animation-state replication and full AI authority are OUT OF SCOPE.
+
+Launch support: launch_coop.ps1 -Count2 -LocalPair assigns per-process
+TLL_COOP_ROLE=1/2, leaving the user's shared reports/coop_role.txt untouched.
+The agent launches/injects; ONLY the user loads checkpoints and controls games.
+
+**Build/launch handoff:** Release main DLL builds cleanly (no new test runs),
+SHA256 E19D25ECD090FF5233AE1522C39A46882422F3858FE5AC117C438F271BC93EB5.
+Both P99 exam options remain OFF. Launched and injected PID16896(A/31338) and
+PID7824(B/31339); logs confirm opposite roles, loopback peer ports and native
+Pirate+408 installation in both. Both processes responsive after injection.
+No game input was sent. No root capture/application or visual success has been
+observed yet: the user still needs to load the same encounter in both copies.
+Read the latest per-PID ENEMY-ROOT counters in reports/locomotion_hook.log;
+the first supported receiver candidate starts the30second window automatically.
+Do not reinject or claim success merely from installation.
+
+IDB: stopped MCP, applied constructor/dormant-ragdoll names and ABI/job comments
+to the sole ida/tll.i64. reports/enemy_root_sync_labels_20261018.txt records
+2039 functions,86 data names,3 function types and save_database returned True.
+Restarted MCP and verified all three new names, the setter/Perform names and
+constructor xrefs (including141BB335F). NEXT is the user-driven same-encounter
+result, not more isolated offer or transport tests. If the writer refuses,
+use its concrete lastGate plus current data; do not weaken guards blindly.

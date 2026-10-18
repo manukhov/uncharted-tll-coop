@@ -3,6 +3,10 @@
 #include <WS2tcpip.h>
 #include <TlHelp32.h>
 #include <intrin.h>
+#if defined(TLL_ENEMY_ROOT_SYNC)
+#include <bcrypt.h>
+#include "enemy_root_sync_protocol.h"
+#endif
 
 #include <array>
 #include <algorithm>
@@ -15594,6 +15598,10 @@ void swap_character_manager_0_1() {
     log_line(line.str().c_str());
 }
 
+#if defined(TLL_ENEMY_ROOT_SYNC)
+#include "enemy_root_sync_runtime.inl"
+#endif
+
 DWORD WINAPI state_recv_thread(void*) {
     // One buffer big enough for the largest packet (EnemyPacket); dispatch by magic.
     alignas(8) char buf[sizeof(coop::EnemyPacket) + 64];
@@ -15611,6 +15619,12 @@ DWORD WINAPI state_recv_thread(void*) {
         if (received < static_cast<int>(sizeof(std::uint32_t))) continue;
         std::uint32_t magic;
         std::memcpy(&magic, buf, sizeof(magic));
+#if defined(TLL_ENEMY_ROOT_SYNC)
+        if (magic == coop::enemy_root_sync::kMagic) {
+            enemy_root::receive(buf, received, source_addr, source_addr_size);
+            continue;
+        }
+#endif
         if (magic == coop::kStatePacketMagic &&
             received == static_cast<int>(sizeof(coop::StatePacket))) {
             coop::StatePacket packet{};
@@ -16022,6 +16036,13 @@ bool start_state_net() {
                 role.pop_back();
             }
         }
+#if defined(TLL_ENEMY_ROOT_SYNC)
+        // Explicit per-process launch role for a local A/B pair; leave the user's
+        // shared coop_role.txt untouched (it may intentionally contain role B).
+        char launch_role[8]{};
+        const DWORD launch_role_size = GetEnvironmentVariableA("TLL_COOP_ROLE", launch_role, sizeof(launch_role));
+        if (launch_role_size == 1 && (launch_role[0] == '1' || launch_role[0] == '2')) role.assign(launch_role, 1);
+#endif
         if (role == "2") {
             g_net_role_b = true;
         } else if (role == "1") {
@@ -39391,6 +39412,9 @@ bool mirror_local_animation_snapshot_to_clone() {
 }
 
 void net_tick() {
+#if defined(TLL_ENEMY_ROOT_SYNC)
+    enemy_root::tick(); // Invalidate before the existing unstable-world early return.
+#endif
     // Reload guard: do nothing while the local player is being recreated.
     if (!world_stable()) return;
     const bool foreground = process_owns_foreground_window();
@@ -82153,6 +82177,9 @@ DWORD WINAPI install_hook(void*) {
     log_line("local-player resolver installed; this is not local appearance confirmation");
     log_line("one-shot split render activation ENABLED after login_state==3");
     const bool state_net_started = start_state_net();
+#if defined(TLL_ENEMY_ROOT_SYNC)
+    if (state_net_started) install_enemy_root_sync();
+#endif
     if constexpr (kEnableP99ConsumedCensus && !kEnableRejectedNadineWeaponRuntimeProbes) {
         const bool installed = state_net_started && install_p99_consumed_census();
         const bool waiting = installed && start_p99_consumed_arm_wait();

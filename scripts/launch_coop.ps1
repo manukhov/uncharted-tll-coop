@@ -4,12 +4,17 @@ param(
     [string]$GamePath = "C:\UNCHARTED Legacy of Thieves Collection (2016-2017-2022)\Uncharted Legacy of Thieves Collection\tll.exe",
     [int]$SettleSeconds = 14,
     [ValidateRange(0, 30)]
-    [int]$InjectionGapSeconds = 5
+    [int]$InjectionGapSeconds = 5,
+    [switch]$LocalPair
 )
 
 $ErrorActionPreference = "Stop"
 $buildPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\scanner\build"))
 $injectorPath = Join-Path $buildPath "tll_dll_injector.exe"
+
+if ($LocalPair -and $Count -ne 2) {
+    throw "LocalPair requires Count=2"
+}
 
 if (-not (Test-Path -LiteralPath $GamePath -PathType Leaf)) {
     throw "Game executable not found: $GamePath"
@@ -22,7 +27,17 @@ $gameDirectory = [IO.Path]::GetDirectoryName($GamePath)
 $processes = @()
 for ($instance = 1; $instance -le $Count; $instance++) {
     Write-Host "== launching instance $instance =="
-    $process = Start-Process -FilePath $GamePath -WorkingDirectory $gameDirectory -PassThru
+    if ($LocalPair) {
+        # Per-process A/B roles: do not rewrite the shared user's coop_role.txt.
+        $startInfo = [Diagnostics.ProcessStartInfo]::new()
+        $startInfo.FileName = $GamePath
+        $startInfo.WorkingDirectory = $gameDirectory
+        $startInfo.UseShellExecute = $false
+        $startInfo.EnvironmentVariables['TLL_COOP_ROLE'] = [string]$instance
+        $process = [Diagnostics.Process]::Start($startInfo)
+    } else {
+        $process = Start-Process -FilePath $GamePath -WorkingDirectory $gameDirectory -PassThru
+    }
     Start-Sleep -Seconds 2
     if ($process.HasExited) {
         throw "Instance $instance exited during startup"

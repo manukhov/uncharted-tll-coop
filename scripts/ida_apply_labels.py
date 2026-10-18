@@ -3991,7 +3991,9 @@ FUNCTIONS = {
         "CompositeBody_Init",
         "STATIC exact CompositeBody::Init composite-body.cpp:685. Stores "
         "owner atComposite+8; bodies+48 stride110, bindings+58 stride50. "
-        "Used by both primary owner+238 and optional ragdoll+580.",
+        "Used by both primary owner+238 and optional ragdoll+580. "
+        "Native initialization stores count to+10 AND disabled count+24 at "
+        "141E55A50/5A54; a nonempty secondary can still be dormant mode0.",
     ),
     0x141E56800: (
         "CompositeBody_ShutdownBodiesAndResetCounts",
@@ -4033,7 +4035,8 @@ FUNCTIONS = {
         "count+1C and mode2 game-driven count+18, then calls141E57950 to "
         "rebuild this body's joint/root mappings via141CF5C40. Desired modes "
         "are not the nativebody+160 enum. Binding eligibility can change "
-        "without replacing the owning Composite pointer.",
+        "without replacing the owning Composite pointer. Mode0 without "
+        "body A0&400h is counted in Composite+24 at141E57F1A.",
     ),
     0x141CF5C40: (
         "RigidBody_ExportJointMapping",
@@ -4042,7 +4045,8 @@ FUNCTIONS = {
         "body flags, linkage+C6 and joint+C4. Source1 can emit root key=-1 "
         "through141E533E0 at141CF61BB; source2 emits joint mappings, with "
         "separate special source4 handling. Called by141E57950 during native "
-        "mapping updates; this is not a read-only eligibility query.",
+        "mapping updates; this is not a read-only eligibility query. "
+        "Mode0 with body A0&400h clear takes no-export141CF5DB4/5DC7.",
     ),
     0x1401BABB0: (
         "CompositeBody_ShutdownAndFree",
@@ -4072,7 +4076,9 @@ FUNCTIONS = {
         "STATIC nativebody+40 required; native/desired motion gates. Under "
         "A0 bit0 clear and float+9C<=0 calls141CF0EE0(body,0) at141CF586D. "
         "Decompiler omits substantial asm tail: use disassembly for gates. "
-        "Called byCompositeBody141E5A980; not arbitrary-thread permission.",
+        "Called byCompositeBody141E5A980; not arbitrary-thread permission. "
+        "Unworlded mode0 bodies cannot enter the desired3-only velocity tail "
+        "141CF58C2/58C7; dormant secondary is distinct from active mode2.",
     ),
     0x141CF0A00: (
         "RigidBody_GetOwnerOrJointWorldTransform",
@@ -4090,7 +4096,23 @@ FUNCTIONS = {
         "and takes max status0/1/2. Checks body+40, A0 mode/flags and native "
         "world+10; mode6000 can import swept pose through141CF3790 at "
         "141CF5459. Other branches refresh game transforms at141CF4F2F and "
-        "modify flags. Not a read-only getter or status inferable from mode alone.",
+        "modify flags. Not a read-only getter or status inferable from mode alone. "
+        "Nonnull native body with native+10=null exits status0 at141CF4F51.",
+    ),
+    0x141E7E210: (
+        "RagdollRuntime_ConstructDormant",
+        "STATIC secondary Composite runtime constructor. Stores owner "
+        "Composite at runtime+0 at141E7E248, byte runtime+68=0 at141E7E27B, "
+        "allocates penetrator and stores runtime+58 at141E7EC7F. Byte+68=0 "
+        "makes Character_UpdateBuoyancy exit at141EA1375. This identifies "
+        "a dormant-state gate, not a general lifetime lease.",
+    ),
+    0x1420F03D0: (
+        "RagdollPenetrator_InitializeInactive",
+        "STATIC stores owning Composite at penetrator+0 at1420F0400; "
+        "WORD[penetrator+3D]=0 at1420F0414 leaves active byte+3E zero. "
+        "Character+410 penetration call141E9C4E4 is skipped when +3E=0. "
+        "Reached through secondary runtime+58; no physics-write authority.",
     ),
     0x141CF0EE0: (
         "RigidBody_RefreshGameTransformAndQueue",
@@ -4385,12 +4407,24 @@ FUNCTIONS = {
         "physics is queued later through Pirate+408/owner+698. Cross-phase "
         "dependency and safe remote ownership remain open.",
     ),
+    0x141E7C690: (
+        "NdLocatableObject_ConstructIdentityParentAndLocalRoot",
+        "STATIC base constructor called by NdGameObject at141BB335F. "
+        "QWORD+104=000000007FCCCCCC at141E7C6B4 leaves parent key+108=0; "
+        "DWORD+10C=0 at141E7C6BF. Cached parent+110 and local+130 translations "
+        "are zero; quaternion+120/+140 use1428805D0=(0,0,0,1). Key/generation "
+        "zero alone does NOT prove parentless later: phase40 resolves inline "
+        "table14386FD00 using DWORD+108 and may retain a prior parent cache.",
+    ),
     0x141E7D0D0: (
         "ObjectTransform_CopyLocalRootAndNotify208",
         "STATIC copies supplied32bytes to object+0x130/+0x140, then tail-calls "
         "virtual+0x208. Called by NavCharacter_UpdateRootLocator at141DEDA11 and "
         "BuildInteractHookRuntimeStateFromLiveObject. Exact Pirate+208 is empty; "
-        "this helper alone does not publish Pirate physics.",
+        "this helper alone does not publish Pirate physics. ABI: RCX=object, "
+        "RDX=pointer to contiguous32byte position/quaternion; no meaningful "
+        "success return. Preserve receiver position service lane+13C when "
+        "substituting only xyz. Exact Pirate+208=1401D4E10 (RET0).",
     ),
     0x141E7D1D0: (
         "ObjectTransform_CopyLocalRotationAndNotify208",
@@ -4642,7 +4676,11 @@ FUNCTIONS = {
         "conditional phase40 call141A929C1. Candidate ordering is after the "
         "FULL exact Pirate+408, not an interior common-Character return; "
         "requires job+14==0, current Fg.flags&40h and validated current owner. "
-        "This order alone is not pose-cache freshness or write admission.",
+        "This order alone is not pose-cache freshness or write admission. "
+        "Native job+20 is already initialized before Perform: async allocation "
+        "141781E76..EAD uses stride38 and copies1466D0C58 at141781EE3/EEA; "
+        "sync copies it at141783173/17A. It remains the same job through "
+        "Perform/JointBlend, not an uninitialized future-only callback field.",
     ),
     0x1415A9040: (
         "TaggedHeapAllocator_Init",

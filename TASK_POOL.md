@@ -12,6 +12,24 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy Synchronization (2026-10-18)
 
+CURRENT IMPLEMENTATION RESET (user: implement sync, not tests): ordinary main
+DLL now contains native root-only A->B replication through exact Pirate+408
+return141A929A7 and setter141E7D0D0. The isolated observer/offer/transaction
+track below is PARKED. No new standalone tests. Full spawner association,
+reciprocal local identities, per-roster session echo, native normal-path/body
+guards, 200ms freshness and a30second first write window bound this first
+same-checkpoint scenario. HP/death/AI writes remain OFF; player baseline stays.
+See latest COOP_STATUS for alternatives, independent static evidence and the
+prelaunch falsifiable prediction. Native applied counters are not visible proof.
+Main DLL built/injected in PID16896(A) and PID7824(B). Native dormant nonempty
+ragdoll admission is implemented; active ragdolls remain excluded. IDB saved.
+NEXT: user loads the SAME living-enemy encounter in both; correlate visible
+movement with ENEMY-ROOT capture/match/apply/lastGate in locomotion_hook.log.
+No visible sync success yet. The30second window starts on first supported
+receiver candidate; do not rearm terminal stops/reinject running processes.
+
+The following paragraphs are the retained historical investigation trail:
+
 User explicitly moved priority from appearance to enemies between copies.
 Do not simply enable old g_enemy_sync: it performs raw world/local/HP writes;
 RequestDisableAi and the old freeze test are not admitted. Current investigation:

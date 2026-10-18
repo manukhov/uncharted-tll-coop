@@ -4,6 +4,7 @@ project(TLLCoopTools LANGUAGES CXX)
 enable_language(ASM_MASM)
 add_library(tll_p99_native_frame_bridge OBJECT src/nadine_p99_group_native_frame.asm)
 add_library(tll_p99_process_frame_bridge OBJECT src/nadine_p99_process_native_frame.asm)
+add_library(tll_enemy_root_sync_bridge OBJECT src/enemy_root_sync_native.asm)
 
 add_executable(tll_object_scanner src/object_scanner.cpp)
 add_executable(tll_player_nudge src/player_position_nudge.cpp)
@@ -88,7 +89,9 @@ add_library(tll_coop_runtime SHARED src/coop_runtime.cpp
     src/nadine_p99_wrist_code_windows.cpp
     src/nadine_p99_wrist_prepare_windows.cpp
     $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
-    $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
+    $<TARGET_OBJECTS:tll_p99_process_frame_bridge>
+    $<TARGET_OBJECTS:tll_enemy_root_sync_bridge>)
+target_compile_definitions(tll_coop_runtime PRIVATE TLL_ENEMY_ROOT_SYNC=1)
 option(TLL_P99_SOURCE_OBSERVATION_EXAM "Enable one writer-disabled source observation in an explicit exam build" OFF)
 option(TLL_P99_CONSUMED_CENSUS_EXAM "Enable bounded read-only normal Process/postblend census" OFF)
 if(TLL_P99_CONSUMED_CENSUS_EXAM AND TLL_P99_SOURCE_OBSERVATION_EXAM)
