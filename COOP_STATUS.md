@@ -9,10 +9,12 @@ source and the launcher refuses the old auto-enabled hash. Read the latest
 entry before any relaunch; no new enemy-enabled exam is prepared/admitted.
 USER FOLLOW-UP: lag DISAPPEARED after this stop in the same two running games.
 The new active enemy-root work is the confirmed regression as a group; GPU
-load alone does NOT explain it. Exact hotspot remains unmeasured. Both games
-are now CLOSED. The revised main DLL BUILDS with default-OFF startup: enemy
+load alone does NOT explain it. Exact hotspot remains unmeasured. Revised
+exam is now RUNNING in PID22652(A)/23592(B), awaiting user-loaded encounter.
+The revised main DLL BUILDS with default-OFF startup: enemy
 UDP, nonce generation and recurring logging run on an isolated worker; B
-checks each new packet only once. It is NOT injected or runtime-validated.
+checks each new packet only once. This revision is injected, but visible
+enemy synchronization/performance is NOT runtime-validated.
 The latest entry adds a cumulative guard-work cutoff and PID/creation-bound
 terminal stop; a revised bounded same-encounter exam is now prepared. Read its
 prediction and actual launch/result below; compilation is not gameplay proof.
@@ -43028,3 +43030,19 @@ Source review fixed sequential-stop timeout and inherited-opt-in defects;
 PowerShell parsing, C# stop-tool compilation/non-game refusal and Release main
 build pass. No new standalone test suite, no new game-address labels. Sole IDB
 existing labels were read/verified, not rewritten. Runtime outcome pending.
+
+**Actual revised launch:** launched/injected PID22652 at21:38:29 and PID23592
+at21:38:31 Moscow. Launcher returned DONE; both processes respond. Native logs
+confirm A/Chloe requested and B/Nadine requested, player ports31338/31339,
+separate enemy ports31340/31341, exact Pirate+408 hook installed, both baseline
+LOCAL-LOOK READY banners. Actual appearance is still visually unverified.
+The new stop script -InspectOnly successfully opens each PID/creation-bound
+request+ACK pair; stoppedAndQuiescent=False in both, as expected before stop.
+No stop request, game input or rearm was sent. Latest enemy logs have actors0,
+paired0, capture/match/apply0 and cost/query0: no gameplay validation work yet.
+NEXT is the user's SAME living-enemy encounter and visible motion/smoothness
+report. Read reports/enemy_root_22652.log and enemy_root_23592.log. Do not
+rebuild/reinject these running copies or mistake installation/empty counters
+for synchronization success. Emergency command if needed:
+scripts/stop_enemy_root_channel.ps1 -ProcessIds22652,23592 (PowerShell parameter
+syntax requires a space after -ProcessIds). No automatic rearm after any stop.

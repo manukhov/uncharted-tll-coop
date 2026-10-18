@@ -18,7 +18,9 @@ and read back in both processes; native logs confirm STOPPED with apply=0.
 Do NOT relaunch hash E19D25EC...: launch_coop now refuses that exact image.
 User now confirms lag DISAPPEARED after that stop with both games still open.
 The active enemy-root path is the regression; GPU-only attribution is rejected.
-Both games are now CLOSED and the revised main DLL BUILDS, default-OFF.
+Revised main DLL BUILDS, default-OFF; explicit exam now runs PID22652(A) and
+PID23592(B). Both injected/responding; enemy ports31340/31341 and stop-control
+events verified. Empty actor/cost counters so far, awaiting user-loaded scene.
 Enemy transport uses a dedicated nonblocking worker/socket (state ports+2),
 not the player sockets or game-thread sendto. RNG and recurring private-file
 logging also moved off game update. B reserves/copies each packet sequence
@@ -30,9 +32,11 @@ be preempted. Independent PID+creation-bound stop request/ACK is available via
 scripts/stop_enemy_root_channel.ps1 (signals both before waiting; no memory
 writes). Old hash/PDB stop remains restricted. Revised native-root exam has
 written evidence/prediction in latest COOP_STATUS and is ready for two copies.
-NEXT: launch -Count2 -LocalPair -EnemyRootSync; user alone loads the same living
-enemy encounter, no initial shooting/reload; compare visible motion/smoothness
-with per-PID enemy_root logs. Cost cutoff is containment, NOT sync success.
+NEXT: user alone loads the same living-enemy encounter, no initial shooting/
+reload; compare visible motion/smoothness with enemy_root_22652/23592.log.
+Do not rebuild/reinject running copies. If needed, stop BOTH using
+stop_enemy_root_channel.ps1 -ProcessIds 22652,23592. No rearm after stop.
+Cost cutoff is containment, NOT sync success.
 No standalone tests/offer expansion, damage/AI writer or automatic rearm.
 
 PREVIOUS IMPLEMENTATION (superseded by rejection above): ordinary main
