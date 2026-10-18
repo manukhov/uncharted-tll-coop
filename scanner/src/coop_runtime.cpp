@@ -14808,6 +14808,7 @@ void register_nadine_as_character() {
 // Resolve the live Player object for retained slot `index` from
 // g_RetainedPlayerSlotTable: entry {ptr,id} at table+index*0x10; player object =
 // *(entry.ptr + 8), with entry.id == object+BC as in native1410F0D10.
+// Mod admission is stricter: never resolve a Player already entering OnKill.
 // This is a checked observation, NOT a lifetime/relocation lease for callers.
 extern volatile int g_drive_slot_index;
 
@@ -14826,12 +14827,16 @@ void* retained_player_object(int index) {
         const auto generation = *reinterpret_cast<const volatile std::uint32_t*>(slot + 8);
         if (record == 0 || generation == 0) return nullptr;
         const auto object = *reinterpret_cast<const volatile std::uintptr_t*>(record + 8);
+        // KillTree1416A5E2A sets enteredOnKill BEFORE virtual+190 cleanup;
+        // object+BC is not zeroed until1416A6044, after those callbacks.
         if (object == 0 ||
+            (*reinterpret_cast<const volatile std::uint8_t*>(object + 0x40) & 0x04) != 0 ||
             *reinterpret_cast<const volatile std::uint32_t*>(object + 0xBC) != generation) return nullptr;
         if (*reinterpret_cast<const volatile std::uintptr_t*>(slot) != record ||
             *reinterpret_cast<const volatile std::uint32_t*>(slot + 8) != generation ||
             *reinterpret_cast<const volatile std::uintptr_t*>(record + 8) != object ||
-            *reinterpret_cast<const volatile std::uint32_t*>(object + 0xBC) != generation) return nullptr;
+            *reinterpret_cast<const volatile std::uint32_t*>(object + 0xBC) != generation ||
+            (*reinterpret_cast<const volatile std::uint8_t*>(object + 0x40) & 0x04) != 0) return nullptr;
         return reinterpret_cast<void*>(object);
     } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ||
                 GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR

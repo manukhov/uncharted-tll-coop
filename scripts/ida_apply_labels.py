@@ -8,6 +8,63 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-10-18: menu task reset and pre-invalidation OnKill admission ---
+    0x141CB9C40: (
+        "GameTaskGraphMgr_Reset",
+        "STATIC source assertion GameTaskGraphMgr::Reset(int,bool,bool) const, "
+        "task-graph-mgr.cpp:254. Under manager+200 recursive lock, invokes "
+        "observer+8 at141CB9CF5 BEFORE resetting task subnodes. Exact installed "
+        "TaskObserver142A7E268 resolves1413C6AF0, which calls actor reset1413B9820. "
+        "Reached synchronously by141CDA945 and141CDB519, not only queued VM work.",
+    ),
+    0x1413C6AF0: (
+        "TaskObserver_OnReset_DispatchActorReset",
+        "STATIC TaskObserver142A7E268 slot+8, singleton1430743C8 installed at "
+        "manager146A51370+100 by140156192. Called at141CB9CF5 before task reset. "
+        "Calls primary-player kill/camera helper1410F3DD0 at1413C6B15, then "
+        "actor reset1413B9820(reason,bool) at1413C6B1F. Not a worker exclusion fence.",
+    ),
+    0x1413C7170: (
+        "TaskObserver_OnTaskState2_ConditionalActorReset",
+        "STATIC TaskObserver142A7E268 slot+20, invoked at141CDC613 after "
+        "task+60=2 at141CDC55C. Calls1413B9820(2,0) at1413C71BE ONLY if "
+        "141CDBFF0(task) succeeds and task+90 bit4 is set. Live main-menu "
+        "task flags unknown; distinct from unconditional observer+8 reset.",
+    ),
+    0x141CDA070: (
+        "PreResetter_Init",
+        "STATIC exact PreResetter::Init source assertion, task-subnode.cpp:598. "
+        "Copies initial user payload into process+100..117. Materialized by "
+        "141CDA800 positive-duration branch at141CDB481; Active callback141CDA250 "
+        "later re-enters that task transition with zero duration.",
+    ),
+    0x141CDA250: (
+        "PreResetter_ActiveUpdateAndResetTask",
+        "STATIC Active@PreResetter vtable142B6CB78 slot+20. Timer/payload test "
+        "eventually calls141CDA800 with zero duration at141CDA43F, then kills "
+        "its process tree. Positive initial duration does not exclude earlier "
+        "conditional synchronous GameTaskGraphMgr_Reset at141CDA945.",
+    ),
+    0x1410D84B0: (
+        "Player_OnKillProcess",
+        "STATIC exact Player142A4BFE8 slot+190. KillTree sets object+40 bit4 "
+        "before dispatch, but object+BC remains valid until callback returns. "
+        "This callback keeps Player vtable while releasing state/children; "
+        "calls Character_OnKillProcess141E9C750 at1410D8A55.",
+    ),
+    0x141E9C750: (
+        "Character_OnKillProcess",
+        "STATIC base OnKill callback called by Player1410D84B0 at1410D8A55. "
+        "Performs Character cleanup and tail-calls NdGameObject_OnKillProcess "
+        "141BB95C0 at141E9C79E. Distinct from deleting destructor141E991F0.",
+    ),
+    0x141623AD0: (
+        "ProcessMgr_RemoveKilledProcessFromTokenIndex",
+        "STATIC called by KillTree at1416A5F16 AFTER virtual+190 OnKill "
+        "and BEFORE object+BC invalidation1416A6044. Removes token-index entry "
+        "under ProcessMgr recursive lock; not itself the OnKill virtual callback "
+        "and not a mod-reader lifetime lock.",
+    ),
     0x1403480D0: (
         "Script_QuitToMainMenu_Request",
         "STATIC: registered for literal quit-to-main-menu14291AEC0 by14003FA20 "
@@ -7607,7 +7664,11 @@ FUNCTIONS = {
         "ProcessKillTree",
         "ndlib Process::KillTree. Recursively tears down a process hierarchy "
         "and bypasses normal health, hit, ragdoll, and gameplay death handling. "
-        "Do not use this as a networked NPC/player death primitive.",
+        "Do not use this as a networked NPC/player death primitive. STATIC "
+        "lifecycle: locks object+50; sets +40 enteredOnKill bit4 at1416A5E2A "
+        "BEFORE virtual+190 at1416A5E33. Only AFTER callback/index removal "
+        "does1416A6044 zero+BC and1416A607D publish the dead list. Identity "
+        "and exact vtable alone therefore admit the earlier OnKill interval.",
     ),
     0x1402F8B40: (
         "PirateIsDeadViaHealthSystem",
@@ -8021,7 +8082,9 @@ FUNCTIONS = {
         "Detaches a node from owner+0x70/+0x80/+0x98, decrements owner+0xA8, "
         "and clears node fields. Also used directly inside 0x1417C3790, "
         "which pins both helpers as internal bookkeeping for the returned "
-        "materialized object family.",
+        "materialized object family. STATIC cleanup141622A60->1416A66C0 reaches "
+        "node+8=0 at1415FCAD8; this is LATER than KillTree object+BC=0 and "
+        "deleting-destructor dispatch. A nonnull node+8 is not live identity.",
     ),
     0x1416A3330: (
         "ConstructBaseRuntimeObjectWithNullHandleAndFreshObjectId",
@@ -8084,10 +8147,11 @@ FUNCTIONS = {
         "CommitResolvedPlayerSpawn 0x1410F14C0.",
     ),
     0x1410F3DD0: (
-        "RefreshPrimaryRetainedPlayerCamera",
-        "Touches retained player slot 0, restores entity focus, then queries "
-        "the primary screen-route entity and updates camera state through "
-        "0x141C078D0.",
+        "PlayerSlots_KillPrimaryAndRefreshCamera",
+        "STATIC correction: resolves retained slot0 with generation check, "
+        "writes object+72=1, then calls ProcessKillTree at1410F3E04 BEFORE "
+        "optional primary camera refresh141C078D0. TaskObserver_OnReset calls "
+        "this at1413C6B15 before broader actor reset. Not a harmless getter.",
     ),
     0x1410F3E40: (
         "CheckRetainedPlayerSlotActive",
@@ -8574,11 +8638,11 @@ FUNCTIONS = {
         "`kCameraContextualLook`.",
     ),
     0x1416A3800: (
-        "DestroyCameraControlBaseAndRestoreCoreVtable",
-        "Shared camera-control cleanup path. Temporarily installs an internal "
-        "camera-control vtable, asserts if a live pair remains in +0xD0 when "
-        "the global bypass is clear, then restores the core CameraControl "
-        "vtable at 0x14297E9B0.",
+        "Process_Destructor",
+        "STATIC correction: exact Process::~Process source assertion, not "
+        "camera-control-specific. Installs Process vtable at1416A3819, asserts "
+        "level+ D0 was cleared unless global bypass, then installs Relocatable "
+        "vtable at1416A387F/388F. Base of Player/NPC destruction as well.",
     ),
     0x1416A3920: (
         "CacheCameraControlProcessTokenIdIfMissing",
@@ -9157,11 +9221,12 @@ FUNCTIONS = {
         "and dispatches relocation into nested child objects.",
     ),
     0x141BB95C0: (
-        "DestroyCompanionCameraRigOwner",
-        "Destructor path for the companion camera-rig owner. Tears down nested "
-        "runtime objects at +0x218/+0x238, notifies external systems using the "
-        "cached retained pair at +0xA8/+0xBC when byte +0x16D is set, and "
-        "continues with deeper cleanup of companion and child-node state.",
+        "NdGameObject_OnKillProcess",
+        "STATIC correction: base OnKill, not companion-camera deleting "
+        "destructor. Called by Character141E9C750 at141E9C79E beneath "
+        "Player_OnKillProcess. Cleans nested resources, sets +40 reachedOnKill "
+        "bit2 at141BB9920, unlinks/clears level+D0 at141BB9933/9938. Runtime "
+        "id+BC is invalidated later by KillTree, not by this callback.",
     ),
     0x141BBDD30: (
         "PushCompanionCameraRigPoseToChildNodes",
@@ -15892,6 +15957,16 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x1416A5E2A: (
+        "STATIC Process+40 m_killFlags.m_enteredOnKill (mask04). Set BEFORE "
+        "virtual+190 cleanup1416A5E33; Player vtable/id can still match here. "
+        "Mod retained lookup must reject this phase; read is not lifetime lease."
+    ),
+    0x1416A6044: (
+        "STATIC invalidate Process runtime id+BC AFTER OnKill callback and "
+        "token-index removal, BEFORE dead-list publication/destructor. "
+        "Retained slot pairs need not themselves be cleared to become invalid."
+    ),
     0x1417C3D0E: (
         "STATIC correction: mov [rbx+B8],r14d writes descriptor delta, NOT local "
         "runtime id+BC. Base constructor1416A3393 assigns+BC via1416A38A0."

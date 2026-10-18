@@ -12,20 +12,24 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy Synchronization (2026-10-18)
 
-2026-10-18 continuation: shared retained_player_object now checks native
-generation identity (1410F0D10/1410F0F60), bounds, observed turnover and read
-faults. Real DLL E816B0B2...D5C1F2 builds; machine-code/SEH review passes.
-This removes a concrete stale-generation acceptance defect, NOT a proved
-menu-crash cause or a lifetime lease. Stopped enemy wrapper has no found
-ABI/unwind defect; exact Pirate destructor1404A3510 changes vtable before
-controllers are freed. IDB labeled/saved/read back. No runtime this turn.
-Continue the menu reset boundary and baseline pointer lifetime; do not reopen
-raw-address churn as corruption (native relocation already explains it).
-Exact quit-to-main-menu command ingress1403480D0 sets1437DFD5E; postrender
-140166811/81A consumes/clears it BEFORE1413C80D0->1409BCA80->141CDA800.
-NEXT trace that task/VM dispatch to observer callbacks1413C6AF0/1413C7170 and
-reset1413B9820. Request flag is NOT a lifetime/unload guard; full GameClose and
-separately registered Reset Actors are not substitutes for this path.
+2026-10-18 continuation: shared retained_player_object now ALSO rejects
+enteredOnKill at object+40 bit4, before/finally after its generation checks.
+1416A5E2A sets that flag BEFORE exact Player virtual+190 cleanup; ID+BC is
+zeroed only at1416A6044 afterward. Real DLL A7A98C27...9A072 builds; emitted
+reads/SEH audited. Concrete admission fix, NOT a lifetime lease or crash proof.
+Menu route now closed statically:141CDA800 ->GameTaskGraphMgr_Reset141CB9C40
+->exact TaskObserver1413C6AF0 ->1410F3DD0 kills primary Player ->1413B9820.
+Reset may run early at141CDA945 or synchronously at141CDB519, before menu VM;
+positive-duration PreResetter141CDA250 eventually takes the zero-duration path.
+Secondary observer1413C7170 reset is conditional, not proved in the failed run.
+IDB labels/corrections saved/read back. Dormant aux_input_thread is compiled
+OUT; proposed diagnostic gates removed, no such runtime fix is claimed.
+NEXT: bounded ordinary two-copy menu-exit regression with enemy root OFF and
+existing crash watchers on BOTH roles; static quota/prediction in latest
+COOP_STATUS. User alone controls both copies. No performance verdict under
+debugger; success would not prove guard execution or previous crash causality.
+Post-return pointer lifetime remains open. Do not reopen pointer-address churn
+as corruption or use the cleared request flag as a lifetime/unload guard.
 
 LATEST RESULT: one copy CRASHED on returning to the main menu (user report).
 Revised PID22652(A)/23592(B) run is REJECTED as usable; both processes are gone.

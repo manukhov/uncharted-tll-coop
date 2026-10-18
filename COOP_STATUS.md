@@ -2,16 +2,16 @@
 
 ## Current user priority / handoff (2026-10-18)
 
-LATEST CODE: fixed shared retained_player_object's missing generation contract
-against native1410F0D10/1410F0F60. Bounded SEH reads now reject null/zero/stale
-identity and observed tuple turnover, without VQ/native calls or writes.
-Real DLL built (E816B0B2...D5C1F2); emitted loads/SEH independently verified.
-NOT a lifetime lease or a confirmed fix for the menu crash. No game launched.
-Stopped enemy-wrapper ABI/unwind audit found no defect; ordinary Pirate base
-destruction replaces its exact vtable before freeing controllers. The menu
-request ingress is now located:1403480D0->1437DFD5E->postrender140166811.
-Its flag clears BEFORE task transition; not an unload guard. Task/VM/reset
-execution and post-return pointer lifetime remain open. See latest entry.
+LATEST CODE: retained_player_object now also rejects enteredOnKill at object+40
+bit4, before and after the generation/tuple checks. Native1416A5E2A sets this
+flag BEFORE Player cleanup; identity is zeroed only at1416A6044 afterward.
+Menu transition141CDA800 reaches GameTaskGraphMgr_Reset141CB9C40 and exact
+TaskObserver1413C6AF0, which kills the primary Player and resets actors.
+Real DLL A7A98C27...9A072 built; emitted reads/SEH independently verified.
+NOT a lifetime lease or a confirmed fix for the previous menu crash.
+NEXT: bounded baseline two-copy menu-exit regression with enemy root OFF and
+existing crash watchers attached to BOTH roles. Written prediction below;
+no performance verdict under debugger, no enemy-sync success claim.
 
 LATEST RESULT: user reports one copy CRASHED while returning to the main menu.
 Revised PID22652(A)/23592(B) run is REJECTED as usable; both processes are now
@@ -20,8 +20,8 @@ gone. Both enemy channels terminally stopped at their first census (2.389ms /
 enemy-root setter, NOT the installed stock-forwarding hook or other baseline
 hooks as crash causes. No fresh exception PC/stack/dump. User does not recall
 which role crashed and confirms manually closing the other copy.
-See latest entry and preserved exact DLL/PDB/logs. No relaunch/rearm or budget
-increase; source remains default-OFF. No visible enemy-sync success.
+See latest entry and preserved exact DLL/PDB/logs. Do not repeat that enemy
+exam or raise its budget; source remains default-OFF. No visible sync success.
 
 PREVIOUS RUN: severe lag in PID16896/7824 disappeared after only active enemy
 work was stopped. That active path was the confirmed regression as a group;
@@ -43220,3 +43220,106 @@ and g_QuitToMainMenuRequested1437DFD5E. Saved in the sole IDB (second apply log
 reports/apply_menu_request_20261018.txt); save/readback verified before handoff.
 This adds no runtime hook and does not establish that the user's exact UI
 action traversed this command in the failed run.
+
+## 2026-10-18 — Reject early OnKill admission; close static menu-to-reset chain
+
+**STATIC defect corrected, prior crash cause still HYPOTHESIS.** Generation
+equality alone does not reject a Player during its OnKill callback. In
+ProcessKillTree1416A5C20, under object+50 lock,1416A5E2A sets object+40 bit4
+(assertion names it m_enteredOnKill), then1416A5E33 calls virtual+190. Exact
+Player vtable142A4BFE8 slot142A4C178 resolves Player_OnKillProcess1410D84B0.
+It preserves its Player vtable/runtime ID while cleaning state, then calls
+Character_OnKillProcess141E9C750 at1410D8A55. Character calls
+NdGameObject_OnKillProcess141BB95C0 at141E9C79E; the latter sets reachedOnKill
+bit2 at141BB9920 and unlinks/clears level+D0 at141BB9933/38.
+
+Only AFTER those callbacks does1416A5F16 call141623AD0 to remove the ProcessMgr
+token-index entry; this is NOT an OnKill callback. Runtime ID+BC becomes zero
+at1416A6044; flags+40|=1 and+3E|=1 follow at604D/6050, dead-list insertion at
+6076/607D. Later cleanup1416A62B0 invokes the deleting destructor at1416A65B9,
+then updates record+24/object+3C and clears the vtable at65C2/65C5/65C9.
+Record+8 becomes null still later at1415FCAD8 through141622A60->1416A66C0.
+Constructor1416A3330 assigns the ID at3393 and zeroes QWORD+3C at33B7, which
+covers these kill flags. No revival/bit4 clear occurs on the traced kill path;
+this is not an exhaustive claim about every writer in the binary.
+
+Three independent evidence kinds: exact flag assertion strings, store/callback/
+invalidation ordering, and Player vtable/callee identity; constructor and
+independent destruction/unlink paths further agree. **STATIC REJECTED:** exact
+Player vtable, equal generation, or nonnull record+8 is individually sufficient
+for live admission during OnKill. Native locks do not lease a mod-returned pointer.
+
+retained_player_object now reads object+40 bit4 both before and after its
+existing final identity rereads, inside the same AV/in-page-only SEH scope.
+This is intentionally STRICTER than native retained resolvers, without new
+calls, object writes, allocations or VirtualQuery. It closes observed early
+OnKill admission, NOT destruction after return, concurrent relocation, or ABA.
+No evidence in the old logs establishes this defect caused the user's crash.
+
+**STATIC menu route, not merely queued work:** quit request1403480D0 ->
+postrender140166811/81A ->1413C80D0 ->1409BCA80 ->141CDA800. The latter can
+call GameTaskGraphMgr_Reset141CB9C40 early at141CDA945 when143FE1070+4742 and
+manager146A51370's byte are nonzero, BEFORE duration handling. Duration<=0
+reaches synchronous reset141CDB519; positive duration creates PreResetter at
+141CDB481. PreResetter_Init141CDA070 is identified by its source assertion
+(task-subnode.cpp:598); Active vtable142B6CB78+20 resolves141CDA250, whose timer
+expiry calls141CDA800 with zero duration at141CDA43F. Positive duration does
+not exclude the earlier141CDA945 reset.
+
+GameTaskGraphMgr_Reset141CB9C40 has the exact source assertion (task-graph-mgr
+.cpp:254) and calls manager+100 observer virtual+8 at141CB9CF5 under manager+200
+recursive lock, BEFORE task-subnode resets. RTTI TaskObserver vtable142A7E268
+has +8=1413C6AF0, +20=1413C7170. Singleton1430743C8 receives that vtable in
+1413C7F70 and is installed in146A51470 at140156192. Callback1413C6AF0 calls
+1410F3DD0 at1413C6B15, then broad actor reset1413B9820 at1413C6B1F.
+1410F3DD0 resolves the primary slot, writes+72 and calls ProcessKillTree at
+1410F3E04 before optional camera refresh. Thus its old camera-only name was
+incomplete. This reset precedes later observer+10 at141CDB6EE and VM141CDB71F.
+**STATIC REJECTED:** task transition only queues work, or menu script VM must
+run first to reach actor teardown. Full GameClose is not this route.
+
+A separate later conditional reset exists through GameTaskGraphMgr_Update
+141CB9820 ->141EADFF0 (possibly141EAE070) ->141CDC520: task+60=2 at141CDC55C,
+observer+20 at141CDC613 ->1413C7170 ->1413B9820(2,0) at1413C71BE only if
+141CDBFF0(task) and task+90 bit4. Live menu flags are unknown; do not claim this
+second route executed in the failed run. Reset reentry counter1437E7F40 and
+already-cleared quit-request byte are NOT global lifetime/unload guards.
+
+**STATIC REJECTED dormant-diagnostic attribution:** aux_input_thread's old
+diagnostic readers looked relevant in source, but kEnableLegacyRuntimeDiagnostics
+is constexpr false; its CreateThread branch and helpers are omitted from this
+production DLL. Proposed reader gates were removed. No active diagnostic
+fix or background-thread crash cause is claimed.
+
+**Production verification, not behavior:** fresh tll_coop_runtime build passes.
+DLL SHA256 A7A98C27A6FD82495E00935F06F31F5AFE8015453B1D58603FA918B96E79A072;
+PDB SHA256 83FA8E967865FAB310025B8CE2FBF62F11E7388990354E7E71A17F95419545E4.
+Independent emitted-code audit: resolver RVA51F80..5201C, size156; kill loads/
+tests51FC4/51FC8 and51FFB/51FFF; final identity loads51FD7/51FDF/51FE7/51FF0.
+SEH[51FAA,52015) covers all reads; filter6CF90 catches onlyC0000005/C0000006,
+handler52015 returns null. No calls/stores/VQ/allocation. No test framework added.
+
+**IDB handoff:** labeled GameTaskGraphMgr_Reset, both TaskObserver callbacks,
+PreResetter Init/update, Player/Character/NdGameObject OnKill and ProcessMgr
+token-index removal. Corrected1410F3DD0 to PlayerSlots_KillPrimaryAndRefreshCamera
+and1416A3800 to Process_Destructor; corrected lifecycle comments. Sole IDB
+saved after stopping MCP: reports/apply_menu_onkill_20261018.txt records2049
+functions/87data names/3types and save_database returned True. MCP restarted;
+new/corrected names and TaskObserver slot xref read back successfully.
+
+**Bounded runtime prediction written BEFORE launch:** candidate A is the
+statically proved early-OnKill admission defect; candidate B is a remaining
+post-return pointer use, installed wrapper, other native/hook failure. Use
+fresh DLL above, two ordinary local-pair copies, enemy root channel OFF; attach
+the EXISTING PID/image-bound crash watcher to BOTH while still at main menu.
+User alone loads the same encounter, briefly checks ordinary player operation,
+then returns A and B separately to main menu, leaving both processes open.
+Prediction: marked OnKill objects are rejected even while their IDs match;
+ordinary gameplay and both menu returns remain available without a crash.
+Any crash fails this regression; a fresh second-chance PC/stack distinguishes
+remaining wrapper/native/caller paths. No resolver hit counter was added, so
+successful menu returns alone prove neither guard execution nor old-crash
+causality. This run does NOT validate enemy sync, the stopped Pirate hook, or
+performance (debugger changes timing). No automatic repeat/rearm, no larger
+enemy budget, no game input by the agent. If no second-chance context arrives,
+exit code/handled exceptions alone still cannot identify a crash PC.
