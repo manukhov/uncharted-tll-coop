@@ -30,6 +30,9 @@ std::uint32_t sequence{}, hello_sequence{};
 ULONGLONG peer_seen{}, last_hello{}, last_tick{}, last_log{};
 ULONGLONG first_apply{};
 bool confirmed{};
+// Owned by the serialized tick. Never lose an invalid/unpublished census while
+// a native callback holds the mailbox; decide terminal/rebind under that lock.
+bool census_gap{};
 std::atomic<bool> installed{}, stopped{};
 std::atomic<bool> active_scope{};
 std::atomic_flag ticking = ATOMIC_FLAG_INIT;
@@ -210,12 +213,28 @@ void tick() {
     if (now-last_tick < 50) { ticking.clear(); return; } last_tick = now;
     Roster current{};
     const bool valid = census(current);
+    if (!valid) {
+        census_gap = true;
+        active_scope.store(false, std::memory_order_release);
+        if (applied.load(std::memory_order_acquire)) stopped.store(true);
+    }
     std::array<wire::Packet, wire::kActors+1> pending{}; std::size_t count{};
     // This runs from Player/Nadine update: never wait for a receiver/native job.
     // An unpublished census must not leave the writer enabled until next tick.
     if (!TryAcquireSRWLockExclusive(&lock)) {
+        census_gap = true;
         active_scope.store(false, std::memory_order_release);
         ticking.clear(); return;
+    }
+    if (census_gap) {
+        // An in-flight first apply may have completed after the failed try-lock.
+        // Once the lock is ours, it cannot race this decision. Before any apply
+        // reset the session; after one apply the gap is terminal, never rearm.
+        if (applied.load(std::memory_order_acquire)) stopped.store(true);
+        reset_locked(); census_gap = false;
+    }
+    if (stopped.load()) {
+        ReleaseSRWLockExclusive(&lock); ticking.clear(); return;
     }
     if (!valid) {
         if (applied.load(std::memory_order_relaxed)) stopped.store(true);

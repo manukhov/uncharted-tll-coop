@@ -42852,6 +42852,11 @@ immediately on SOCKET_ERROR and would busy-spin on WSAEWOULDBLOCK.
 - tick and enemy receive use TryAcquire, not blocking waits. A busy tick clears
   active_scope until a census is published; final setter fence also checks it.
   Busy enemy datagrams drop rather than stall the shared player-state receiver.
+  Review caught an invalid-census loss on a busy mailbox: a tick-owned gap latch
+  now persists invalid/unpublished census until the lock is acquired. Under
+  that lock a prior apply makes the gap terminal; before any apply it resets
+  the session. This also covers an in-flight first apply finishing AFTER the
+  failed TryAcquire, so a later valid census cannot silently rearm old state.
 - Census frequency and stale-session rules are NOT relaxed. No SEH-only broad
   page probe replaces explicit readable/guard-page rejection. Native setter,
   gameplay, health, AI, player replication and appearances are unchanged.
