@@ -41844,3 +41844,152 @@ GetJointCache at141728A80 already had the base name;141728AF0 is explicitly
 AnimControl_GetJointCache_Assert178 (no implicit _0 collision). Player/runtime
 sources and the main DLL remain unchanged. Preexisting untracked tmp/ was
 left untouched and is not part of this unit.
+
+## 2026-10-18 — Implement isolated enemy observer components; runtime admission closed
+
+Continuation from8900874. Enemy synchronization remains P0; appearance is
+parked. This is implementation and offline verification, NOT a successful
+in-game observation or cross-copy enemy movement. No game launch/injection,
+enemy pose/HP/AI write or main-runtime change in this unit.
+
+**STATIC implementation against the pinned native contract.** Separate
+enemy_jointblend_hooks forwards the seven code sites and1466D0C58 callback
+with unchanged arguments, result width and LastError. It uses enemy-private
+FLS/bootstrap state and only the existing generic fiber-slot and two original
+native-frame MASM bridges. First/later Process wrappers capture the game call
+PC in their actual entry frame; the independent native Process return-slot
+belongs to the bridge. Nested native scopes invalidate the parent instead of
+joining child events. Native SEH propagates through cleanup; no observer
+exception is translated into a successful native result.
+
+**REJECTED Art+24/raw+4 equality; STATIC corrected candidate pairs.** The
+initial synthetic fixture incorrectly used one ID for both fields. Art+24 is
+the DATABASE key consumed by SkelTable_LoginArtItemSkeleton1417CD4E0 at
+1417CD52D/CD6B6; raw+4 is a distinct skeleton ID consumed by Process at
+141ABA50A. This distinction already existed in the registry's loader-field
+shift analysis (2026-09-17 section); the new observer had failed to apply it.
+The wrong equality would reject both actual candidate assets, without needing
+a game launch to discover the error. Corrected Identity.art_database_id and
+raw_skeleton_id and reject crossed/old-equality pairs:
+
+| Pinned entry | Loader/raw offsets | Art database / raw skeleton |
+| --- | --- | --- |
+| npc-normal-base.pak | 5EAE0 / 5EB80 | 2628A5DC / BD7EEE2F |
+| npc-medium-base.pak | 18E0 / 1980 | F181B564 / FC65A17A |
+
+Existing PagedPak fixups resolve loader+20 to the exact raw object; runtime
+Art fields are loader fields shifted by+20. The extended matrix audit verifies
+this link after exact entry size/SHA checks (normal659136 bytes,
+a72079fd5f3b691ea790f153808c8b3a42079be355668220048028a518f1b5a8;
+medium258720 bytes,d8b5452fc413d977c13c0f33729155d09ff24b8fcfb69052856f95c78271d13a).
+Both have Art+30 DWORD and raw+16 BYTE group counts6. Their equality is pinned
+asset evidence, not a general native guarantee. Art+30 sizes32-byte generated
+command records at141A90EA4/EBA/141A914BB; raw+16 bounds group descriptors at
+141686D3A/141AB9A80. Corrected the existing141A90E70 comment: scratch size
+is u16(raw+1A), NOT Art+1A (raw loaded through Art+40 at141A90F72/141A910F6).
+These are static resource identities, not proof either asset is active in a
+particular living Pirate invocation. Both exact real-entry audits PASS.
+
+**STATIC command/provenance correction.** Process141A92E78 receives generated
+commands from segment-record+0 at141A92E6C and DWORD word count from+C at
+141A92E71, not the authored joint program at raw+5340. Actual cmd16 selection
+14217B630 reads Segment+28 raw, Segment+38 group, raw+34 directory, group+6
+first index/group+F count and directory+8*index+4 program-relative offset.
+Directory u16+2 supplies the offline capture extent, NOT the native executor's
+loop bound. Cmd24 export and matching byte hash cannot prove cmd16/operator
+execution. Program execution remains explicitly false/unverified; no command
+copy or guessed commands==program assertion was added.
+
+The collector now checks Process context+0==Art at entry/return and export,
+Segment+28==raw, Segment+00==callback WorkBuffer and Segment+08==context.
+Independent context producer141A92D70/E2B/E34 and consumer141AB9852/55 agree.
+The88-byte WorkBuffer allocated141AB98D3/stored141AB9A53 and passed in RCX
+at141ABAC63 is NOT Segment+58 matrix workspace. The fixture now uses distinct
+addresses for generated commands, WorkBuffer, matrix workspace and authored
+program; mutation tests reject link changes and Process-return argument drift.
+
+The byte-copy adapter and fixed collector preserve current owner/control/Fg/
+Art/raw/cache/body reciprocity, paired initial metadata and subsequent current
+body-count/joint/binding checks. Only one actor and six attempted samples can
+own buffers. Program bytes,90 matrix rows, root copies, selected Locators and
+converted body-store inputs/results have explicit capture points. No game
+getter, write, transform math or fingerprint calculation is performed here.
+Unknown fingerprints remain unverified. Store return141CF0F3B with ancestor
+141CF5872 is still NOT dirty-queue/Havok commit proof. Validbits copied after
+a body store do not establish pre-getter validity or numerical pose agreement.
+
+Only outer Exit releases a sample; it never dereferences game pointers.
+The exported complete(sample) predicate additionally requires a normal Exit,
+no final collector failure and the completed policy trace. This prevents a
+late clock, budget or wrong-job failure from inheriting earlier policy closure.
+Worker reads require stop plus quiescent acquire. Forced DeleteFiber need not
+unwind or emit Exit: timeout must stop without publishing/reusing that lease.
+No timeout worker has been connected yet.
+
+**STATIC Windows installer and explicit remaining limits.** The installer
+preflights exact stock instructions/targets/global, pins all wrapper modules,
+prepares permanent RX relays, suspends an enumerated bounded thread set and
+excludes RIP from each entire16-byte patch word. A second census rejects new
+observed threads. Code uses16-byte compare/exchange; callback publication uses
+aligned8-byte compare/exchange. Restore/rollback only replace exact owned
+words, never foreign mutations. Protection and instruction-cache errors are
+checked; unrecoverable failures retain suspension ownership for explicit
+same-thread recovery. No destructor unhooks, resumes, frees or unloads.
+
+Offline fault review corrected two suspension-recovery defects: an untouched
+foreign page protection must not strand threads after pre-publication refusal;
+after a partial ResumeThread failure, recovery must reacquire already-resumed
+threads without double-suspending retained ones. Page ownership is marked only
+after successful VirtualProtect. Tests cover exact rollback, foreign code/
+callback preservation, protection/cache failures and original suspend counts.
+
+**REJECTED admission inference, not a rejected native animation path:** two
+NtGetNextThread censuses are not a kernel-wide thread-creation fence. A newly
+created/remote thread can still evade the checked set. Result explicitly
+reports thread_creation_fenced=false, and Installed is NOT runtime GO. Also
+the collector's1ms clock covers only collector callback intervals, excluding
+native execution but also excluding wrapper/FLS/bridge bookkeeping. It is NOT
+the complete observer cost. First-touch FlsSetValue may allocate fiber state;
+no allocation-free wrapper claim is made. Runtime admission and complete-budget
+constants remain false. These are prerequisites to close, not permissions to
+launch and measure an unsafe implementation.
+
+Queued callbacks can outlive restoration of1466D0C58; no drain/unload proof
+exists. Configuration, FLS, relay pages and wrappers stay process-lifetime.
+If failure retains suspended threads, the coordinator cannot use ordinary
+logging/heap work that might acquire one of their locks. That coordinator,
+publication boundary and bounded recovery policy still need implementation.
+
+The separate tll_enemy_jointblend_arm CLI signals ONLY an existing event after
+PID, process creation time and exact absolute executable checks. Its namespace
+is disjoint from all three P99 protocols; a signal is NOT an ARMED/admission
+acknowledgement. No event server or automatic game-side startup exists yet.
+tll_enemy_jointblend_core is an explicit EXCLUDE_FROM_ALL static target built
+without the installer's test-fault macro. It is not an injectable DLL and has
+no link from tll_coop_runtime. Existing P99 exams remain OFF; the main DLL SHA256
+remains3ACCA2A17891BA1D5CA14EC39CC0024827556BE71B5DE0E22E9C227063BBD710.
+
+Verification: Release /W4 /WX core and new fixture builds PASS; capture
+12/12 groups, collector14/14, wrappers2874 checks/0 failures and Windows
+installer10/10 groups PASS. Focused CTest14/14 includes enemy policies, native
+frame bridges and all four arm protocols; the updated observation policy has
+17/17 groups. Matrix-audit Python mutation tests20/20 PASS and both actual
+entry audits PASS. Independent static/code review found the ID confusion above;
+review of the correction has no remaining scoped blockers. These synthetic
+checks do not validate game performance, lifetime,
+peer matching, numerical collider freshness or actual enemy synchronization.
+
+**HYPOTHESIS / next step.** Close complete wrapper-cost accounting and a
+defensible concurrent publication boundary before enabling an exam DLL. Add
+bounded worker-only output and missing-Exit timeout without recycling active
+buffers. Preserve the prior discriminating reset/export/body-store prediction;
+old queued, skipped, nested and incomplete traces must reject. Full authored
+peer identity/epochs and native pose writing remain separate, unadmitted work.
+
+Six existing IDA comments now preserve the corrected identity/count/command
+dataflow. MCP was stopped before the sole ida/tll.i64 write. Local
+reports/enemy_jointblend_capture_identity_labels_20261018.txt confirms2036
+functions/86 data names/3 function types and save_database returned True.
+Restarted MCP resolves all six existing function names, reads back the new
+database-ID and raw-scratch comments, and confirms the allocator caller xrefs
+from141A924AB/141A92C1B. Preexisting untracked tmp/ remains untouched.

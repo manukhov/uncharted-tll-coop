@@ -21,6 +21,7 @@ import struct
 from native_anim_pose_audit import DEFAULT_GAME  # Constant only; never MappedImage.
 from p99_group_program_audit import operators, propagation_records, writes
 from psarc_asset_audit import Psarc
+from generate_p99_chloe_source_rows import PagedPak
 
 
 DEFAULT_ARCHIVE = DEFAULT_GAME / "Uncharted4_data/build/pc/thelostlegacy/actor77.psarc"
@@ -38,13 +39,15 @@ class Candidate:
     skeleton_id: int
     size: int
     sha256: str
+    loader: int
+    database_id: int
 
 
 CANDIDATES = (
     Candidate("npc-normal-base.pak", 0x5EB80, 0xBD7EEE2F, 659136,
-              "a72079fd5f3b691ea790f153808c8b3a42079be355668220048028a518f1b5a8"),
+              "a72079fd5f3b691ea790f153808c8b3a42079be355668220048028a518f1b5a8", 0x5EAE0, 0x2628A5DC),
     Candidate("npc-medium-base.pak", 0x1980, 0xFC65A17A, 258720,
-              "d8b5452fc413d977c13c0f33729155d09ff24b8fcfb69052856f95c78271d13a"),
+              "d8b5452fc413d977c13c0f33729155d09ff24b8fcfb69052856f95c78271d13a", 0x18E0, 0xF181B564),
 )
 
 
@@ -154,12 +157,34 @@ def audit_program(program: bytes, workspace_count: int, parameter_count: int,
     }
 
 
+def audit_candidate_identity(data: bytes, candidate: Candidate, resolved_raw: int) -> dict:
+    """Check authored loader/raw identities after hash and PAK fixup validation.
+
+    Runtime Art fields are loader fields shifted by +20. Art+24 is a database
+    key, not raw+4; equal IDs in a synthetic fixture would hide a real rejection.
+    """
+    loader = extent(data, candidate.loader, 0x28, "skeleton loader")
+    header = extent(data, candidate.raw, 0x40, "raw skeleton header")
+    if struct.unpack_from("<II", loader) != (0xE, candidate.database_id):
+        raise ValueError("skeleton loader type/database ID changed")
+    if resolved_raw != candidate.raw:
+        raise ValueError("skeleton loader fixup does not target the candidate raw skeleton")
+    if struct.unpack_from("<II", header, 4) != (candidate.skeleton_id, candidate.skeleton_id):
+        raise ValueError("raw skeleton IDs changed")
+    groups = struct.unpack_from("<I", loader, 0x10)[0]
+    if (groups, header[0x16]) != (6, 6):
+        raise ValueError("candidate Art/raw group counts changed")
+    return {"loader_offset": candidate.loader, "art_database_id": f"{candidate.database_id:08X}",
+            "raw_skeleton_offset": candidate.raw, "skeleton_id": f"{candidate.skeleton_id:08X}",
+            "art_group_count": groups, "raw_group_count": header[0x16]}
+
+
 def audit_candidate(data: bytes, candidate: Candidate) -> dict:
     if len(data) != candidate.size or digest(data) != candidate.sha256:
         raise ValueError(f"{candidate.entry}: size/SHA-256 differs from pinned candidate")
+    pak = PagedPak(data)
+    identity = audit_candidate_identity(data, candidate, pak.resolve_pointer(candidate.loader + 0x20)[2])
     header = extent(data, candidate.raw, 0x40, "raw skeleton header")
-    if struct.unpack_from("<II", header, 4) != (candidate.skeleton_id, candidate.skeleton_id):
-        raise ValueError("raw skeleton IDs changed")
     group_relative = struct.unpack_from("<I", header, 0x2C)[0]
     directory_relative = struct.unpack_from("<I", header, 0x34)[0]
     if group_relative != 0x40:
@@ -177,7 +202,7 @@ def audit_candidate(data: bytes, candidate: Candidate) -> dict:
     result = audit_program(program, count, parameters)
     return {
         "entry": candidate.entry, "bytes": len(data), "sha256": digest(data),
-        "raw_skeleton_offset": candidate.raw, "skeleton_id": f"{candidate.skeleton_id:08X}",
+        **identity,
         "candidate_only": True, "group": 0, "first": first, "program_index": program_index,
         "program_count": group[0x0F], "program_relative": relative,
         "declared_program_bytes_u16_2": declared_size,

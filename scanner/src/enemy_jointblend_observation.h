@@ -13,6 +13,7 @@ namespace coop::enemy_jointblend_observation {
 inline constexpr std::size_t kMaxSamples = 6, kMaxBodies = 16, kMaxSelectedJoints = 16;
 inline constexpr std::uintptr_t kPirateRva = 0x294B9D0;
 inline constexpr std::uint32_t kNormalSkeleton = 0xBD7EEE2F, kMediumSkeleton = 0xFC65A17A;
+inline constexpr std::uint32_t kNormalDatabase = 0x2628A5DC, kMediumDatabase = 0xF181B564;
 inline constexpr std::uint32_t kExportId = 0x248B1AAE;
 inline constexpr std::uintptr_t kBodyStoreRva = 0x1CF3790;
 inline constexpr std::uintptr_t kBodyStoreCallRva = 0x1CF0F36, kBodyStoreReturnRva = 0x1CF0F3B;
@@ -42,6 +43,7 @@ enum class Stage : std::uint8_t {
     empty, normal_entry, reset_returned, process_entered, export_entered,
     export_returned, process_returned, primary_entered, primary_returned, closed
 };
+// Authored-byte identity only, never evidence of cmd16/operator execution.
 enum class ProgramMatch : std::uint8_t { identity_unverified, normal_candidate, medium_candidate };
 enum class Comparison : std::uint8_t { not_performed, reported_equal, reported_different };
 enum class CapturePoint : std::uint8_t { none, pre_consumer, post_store };
@@ -55,7 +57,8 @@ struct Identity {
     // Not the Process bridge's separate original slot or a C++ wrapper/game PC.
     std::uintptr_t module{}, job{}, native_return_slot{}, owner{}, vtable{};
     std::uintptr_t record{}, record_owner{}, owner_record{}, fg{}, owner_fg{}, fg_record{};
-    std::uint32_t id{}, owner_id{}, fg_id{}, skeleton_id{}, raw_skeleton_id{};
+    // Art+24 is a database key; raw+4 is a different skeleton identity.
+    std::uint32_t id{}, owner_id{}, fg_id{}, art_database_id{}, raw_skeleton_id{};
     std::uintptr_t job_control{}, fg_control{}, owner_control{}, control_fg{};
     std::uintptr_t art{}, active_art18{}, active_art1a0{}, cache_art{};
     std::uintptr_t raw{}, art_raw{}, cache_raw{}, cache{}, locator_bank{}, matrix_bank{};
@@ -143,14 +146,18 @@ constexpr bool fits_span(std::uintptr_t base, std::uintptr_t bytes) {
     // Require a representable exclusive end as well as every addressed byte.
     return base && bytes && bytes <= std::numeric_limits<std::uintptr_t>::max() - base;
 }
+inline bool candidate_skeleton_pair(const Identity& i) {
+    return (i.art_database_id == kNormalDatabase && i.raw_skeleton_id == kNormalSkeleton) ||
+        (i.art_database_id == kMediumDatabase && i.raw_skeleton_id == kMediumSkeleton);
+}
 inline ProgramMatch classify_program(const Metadata& m) {
     const auto& i = m.identity;
-    if (!m.fingerprint_present || i.group_table_relative != 0x40 || i.first || i.workspace_count != 90 || i.parameter_count != 55 ||
+    if (!candidate_skeleton_pair(i) || !m.fingerprint_present || i.group_table_relative != 0x40 || i.first || i.workspace_count != 90 || i.parameter_count != 55 ||
         i.program_count != 1 || i.program_index || i.program_relative != 0x5340 || i.program_bytes != 0x40B0)
         return ProgramMatch::identity_unverified;
-    if (i.skeleton_id == kNormalSkeleton && m.program_sha256 == kNormalProgramSha256)
+    if (i.raw_skeleton_id == kNormalSkeleton && m.program_sha256 == kNormalProgramSha256)
         return ProgramMatch::normal_candidate;
-    if (i.skeleton_id == kMediumSkeleton && m.program_sha256 == kMediumProgramSha256)
+    if (i.raw_skeleton_id == kMediumSkeleton && m.program_sha256 == kMediumProgramSha256)
         return ProgramMatch::medium_candidate;
     return ProgramMatch::identity_unverified;
 }
@@ -163,8 +170,7 @@ inline Reason admit(const Metadata& m) {
     if (!i.art || i.active_art18 != i.art || i.active_art1a0 != i.art || i.cache_art != i.art ||
         !i.raw || i.art_raw != i.raw || i.cache_raw != i.raw || !points_at(i.fg, 0x30, i.cache) ||
         !i.matrix_bank || !i.locator_bank) return Reason::cache_links;
-    if ((i.skeleton_id != kNormalSkeleton && i.skeleton_id != kMediumSkeleton) ||
-        i.raw_skeleton_id != i.skeleton_id) return Reason::unknown_skeleton;
+    if (!candidate_skeleton_pair(i)) return Reason::unknown_skeleton;
     if (i.first || i.workspace_count != 90 || i.parameter_count != 55 ||
         !i.group_table_relative || !points_at(i.raw, i.group_table_relative, i.group_descriptor)) return Reason::group_range;
     // This observer deliberately admits only the two audited group0 layouts

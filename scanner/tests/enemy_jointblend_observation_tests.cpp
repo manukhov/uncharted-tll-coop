@@ -19,7 +19,7 @@ obs::Metadata metadata() {
     i.record = 0x21000; i.record_owner = i.owner; i.owner_record = i.record;
     i.fg = 0x30000; i.owner_fg = i.fg; i.fg_record = i.record;
     i.id = i.owner_id = i.fg_id = 37;
-    i.skeleton_id = i.raw_skeleton_id = obs::kNormalSkeleton;
+    i.art_database_id = obs::kNormalDatabase; i.raw_skeleton_id = obs::kNormalSkeleton;
     i.job_control = i.fg_control = i.owner_control = 0x32000; i.control_fg = i.fg;
     i.art = i.active_art18 = i.active_art1a0 = i.cache_art = 0x40000;
     i.raw = i.art_raw = i.cache_raw = 0x50000; i.cache = i.fg + 0x30;
@@ -117,13 +117,16 @@ bool group_range_and_candidate_identity() {
         [](auto& x) { x.first = 1; }, [](auto& x) { x.workspace_count = 55; },
         [](auto& x) { x.parameter_count = 90; }, [](auto& x) { ++x.group_descriptor; },
         [](auto& x) { x.group_table_relative = 0; },
-        [](auto& x) { x.skeleton_id = x.raw_skeleton_id = 0xC39CA709; },
+        [](auto& x) { x.art_database_id = x.raw_skeleton_id = 0xC39CA709; },
+        [](auto& x) { x.art_database_id = obs::kNormalSkeleton; },
+        [](auto& x) { x.art_database_id = obs::kMediumDatabase; },
+        [](auto& x) { x.raw_skeleton_id = obs::kNormalDatabase; },
         [](auto& x) { ++x.raw_skeleton_id; }, [](auto& x) { x.program_directory = 0; },
         [](auto& x) { x.program_count = 0; }, [](auto& x) { x.program_count = 2; },
         [](auto& x) { x.program_index = 1; x.program_count = 2; }, [](auto& x) { ++x.program; },
         [](auto& x) { x.program_bytes = 0; }, [](auto& x) { x.program_bytes = 0x100001; }
     }) { auto m = metadata(); change(m.identity); CHECK(obs::admit(m) != obs::Reason::none); }
-    auto m = metadata(); m.identity.skeleton_id = m.identity.raw_skeleton_id = obs::kMediumSkeleton;
+    auto m = metadata(); m.identity.art_database_id = obs::kMediumDatabase; m.identity.raw_skeleton_id = obs::kMediumSkeleton;
     CHECK(obs::admit(m) == obs::Reason::none);
     CHECK(obs::classify_program(m) == obs::ProgramMatch::identity_unverified);
     m.program_sha256 = obs::kMediumProgramSha256;

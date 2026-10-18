@@ -23,6 +23,18 @@ add_executable(tll_p99_wrist_arm src/p99_observation_arm.cpp)
 target_compile_definitions(tll_p99_wrist_arm PRIVATE TLL_P99_WRIST_ARM=1)
 add_executable(tll_p99_consumed_arm src/p99_observation_arm.cpp)
 target_compile_definitions(tll_p99_consumed_arm PRIVATE TLL_P99_CONSUMED_ARM=1)
+add_executable(tll_enemy_jointblend_arm src/p99_observation_arm.cpp)
+target_compile_definitions(tll_enemy_jointblend_arm PRIVATE TLL_ENEMY_JOINTBLEND_ARM=1)
+# Compile the real observer components without fault-injection definitions.
+# No DLL/startup, no automatic install, and no link from the campaign runtime.
+add_library(tll_enemy_jointblend_core STATIC EXCLUDE_FROM_ALL
+    src/enemy_jointblend_hooks.cpp src/enemy_jointblend_install_windows.cpp
+    $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
+    $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
+target_include_directories(tll_enemy_jointblend_core PUBLIC src)
+target_compile_features(tll_enemy_jointblend_core PUBLIC cxx_std_20)
+target_compile_definitions(tll_enemy_jointblend_core PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(tll_enemy_jointblend_core PRIVATE /W4 /WX /permissive- /EHsc)
 # Read-only external transport, built without private fixture seams. Not linked
 # into a game-side installer and never opens/attaches to a process by itself.
 add_library(tll_p99_wrist_remote_read STATIC src/nadine_p99_wrist_remote_read.cpp)
@@ -83,6 +95,7 @@ foreach(
     tll_p99_observation_arm
     tll_p99_wrist_arm
     tll_p99_consumed_arm
+    tll_enemy_jointblend_arm
     tll_coop_runtime
 )
     target_compile_features(${target} PRIVATE cxx_std_20)
@@ -149,6 +162,23 @@ set_target_properties(tll_p99_provider_preparation PROPERTIES PREFIX "")
 include(CTest)
 set(TLL_P99_NATIVE_INVENTORY_DIR "" CACHE PATH "Explicit generated TEST-ONLY native inventory header directory")
 if(BUILD_TESTING)
+    add_executable(tll_enemy_jointblend_capture_tests tests/enemy_jointblend_capture_tests.cpp)
+    add_executable(tll_enemy_jointblend_collector_tests tests/enemy_jointblend_collector_tests.cpp)
+    add_executable(tll_enemy_jointblend_hooks_tests tests/enemy_jointblend_hooks_tests.cpp
+        src/enemy_jointblend_hooks.cpp $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
+        $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
+    add_executable(tll_enemy_jointblend_install_windows_tests tests/enemy_jointblend_install_windows_tests.cpp
+        src/enemy_jointblend_install_windows.cpp)
+    target_compile_definitions(tll_enemy_jointblend_install_windows_tests PRIVATE TLL_ENEMY_INSTALL_TESTING=1)
+    foreach(enemy_part capture collector hooks install_windows)
+        target_include_directories(tll_enemy_jointblend_${enemy_part}_tests PRIVATE src)
+        target_compile_features(tll_enemy_jointblend_${enemy_part}_tests PRIVATE cxx_std_20)
+        target_compile_definitions(tll_enemy_jointblend_${enemy_part}_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+        target_compile_options(tll_enemy_jointblend_${enemy_part}_tests PRIVATE /W4 /WX /permissive- /EHsc)
+        add_test(NAME enemy_jointblend_${enemy_part} COMMAND tll_enemy_jointblend_${enemy_part}_tests)
+        set_tests_properties(enemy_jointblend_${enemy_part} PROPERTIES TIMEOUT 30)
+    endforeach()
+    add_test(NAME enemy_jointblend_arm COMMAND tll_enemy_jointblend_arm --self-test)
     # Value-only enemy observer contracts. Not linked into the runtime DLL;
     # passing these tests does not install hooks or admit a game-side writer.
     foreach(enemy_contract jointblend_observation jointblend_native_contract)

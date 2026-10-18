@@ -10,7 +10,7 @@ Full campaign co-op between two game copies. Current user-directed order:
   boundary; keep enemy damage/death/HP writes and AI pause OFF.
 - Complete combat authority and remaining player/appearance work separately.
 
-## P0 CURRENT: Enemy Synchronization (2026-10-16)
+## P0 CURRENT: Enemy Synchronization (2026-10-18)
 
 User explicitly moved priority from appearance to enemies between copies.
 Do not simply enable old g_enemy_sync: it performs raw world/local/HP writes;
@@ -97,17 +97,35 @@ six callback args and seven Process args; primary takes ONLY RCX=composite.
 The concrete store returns141CF0F3B with original int EAX; its refresh ancestor
 return is141CF5872 at independent store-entry-return-slot+0xB0. This witnesses
 a body pose store, NOT Havok queueing or numerical joint/body agreement.
-NEXT: wire these separate enemy contracts to native FLS/MASM wrappers and a
-transactional installer, default OFF. Independently published original Process
-return-slot must equal cmd24 Segment+1628. Snapshot selected cache data with
-explicit capture points: post-store bits cannot prove pre-getter cache validity.
-Add PID/creation late arm and fixed owned capture storage/worker publication;
-six attempted samples of one actor, cumulative1ms observer work per invocation.
+2026-10-18 implementation: isolated enemy FLS/MASM wrappers, bounded byte-copy
+adapter, fixed six-sample collector, Windows transactional installer and separate
+PID/creation-bound arm CLI now build and pass synthetic tests. The core is an
+explicit static library, NOT linked into coop_runtime; no exam DLL/startup or
+worker publication exists yet. The original Process slot is independently
+captured and checked against cmd24 Segment+1628. Captures distinguish reset,
+export, pre-consumer and post-store data. Outer Exit reads no game pointers;
+late Exit failures cannot become successful samples. Stop cannot expose or
+recycle an abandoned fiber's still-active sample.
+STATIC correction: Art+24 is DATABASE ID, not raw+4 skeleton ID. Exact pairs
+are normal2628A5DC/BD7EEE2F and mediumF181B564/FC65A17A. Old equality rejected
+both real assets; policy/reader/fixtures and hash-pinned PAK fixup audit fixed.
+Process arguments are generated command pointer/word count, not raw+5340
+program. Context+0 Art and Segment+00 WorkBuffer/+08 context/+28 raw checks
+are now explicit. WorkBuffer is distinct from Segment+58 matrix workspace.
+Captured authored program identity and cmd24 export do NOT prove cmd16 ran;
+keep execution unverified until a separate native execution witness closes it.
+NEXT: close installer publication safety before runtime wiring: two thread
+censuses plus RIP exclusion are NOT a thread-creation fence. Test recovery
+without logging/heap work while suspended threads may retain locks. Measure
+the full wrapper/FLS/bridge overhead, not only collector callbacks; current1ms
+accounting excludes wrapper overhead and first-touch FLS may allocate. Both
+runtime admission constants remain false. Then add bounded worker timeout,
+quiescent-only owned output and explicit exam startup; no auto retry/unload.
 No P99 Control/selector/8-group policy; do not call install_p99_group_package(true).
 Exclude custom/skip/null-control/reentry and initial cached-prepass. Old queued
 callbacks may bypass the observer; later queued wrappers can survive global
 restore, so no DLL unload/free without a separately proven drain fence. No
-runtime observer, unchanged RPM census, game launch or pose writer yet.
+enabled runtime observer, unchanged RPM census, game launch or pose writer yet.
 Perform and JointBlend are separate calls; do not stitch post+408 with pointer/time.
 No writer exam is admitted. Generic1416860A0 converts world to local but
 does not invalidate the cache; missing parent keys retain cached parent,

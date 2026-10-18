@@ -1,0 +1,422 @@
+#include "enemy_jointblend_collector.h"
+
+#include <algorithm>
+#include <cstring>
+#include <iostream>
+#include <map>
+#include <vector>
+
+namespace {
+namespace col = coop::enemy_jointblend_collector;
+namespace cap = coop::enemy_jointblend_capture;
+namespace obs = coop::enemy_jointblend_observation;
+namespace hook = coop::enemy_jointblend_hooks;
+using A = std::uintptr_t;
+#define CHECK(x) do { if (!(x)) { std::cerr << __func__ << ':' << __LINE__ << ": " #x "\n"; return false; } } while (false)
+
+struct Reader {
+    std::map<A, std::vector<std::byte>> memory;
+    std::size_t calls{}, forbidden_calls{};
+    bool forbidden{};
+    void block(A at, std::size_t bytes) { memory[at].resize(bytes); }
+    template<class T> void put(A at, T value) {
+        auto p = memory.upper_bound(at);
+        if (p == memory.begin()) throw "missing fixture block";
+        --p;
+        const auto offset = at - p->first;
+        if (offset > p->second.size() || sizeof(T) > p->second.size() - offset) throw "fixture overflow";
+        std::memcpy(p->second.data() + offset, &value, sizeof(value));
+    }
+    bool copy(A at, void* destination, std::size_t bytes) noexcept {
+        ++calls;
+        if (forbidden) { ++forbidden_calls; return false; }
+        auto p = memory.upper_bound(at);
+        if (p == memory.begin()) return false;
+        --p;
+        const auto offset = at - p->first;
+        if (offset > p->second.size() || bytes > p->second.size() - offset) return false;
+        std::memcpy(destination, p->second.data() + offset, bytes);
+        return true;
+    }
+};
+struct Clock {
+    std::uint64_t time = 1000000, step = 1;
+    static std::uint64_t now(void* p) noexcept {
+        auto& clock = *static_cast<Clock*>(p);
+        const auto value = clock.time;
+        clock.time += clock.step;
+        return value;
+    }
+};
+struct Fixture {
+    static constexpr A module = 0x140000000ULL, job = 0x10000, owner = 0x20000, record = 0x21000;
+    static constexpr A fg = 0x30000, control = 0x32000, art = 0x40000, raw = 0x50000;
+    static constexpr A composite = 0x60000, bodies = 0x61000, matrices = 0x70000, locators = 0x80000;
+    static constexpr A workspace = 0x90000, payload = 0x94000, native = 0xA0000, input = 0xB0000;
+    static constexpr A work_buffer = 0x98000;
+    static constexpr A commands = 0xC0000;
+    static constexpr A jointblend_slot = 0x110008, process_context = jointblend_slot - (0x5F8 - 0x110);
+    static constexpr A segment = 0x120000, process_slot = segment + 0x1628, store_slot = 0x130008;
+    Reader reader;
+    Clock clock;
+    col::Collector<Reader> collector{reader, {module, 0x7000000}, {&clock, Clock::now, 1000000}};
+    std::uint64_t nonce = 1;
+    Fixture() {
+        reader.block(module + cap::kForceMode2Rva, 3);
+        reader.block(job, 0x18); reader.block(owner, 0x240); reader.block(record, 16);
+        reader.block(fg, 0x2A8); reader.block(control, 0x28); reader.block(art, 0x48);
+        reader.block(raw, 0x9400); reader.block(composite, 0x128); reader.block(bodies, 0x110 * 3);
+        reader.block(matrices, 64 * 90); reader.block(locators, 32 * 90); reader.block(payload, 8);
+        reader.block(segment, 0x60); reader.block(process_context, 8);
+        reader.block(input, 32); reader.block(store_slot + 0xB0, 8);
+        reader.put(process_context, art); reader.put(segment + 0x28, raw);
+        reader.put(segment, work_buffer); reader.put(segment + 8, process_context);
+        reader.put(job, control); reader.put(job + 8, fg); reader.put(owner, module + obs::kPirateRva);
+        reader.put(record + 8, owner); reader.put(owner + 0xA8, record); reader.put(owner + 0xBC, std::uint32_t{37});
+        reader.put(owner + 0x1A0, control); reader.put(owner + 0x1A8, fg); reader.put(owner + 0x238, composite);
+        reader.put(control + 0x20, fg); reader.put(fg, std::uint32_t{0x20}); reader.put(fg + 6, std::uint8_t{2});
+        reader.put(fg + 8, std::uint8_t{1}); reader.put(fg + 0x10, control); reader.put(fg + 0x18, art);
+        reader.put(fg + 0x1A0, art); reader.put(fg + 0x1A8, record); reader.put(fg + 0x1B0, std::uint32_t{37});
+        reader.put(fg + 0xF0, art); reader.put(fg + 0xF8, raw); reader.put(fg + 0x100, A{0x33000});
+        reader.put(fg + 0x108, locators); reader.put(fg + 0x110, matrices);
+        reader.put(art + 0x24, obs::kNormalDatabase); reader.put(art + 0x30, std::uint32_t{6}); reader.put(art + 0x40, raw);
+        reader.put(raw + 4, obs::kNormalSkeleton); reader.put(raw + 0x16, std::uint8_t{6});
+        reader.put(raw + 0x2C, std::uint32_t{0x40}); reader.put(raw + 0x34, std::uint32_t{0x140});
+        reader.put(raw + 0x4F, std::uint8_t{1}); reader.put(raw + 0x50, std::uint16_t{90}); reader.put(raw + 0x52, std::uint16_t{55});
+        reader.put(raw + 0x142, std::uint16_t{0x40B0}); reader.put(raw + 0x144, std::uint32_t{0x5340});
+        reader.put(composite + 8, owner); reader.put(composite + 0x10, std::uint32_t{3}); reader.put(composite + 0x48, bodies);
+        for (std::size_t b = 0; b < 3; ++b) {
+            const A body = bodies + 0x110 * b, n = native + 0x200 * b;
+            reader.block(n, 0x161); reader.put(n + 0x160, std::uint8_t{4});
+            reader.put(body + 0x40, n); reader.put(body + 0x68, owner);
+            reader.put(body + 0x50, static_cast<std::uint32_t>(100 + b));
+            reader.put(body + 0x54, static_cast<std::uint16_t>(10 + b));
+            reader.put(body + 0xA0, std::uint32_t{2u << 13});
+            reader.put(body + 0xC4, static_cast<std::int16_t>(b + 2));
+            reader.put(body + 0xC6, static_cast<std::uint8_t>(b ? 3u : 1u));
+        }
+        cap::Matrix root{};
+        for (std::size_t i = 0; i < root.size(); ++i) root[i] = static_cast<std::uint32_t>(0x3F800000 + i);
+        reader.put(fg + 0x1C0, root); reader.put(fg + 0x30, root);
+        reader.put(fg + 0x70, std::uint64_t{(1u << 3) | (1u << 4)});
+        reader.put(segment + 0x38, raw + 0x40); reader.put(segment + 0x58, workspace);
+        reader.put(payload, matrices); reader.put(store_slot + 0xB0, module + 0x1CF5872);
+        reader.put(input, col::Words8{1, 2, 3, 4, 5, 6, 7, 8});
+    }
+    hook::Event event(hook::Kind kind, unsigned body = 0) const {
+        hook::Event e{};
+        e.kind = kind; e.invocation_nonce = nonce; e.job = job;
+        e.original_jointblend_return_slot = jointblend_slot;
+        e.wrapper_entry_return_slot = 0x140008;
+        switch (kind) {
+        case hook::Kind::Entry:
+        case hook::Kind::Exit:
+            e.original_jointblend_return_slot = 0;
+            e.wrapper_entry_return_pc = module + 0x17815BE;
+            e.arguments[0] = job;
+            break;
+        case hook::Kind::ResetEnter:
+        case hook::Kind::ResetReturn:
+            e.wrapper_entry_return_pc = module + 0x1A92BAA;
+            e.arguments[0] = fg + 0x30; e.arguments[1] = fg + 0x1C0; e.result = matrices;
+            break;
+        case hook::Kind::ProcessEnter:
+        case hook::Kind::ProcessReturn:
+            e.site = hook::ProcessSite::first;
+            e.wrapper_entry_return_pc = module + 0x1A92E7D;
+            e.arguments = {commands, 4, process_context, 0, 0, 0, 0};
+            break;
+        case hook::Kind::PostposeEnter:
+        case hook::Kind::PostposeReturn:
+            e.site = hook::ProcessSite::first;
+            e.original_process_return_slot = process_slot;
+            e.wrapper_entry_return_pc = module + 0x1ABAC69;
+            e.arguments = {work_buffer, segment, process_context, obs::kExportId, payload, 0, 0};
+            break;
+        case hook::Kind::PrimaryEnter:
+        case hook::Kind::PrimaryReturn:
+            e.wrapper_entry_return_pc = module + 0x1BBE11E; e.arguments[0] = composite;
+            break;
+        case hook::Kind::StoreEnter:
+        case hook::Kind::StoreReturn:
+            e.wrapper_entry_return_pc = module + 0x1CF0F3B; e.wrapper_entry_return_slot = store_slot;
+            e.arguments[0] = bodies + 0x110 * body; e.arguments[1] = input;
+            e.result = 0xFFFFFFFB;
+            break;
+        default: break;
+        }
+        e.normal_return = kind == hook::Kind::ResetReturn || kind == hook::Kind::ProcessReturn ||
+            kind == hook::Kind::PostposeReturn || kind == hook::Kind::PrimaryReturn ||
+            kind == hook::Kind::StoreReturn || kind == hook::Kind::Exit;
+        return e;
+    }
+    void send(hook::Kind kind, unsigned body = 0) { collector.emit(event(kind, body)); }
+    void through_process() {
+        send(hook::Kind::Entry); send(hook::Kind::ResetEnter); send(hook::Kind::ResetReturn);
+        send(hook::Kind::ProcessEnter); send(hook::Kind::PostposeEnter); send(hook::Kind::PostposeReturn);
+        send(hook::Kind::ProcessReturn);
+    }
+    void body_events(unsigned body) {
+        send(hook::Kind::StoreEnter, body); send(hook::Kind::StoreReturn, body);
+    }
+    void primary_events() {
+        send(hook::Kind::PrimaryEnter);
+        for (unsigned body = 0; body < 3; ++body) body_events(body);
+        send(hook::Kind::PrimaryReturn);
+    }
+    void full() { through_process(); primary_events(); send(hook::Kind::Exit); }
+    void next() { ++nonce; clock.time += 300000; }
+    const col::Sample& first() const { return collector.samples()[0]; }
+};
+
+bool complete_chain_is_event_only_and_exit_reads_nothing() {
+    Fixture f; CHECK(f.collector.arm()); f.through_process(); f.primary_events();
+    CHECK(!f.collector.quiescent());
+    CHECK(!col::complete(f.first()));
+    const auto reads = f.reader.calls;
+    f.reader.forbidden = true; f.send(hook::Kind::Exit); f.collector.stop();
+    CHECK(f.collector.quiescent() && f.collector.count() == 1);
+    CHECK(f.reader.calls == reads && f.reader.forbidden_calls == 0);
+    const auto& s = f.first();
+    CHECK(s.published && s.normal_exit && s.failure == col::Failure::none);
+    CHECK(col::complete(s));
+    CHECK(obs::completed_witness(s.policy) && s.policy.stored_mask == 7);
+    CHECK(s.roots.complete && s.matrices.complete && s.before_primary.complete && s.program.complete);
+    CHECK(s.before_primary.timing == cap::CaptureTiming::pre_consumer);
+    CHECK(s.policy.program_match == obs::ProgramMatch::identity_unverified);
+    CHECK(!col::kProgramExecutionWitnessAvailable);
+    CHECK(s.command_list == f.commands && s.command_list != s.program.identity.program && s.command_words == 4);
+    CHECK(!obs::selected_locator_comparisons_reported_equal(s.policy));
+    CHECK(s.policy.locators[1] == obs::LocatorClass::valid_unverified);
+    CHECK(s.policy.store_return_eax[0] == 0xFFFFFFFB && s.bodies[0].input[0] == 1);
+    CHECK(s.bodies[0].entered && s.bodies[0].returned && s.bodies[2].returned);
+    return true;
+}
+bool absent_or_misordered_stages_fail_closed() {
+    for (unsigned omission = 0; omission < 4; ++omission) {
+        Fixture f; CHECK(f.collector.arm()); f.send(hook::Kind::Entry);
+        if (omission != 0) f.send(hook::Kind::ResetEnter);
+        if (omission != 1) f.send(hook::Kind::ResetReturn);
+        f.send(hook::Kind::ProcessEnter);
+        if (omission != 2) {
+            f.send(hook::Kind::PostposeEnter); f.send(hook::Kind::PostposeReturn);
+        }
+        f.send(hook::Kind::ProcessReturn); f.send(hook::Kind::PrimaryEnter);
+        for (unsigned body = 0; body < (omission == 3 ? 2u : 3u); ++body) f.body_events(body);
+        f.send(hook::Kind::PrimaryReturn); f.send(hook::Kind::Exit); f.collector.stop();
+        CHECK(f.collector.quiescent() && f.collector.count() == 1);
+        CHECK(f.first().failure != col::Failure::none && !obs::completed_witness(f.first().policy));
+    }
+    Fixture f; CHECK(f.collector.arm()); f.send(hook::Kind::Entry); f.send(hook::Kind::ResetEnter);
+    f.send(hook::Kind::ResetReturn); f.send(hook::Kind::ResetReturn); f.send(hook::Kind::Exit); f.collector.stop();
+    CHECK(f.first().failure != col::Failure::none);
+    return true;
+}
+bool foreign_frames_and_return_sites_fail_closed() {
+    for (unsigned mutation = 0; mutation < 6; ++mutation) {
+        Fixture f; CHECK(f.collector.arm()); f.send(hook::Kind::Entry); f.send(hook::Kind::ResetEnter);
+        if (mutation < 2) {
+            auto e = f.event(hook::Kind::ResetReturn);
+            if (mutation == 0) e.original_jointblend_return_slot += 0x10;
+            else ++e.wrapper_entry_return_pc;
+            f.collector.emit(e);
+        } else {
+            f.send(hook::Kind::ResetReturn);
+            auto process = f.event(hook::Kind::ProcessEnter);
+            if (mutation == 2) process.arguments[2] += 0x10;
+            if (mutation == 3) process.site = hook::ProcessSite::later;
+            f.collector.emit(process);
+            auto post = f.event(hook::Kind::PostposeEnter);
+            if (mutation == 4) post.original_process_return_slot += 0x10;
+            if (mutation == 5) ++post.wrapper_entry_return_pc;
+            f.collector.emit(post);
+        }
+        f.send(hook::Kind::Exit); f.collector.stop();
+        CHECK(f.collector.quiescent());
+        CHECK(f.first().failure == col::Failure::scope || f.first().failure == col::Failure::callsite);
+        CHECK(!obs::completed_witness(f.first().policy));
+    }
+    return true;
+}
+bool collection_mutations_fail_closed() {
+    for (unsigned mutation = 0; mutation < 3; ++mutation) {
+        Fixture f; CHECK(f.collector.arm()); f.through_process(); f.send(hook::Kind::PrimaryEnter);
+        if (mutation == 0) f.reader.put(f.composite + 0x10, std::uint32_t{2});
+        if (mutation == 1) f.reader.put(f.bodies + 0x110 + 0xC4, std::int16_t{5});
+        if (mutation == 2) f.reader.put(f.bodies + 0x110 + 0x50, std::uint32_t{999});
+        f.body_events(0); f.send(hook::Kind::PrimaryReturn); f.send(hook::Kind::Exit); f.collector.stop();
+        CHECK(f.collector.quiescent() && f.first().failure == col::Failure::scope);
+        CHECK(!obs::completed_witness(f.first().policy));
+    }
+    return true;
+}
+bool store_ancestry_arguments_and_pairs_fail_closed() {
+    for (unsigned mutation = 0; mutation < 5; ++mutation) {
+        Fixture f; CHECK(f.collector.arm()); f.through_process(); f.send(hook::Kind::PrimaryEnter);
+        auto enter = f.event(hook::Kind::StoreEnter);
+        if (mutation == 0) f.reader.put(f.store_slot + 0xB0, f.module + 0x1CF5873);
+        if (mutation == 1) enter.wrapper_entry_return_slot += 0x10;
+        if (mutation == 2) enter.arguments[0] += 1;
+        if (mutation != 3) f.collector.emit(enter);
+        auto returned = f.event(hook::Kind::StoreReturn);
+        if (mutation == 4) returned.arguments[1] += 16;
+        f.collector.emit(returned); f.send(hook::Kind::Exit); f.collector.stop();
+        CHECK(f.collector.quiescent() && f.first().failure != col::Failure::none);
+        CHECK(!obs::completed_witness(f.first().policy));
+    }
+    return true;
+}
+bool exception_reentry_and_stop_wait_for_outer_exit() {
+    for (auto kind : {hook::Kind::Exception, hook::Kind::Reentry}) {
+        Fixture f; CHECK(f.collector.arm()); f.send(hook::Kind::Entry); f.send(hook::Kind::ResetEnter);
+        f.send(kind); f.collector.stop(); CHECK(!f.collector.requested() && !f.collector.quiescent());
+        const auto reads = f.reader.calls;
+        f.reader.forbidden = true;
+        auto exit = f.event(hook::Kind::Exit); exit.normal_return = kind == hook::Kind::Reentry;
+        f.collector.emit(exit);
+        CHECK(f.collector.quiescent() && f.reader.calls == reads);
+        CHECK(f.first().published && f.first().failure == (kind == hook::Kind::Exception ?
+            col::Failure::exception : col::Failure::reentry));
+    }
+    Fixture f; CHECK(f.collector.arm()); f.through_process();
+    f.collector.stop(); CHECK(!f.collector.quiescent());
+    f.primary_events(); CHECK(!f.collector.quiescent()); f.send(hook::Kind::Exit);
+    CHECK(f.collector.quiescent() && f.first().failure == col::Failure::none);
+    CHECK(obs::completed_witness(f.first().policy));
+    return true;
+}
+bool foreign_nonce_does_not_finish_or_join_scope() {
+    Fixture f; CHECK(f.collector.arm()); f.through_process();
+    auto foreign = f.event(hook::Kind::Exit); foreign.invocation_nonce = 999;
+    const auto reads = f.reader.calls;
+    f.collector.emit(foreign); CHECK(f.reader.calls == reads);
+    f.collector.stop(); CHECK(!f.collector.quiescent());
+    f.primary_events(); f.send(hook::Kind::Exit);
+    CHECK(f.collector.quiescent() && f.first().failure == col::Failure::none);
+    return true;
+}
+bool budget_charges_observer_intervals_not_native_gaps() {
+    Fixture f; CHECK(f.collector.arm());
+    const hook::Kind events[]{hook::Kind::Entry, hook::Kind::ResetEnter, hook::Kind::ResetReturn,
+        hook::Kind::ProcessEnter, hook::Kind::PostposeEnter, hook::Kind::PostposeReturn,
+        hook::Kind::ProcessReturn, hook::Kind::PrimaryEnter};
+    for (auto kind : events) { f.send(kind); f.clock.time += 100000000; }
+    for (unsigned body = 0; body < 3; ++body) {
+        f.send(hook::Kind::StoreEnter, body); f.clock.time += 100000000;
+        f.send(hook::Kind::StoreReturn, body); f.clock.time += 100000000;
+    }
+    f.send(hook::Kind::PrimaryReturn); f.clock.time += 100000000; f.send(hook::Kind::Exit);
+    f.collector.stop(); CHECK(f.collector.quiescent());
+    CHECK(f.first().failure == col::Failure::none && f.first().total_ticks == 16);
+    CHECK(f.first().policy.observer_ticks == 16);
+    Fixture over; CHECK(over.collector.arm()); over.clock.step = 300; over.full();
+    CHECK(over.collector.quiescent() && !over.collector.requested());
+    CHECK(over.first().failure == col::Failure::budget && !obs::completed_witness(over.first().policy));
+    return true;
+}
+bool six_samples_pin_one_actor_and_stop() {
+    Fixture f; CHECK(f.collector.arm());
+    for (unsigned i = 0; i < 6; ++i) { f.full(); f.next(); }
+    CHECK(f.collector.quiescent() && !f.collector.requested() && f.collector.count() == 6);
+    CHECK(f.collector.probes() == 6);
+    for (const auto& s : f.collector.samples()) {
+        CHECK(s.failure == col::Failure::none && obs::completed_witness(s.policy));
+        CHECK(s.policy.metadata.identity.owner == f.owner && s.policy.metadata.identity.id == 37);
+    }
+    const auto reads = f.reader.calls; f.full();
+    CHECK(f.collector.count() == 6 && f.reader.calls == reads);
+    return true;
+}
+bool generation_or_body_binding_change_stops_session() {
+    for (unsigned mutation = 0; mutation < 2; ++mutation) {
+        Fixture f; CHECK(f.collector.arm()); f.full(); f.next();
+        if (mutation == 0) {
+            f.reader.put(f.owner + 0xBC, std::uint32_t{38}); f.reader.put(f.fg + 0x1B0, std::uint32_t{38});
+        } else f.reader.put(f.bodies + 0x50, std::uint32_t{777});
+        f.full();
+        CHECK(f.collector.quiescent() && f.collector.count() == 2 && !f.collector.requested());
+        CHECK(f.collector.samples()[0].failure == col::Failure::none);
+        CHECK(f.collector.samples()[1].failure == col::Failure::scope);
+        CHECK(f.collector.samples()[1].policy.reason == obs::Reason::selection_changed);
+    }
+    return true;
+}
+bool skipped_first_actor_does_not_read_full_metadata() {
+    Fixture f; f.reader.put(f.owner, f.module + 1); CHECK(f.collector.arm()); f.full(); f.collector.stop();
+    CHECK(f.collector.quiescent() && f.collector.count() == 0 && f.reader.calls == 4);
+    return true;
+}
+bool late_exit_failure_cannot_publish_a_success() {
+    for (unsigned mutation = 0; mutation < 3; ++mutation) {
+        Fixture f; CHECK(f.collector.arm()); f.through_process(); f.primary_events();
+        CHECK(obs::completed_witness(f.first().policy));
+        auto exit = f.event(hook::Kind::Exit);
+        if (mutation == 0) ++exit.job;
+        if (mutation == 1) f.clock.time = 0;
+        if (mutation == 2) f.clock.step = 1001;
+        f.collector.emit(exit); f.collector.stop();
+        CHECK(f.collector.quiescent() && f.first().published);
+        CHECK(!col::complete(f.first()));
+    }
+    return true;
+}
+bool missing_exit_never_releases_or_recycles_owned_buffers() {
+    Fixture f; CHECK(f.collector.arm()); f.through_process(); f.primary_events();
+    f.collector.stop(); // Models timeout after a fiber was abandoned, not unwound.
+    CHECK(!f.collector.requested() && !f.collector.quiescent());
+    CHECK(!col::complete(f.first()) && !f.first().published);
+    CHECK(!f.collector.arm());
+    f.next(); f.full(); // Another nonce cannot replace the missing outer Exit.
+    CHECK(!f.collector.quiescent() && !f.first().published);
+    return true;
+}
+bool process_and_export_provenance_rejects_mismatches() {
+    for (unsigned mutation = 0; mutation < 9; ++mutation) {
+        Fixture f; CHECK(f.collector.arm());
+        f.send(hook::Kind::Entry); f.send(hook::Kind::ResetEnter); f.send(hook::Kind::ResetReturn);
+        if (mutation == 0) f.reader.put(f.process_context, f.art + 8);
+        auto process = f.event(hook::Kind::ProcessEnter);
+        if (mutation == 1) process.arguments[0] = 0;
+        if (mutation == 2) process.arguments[1] = 0;
+        f.collector.emit(process);
+        if (mutation == 3) f.reader.put(f.segment + 0x28, f.raw + 8);
+        if (mutation == 4) f.reader.put(f.segment, f.workspace);
+        if (mutation == 5) f.reader.put(f.segment + 8, f.process_context + 8);
+        f.send(hook::Kind::PostposeEnter); f.send(hook::Kind::PostposeReturn);
+        auto returned = f.event(hook::Kind::ProcessReturn);
+        if (mutation == 6) returned.arguments[0] += 4;
+        if (mutation == 7) ++returned.arguments[1];
+        if (mutation == 8) f.reader.put(f.process_context, f.art + 8);
+        f.collector.emit(returned); f.primary_events(); f.send(hook::Kind::Exit); f.collector.stop();
+        CHECK(f.collector.quiescent() && !col::complete(f.first()));
+        CHECK(f.first().failure == col::Failure::scope || f.first().failure == col::Failure::arguments);
+    }
+    return true;
+}
+} // namespace
+
+int main() {
+    const std::pair<const char*, bool (*)()> tests[]{
+        {"complete/exit", complete_chain_is_event_only_and_exit_reads_nothing},
+        {"missing stages", absent_or_misordered_stages_fail_closed},
+        {"foreign frames", foreign_frames_and_return_sites_fail_closed},
+        {"collection mutation", collection_mutations_fail_closed},
+        {"store pairing", store_ancestry_arguments_and_pairs_fail_closed},
+        {"exception/stop", exception_reentry_and_stop_wait_for_outer_exit},
+        {"foreign nonce", foreign_nonce_does_not_finish_or_join_scope},
+        {"observer budget", budget_charges_observer_intervals_not_native_gaps},
+        {"six samples", six_samples_pin_one_actor_and_stop},
+        {"selection change", generation_or_body_binding_change_stops_session},
+        {"early filter", skipped_first_actor_does_not_read_full_metadata},
+        {"late exit failure", late_exit_failure_cannot_publish_a_success},
+        {"abandoned scope", missing_exit_never_releases_or_recycles_owned_buffers},
+        {"actual context provenance", process_and_export_provenance_rejects_mismatches},
+    };
+    std::size_t passed = 0;
+    for (const auto& [name, run] : tests) {
+        if (!run()) { std::cerr << "FAIL " << name << '\n'; return 1; }
+        ++passed;
+    }
+    std::cout << passed << '/' << std::size(tests) << " passed\n";
+    return 0;
+}

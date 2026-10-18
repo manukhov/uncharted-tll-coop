@@ -2,6 +2,7 @@
 """Asset-independent mutations of the enemy matrix storage/dataflow proof."""
 
 import struct
+from dataclasses import replace
 import unittest
 from unittest.mock import patch
 
@@ -142,6 +143,25 @@ class MatrixAuditTests(unittest.TestCase):
         for data in (b"", b"x" * audit.CANDIDATES[0].size):
             with self.assertRaisesRegex(ValueError, "size/SHA-256"):
                 audit.audit_candidate(data, audit.CANDIDATES[0])
+
+    def test_database_and_raw_skeleton_ids_are_distinct_pinned_pairs(self):
+        for source in audit.CANDIDATES:
+            candidate = replace(source, loader=0x40, raw=0x80)
+            data = bytearray(0xC0)
+            struct.pack_into("<II", data, 0x40, 0xE, candidate.database_id)
+            struct.pack_into("<I", data, 0x50, 6)
+            struct.pack_into("<II", data, 0x84, candidate.skeleton_id, candidate.skeleton_id)
+            data[0x96] = 6
+            result = audit.audit_candidate_identity(data, candidate, 0x80)
+            self.assertNotEqual(result["art_database_id"], result["skeleton_id"])
+            for offset, value in ((0x44, candidate.skeleton_id), (0x84, candidate.database_id),
+                                  (0x88, 1), (0x50, 7), (0x40, 0)):
+                mutated = data.copy()
+                struct.pack_into("<I", mutated, offset, value)
+                with self.subTest(entry=source.entry, offset=offset), self.assertRaises(ValueError):
+                    audit.audit_candidate_identity(mutated, candidate, 0x80)
+            with self.assertRaisesRegex(ValueError, "fixup"):
+                audit.audit_candidate_identity(data, candidate, 0x88)
 
     def test_pinned_inventory_has_all47_operators(self):
         self.assertEqual(sum(audit.EXPECTED_INVENTORY.values()), 47)

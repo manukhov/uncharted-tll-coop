@@ -1,4 +1,5 @@
 #include "nadine_p99_observation_arm.h"
+#include "enemy_jointblend_arm.h"
 #include <array>
 #include <filesystem>
 #include <iostream>
@@ -17,11 +18,16 @@ struct Handle {
     explicit operator bool() const { return value && value != INVALID_HANDLE_VALUE; }
 };
 enum class Result : int { kSent, kArguments = 2, kProcess, kCreation, kImage, kEvent, kSignal };
-enum class Protocol { kSource, kWrist, kCensus };
-constexpr std::array kProtocols{Protocol::kSource, Protocol::kWrist, Protocol::kCensus};
-#if defined(TLL_P99_WRIST_ARM) && TLL_P99_WRIST_ARM && \
-    defined(TLL_P99_CONSUMED_ARM) && TLL_P99_CONSUMED_ARM
-#error Select exactly one P99 arming protocol
+enum class Protocol { kSource, kWrist, kCensus, kEnemy };
+constexpr std::array kProtocols{Protocol::kSource, Protocol::kWrist, Protocol::kCensus, Protocol::kEnemy};
+#if ((defined(TLL_ENEMY_JOINTBLEND_ARM) && TLL_ENEMY_JOINTBLEND_ARM) + \
+     (defined(TLL_P99_WRIST_ARM) && TLL_P99_WRIST_ARM) + \
+     (defined(TLL_P99_CONSUMED_ARM) && TLL_P99_CONSUMED_ARM)) > 1
+#error Select exactly one observation arming protocol
+#endif
+#if defined(TLL_ENEMY_JOINTBLEND_ARM) && TLL_ENEMY_JOINTBLEND_ARM
+constexpr auto kProtocol = Protocol::kEnemy;
+constexpr auto kProgramName = L"tll_enemy_jointblend_arm";
 #elif defined(TLL_P99_CONSUMED_ARM) && TLL_P99_CONSUMED_ARM
 constexpr auto kProtocol = Protocol::kCensus;
 constexpr auto kProgramName = L"tll_p99_consumed_arm";
@@ -38,6 +44,7 @@ std::wstring event_name(Protocol protocol, DWORD pid, std::uint64_t creation) {
     case Protocol::kSource: return arm::event_name(pid, creation);
     case Protocol::kWrist: return arm::wrist_event_name(pid, creation);
     case Protocol::kCensus: return arm::census_event_name(pid, creation);
+    case Protocol::kEnemy: return coop::enemy_jointblend_arm::event_name(pid, creation);
     }
     return {};
 }
@@ -130,6 +137,7 @@ int self_test() {
     const auto source_name = arm::event_name(pid, creation);
     const auto wrist_name = arm::wrist_event_name(pid, creation);
     const auto census_name = arm::census_event_name(pid, creation);
+    const auto enemy_name = coop::enemy_jointblend_arm::event_name(pid, creation);
     for (const auto protocol : kProtocols) {
         const auto name = event_name(protocol, pid, creation);
         {
@@ -178,6 +186,8 @@ int self_test() {
     if (!wrist || GetLastError() == ERROR_ALREADY_EXISTS) return 1;
     Handle census(CreateEventW(nullptr, FALSE, FALSE, census_name.c_str()));
     if (!census || GetLastError() == ERROR_ALREADY_EXISTS) return 1;
+    Handle enemy(CreateEventW(nullptr, FALSE, FALSE, enemy_name.c_str()));
+    if (!enemy || GetLastError() == ERROR_ALREADY_EXISTS) return 1;
     check(SetEvent(old_census.value) != FALSE, "private old immediate-arm fixture signal succeeds");
     check(WaitForSingleObject(census.value, 0) == WAIT_TIMEOUT,
         "old immediate-arm signal never becomes a census request");
@@ -188,6 +198,7 @@ int self_test() {
         case Protocol::kSource: return source.value;
         case Protocol::kWrist: return wrist.value;
         case Protocol::kCensus: return census.value;
+        case Protocol::kEnemy: return enemy.value;
         }
         return static_cast<HANDLE>(nullptr);
     };
@@ -195,6 +206,7 @@ int self_test() {
         check(WaitForSingleObject(source.value, 0) == WAIT_TIMEOUT, "refusal did not signal source event");
         check(WaitForSingleObject(wrist.value, 0) == WAIT_TIMEOUT, "refusal did not signal wrist event");
         check(WaitForSingleObject(census.value, 0) == WAIT_TIMEOUT, "refusal did not signal census event");
+        check(WaitForSingleObject(enemy.value, 0) == WAIT_TIMEOUT, "refusal did not signal enemy event");
         check(WaitForSingleObject(old_census.value, 0) == WAIT_TIMEOUT, "operation did not signal old census event");
     };
     for (const auto protocol : kProtocols) {
