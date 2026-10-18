@@ -7,6 +7,10 @@ run is REJECTED as usable; the new handler has been terminally stopped in
 both live processes with ZERO receiver applies. Startup is default-OFF in
 source and the launcher refuses the old auto-enabled hash. Read the latest
 entry before any relaunch; no new enemy-enabled exam is prepared/admitted.
+USER FOLLOW-UP: lag DISAPPEARED after this stop in the same two running games.
+The new active enemy-root work is the confirmed regression as a group; GPU
+load alone does NOT explain it. Exact hotspot remains unmeasured. A narrow
+source optimization is recorded below and remains undeployed/default-OFF.
 
 USER CORRECTION (2026-10-18): implement enemy synchronization, not additional
 standalone tests or loader/offer infrastructure. The latest entry connects an
@@ -42803,3 +42807,61 @@ No rebuild/relaunch while both heavy games remain running; current live safety
 comes from the verified terminal stop, NOT a replaced DLL. Build remains the
 next implementation step once those processes are closed. No new game address
 discovery or IDB change, and no new component tests. Existing labels stay saved.
+
+## 2026-10-18 — Confirm enemy-root performance regression; reduce redundant work
+
+**CONFIRMED user-visible discriminator:** user answered "ушли" (lags went
+away) after only enemy_root::stopped was set in PID16896/7824. Both same game
+processes remain running. The new active enemy-root path is therefore the
+regression as a group. The prior high GPU/memory counters are real, but the
+GPU-only explanation is REJECTED as an explanation of this before/after result.
+No native root writes ran (apply=0). Pirate+408 shim/stock forwarding stayed
+installed after stop; their mere presence/ABI overhead does not explain the
+disappearing lag. Do not blame the native setter or declare root sync working.
+
+**STATIC repeated cost pattern, not a timed attribution to one API:**
+hooked_update -> net_tick -> enemy_root::tick runs census on a game update
+thread every50ms. Original census/current_player scalar reads did not share a
+ReadCache; each called VirtualQuery. CharacterManager contributes four such
+reads per row before identity, and retained-player resolution contributes eight.
+identity/ordinary ALREADY had local caches: claiming every one of their fields
+queried the kernel would be wrong. Full identity/body admission also ran before
+discovering that B lacked a fresh packet, or that A had nothing new to send yet.
+Blocking AcquireSRW in tick could wait for a callback that queried memory while
+holding the same lock; the shared player receiver also waited on that lock.
+
+This repeats a known bad technique in COOP_STATUS's2026-07-04 performance entry
+and FINDINGS_ARCHIVE Performance CONFIRMED: hot per-pointer VirtualQuery was
+previously removed after user-confirmed stalls. That historical mechanism is
+a strong lead, NOT proof of the exact duration or dominant API in this run.
+Competing remaining causes include census, native guard work, lock waiting and
+game-thread sendto. A blocking send is possible, but no observation proves it
+occurred. Do not change the shared recv_socket to FIONBIO: its receiver loops
+immediately on SOCKET_ERROR and would busy-spin on WSAEWOULDBLOCK.
+
+**IMPLEMENTED in source, not runtime-verified:**
+
+- One lexical ReadCache spans each synchronous census/current_player/identity
+  pass. No cache survives that call or a native phase; per-copy SEH and all
+  identity/parent/health/body gates remain. Names copy in page-bounded chunks
+  through the SAME checked cache, removing the redundant separate query.
+- Postblend first checks roster metadata for actual work: A captures at most
+  20Hz per actor; B requires a fresh peer/session-matching packet before the
+  expensive native walk. Pointer membership alone never authorizes a write:
+  full identity/ordinary and final generation/session guards still follow.
+- tick and enemy receive use TryAcquire, not blocking waits. A busy tick clears
+  active_scope until a census is published; final setter fence also checks it.
+  Busy enemy datagrams drop rather than stall the shared player-state receiver.
+- Census frequency and stale-session rules are NOT relaxed. No SEH-only broad
+  page probe replaces explicit readable/guard-page rejection. Native setter,
+  gameplay, health, AI, player replication and appearances are unchanged.
+
+This is a narrow removal of redundant work, NOT a claim that all potentially
+blocking operations have left the game thread. Remaining VQ cache misses and
+blocking-socket sendto still need a bounded design before re-enabling. Do not
+resume the separate offer/test infrastructure or launch an unchanged writer.
+No game input, rearm, injection, new IDB discovery or component tests. Source
+build is deferred while the existing games are open; the current on-disk DLL
+and matching PDB remain intact for the verified emergency stop. NEXT: compile
+after those processes close, and close the remaining on-frame blocking risk
+before admitting another enemy-enabled run. No visible optimized-sync result.

@@ -18,7 +18,7 @@ struct Roster {
 };
 struct Row {
     wire::Packet outgoing{}, incoming{};
-    ULONGLONG captured{}, received{};
+    ULONGLONG captured{}, received{}, next_capture{};
     std::uint32_t last_sequence{};
     bool dirty{};
 };
@@ -64,7 +64,10 @@ bool copy(std::uintptr_t at, void* out, std::size_t size, ReadCache* cache = nul
         GetExceptionCode() == EXCEPTION_GUARD_PAGE ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) { return false; }
 }
 template<class T> bool read(std::uintptr_t at, T& out) noexcept { return copy(at, &out, sizeof(out)); }
-std::uintptr_t current_player() noexcept {
+std::uintptr_t current_player(ReadCache* shared = nullptr) noexcept {
+    ReadCache local_cache{};
+    auto* cache = shared ? shared : &local_cache;
+    const auto read = [cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), cache); };
     std::uintptr_t record{}, actor{}, vt{}, record_after{}, actor_after{}; std::uint32_t id{}, actor_id{}, id_after{};
     if (!read(g_module+kRetainedSlotTableRva, record) || !read(g_module+kRetainedSlotTableRva+8, id) || !id ||
         !read(record+8, actor) || !read(actor, vt) || vt != g_module+kPlayerVtableRva || !read(actor+0xBC, actor_id) || actor_id != id ||
@@ -73,11 +76,12 @@ std::uintptr_t current_player() noexcept {
         !read(record+8, actor_after) || actor_after != actor) return 0;
     return actor;
 }
-bool identity(std::uintptr_t actor, Local& out) noexcept {
+bool identity(std::uintptr_t actor, Local& out, ReadCache* shared = nullptr) noexcept {
     // Lexical cache, discarded before any native callback or mailbox handoff.
     // Every actual copy still has memory-fault SEH; this is not a page lease.
-    ReadCache cache{};
-    const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
+    ReadCache local_cache{};
+    auto* cache = shared ? shared : &local_cache;
+    const auto read = [cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), cache); };
     Local value{}; value.actor = actor;
     std::uintptr_t vtable{}, bound_actor{}, owner_record{}, name{};
     std::uint32_t bound_id{}; std::uint8_t flags{};
@@ -91,13 +95,12 @@ bool identity(std::uintptr_t actor, Local& out) noexcept {
         !read(actor+0xDC, value.key.variant_id)) return false;
     bool ended{};
     for (std::size_t i = 0; i < value.key.name.size();) {
-        MEMORY_BASIC_INFORMATION m{};
-        if (VirtualQuery(reinterpret_cast<void*>(name+i), &m, sizeof(m)) != sizeof(m)) return false;
-        const auto end = reinterpret_cast<std::uintptr_t>(m.BaseAddress)+m.RegionSize;
-        if (end <= name+i) return false;
-        const auto available = end-(name+i);
+        // Windows AMD64 base pages are4KiB. Stop at each page boundary so a
+        // terminator before an unreadable next page remains valid. copy() still
+        // checks protection/SEH; do not query the same name region twice.
+        const auto available = std::size_t{0x1000}-((name+i)&0xFFF);
         const auto size = std::min(available, value.key.name.size()-i);
-        if (!size || !copy(name+i, value.key.name.data()+i, size)) return false;
+        if (!copy(name+i, value.key.name.data()+i, size, cache)) return false;
         for (std::size_t j = i; j < i+size; ++j) if (!value.key.name[j]) {
             std::fill(value.key.name.begin()+j, value.key.name.end(), '\0'); ended = true; break;
         }
@@ -112,8 +115,12 @@ bool identity(std::uintptr_t actor, Local& out) noexcept {
     out = value; return true;
 }
 bool census(Roster& out) noexcept {
+    // One synchronous read pass, no game callbacks or pointer publication.
+    // Reuse region checks inside this pass, never across ticks/native phases.
+    ReadCache cache{};
+    const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
     Roster value{};
-    value.player = current_player();
+    value.player = current_player(&cache);
     if (!value.player || !read(value.player+0xBC, value.player_id) || !value.player_id ||
         !read(g_module+0x3898630, value.manager) || !read(value.manager, value.array)) return false;
     std::uint32_t count{};
@@ -126,7 +133,7 @@ bool census(Roster& out) noexcept {
         if (vt != g_module+kPirate) continue;
         if (value.count == value.rows.size()) return false;
         Local local{};
-        if (!identity(actor, local) || local.record != entry.record || local.generation != entry.id) return false;
+        if (!identity(actor, local, &cache) || local.record != entry.record || local.generation != entry.id) return false;
         for (std::uint32_t previous = 0; previous < value.count; ++previous)
             if (value.rows[previous].key == local.key || value.rows[previous].actor == actor) return false;
         value.rows[value.count++] = local;
@@ -151,7 +158,8 @@ void receive(const void* bytes, int size, const sockaddr_in& source, int source_
     wire::Packet packet{}; std::memcpy(&packet, bytes, sizeof(packet));
     if (!wire::valid(packet) || packet.role_b == static_cast<std::uint8_t>(g_net_role_b)) return;
     const auto now = GetTickCount64();
-    AcquireSRWLockExclusive(&lock);
+    // Enemy UDP is lossy; contention must not stall the shared player receiver.
+    if (!TryAcquireSRWLockExclusive(&lock)) return;
     if (!session || stopped.load(std::memory_order_relaxed)) { ReleaseSRWLockExclusive(&lock); return; }
     if (packet.kind == wire::Kind::hello) {
         if (hello_sequence && now-peer_seen < 2000 && !wire::newer(packet.sequence, hello_sequence)) {
@@ -203,7 +211,12 @@ void tick() {
     Roster current{};
     const bool valid = census(current);
     std::array<wire::Packet, wire::kActors+1> pending{}; std::size_t count{};
-    AcquireSRWLockExclusive(&lock);
+    // This runs from Player/Nadine update: never wait for a receiver/native job.
+    // An unpublished census must not leave the writer enabled until next tick.
+    if (!TryAcquireSRWLockExclusive(&lock)) {
+        active_scope.store(false, std::memory_order_release);
+        ticking.clear(); return;
+    }
     if (!valid) {
         if (applied.load(std::memory_order_relaxed)) stopped.store(true);
         reset_locked();
@@ -341,6 +354,26 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     if (pc != g_module+0x1A929A7 || !installed.load(std::memory_order_acquire) || !active_scope.load(std::memory_order_acquire) ||
         stopped.load(std::memory_order_relaxed) || g_dll_inert) return;
     const auto actor = reinterpret_cast<std::uintptr_t>(object);
+    // Metadata-only scheduling first. A roster pointer match is NOT admission:
+    // all identity/ordinary/final generation checks below remain mandatory.
+    const auto schedule_now = GetTickCount64();
+    if (!TryAcquireSRWLockExclusive(&lock)) return;
+    bool due{};
+    if (session && confirmed && schedule_now-peer_seen <= 1000 && !stopped.load()) {
+        for (std::size_t i = 0; i < roster.count; ++i) if (roster.rows[i].actor == actor) {
+            auto& row = rows[i];
+            if (!g_net_role_b) {
+                due = schedule_now >= row.next_capture;
+                if (due) row.next_capture = schedule_now+50;
+            } else {
+                due = row.received && schedule_now-row.received <= 200 &&
+                    row.incoming.sender == peer && row.incoming.receiver == session;
+            }
+            break;
+        }
+    }
+    ReleaseSRWLockExclusive(&lock);
+    if (!due) return;
     Local local{}; std::array<float, 8> transform{}; unsigned gate{};
     if (!identity(actor, local) || !ordinary(actor, reinterpret_cast<std::uintptr_t>(native_job), transform, gate)) {
         last_rejection.store(gate, std::memory_order_relaxed);
@@ -380,7 +413,8 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     if (!TryAcquireSRWLockExclusive(&lock)) return;
     const auto apply_now = GetTickCount64();
     std::uintptr_t manager{}; std::uint32_t player_id{};
-    const bool still_current = !g_dll_inert && !stopped.load() && session == local_session && session == packet.receiver && peer == packet.sender &&
+    const bool still_current = !g_dll_inert && active_scope.load(std::memory_order_acquire) && !stopped.load() &&
+        session == local_session && session == packet.receiver && peer == packet.sender &&
         confirmed && apply_now-peer_seen <= 1000 && index < roster.count && roster.rows[index] == local &&
         rows[index].received && apply_now-rows[index].received <= 200 && first_apply && apply_now-first_apply <= 30000 &&
         rows[index].incoming.sequence == packet.sequence &&

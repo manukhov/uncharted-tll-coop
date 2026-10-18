@@ -16,11 +16,14 @@ LATEST RESULT: user reports severe lag in BOTH PID16896/7824. First root-sync
 run is REJECTED as a usable implementation. Emergency terminal stop applied
 and read back in both processes; native logs confirm STOPPED with apply=0.
 Do NOT relaunch hash E19D25EC...: launch_coop now refuses that exact image.
-Source startup is default-OFF; a new build is deferred while two games occupy
-nearly all GPU capacity and leave about1.1GB system RAM available. NEXT: user
-reports whether stopping root-sync improved smoothness; distinguish hook cost
-from shared resource pressure before another enemy-enabled launch. No new
-tests/offer expansion, no damage/AI writer, no automatic rearm.
+User now confirms lag DISAPPEARED after that stop with both games still open.
+The active enemy-root path is the regression; GPU-only attribution is rejected.
+Source now shares one lexical census cache, filters fresh work before native
+body checks and replaces blocking mailbox waits with TryAcquire. Exact timed
+hotspot remains unproved; remaining VQ misses/sendto are still on game update.
+Source startup stays default-OFF. NEXT: compile after games close; close the
+remaining on-frame blocking risk before any enemy-enabled run. No new tests/
+offer expansion, no damage/AI writer, no automatic rearm or claimed sync success.
 
 PREVIOUS IMPLEMENTATION (superseded by rejection above): ordinary main
 DLL now contains native root-only A->B replication through exact Pirate+408
