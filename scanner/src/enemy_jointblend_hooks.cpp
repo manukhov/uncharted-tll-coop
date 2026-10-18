@@ -14,6 +14,7 @@ namespace {
 
 #if defined(TLL_ENEMY_HOOK_AUDIT)
 std::atomic<std::uint64_t> g_reads{}, g_writes{}, g_bootstraps{};
+std::atomic<unsigned> g_fail_write{};
 #endif
 
 // Reuse only the reviewed generic slot mechanism. These two FLS allocations
@@ -66,6 +67,13 @@ struct EnemyWindowsApi {
     static bool write(DWORD index, void* value) noexcept {
 #if defined(TLL_ENEMY_HOOK_AUDIT)
         g_writes.fetch_add(1, std::memory_order_relaxed);
+        const auto fault=g_fail_write.exchange(0);
+        if (fault) {
+            const DWORD saved=GetLastError();
+            if (fault==2) FlsSetValue(index,value);
+            SetLastError(saved);
+            return false;
+        }
 #endif
         const DWORD error = GetLastError();
         const bool ok = FlsSetValue(index, value) != FALSE;
@@ -190,7 +198,8 @@ bool requested() noexcept {
     return result;
 }
 
-void jointblend_observed(void* job, std::uintptr_t pc, std::uintptr_t slot, DWORD entry_error, bool wanted) {
+void jointblend_observed(void* job, std::uintptr_t pc, std::uintptr_t slot, DWORD entry_error,
+    bool wanted, Completion& completion) {
     Frame* outer = g_frames.current();
     if (!outer && (!wanted || g_frames.failed())) {
         SetLastError(entry_error);
@@ -215,6 +224,7 @@ void jointblend_observed(void* job, std::uintptr_t pc, std::uintptr_t slot, DWOR
         g_native.jointblend(job);
         return;
     }
+    if (frame.observed) completion.invocation_nonce=frame.nonce;
     bool normal = false;
     __try {
         emit(frame, event_for(frame, Kind::Entry, ProcessSite::none, pc, slot, args));
@@ -224,14 +234,23 @@ void jointblend_observed(void* job, std::uintptr_t pc, std::uintptr_t slot, DWOR
         normal = true;
     } __finally {
         const DWORD native_error = GetLastError();
-        if (!normal) exception(frame, ProcessSite::none, pc, slot, args);
-        // Assembly normal return clears this; abnormal unwind needs us too.
-        frame.native_return_slot = 0;
-        frame.process = nullptr;
-        emit(frame, event_for(frame, Kind::Exit, ProcessSite::none, pc, slot,
-            args, 0, normal));
-        g_frames.leave(frame, previous);
-        SetLastError(native_error);
+        bool reported=false;
+        __try {
+            if (!normal) exception(frame, ProcessSite::none, pc, slot, args);
+            // Assembly normal return clears this; abnormal unwind needs us too.
+            frame.native_return_slot = 0;
+            frame.process = nullptr;
+            emit(frame, event_for(frame, Kind::Exit, ProcessSite::none, pc, slot,
+                args, 0, normal));
+            reported=true;
+        } __finally {
+            // Runs even if the observer itself unexpectedly raises SEH.
+            const bool restored=g_frames.leave(frame, previous);
+            completion.normal_return=normal;
+            completion.cleanup_ok=restored && !g_frames.failed();
+            completion.observer_ok=reported && !frame.invalid;
+            SetLastError(native_error);
+        }
     }
 }
 
@@ -256,12 +275,15 @@ __declspec(noinline) void __fastcall jointblend(void* job) {
         g_native.jointblend(job);
         return;
     }
+    Completion completion{}; // Fail-closed even if inner cleanup is interrupted.
     __try {
-        jointblend_observed(job, pc, slot, entry_error, wanted);
+        jointblend_observed(job, pc, slot, entry_error, wanted, completion);
     } __finally {
         const DWORD error = GetLastError();
         g_entered_wrappers.fetch_sub(1, std::memory_order_acq_rel);
-        SetLastError(error);
+        __try {
+            if (completion.invocation_nonce) g_sink.complete(g_sink.context,completion);
+        } __finally { SetLastError(error); }
     }
 }
 
@@ -430,7 +452,7 @@ bool configure(const NativeCalls& native, Sink sink) noexcept {
     bool success = false;
     if (!g_configure_attempt.test_and_set(std::memory_order_acq_rel) &&
         native.jointblend && native.reset && native.process && native.postpose &&
-        native.primary && native.store && sink.requested && sink.emit && g_frames.initialize()) {
+        native.primary && native.store && sink.requested && sink.emit && sink.complete && g_frames.initialize()) {
         g_native = native;
         g_sink = sink;
         g_ready.store(true, std::memory_order_release);
@@ -456,6 +478,7 @@ AuditSnapshot audit_snapshot() noexcept {
 void audit_exhaust_counter() noexcept {
     g_entered_wrappers.store(std::numeric_limits<std::uint64_t>::max());
 }
+void audit_fail_next_write(bool after_effect) noexcept { g_fail_write.store(after_effect ? 2u : 1u); }
 #endif
 
 } // namespace coop::enemy_jointblend_hooks

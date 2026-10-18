@@ -15,7 +15,7 @@ constexpr DWORD kException=0xE0426128;
 constexpr std::size_t kWarm=2048,kCold=64;
 unsigned failures{};
 bool wanted{}, copy_sink{};
-std::uint64_t calls{}, events{}, exits{}, reentries{};
+std::uint64_t calls{}, events{}, exits{}, reentries{}, completions{};
 alignas(64) std::array<std::byte,0x40B0+90*64> input{},output{};
 h::NativeCalls wrapped{};
 h::Process later{};
@@ -87,6 +87,10 @@ __declspec(noinline) bool invoke(h::JointBlend function,Job& job) {
     __except(GetExceptionCode()==kException ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) { return true; }
     return false;
 }
+void complete(void*,const h::Completion& completion) noexcept {
+    ++completions;
+    check(completion.invocation_nonce && completion.cleanup_ok,"post-cleanup scalar completion");
+}
 std::uint64_t measure(Job& job,bool expected_throw) {
     const auto start=tick();
     const bool caught=invoke(job.hooks ? wrapped.jointblend : native_jointblend,job);
@@ -105,11 +109,12 @@ template<std::size_t N> void report(const char* name,std::array<std::uint64_t,N>
 void warm(const char* name,Job job,bool armed,bool copying) {
     std::array<std::uint64_t,kWarm> samples{};
     copy_sink=copying;
-    const auto old_calls=calls,old_exits=exits,old_events=events,old_reentries=reentries;
+    const auto old_calls=calls,old_exits=exits,old_events=events,old_reentries=reentries,old_completions=completions;
     for (auto& sample:samples) { wanted=armed;sample=measure(job,job.throw_store); }
     check(calls>old_calls,"native calls never omitted");
-    if (job.hooks && armed) check(exits-old_exits==kWarm,"one exit per complete measured wrapper");
-    else check(events==old_events,"direct/dormant path has no observations");
+    if (job.hooks && armed) check(exits-old_exits==kWarm && completions-old_completions==kWarm,
+        "one exit and cleanup completion per complete measured wrapper");
+    else check(events==old_events && completions==old_completions,"direct/dormant path has no observations");
     if (job.reenter && job.hooks && armed) check(reentries-old_reentries==kWarm,"nested stopped scopes rejected");
     report(name,samples);
 }
@@ -158,7 +163,7 @@ int main() {
     frequency=static_cast<std::uint64_t>(f.QuadPart);
     input.fill(std::byte{0x5A});
     check(h::configure({native_jointblend,native_reset,native_process,native_postpose,native_primary,native_store},
-        {nullptr,requested,emit}),"configure real core");
+        {nullptr,requested,emit,complete}),"configure real core");
     const auto t=h::targets();
     wrapped={reinterpret_cast<h::JointBlend>(t.code[0]),reinterpret_cast<h::Reset>(t.code[2]),
         reinterpret_cast<h::Process>(t.code[3]),reinterpret_cast<h::Postpose>(t.postpose),

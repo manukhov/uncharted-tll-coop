@@ -195,6 +195,11 @@ if(BUILD_TESTING)
     endforeach()
     add_test(NAME enemy_jointblend_collector_cost COMMAND tll_enemy_jointblend_collector_tests --cost)
     set_tests_properties(enemy_jointblend_collector_cost PROPERTIES TIMEOUT 30)
+    foreach(cleanup_failure before after before-seh after-seh peer)
+        add_test(NAME enemy_jointblend_cleanup_${cleanup_failure}
+            COMMAND tll_enemy_jointblend_hooks_tests --cleanup-${cleanup_failure})
+        set_tests_properties(enemy_jointblend_cleanup_${cleanup_failure} PROPERTIES TIMEOUT 30)
+    endforeach()
     add_test(NAME enemy_jointblend_arm COMMAND tll_enemy_jointblend_arm --self-test)
     # Value-only enemy observer contracts. Not linked into the runtime DLL;
     # passing these tests does not install hooks or admit a game-side writer.

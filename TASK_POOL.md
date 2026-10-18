@@ -137,13 +137,27 @@ maximum8.8us in the recorded run. Separate real-Collector/map-reader timing
 with16 bodies completes128/128 samples, median101.4us/max155.9us;3703 reads and
 531858 copied bytes per complete fixture. No noisy baseline subtraction and no
 game latency claim. Do not repeat these component probes as runtime proof.
-NEXT: integrate a complete cost/completion contract with the actual bounded
-reader: collector Exit currently publishes before wrapper FLS leave and final
-return. A post-cleanup failure/time charge must not inherit a completed sample.
-Retain one native invocation and preserve original return-slot/SEH semantics;
-do not call collector-only ticks complete observer time or derive a hard1ms
-guarantee from synthetic percentiles. Armed cold FLS may still allocate. Keep
-all runtime-admission constants false. Then certify the prepared enemy module,
+2026-10-18 completion pass: Exit now closes native observation ONLY. Scalar
+Completion follows FLS leave and registered-wrapper retirement; collector
+retains its lease until this matching nonce completes. Cleanup/global poison,
+observer invalidation, missing Exit, late clock/budget and protocol failures
+cannot become successful samples. No native reads after Exit. Missing
+Completion never publishes/reuses a buffer, including forced fiber deletion.
+Admission/stop/busy now share ONE atomic word; separate state/active atomics
+allowed stop to report quiescence before a concurrent entrant published active.
+All mutable sample writes precede owner release. This is DATA quiescence, not
+permission to unload callbacks/relays or proof the final epilogue returned.
+Focused CTest30/30 PASS, collector19 groups, hook audit3844 checks, plus five
+isolated cleanup-fault cases (including peer-fiber poison). Main DLL unchanged.
+Exit-to-Completion is charged, but complete wrapper cost is STILL unmeasured:
+armed cold FLS, pre-Entry work and final callback/epilogue are not all included.
+NEXT: integrate the actual bounded in-process guarded Reader with this collector
+and wrapper, exercising complete/early-filter/failure/SEH paths in an owned
+fixture. Do not repeat separate map-reader/empty-sink percentiles as integrated
+proof. Preserve one native invocation and original return-slot/SEH semantics;
+keep kCompleteWrapperBudgetMeasured and kRuntimeAdmission false until a defensible
+full-path contract exists; cold FLS may allocate and percentiles are not a hard
+1ms guarantee. Then certify the prepared enemy module,
 native fallbacks/config/relay lifetime and immutable preparation offer before
 connecting the external transaction to an explicit exam. Its byte/protection
 verification is NOT a release certificate or module-identity/retention proof;

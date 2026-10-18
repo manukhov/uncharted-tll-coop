@@ -7,6 +7,7 @@
 #include <map>
 #include <vector>
 #include <cstdio>
+#include <thread>
 
 namespace {
 namespace col = coop::enemy_jointblend_collector;
@@ -156,7 +157,13 @@ struct Fixture {
             kind == hook::Kind::StoreReturn || kind == hook::Kind::Exit;
         return e;
     }
-    void send(hook::Kind kind, unsigned body = 0) { collector.emit(event(kind, body)); }
+    void finish(bool normal = true, bool cleanup = true, bool observer = true) {
+        collector.finish({nonce, normal, cleanup, observer});
+    }
+    void send(hook::Kind kind, unsigned body = 0) {
+        collector.emit(event(kind, body));
+        if (kind == hook::Kind::Exit) finish();
+    }
     void through_process() {
         send(hook::Kind::Entry); send(hook::Kind::ResetEnter); send(hook::Kind::ResetReturn);
         send(hook::Kind::ProcessEnter); send(hook::Kind::PostposeEnter); send(hook::Kind::PostposeReturn);
@@ -280,6 +287,8 @@ bool exception_reentry_and_stop_wait_for_outer_exit() {
         f.reader.forbidden = true;
         auto exit = f.event(hook::Kind::Exit); exit.normal_return = kind == hook::Kind::Reentry;
         f.collector.emit(exit);
+        CHECK(!f.collector.quiescent() && !f.first().published);
+        f.finish(exit.normal_return);
         CHECK(f.collector.quiescent() && f.reader.calls == reads);
         CHECK(f.first().published && f.first().failure == (kind == hook::Kind::Exception ?
             col::Failure::exception : col::Failure::reentry));
@@ -313,8 +322,8 @@ bool budget_charges_observer_intervals_not_native_gaps() {
     }
     f.send(hook::Kind::PrimaryReturn); f.clock.time += 100000000; f.send(hook::Kind::Exit);
     f.collector.stop(); CHECK(f.collector.quiescent());
-    CHECK(f.first().failure == col::Failure::none && f.first().total_ticks == 16);
-    CHECK(f.first().policy.observer_ticks == 16);
+    CHECK(f.first().failure == col::Failure::none && f.first().total_ticks == 17);
+    CHECK(f.first().policy.observer_ticks == 17);
     Fixture over; CHECK(over.collector.arm()); over.clock.step = 300; over.full();
     CHECK(over.collector.quiescent() && !over.collector.requested());
     CHECK(over.first().failure == col::Failure::budget && !obs::completed_witness(over.first().policy));
@@ -360,7 +369,7 @@ bool late_exit_failure_cannot_publish_a_success() {
         if (mutation == 0) ++exit.job;
         if (mutation == 1) f.clock.time = 0;
         if (mutation == 2) f.clock.step = 1001;
-        f.collector.emit(exit); f.collector.stop();
+        f.collector.emit(exit); f.collector.stop(); f.finish();
         CHECK(f.collector.quiescent() && f.first().published);
         CHECK(!col::complete(f.first()));
     }
@@ -374,6 +383,124 @@ bool missing_exit_never_releases_or_recycles_owned_buffers() {
     CHECK(!f.collector.arm());
     f.next(); f.full(); // Another nonce cannot replace the missing outer Exit.
     CHECK(!f.collector.quiescent() && !f.first().published);
+    return true;
+}
+bool exit_waits_for_matching_cleanup_completion() {
+    Fixture f; CHECK(f.collector.arm()); f.through_process(); f.primary_events();
+    const auto reads = f.reader.calls;
+    f.reader.forbidden = true;
+    f.collector.emit(f.event(hook::Kind::Exit)); f.collector.stop();
+    CHECK(f.first().exit_seen && !f.first().published && !col::complete(f.first()));
+    CHECK(!f.collector.quiescent());
+    f.collector.finish({999, true, true, true});
+    CHECK(!f.collector.quiescent() && !f.first().published);
+    f.next(); f.full(); // Missing completion cannot be displaced by another scope.
+    CHECK(!f.collector.quiescent() && f.collector.count() == 1 && !f.first().published);
+    --f.nonce; f.finish();
+    CHECK(f.collector.quiescent() && f.first().published);
+    // Deliberate next() delay is charged as cleanup, not silently omitted.
+    CHECK(f.first().failure == col::Failure::budget);
+    const auto ticks = f.first().total_ticks;
+    f.finish(false, false, false);
+    CHECK(f.first().total_ticks == ticks && f.first().failure == col::Failure::budget);
+    CHECK(f.reader.calls == reads && f.reader.forbidden_calls == 0);
+    return true;
+}
+bool cleanup_and_protocol_failures_cannot_publish_success() {
+    for (unsigned mutation = 0; mutation < 8; ++mutation) {
+        Fixture f; CHECK(f.collector.arm()); f.through_process(); f.primary_events();
+        const auto reads = f.reader.calls; f.reader.forbidden = true;
+        if (mutation != 5) f.collector.emit(f.event(hook::Kind::Exit));
+        if (mutation == 3) f.clock.time = 0;
+        if (mutation == 4) f.clock.time += 1001;
+        if (mutation == 6) f.collector.emit(f.event(hook::Kind::Exit));
+        if (mutation == 7) f.collector.emit(f.event(hook::Kind::StoreEnter));
+        f.finish(mutation != 2, mutation != 0, mutation != 1);
+        f.collector.stop();
+        CHECK(f.collector.quiescent() && f.first().published && !col::complete(f.first()));
+        CHECK(f.first().failure != col::Failure::none);
+        if (mutation == 0) CHECK(f.first().failure == col::Failure::cleanup);
+        if (mutation == 1) CHECK(f.first().failure == col::Failure::reentry);
+        if (mutation == 5) CHECK(f.first().failure == col::Failure::incomplete);
+        CHECK(f.reader.calls == reads && f.reader.forbidden_calls == 0);
+    }
+    return true;
+}
+bool stop_and_admission_share_one_atomic_lifecycle() {
+    col::Lease closed; closed.stop();
+    CHECK(closed.quiescent() && !closed.arm() && !closed.acquire());
+    col::Lease owned; CHECK(owned.arm() && owned.acquire()); owned.stop();
+    CHECK(!owned.requested() && !owned.quiescent() && !owned.acquire());
+    owned.release(); CHECK(owned.quiescent() && !owned.arm() && !owned.acquire());
+    // Repeated two-thread admission/stop ordering. A held lease must never be
+    // reported quiescent, including before a sample or nonce has been stored.
+    for (unsigned i = 0; i < 256; ++i) {
+        col::Lease lease; CHECK(lease.arm());
+        std::atomic<bool> go{false}, decided{false}, release{false};
+        bool acquired = false;
+        std::thread entrant([&] {
+            while (!go.load(std::memory_order_acquire)) std::this_thread::yield();
+            acquired = lease.acquire(); decided.store(true, std::memory_order_release);
+            while (!release.load(std::memory_order_acquire)) std::this_thread::yield();
+            if (acquired) lease.release();
+        });
+        go.store(true, std::memory_order_release); lease.stop();
+        while (!decided.load(std::memory_order_acquire)) std::this_thread::yield();
+        const bool correct = lease.quiescent() == !acquired;
+        release.store(true, std::memory_order_release); entrant.join();
+        CHECK(correct && lease.quiescent() && !lease.acquire());
+    }
+    return true;
+}
+struct PausedClock {
+    std::atomic<bool> entered{false}, resume{false};
+    Clock clock;
+    static std::uint64_t now(void* p) noexcept {
+        auto& self = *static_cast<PausedClock*>(p);
+        if (!self.entered.exchange(true, std::memory_order_acq_rel))
+            while (!self.resume.load(std::memory_order_acquire)) std::this_thread::yield();
+        return Clock::now(&self.clock);
+    }
+};
+bool stop_during_admission_waits_for_owner_release() {
+    PausedClock clock;
+    Fixture f(3, {&clock, PausedClock::now, 1000000}); CHECK(f.collector.arm());
+    std::thread entrant([&] { f.full(); });
+    while (!clock.entered.load(std::memory_order_acquire)) std::this_thread::yield();
+    f.collector.stop();
+    const bool held = !f.collector.quiescent() && !f.collector.requested();
+    clock.resume.store(true, std::memory_order_release); entrant.join();
+    CHECK(held && f.collector.quiescent());
+    return true;
+}
+struct ReentrantClock {
+    Fixture* fixture{};
+    Clock clock;
+    bool inject{}, remained_owned{};
+    static std::uint64_t now(void* p) noexcept {
+        auto& self = *static_cast<ReentrantClock*>(p);
+        if (self.inject) {
+            self.inject = false;
+            self.fixture->finish();
+            self.remained_owned = !self.fixture->collector.quiescent() && !self.fixture->first().published;
+        }
+        return Clock::now(&self.clock);
+    }
+};
+bool recursive_completion_never_releases_the_outer_owner() {
+    // Deliberately violate the nonreentrant Clock contract to verify that the
+    // Exit/Completion guards are established before callbacks, not after them.
+    for (bool during_exit : {false, true}) {
+        ReentrantClock clock;
+        Fixture f(3, {&clock, ReentrantClock::now, 1000000}); clock.fixture = &f;
+        CHECK(f.collector.arm()); f.through_process(); f.primary_events();
+        f.reader.forbidden = true;
+        clock.inject = during_exit; f.collector.emit(f.event(hook::Kind::Exit));
+        clock.inject = !during_exit; f.finish();
+        CHECK(clock.remained_owned && f.collector.quiescent());
+        CHECK(f.first().published && !col::complete(f.first()) && f.first().failure == col::Failure::scope);
+        CHECK(f.reader.forbidden_calls == 0);
+    }
     return true;
 }
 bool process_and_export_provenance_rejects_mismatches() {
@@ -447,6 +574,11 @@ int main(int argc,char** argv) {
         {"early filter", skipped_first_actor_does_not_read_full_metadata},
         {"late exit failure", late_exit_failure_cannot_publish_a_success},
         {"abandoned scope", missing_exit_never_releases_or_recycles_owned_buffers},
+        {"delayed completion", exit_waits_for_matching_cleanup_completion},
+        {"cleanup failures", cleanup_and_protocol_failures_cannot_publish_success},
+        {"atomic lease", stop_and_admission_share_one_atomic_lifecycle},
+        {"stop during admission", stop_during_admission_waits_for_owner_release},
+        {"recursive completion", recursive_completion_never_releases_the_outer_owner},
         {"actual context provenance", process_and_export_provenance_rejects_mismatches},
     };
     std::size_t passed = 0;

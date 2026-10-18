@@ -2,6 +2,7 @@
 #include "enemy_jointblend_capture.h"
 #include "enemy_jointblend_hooks.h"
 #include "enemy_jointblend_native_contract.h"
+#include "enemy_jointblend_lease.h"
 #include "nadine_p99_group_native_frame.h"
 #include <atomic>
 
@@ -19,7 +20,7 @@ inline constexpr bool kRuntimeAdmission = false;
 inline constexpr bool kProgramExecutionWitnessAvailable = false;
 using Address = std::uintptr_t;
 using Words8 = std::array<std::uint32_t, 8>;
-enum class Failure : std::uint8_t { none, clock, read, scope, callsite, arguments, incomplete, exception, reentry, budget };
+enum class Failure : std::uint8_t { none, clock, read, scope, callsite, arguments, incomplete, exception, reentry, budget, cleanup };
 struct BodyCapture {
     Words8 input{}, stored{}, locator{};
     std::array<std::uint64_t, 2> valid{};
@@ -36,21 +37,23 @@ struct Sample {
     cap::Filter filter{};
     cap::Status read_status{};
     Failure failure{};
-    std::uint64_t nonce{}, pending_ticks{}, total_ticks{};
+    std::uint64_t nonce{}, pending_ticks{}, total_ticks{}, exit_tick{};
     Address job{}, process_context{}, process_wrapper_pc{};
     Address command_list{}; // Generated transient commands, NOT raw skeleton program bytes.
     std::uint32_t command_words{};
     bool begin_attempted{}, begun{}, reset_entered{}, process_active{}, normal_exit{}, published{};
+    bool exit_seen{}, exit_processing{}, completion_started{}, cleanup_ok{}, observer_ok{};
 };
-// Policy closure alone is insufficient: the outer Exit may fail its final
-// clock/budget/scope check after primary-return closed the event trace.
+// Policy closure/Exit alone is insufficient: cleanup and completion can still
+// fail after primary-return closed the event trace. Read only while quiescent.
 inline bool complete(const Sample& sample) noexcept {
-    return sample.published && sample.normal_exit && sample.failure == Failure::none &&
+    return sample.published && sample.exit_seen && sample.completion_started &&
+        sample.cleanup_ok && sample.observer_ok && sample.normal_exit && sample.failure == Failure::none &&
         obs::completed_witness(sample.policy);
 }
 struct Clock {
     void* context{};
-    std::uint64_t (*now)(void*) noexcept{}; // Zero means failure.
+    std::uint64_t (*now)(void*) noexcept{}; // Bounded, nonthrowing, nonreentrant; no game access. Zero means failure.
     std::uint64_t frequency{};
 };
 
@@ -64,41 +67,39 @@ public:
         : reader_(reader), image_(image), clock_(clock) {}
     bool arm() noexcept {
         if (!clock_.now || clock_.frequency < 1000 || !native::valid_module(image_)) return false;
-        unsigned expected = 0;
-        return state_.compare_exchange_strong(expected, 1, std::memory_order_acq_rel);
+        return lease_.arm();
     }
-    void stop() noexcept { state_.store(2, std::memory_order_release); }
-    bool requested() const noexcept { return state_.load(std::memory_order_acquire) == 1; }
-    bool quiescent() const noexcept {
-        return state_.load(std::memory_order_acquire) == 2 && active_.load(std::memory_order_acquire) == 0;
-    }
+    void stop() noexcept { lease_.stop(); }
+    bool requested() const noexcept { return lease_.requested(); }
+    bool quiescent() const noexcept { return lease_.quiescent(); }
     const std::array<Sample, obs::kMaxSamples>& samples() const noexcept { return samples_; }
     std::size_t count() const noexcept { return count_; } // Only after quiescent().
     std::uint32_t probes() const noexcept { return probes_; } // Only after quiescent().
     hooks::Sink sink() noexcept {
         return {this, [](void* p) noexcept { return static_cast<Collector*>(p)->requested(); },
-            [](void* p, const hooks::Event& e) noexcept { static_cast<Collector*>(p)->emit(e); }};
+            [](void* p, const hooks::Event& e) noexcept { static_cast<Collector*>(p)->emit(e); },
+            [](void* p, const hooks::Completion& c) noexcept { static_cast<Collector*>(p)->finish(c); }};
     }
     void emit(const hooks::Event& e) noexcept {
         if (e.kind == hooks::Kind::Entry) { enter(e); return; }
         if (!e.invocation_nonce || active_.load(std::memory_order_acquire) != e.invocation_nonce) return;
+        if (!count_ || samples_[count_-1].nonce!=e.invocation_nonce) { stop(); return; }
         auto& s = samples_[count_ - 1];
-        const auto start = tick();
+        if (s.exit_seen || s.completion_started) { fail(s,Failure::scope);stop();return; }
         if (e.kind == hooks::Kind::Exit) {
+            s.exit_seen=true;s.exit_processing=true; // Before any clock callback.
+            const auto start=tick();
             // No native pointer dereferences after original JointBlend returns.
             if (e.job != s.job) fail(s, Failure::scope);
             s.normal_exit = e.normal_return;
             if (!e.normal_return) fail(s, Failure::exception);
             if (!s.begun) { if (!s.begin_attempted) ++session_.attempted; fail(s, Failure::incomplete); }
             else if (!obs::completed_witness(s.policy)) fail(s, Failure::incomplete);
-            charge(s, start);
-            s.published = true;
-            if (count_ == obs::kMaxSamples || session_.stopped || s.failure == Failure::budget || s.failure == Failure::clock)
-                stop();
-            active_.store(0, std::memory_order_release);
-            lease_.clear(std::memory_order_release);
+            s.exit_tick=charge(s,start);
+            s.exit_processing=false;
             return;
         }
+        const auto start = tick();
         if (e.kind == hooks::Kind::Exception || e.kind == hooks::Kind::Reentry) {
             fail(s, e.kind == hooks::Kind::Exception ? Failure::exception : Failure::reentry);
             if (s.begun) obs::reentered(s.policy);
@@ -107,13 +108,30 @@ public:
         }
         charge(s, start);
     }
+    void finish(const hooks::Completion& c) noexcept {
+        if (!c.invocation_nonce || active_.load(std::memory_order_acquire)!=c.invocation_nonce) return;
+        if (!count_ || samples_[count_-1].nonce!=c.invocation_nonce) { stop();return; }
+        auto& s=samples_[count_-1];
+        if (s.exit_processing || s.completion_started) { fail(s,Failure::scope);stop();return; }
+        s.completion_started=true; // Reentrant/duplicate completion never releases the outer owner.
+        if (!s.exit_seen) fail(s,Failure::incomplete);
+        if (c.normal_return!=s.normal_exit) fail(s,Failure::scope);
+        s.cleanup_ok=c.cleanup_ok;s.observer_ok=c.observer_ok;
+        if (!c.cleanup_ok) fail(s,Failure::cleanup);
+        if (!c.observer_ok) fail(s,Failure::reentry);
+        // No game addresses or Reader calls here. Charge the previously missing
+        // Exit-to-cleanup interval, not an inclusive native-time estimate.
+        charge(s,s.exit_tick);
+        if (count_==obs::kMaxSamples || session_.stopped || s.failure!=Failure::none) stop();
+        s.published=true; // Last output mutation, before release of the one-word lease.
+        release_empty();
+    }
 private:
     Reader& reader_;
     native::ModuleImage image_{};
     Clock clock_{};
-    std::atomic<unsigned> state_{0};
     std::atomic<std::uint64_t> active_{0};
-    std::atomic_flag lease_ = ATOMIC_FLAG_INIT;
+    Lease lease_{};
     obs::Session session_{};
     std::array<Sample, obs::kMaxSamples> samples_{};
     std::size_t count_{};
@@ -126,21 +144,22 @@ private:
         if (status.ok()) return true;
         s.read_status = status; fail(s, Failure::read); return false;
     }
-    void charge(Sample& s, std::uint64_t start) noexcept {
+    std::uint64_t charge(Sample& s, std::uint64_t start) noexcept {
         const auto end = tick();
-        if (!start || !end || end < start) { fail(s, Failure::clock); stop(); return; }
+        if (!start || !end || end < start) { fail(s, Failure::clock); stop(); return 0; }
         const auto elapsed = end - start;
         const auto limit = clock_.frequency / 1000;
         if (s.total_ticks > limit || elapsed > limit - s.total_ticks) {
-            fail(s, Failure::budget); if (s.begun) obs::reject(s.policy, obs::Reason::budget); stop(); return;
+            fail(s, Failure::budget); if (s.begun) obs::reject(s.policy, obs::Reason::budget); stop(); return end;
         }
         s.total_ticks += elapsed;
         if (s.begun) { if (!obs::charge(s.policy, 0, elapsed)) fail(s, Failure::budget); }
         else s.pending_ticks += elapsed;
+        return end;
     }
     void enter(const hooks::Event& e) noexcept {
-        if (!requested() || !e.invocation_nonce || lease_.test_and_set(std::memory_order_acquire)) return;
-        // Publish busy BEFORE mutable counters, so worker cannot race stop().
+        if (!e.invocation_nonce || !lease_.acquire()) return;
+        // The single-word lease is busy BEFORE publishing the nonce or counters.
         active_.store(e.invocation_nonce, std::memory_order_release);
         if (!requested()) { release_empty(); return; }
         const auto start = tick();
@@ -164,7 +183,7 @@ private:
     }
     void release_empty() noexcept {
         active_.store(0, std::memory_order_release);
-        lease_.clear(std::memory_order_release);
+        lease_.release();
     }
     bool frame(Sample& s, const hooks::Event& e) noexcept {
         if (e.job != s.job || e.invocation_nonce != s.nonce || !e.original_jointblend_return_slot ||

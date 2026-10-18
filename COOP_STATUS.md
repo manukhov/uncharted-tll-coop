@@ -42185,3 +42185,83 @@ FLS may still allocate. kCompleteWrapperBudgetMeasured and kRuntimeAdmission
 remain false: component timing is useful evidence, not a complete production
 budget certificate. Prepared module identity/fallback/lifetime, worker output
 and native live-capture admission still precede a game exam.
+
+## 2026-10-18 — Retain enemy samples through FLS cleanup at1417815B7/141782B3A
+
+**Scope:** collector/wrapper implementation, not a new native-game finding.
+No game launch, injection, input or enemy write. Appearance remains PARKED;
+the main runtime DLL and both runtime-admission constants are unchanged. No
+new native addresses/fields were established; existing sole-IDB labels need
+no write for this unit.
+
+**STATIC defects / rejected alternatives.** Collector Exit used to publish
+and release its sample before g_frames.leave. A later failed restoration could
+therefore inherit success. Separately, state_ and active_ were independent
+atomics: an entrant could see armed while stop's reader saw active==0. Stronger
+wording about acquire/release did not make those two objects one lifecycle.
+The registered-wrapper optimization counter is also NOT a data/unload fence.
+
+- REJECTED: publish at Exit and append cleanup status later. A consumer can
+  already be reading the object; publication must follow final output writes.
+- REJECTED: timeout/forced fiber deletion synthesizes completion or clears a
+  busy sample. Neither proves that its owner has unwound or stopped writing.
+- Implemented: mandatory scalar Completion(nonce, normal_return, cleanup_ok,
+  observer_ok) after FLS leave AND registered-wrapper decrement. It carries
+  no game pointers. The wrapper's final LastError restoration/epilogue still
+  follow it; it grants neither unload authority nor complete-cost certification.
+
+**STATIC implementation evidence:** the root's nested finally attempts leave
+even if Exit's observer raises SEH. Completion starts fail-closed before entry
+and includes both leave's result AND global FLS poison (another fiber can poison
+the shared slot). Native exceptions/reentry invalidate observer_ok. Only the
+outer observed nonce completes; nested/filtered/foreign scopes cannot finish a
+different sample. Existing original-call MASM slots and native ABI are retained.
+
+Collector Exit records native end without releasing ownership. Completion
+performs scalar-only cleanup/normal-return/protocol/time validation, sets the
+final published flag, then releases. Exit-processing and completion-started
+guards precede clock callbacks. A duplicate active completion rejects without
+releasing its outer owner; a late duplicate is ignored. Exit-to-Completion
+time is now charged, but pre-Entry work, cold FLS and the final callback return/
+wrapper tail are NOT all covered. kCompleteWrapperBudgetMeasured=false and
+kRuntimeAdmission=false remain mandatory.
+
+One atomic Lease now holds armed/stopped/busy in a shared modification order.
+Admission wins before stop and keeps busy until its owner releases, OR stop
+wins and prevents admission. Busy is acquired before nonce/counter/sample
+publication. Quiescent acquire is available only after stopped AND not busy;
+all mutable output writes precede release. This protects collector data only.
+The worker must still retain the DLL/collector/FLS/relays for process lifetime.
+
+**CONFIRMED — owned fixtures only.** Predictions encoded in tests: Exit alone
+cannot publish; wrong/missing Completion cannot release/recycle; cleanup failure
+before OR after an FLS write, also during native SEH, must complete as rejected;
+peer poison must reject even when local FLS restoration succeeds. All pass.
+The native SEH invalidation tests explicitly expect observer_ok=false, not a
+clean trace merely because the exception was reported successfully.
+
+Collector19/19 groups pass: late cleanup/time/protocol faults, post-Exit no-read
+guards, duplicate/missing completion, hostile recursive Clock callbacks,
+256 concurrent stop/admission cases and stop while the entrant is held before
+sample initialization. Hook audit3844 checks pass, including real SEH from Exit,
+normal/native-SEH cleanup, full-width ABI/results, native LastError, fibers and
+abandonment. Five separate terminal cleanup-fault processes pass, including202
+checks for the peer-poison case. No unsafe poisoned-slot lookup is retried.
+Independent read-only review found no remaining scoped correctness defect.
+
+Verification: Release /W4 /WX core and fixtures build; focused CTest30/30 PASS,
+including existing external transport/fault, debug lifecycle and MASM tests.
+The uninstrumented cost fixture now includes the completion callback; its
+percentiles remain non-admitting fixture measurements. Main DLL SHA256 still
+3ACCA2A17891BA1D5CA14EC39CC0024827556BE71B5DE0E22E9C227063BBD710.
+Preexisting untracked tmp/ is untouched. No tll process is running at handoff.
+
+**HYPOTHESIS / next concrete step:** connect the actual bounded in-process
+guarded Reader to this collector and wrapper in an owned integration fixture;
+exercise normal capture, early filter/rejection, failed reads, cold FLS and SEH
+with honest whole-path cost boundaries. Do not add separate map-reader and
+synthetic-sink distributions or call completion's last timestamp total wrapper
+time. Prepared enemy-module identity/ABI/fallback configuration, immutable
+external preparation offer, process-lifetime resources and bounded quiescent
+worker output still precede an explicit game exam. Live asset/command execution
+and enemy movement admission remain unproven; no synchronization success claim.

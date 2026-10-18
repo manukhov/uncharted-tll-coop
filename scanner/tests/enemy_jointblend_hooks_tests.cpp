@@ -7,6 +7,7 @@
 #include <array>
 #include <atomic>
 #include <cstdio>
+#include <cstring>
 
 namespace hooks = coop::enemy_jointblend_hooks;
 
@@ -31,9 +32,14 @@ enum class ThrowAt { none, jointblend, reset, process, postpose, primary, store 
 struct State {
     std::array<hooks::Event, 512> events{};
     std::size_t event_count = 0;
+    std::array<hooks::Completion, 8> completions{};
+    std::size_t completion_count = 0;
+    hooks::AuditSnapshot at_exit{};
     std::array<unsigned, 6> calls{};
     bool gate = true;
     bool sink_reenter = false;
+    bool exit_reenter = false, exit_throw = false;
+    unsigned cleanup_fault = 0;
     std::uint64_t last_entry_nonce = 0;
 } state;
 struct Job {
@@ -99,7 +105,36 @@ void emit(void* context, const hooks::Event& event) noexcept {
         state.sink_reenter = false;
         jointblend_hook(job);
     }
+    if (event.kind == hooks::Kind::Exit) {
+        if (state.exit_reenter) {
+            state.exit_reenter = false;
+            SetLastError(kEntryError); // This nested fixture's explicit native entry contract.
+            jointblend_hook(job);
+        }
+        state.at_exit = hooks::audit_snapshot();
+        if (state.cleanup_fault) hooks::audit_fail_next_write(state.cleanup_fault == 2);
+        if (state.exit_throw) RaiseException(kException, 0, 0, nullptr);
+    }
     SetLastError(0xBAD10002);
+}
+void complete(void* context, const hooks::Completion& completion) noexcept {
+    check(context == &state && completion.invocation_nonce != 0, "completion context and nonce");
+    const auto now = hooks::audit_snapshot();
+    check(state.at_exit.entered_wrappers && now.entered_wrappers == state.at_exit.entered_wrappers - 1,
+        "completion follows wrapper registration retirement");
+    check(now.writes == state.at_exit.writes + 1, "completion follows FLS leave attempt");
+    bool matched = false;
+    for (std::size_t i = 0; i < state.event_count; ++i) {
+        const auto& e = state.events[i];
+        if (e.kind == hooks::Kind::Exit && e.invocation_nonce == completion.invocation_nonce) {
+            matched = true;
+            check(e.normal_return == completion.normal_return, "completion matches native return status");
+        }
+    }
+    check(matched, "completion follows matching Exit");
+    if (state.completion_count < state.completions.size()) state.completions[state.completion_count++] = completion;
+    else check(false, "completion fixture capacity");
+    SetLastError(0xBAD10003);
 }
 
 __declspec(noinline) void* __fastcall native_reset(void* cache, const void* root) {
@@ -230,9 +265,13 @@ bool run_catching(Job& job) {
 }
 void clear() noexcept {
     state.event_count = 0;
+    state.completion_count = 0;
+    state.at_exit = {};
     state.calls = {};
     state.gate = true;
     state.sink_reenter = false;
+    state.exit_reenter = state.exit_throw = false;
+    state.cleanup_fault = 0;
 }
 unsigned count(hooks::Kind kind) noexcept {
     unsigned n = 0;
@@ -240,6 +279,9 @@ unsigned count(hooks::Kind kind) noexcept {
     return n;
 }
 void check_complete_trace(Job& job) noexcept {
+    check(state.completion_count == 1 && state.completions[0].normal_return &&
+        state.completions[0].cleanup_ok && state.completions[0].observer_ok,
+        "exactly one successful post-cleanup completion");
     check(state.event_count == 16 && count(hooks::Kind::Entry) == 1 &&
         count(hooks::Kind::Exit) == 1 && count(hooks::Kind::Exception) == 0,
         "complete event trace exactly once");
@@ -373,6 +415,16 @@ void reentry_tests() {
     job = {};
     check(!run_catching(job), "fresh scope after reentry");
     check_complete_trace(job);
+    clear(); job = {}; state.exit_reenter = true;
+    check(!run_catching(job), "Exit observer reentry returns");
+    check(state.completion_count == 1 && state.completions[0].cleanup_ok &&
+        !state.completions[0].observer_ok, "Exit reentry is rejected by completion");
+    check(GetLastError() == kNativeError, "completion preserves native LastError after Exit reentry");
+    clear(); job = {}; state.exit_throw = true;
+    check(run_catching(job), "Exit observer SEH propagates");
+    check(state.completion_count == 1 && state.completions[0].cleanup_ok &&
+        !state.completions[0].observer_ok, "Exit observer failure still cleans up and completes as rejected");
+    check(hooks::audit_snapshot().entered_wrappers == 0, "Exit SEH retires wrapper");
 }
 void exception_tests() {
     for (auto stage : {ThrowAt::jointblend, ThrowAt::reset, ThrowAt::process,
@@ -385,6 +437,9 @@ void exception_tests() {
             !state.events[state.event_count - 1].normal_return,
             "unwind emits reject and exactly one abnormal outer Exit");
         check(hooks::audit_snapshot().entered_wrappers==0,"all SEH sites retire root registration after FLS cleanup");
+        check(state.completion_count == 1 && !state.completions[0].normal_return &&
+            state.completions[0].cleanup_ok && !state.completions[0].observer_ok,
+            "native SEH carries invalid observation after successful cleanup");
         const auto before = state.event_count;
         job.throw_at = ThrowAt::none;
         SetLastError(kEntryError);
@@ -456,6 +511,7 @@ void fiber_tests() {
     void* doomed = CreateFiber(0, fiber_entry, &abandoned);
     check(doomed != nullptr, "create disposable suspended fiber");
     if (doomed) { SwitchToFiber(doomed); DeleteFiber(doomed); }
+    check(state.completion_count == 0, "abandoned fiber cannot manufacture completion");
     check(hooks::audit_snapshot().entered_wrappers==1,"abandoned fiber leaves conservative registration, never synthetic zero");
     clear();
     Job fresh{};
@@ -497,15 +553,25 @@ void fiber_tests() {
 }
 } // namespace
 
-int main() {
+int main(int argc, char** argv) {
+    unsigned cleanup_fault = 0;
+    bool fault_seh = false, cleanup_peer = false;
+    if (argc == 2) {
+        if (std::strcmp(argv[1], "--cleanup-before") == 0) cleanup_fault = 1;
+        else if (std::strcmp(argv[1], "--cleanup-after") == 0) cleanup_fault = 2;
+        else if (std::strcmp(argv[1], "--cleanup-before-seh") == 0) { cleanup_fault = 1; fault_seh = true; }
+        else if (std::strcmp(argv[1], "--cleanup-after-seh") == 0) { cleanup_fault = 2; fault_seh = true; }
+        else if (std::strcmp(argv[1], "--cleanup-peer") == 0) cleanup_peer = true;
+        else return 2;
+    } else if (argc != 1) return 2;
     check(hooks::targets().code[0] == 0 && hooks::targets().postpose == 0,
         "targets unavailable before one-shot configuration");
     SetLastError(kEntryError);
     const hooks::NativeCalls native{native_jointblend, native_reset, native_process,
         native_postpose, native_primary, native_store};
-    check(hooks::configure(native, {&state, requested, emit}), "isolated FLS configuration");
+    check(hooks::configure(native, {&state, requested, emit, complete}), "isolated FLS configuration");
     check(GetLastError() == kEntryError, "configuration preserves LastError");
-    check(!hooks::configure(native, {&state, requested, emit}), "second configuration rejected");
+    check(!hooks::configure(native, {&state, requested, emit, complete}), "second configuration rejected");
     targets = hooks::targets();
     check(targets.code[0] != 0 && targets.code[0] == targets.code[1] &&
         targets.code[3] != targets.code[4] && targets.postpose != 0, "exact target ordering");
@@ -516,6 +582,47 @@ int main() {
     primary_hook = reinterpret_cast<hooks::Primary>(targets.code[5]);
     store_hook = reinterpret_cast<hooks::Store>(targets.code[6]);
     postpose_hook = reinterpret_cast<hooks::Postpose>(targets.postpose);
+    if (cleanup_peer) {
+        clear();
+        void* caller = ConvertThreadToFiber(nullptr);
+        if (!caller) return 2;
+        Job suspended{}, poisoning{};
+        suspended.yield_to = suspended.return_to = caller;
+        void* fiber = CreateFiber(0, fiber_entry, &suspended);
+        if (!fiber) return 2;
+        SwitchToFiber(fiber);
+        state.cleanup_fault = 2;
+        check(!run_catching(poisoning), "peer fiber returns despite cleanup failure");
+        state.cleanup_fault = 0;
+        SwitchToFiber(fiber); // Its own FLS restoration succeeds, but slot is poisoned.
+        check(state.completion_count == 2 && !state.completions[0].cleanup_ok &&
+            !state.completions[1].cleanup_ok, "peer poison rejects even a successful local FLS restoration");
+        check(state.calls[0] == 2 && hooks::audit_snapshot().entered_wrappers == 0,
+            "both poisoned scopes retain exactly-once native and registration retirement");
+        DeleteFiber(fiber);
+        check(ConvertFiberToThread() != FALSE, "poison fixture leaves fiber mode");
+        std::printf("%u checks, %u failures\n", checks.load(), failures.load());
+        return failures.load() ? 1 : 0;
+    }
+    if (cleanup_fault) {
+        clear(); state.cleanup_fault = cleanup_fault; Job job{};
+        if (fault_seh) job.throw_at = ThrowAt::store;
+        check(run_catching(job) == fault_seh, "cleanup failure preserves native return or exception");
+        check(state.completion_count == 1 && !state.completions[0].cleanup_ok &&
+            state.completions[0].normal_return == !fault_seh && state.completions[0].observer_ok == !fault_seh,
+            "failed FLS leave is reported, never clean completion");
+        check(state.calls[0] == 1 && hooks::audit_snapshot().entered_wrappers == 0,
+            "cleanup failure neither retries native nor leaks root counter");
+        if (!fault_seh) check(GetLastError() == kNativeError, "cleanup failure preserves native LastError");
+        const auto before = hooks::audit_snapshot();
+        clear(); job = {};
+        check(!run_catching(job) && state.event_count == 0 && state.completion_count == 0,
+            "poisoned slot never emits another observation or completion");
+        check(hooks::audit_snapshot().reads == before.reads && state.calls[0] == 1,
+            "poisoned slot never reads possibly dangling frame and still forwards native");
+        std::printf("%u checks, %u failures\n", checks.load(), failures.load());
+        return failures.load() ? 1 : 0;
+    }
     DWORD64 image = 0;
     check(RtlLookupFunctionEntry(reinterpret_cast<DWORD64>(
         &coop::p99_group_native_frame::p99_group_invoke_native), &image, nullptr) != nullptr,

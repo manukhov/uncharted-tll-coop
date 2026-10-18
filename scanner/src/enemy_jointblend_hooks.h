@@ -55,8 +55,18 @@ struct Event {
     // Exit is emitted once for normal return or SEH unwind of an observed outer
     // JointBlend. Forced fiber deletion need not unwind and can omit Exit: a
     // worker must stop/timeout without publishing or reusing an active sample.
-    // Only Exit ends that scope; inner Exception merely invalidates it.
+    // Exit ends native observation, NOT collector ownership/publication.
     bool normal_return = false;
+};
+
+// Scalar-only retirement, after FLS cleanup AND registered-wrapper retirement.
+// No native address/borrowed pointer survives here. Missing retirement (e.g.
+// DeleteFiber without unwind) never allows a worker to publish/reuse a sample.
+// Does NOT certify callback return, wrapper epilogue, unload or complete cost.
+struct Completion {
+    std::uint64_t invocation_nonce{};
+    // observer_ok also excludes native exception/reentry-invalidated traces.
+    bool normal_return{}, cleanup_ok{}, observer_ok{};
 };
 
 struct Sink {
@@ -65,6 +75,8 @@ struct Sink {
     bool (*requested)(void*) noexcept = nullptr;
     // Bounded synchronous observer. Must not throw or retain borrowed pointers.
     void (*emit)(void*, const Event&) noexcept = nullptr;
+    // Required, bounded/nonthrowing/scalar-only; no game reads or callbacks.
+    void (*complete)(void*, const Completion&) noexcept = nullptr;
 };
 
 struct Targets {
@@ -89,6 +101,7 @@ struct AuditSnapshot {
 };
 [[nodiscard]] AuditSnapshot audit_snapshot() noexcept;
 void audit_exhaust_counter() noexcept; // Terminal fixture case only.
+void audit_fail_next_write(bool after_effect) noexcept; // Terminal fixture case.
 #endif
 
 } // namespace coop::enemy_jointblend_hooks
