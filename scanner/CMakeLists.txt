@@ -28,7 +28,7 @@ target_compile_definitions(tll_enemy_jointblend_arm PRIVATE TLL_ENEMY_JOINTBLEND
 # Compile the real observer components without fault-injection definitions.
 # No DLL/startup, no automatic install, and no link from the campaign runtime.
 add_library(tll_enemy_jointblend_core STATIC EXCLUDE_FROM_ALL
-    src/enemy_jointblend_hooks.cpp src/enemy_jointblend_install_windows.cpp
+    src/enemy_jointblend_hooks.cpp src/enemy_jointblend_install_windows.cpp src/enemy_jointblend_read_windows.cpp
     $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
     $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
 target_include_directories(tll_enemy_jointblend_core PUBLIC src)
@@ -176,6 +176,11 @@ if(BUILD_TESTING)
     target_link_libraries(tll_enemy_jointblend_remote_faults_tests PRIVATE tll_p99_debug_windows)
     add_executable(tll_enemy_jointblend_capture_tests tests/enemy_jointblend_capture_tests.cpp)
     add_executable(tll_enemy_jointblend_collector_tests tests/enemy_jointblend_collector_tests.cpp)
+    add_library(tll_enemy_jointblend_fixture_frame OBJECT tests/enemy_jointblend_integration_native.asm)
+    add_executable(tll_enemy_jointblend_integration_tests tests/enemy_jointblend_integration_tests.cpp $<TARGET_OBJECTS:tll_enemy_jointblend_fixture_frame>)
+    target_link_libraries(tll_enemy_jointblend_integration_tests PRIVATE tll_enemy_jointblend_core)
+    add_executable(tll_enemy_jointblend_read_windows_tests tests/enemy_jointblend_read_windows_tests.cpp)
+    target_link_libraries(tll_enemy_jointblend_read_windows_tests PRIVATE tll_enemy_jointblend_core)
     add_executable(tll_enemy_jointblend_hooks_tests tests/enemy_jointblend_hooks_tests.cpp
         src/enemy_jointblend_hooks.cpp $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
         $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
@@ -185,7 +190,7 @@ if(BUILD_TESTING)
     add_executable(tll_enemy_jointblend_install_windows_tests tests/enemy_jointblend_install_windows_tests.cpp
         src/enemy_jointblend_install_windows.cpp)
     target_compile_definitions(tll_enemy_jointblend_install_windows_tests PRIVATE TLL_ENEMY_INSTALL_TESTING=1)
-    foreach(enemy_part capture collector hooks cost install_windows remote_install remote_faults)
+    foreach(enemy_part capture collector integration read_windows hooks cost install_windows remote_install remote_faults)
         target_include_directories(tll_enemy_jointblend_${enemy_part}_tests PRIVATE src)
         target_compile_features(tll_enemy_jointblend_${enemy_part}_tests PRIVATE cxx_std_20)
         target_compile_definitions(tll_enemy_jointblend_${enemy_part}_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)

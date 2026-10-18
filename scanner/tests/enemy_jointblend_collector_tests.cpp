@@ -21,6 +21,8 @@ struct Reader {
     std::map<A, std::vector<std::byte>> memory;
     std::size_t calls{}, forbidden_calls{}, copied_bytes{};
     bool forbidden{};
+    bool begin_event(std::uint64_t, std::uint64_t, std::uint64_t(*)(void*) noexcept, void*) noexcept { return true; }
+    void end_event() noexcept {}
     void block(A at, std::size_t bytes) { memory[at].resize(bytes); }
     template<class T> void put(A at, T value) {
         auto p = memory.upper_bound(at);

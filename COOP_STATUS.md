@@ -42265,3 +42265,109 @@ time. Prepared enemy-module identity/ABI/fallback configuration, immutable
 external preparation offer, process-lifetime resources and bounded quiescent
 worker output still precede an explicit game exam. Live asset/command execution
 and enemy movement admission remain unproven; no synchronization success claim.
+
+## 2026-10-18 — Integrate guarded reads with real JointBlend wrappers and frames
+
+**Scope:** observation infrastructure for enemy sites1417815B7/141782B3A and
+their already-pinned descendants. No new native address/field finding, IDB
+write, game launch/injection/input or pose write. Appearance remains PARKED.
+The main runtime DLL is untouched; no observer startup/exam is enabled.
+
+**STATIC implementation / alternatives.** A process-lifetime P99 SourceReader
+is REJECTED for this collector: its cached page observations must not survive
+native work. A raw memcpy guarded only by SEH is also insufficient: touching
+an already guarded page consumes its alarm. Reuse only the generic page-query
+and bounded Batch primitives, not Player/P99 owner or selector policy.
+
+enemy_jointblend_read_windows implements read-only Windows transport. The
+collector's exclusive lease protects the Reader as well as output. A lexical
+ReadEvent opens a fresh Batch only after ownership/nonce admission and destroys
+it before native execution or early-filter lease release. Exit/Completion do
+not open a batch or read payloads. A read checks nonzero/bounded/nonoverlapping
+spans, full page coverage and committed/readable/non-guard protection, then
+copies under memory-fault-only SEH. An error latches for that event; no retry.
+The output may be partially changed on a fault and is never accepted as valid.
+No allocation, logging, game callback or page-protection write in this path.
+
+The remaining collector budget (frequency/1000 minus accumulated observer
+ticks) is passed into each phase, not renewed to1ms for every event. Query and
+copy boundaries check the same clock before/after work. If a query exhausts
+the allowance, no payload copy begins. An individual syscall/page fault or
+scheduling delay cannot be preempted; an overrun is rejected afterwards. This
+still is not a hard real-time bound or a complete live wrapper cost account.
+
+**CONFIRMED — Windows Reader, owned allocations only:**30 checks pass. Stable
+guard pages, including an interior page of a requested range, are refused
+without consuming PAGE_GUARD or copying a prefix. A deliberate test-only
+protection change after a cached query produces a contained SEH failure;
+partial output is not successful. A new event discards the stale page cache
+and refuses PAGE_NOACCESS before touch. Also tested: scope/nested-begin guards,
+range/overflow/alias rejection, failed-event no retry, recovery in a new event,
+LastError preservation and deadline expiry before payload access.
+VirtualQuery remains a snapshot: concurrent changes can still consume a newly
+installed guard. No object-retention, ABA or atomic-snapshot claim follows.
+
+**CONFIRMED — integrated owned native fixture:** the real uninstrumented core,
+Collector<WindowsReader> and transport now execute together. This is not an
+event replay or a sum of separate benchmark distributions. A private reserved
+image contains ordinary executable thunks whose CALL instructions actually
+push the required return PCs; their unwind tables are registered with Windows.
+Test-only MASM originals create the independent JointBlend context distance
+0x5F8-0x110 and Process Segment+0x1628. Process helper shadow space is BELOW
+Segment, so it cannot overwrite the modeled fields. The real production MASM
+bridges publish original return slots. Store's real wrapper entry+0xB0 contains
+the fixture refresh return at image+1CF5872. Event values are never rewritten.
+These routines model the contract; they are not the retail implementations.
+
+Eight functional modes pass: full16-body capture, four-scalar non-Pirate filter,
+unreadable Art at entry, Art protection revoked between Reset and Process,
+native Store SEH, stop while native code is active, wrong real return PC and
+wrong real context address. The last two reject without weakening production
+provenance checks. Originals run exactly once per site; Store int/Process
+uint32/Postpose opaque64/Reset pointer and LastError survive. SEH unwinds the
+real dynamic thunks, both original-call bridges and wrappers. No Reader calls
+occur at Exit/Completion or when the wrapper is stopped. Immutable Art/raw/
+program fixture pages stay read-only; output remains private collector memory.
+
+Whole-target external QPC spans the wrapper call through full return/SEH catch,
+including FLS, queries, copies, collector and completion. Allocation, image
+construction and thread/fiber creation are outside timing. One Release run:
+
+- Warm thread:64/64 complete, median367.9us/p95=372.7us/max384.3us.
+- Fresh OS thread:64/64 complete, median397.9us/p95=403.5us/max410.7us.
+- Fresh fiber:64/64 complete, median386.7us/p95=392.6us/max402.7us.
+- Each full fixture:199 VirtualQuery calls and531858 copied bytes, all16 bodies.
+- Native Sleep(3) measured3585.4us inclusive, as predicted; native work is NOT
+  silently subtracted. Durations are diagnostics, not acceptance thresholds.
+
+Functional cases use a fixed test clock to avoid scheduler-dependent verdicts;
+all192 measured samples use real QPC for both collector and Reader budget.
+Future slow runs may reject for budget and are reported as such. These owned
+allocations are packed; real game fragmentation, residency, workloads, relay
+dispatch and scheduling are not established by these numbers. Accordingly
+kCompleteWrapperBudgetMeasured=false and kRuntimeAdmission=false remain.
+
+Verification: /W4 /WX Release core/fixtures build PASS; focused CTest35/35 PASS,
+including old collector19 groups, hook/cleanup tests, external transport faults,
+debug lifecycle, generic page readers and MASM ABI fixtures. Main DLL SHA256
+remains3ACCA2A17891BA1D5CA14EC39CC0024827556BE71B5DE0E22E9C227063BBD710.
+Preexisting untracked tmp/ is untouched; no tll process running at this check.
+
+Independent read-only review found a fixture-only large-stack prologue defect:
+the0x1648 Process allocation needed __chkstk before subtracting RSP. Fixed
+using the existing process-frame fixture pattern and verified against the
+[Microsoft x64 prologue contract](https://learn.microsoft.com/en-us/cpp/build/prolog-and-epilog?view=msvc-170).
+This preserves argument registers, the0x1628 Segment distance and unwind data.
+Review also clarified that published REJECTED diagnostics may contain partial
+BodyCapture bytes; only complete(sample) admits successful evidence. Arbitrary
+observer SEH during C++ RAII is outside the nonthrowing callback contract;
+supported payload faults are contained in the SEH leaf and native SEH occurs
+outside Reader phases. No additional scoped blocker was found.
+
+**Next concrete step:** move to prepared enemy-module identity/ABI/fallback
+configuration and process-lifetime retention, then its immutable external
+preparation offer and bounded quiescent worker output. Reuse this integrated
+fixture instead of repeating separate component timings. The current external
+patch transaction is not a module/release certificate. Explicit exam startup
+and a discriminating live capture prediction are still required before launch;
+cmd16/live asset proof and enemy movement admission remain separate and open.

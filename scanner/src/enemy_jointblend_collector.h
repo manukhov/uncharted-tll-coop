@@ -60,6 +60,8 @@ struct Clock {
 // One fixed, process-lifetime collector. Only one current native invocation
 // owns mutable data. Worker consumes it ONLY after quiescent() acquire succeeds.
 // Stop prevents new scopes; it does not cancel or expose an in-flight sample.
+// Reader begin_event/end_event bracket each callback-free read phase. No page
+// cache survives native execution. The same exclusive lease protects Reader.
 template<class Reader>
 class Collector {
 public:
@@ -104,7 +106,9 @@ public:
             fail(s, e.kind == hooks::Kind::Exception ? Failure::exception : Failure::reentry);
             if (s.begun) obs::reentered(s.policy);
         } else if (s.failure == Failure::none) {
-            observe(s, e);
+            ReadEvent reads(*this, start, s.total_ticks);
+            if (reads.opened) observe(s, e);
+            else fail(s, Failure::read);
         }
         charge(s, start);
     }
@@ -138,6 +142,14 @@ private:
     std::uint32_t probes_{};
     Address selected_owner_{};
     std::uint64_t next_tick_{};
+    struct ReadEvent {
+        Reader& reader;
+        bool opened;
+        ReadEvent(Collector& c, std::uint64_t start, std::uint64_t spent) noexcept
+            : reader(c.reader_), opened(spent <= c.clock_.frequency / 1000 &&
+                reader.begin_event(start, c.clock_.frequency / 1000 - spent, c.clock_.now, c.clock_.context)) {}
+        ~ReadEvent() { if (opened) reader.end_event(); }
+    };
     std::uint64_t tick() const noexcept { return clock_.now ? clock_.now(clock_.context) : 0; }
     static void fail(Sample& s, Failure why) noexcept { if (s.failure == Failure::none) s.failure = why; }
     bool read_ok(Sample& s, cap::Status status) noexcept {
@@ -167,7 +179,11 @@ private:
         if (start < next_tick_) { release_empty(); return; }
         if (++probes_ > 600) { stop(); release_empty(); return; }
         cap::Filter filter{};
-        const auto status = cap::fast_filter(reader_, static_cast<Address>(image_.base), e.job, filter);
+        cap::Status status{cap::Reason::unreadable};
+        { // End page scope BEFORE releasing a filtered/failed sample's lease.
+            ReadEvent reads(*this, start, 0);
+            if (reads.opened) status = cap::fast_filter(reader_, static_cast<Address>(image_.base), e.job, filter);
+        }
         if (!status.ok() || (selected_owner_ && filter.owner != selected_owner_)) {
             const auto end = tick();
             if (!end || end < start || end - start > clock_.frequency / 1000) stop();

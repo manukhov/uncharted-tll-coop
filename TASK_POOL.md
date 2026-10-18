@@ -151,13 +151,25 @@ Focused CTest30/30 PASS, collector19 groups, hook audit3844 checks, plus five
 isolated cleanup-fault cases (including peer-fiber poison). Main DLL unchanged.
 Exit-to-Completion is charged, but complete wrapper cost is STILL unmeasured:
 armed cold FLS, pre-Entry work and final callback/epilogue are not all included.
-NEXT: integrate the actual bounded in-process guarded Reader with this collector
-and wrapper, exercising complete/early-filter/failure/SEH paths in an owned
-fixture. Do not repeat separate map-reader/empty-sink percentiles as integrated
-proof. Preserve one native invocation and original return-slot/SEH semantics;
-keep kCompleteWrapperBudgetMeasured and kRuntimeAdmission false until a defensible
-full-path contract exists; cold FLS may allocate and percentiles are not a hard
-1ms guarantee. Then certify the prepared enemy module,
+2026-10-18 guarded-read integration CLOSED for owned fixtures: production
+Windows Reader uses fresh lexical per-event page batches, SEH full-copy checks
+and remaining (not reset) callback budget before/after queries and copies. Its
+cache expires before native execution or collector lease release. No allocation,
+game calls, logs, retries or protection changes on the reader path. Existing
+PAGE_GUARD is refused without touch; concurrent protection changes still race.
+Real core+Collector+Reader now execute together with owned native MASM frames
+and unwind-registered executable fixture thunks at exact expected return RVAs.
+No Event PC/slot rewriting or weaker production checks. Eight functional modes
+cover full16-body trace, early filter, initially unreadable Art, protection
+change between events, native Store SEH, stop-in-native and wrong PC/context.
+Thirty real-reader checks PASS; focused CTest35/35 PASS. Whole-call QPC includes
+FLS/reader/collector/completion/return. Recorded64 warm +64 fresh-thread +64
+fresh-fiber samples all completed, median367.9/397.9/386.7us and maxima
+384.3/410.7/402.7us;199 queries/531858 copied bytes per full owned fixture.
+The deliberately delayed native call remains inclusive (3585.4us). Packed
+fixture allocations are not fragmented game memory, and timings are not a hard
+1ms guarantee or a live budget certificate. Both admission constants stay false.
+NEXT: certify the prepared enemy module,
 native fallbacks/config/relay lifetime and immutable preparation offer before
 connecting the external transaction to an explicit exam. Its byte/protection
 verification is NOT a release certificate or module-identity/retention proof;

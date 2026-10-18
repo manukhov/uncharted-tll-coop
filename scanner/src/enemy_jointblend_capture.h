@@ -2,7 +2,8 @@
 
 // Bounded byte-copy adapter for the observation-only JointBlend policy.
 // Reader::copy(address, destination, bytes) must return true ONLY after a full
-// copy, without allocation or native calls. The Windows caller supplies SEH.
+// copy, without allocation or game calls. The Windows caller supplies page
+// preflight and SEH within one callback-free read phase, never across native work.
 // Read consistency is reject-only: neither equal snapshots nor SEH retain an
 // object, defeat ABA, establish an atomic view, or admit game-memory writes.
 #include "enemy_jointblend_observation.h"
