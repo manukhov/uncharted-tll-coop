@@ -39,5 +39,6 @@ public:
     bool detach() const noexcept;
     const DEBUG_EVENT& event() const noexcept {return event_;}
     HANDLE borrowed_process() const noexcept { return process_; }
+    std::uintptr_t borrowed_main() const noexcept { return main_; }
 };
 } // namespace coop::p99_debug_lifecycle

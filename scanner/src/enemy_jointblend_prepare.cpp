@@ -14,10 +14,13 @@ namespace native = coop::enemy_jointblend_native_contract;
 namespace collect = coop::enemy_jointblend_collector;
 namespace read = coop::enemy_jointblend_read;
 namespace prepared = coop::enemy_jointblend_prepare_windows;
+namespace offer = coop::enemy_jointblend_offer;
 
 #pragma section(".enemy", read, write)
+#pragma section(".eoffer", read, write)
 extern "C" {
 __declspec(dllexport) __declspec(allocate(".enemy")) prep::Page TllEnemyBindingV1{};
+__declspec(dllexport) __declspec(allocate(".eoffer")) offer::Page TllEnemyOfferV1{};
 __declspec(dllexport) std::uint32_t __cdecl TllEnemyPrepareV1(const prep::Request*, std::uint32_t) noexcept;
 }
 namespace {
@@ -109,6 +112,7 @@ struct Resources {
     collect::Collector<read::Reader> collector;
     prepared::Relays relays{};
     prepared::Publisher publisher{};
+    prepared::OfferPublisher offer_publisher{};
     Resources(native::ModuleImage image, std::uint64_t frequency) noexcept : collector(reader, image, {nullptr, tick, frequency}) {}
 };
 // No destructor, free, unload, worker or arm path. All partial allocations and
@@ -167,9 +171,18 @@ prep::Result prepare(const prep::Request* input, std::uint32_t bytes) noexcept {
     if (!pages(targets.postpose, 1, request.self, true) || resources->collector.requested()) return R::configuration_refused;
     binding.hooks = targets.code; binding.postpose = targets.postpose;
     if (!resources->relays.prepare(image, {binding.self, binding.self_size}, binding.hooks)) return R::resources_refused;
-    // V1 remains a local binding, with NO relay addresses or external install
-    // authorization. Relays are retained privately for the future full offer.
-    return resources->publisher.publish(&TllEnemyBindingV1, request.self, binding) == prepared::PublishResult::published ?
+    std::array<std::uint64_t, 2> nonce{};
+    if (BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(nonce.data()), sizeof(nonce), BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0 ||
+        !(nonce[0] | nonce[1])) return R::resources_refused;
+    const auto candidate = offer::from_binding(binding, resources->relays.addresses(), nonce,
+        reinterpret_cast<std::uintptr_t>(&TllEnemyPrepareV1), reinterpret_cast<std::uintptr_t>(&TllEnemyOfferV1),
+        reinterpret_cast<std::uintptr_t>(&TllEnemyBindingV1));
+    if (!offer::valid(candidate) || !resources->relays.verify()) return R::resources_refused;
+    // Separate formats, never a larger struct masquerading as BindingV1. On
+    // partial publication retain both pages/resources; do not erase or retry.
+    if (resources->publisher.publish(&TllEnemyBindingV1, request.self, binding) != prepared::PublishResult::published)
+        return R::publication_refused;
+    return resources->offer_publisher.publish(&TllEnemyOfferV1, candidate) == prepared::PublishResult::published ?
         R::dormant_bound : R::publication_refused;
 }
 }

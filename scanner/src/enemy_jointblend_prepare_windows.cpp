@@ -133,6 +133,29 @@ bool valid_binding(const prep::Binding& b, Address self) noexcept {
     for (const auto hook : b.hooks) if (hook < dll.base || !native::contains_rva(dll, hook-dll.base, 1)) return false;
     return b.hooks[0] == b.hooks[1] && b.postpose >= dll.base && native::contains_rva(dll, b.postpose-dll.base, 1);
 }
+bool page_matches(Address at, Address self, const void* bytes, std::size_t size) noexcept {
+    if (size > kPageBytes || !page_contract(at, self, MEM_IMAGE, PAGE_READONLY)) return false;
+    std::array<std::uint8_t, kPageBytes> expected{}, actual{};
+    std::memcpy(expected.data(), bytes, size);
+    return read_bytes(at, actual.data(), actual.size()) && actual == expected &&
+        page_contract(at, self, MEM_IMAGE, PAGE_READONLY);
+}
+// Caller owns a separate already-consumed one-shot gate and validated payload.
+PublishResult publish_bytes(Address at, Address self, const void* bytes, std::size_t size) noexcept {
+    using R = PublishResult;
+    if (!size || size > kPageBytes || !writable_image_page(at, self)) return R::page;
+    const std::array<std::uint8_t, kPageBytes> zero{};
+    std::array<std::uint8_t, kPageBytes> before{};
+    if (!read_bytes(at, before.data(), before.size()) || before != zero || !writable_image_page(at, self)) return R::page;
+    // Irreversible exposure. Memory-fault SEH does not turn preflight into a lease.
+    if (!write_bytes(at, bytes, size)) return R::write;
+    MemoryBarrier();
+    const DWORD writable = writable_image_page(at, self); // AFTER possible COW.
+    if (!writable) return R::seal;
+    DWORD previous{};
+    if (!protect(reinterpret_cast<void*>(at), kPageBytes, PAGE_READONLY, &previous) || previous != writable) return R::seal;
+    return page_matches(at, self, bytes, size) ? R::published : R::verify;
+}
 }
 
 bool Relays::prepare(native::ModuleImage main, native::ModuleImage self, const std::array<Address, 7>& hooks) noexcept {
@@ -171,33 +194,26 @@ bool Relays::verify() const noexcept {
 }
 bool published(const prep::Page* page, Address self, const prep::Binding& binding) noexcept {
     PreserveError error;
-    const auto at = reinterpret_cast<Address>(page);
-    if (!valid_binding(binding, self) || !page_contract(at, self, MEM_IMAGE, PAGE_READONLY)) return false;
-    prep::Page expected{}, actual{}; expected.binding = binding;
-    return read_bytes(at, &actual, sizeof(actual)) && std::memcmp(&actual, &expected, sizeof(actual)) == 0 &&
-        page_contract(at, self, MEM_IMAGE, PAGE_READONLY);
+    return valid_binding(binding, self) && page_matches(reinterpret_cast<Address>(page), self, &binding, sizeof(binding));
 }
 PublishResult Publisher::publish(prep::Page* page, Address self, const prep::Binding& binding) noexcept {
     PreserveError error;
     using R = PublishResult;
     if (attempted_.exchange(true, std::memory_order_acq_rel)) return R::reused;
     if (!valid_binding(binding, self)) return R::invalid;
-    const auto at = reinterpret_cast<Address>(page);
-    if (!writable_image_page(at, self)) return R::page;
-    const prep::Page zero{};
-    prep::Page before{};
-    if (!read_bytes(at, &before, sizeof(before)) || std::memcmp(&before, &zero, sizeof(before)) ||
-        !writable_image_page(at, self)) return R::page;
-    // Irreversible exposure begins here. Snapshot checks cannot prevent a
-    // concurrent protection change; the POD SEH leaf contains memory faults.
-    if (!write_bytes(at, &binding, sizeof(binding))) return R::write;
-    MemoryBarrier();
-    // COW writes can legitimately turn WRITECOPY into READWRITE. Sample AFTER
-    // the write, then require VirtualProtect to report exactly that protection.
-    const DWORD writable = writable_image_page(at, self);
-    if (!writable) return R::seal;
-    DWORD previous{};
-    if (!protect(page, sizeof(*page), PAGE_READONLY, &previous) || previous != writable) return R::seal;
-    return published(page, self, binding) ? R::published : R::verify;
+    return publish_bytes(reinterpret_cast<Address>(page), self, &binding, sizeof(binding));
+}
+PublishResult OfferPublisher::publish(enemy_jointblend_offer::Page* page, const enemy_jointblend_offer::Offer& offer) noexcept {
+    PreserveError error;
+    if (attempted_.exchange(true, std::memory_order_acq_rel)) return PublishResult::reused;
+    if (!enemy_jointblend_offer::valid(offer) || reinterpret_cast<Address>(page) != offer.page) return PublishResult::invalid;
+    const auto wire = enemy_jointblend_offer::encode(offer);
+    return publish_bytes(offer.page, offer.self, wire.data(), wire.size());
+}
+bool published(const enemy_jointblend_offer::Page* page, const enemy_jointblend_offer::Offer& offer) noexcept {
+    PreserveError error;
+    if (!enemy_jointblend_offer::valid(offer) || reinterpret_cast<Address>(page) != offer.page) return false;
+    const auto wire = enemy_jointblend_offer::encode(offer);
+    return page_matches(offer.page, offer.self, wire.data(), wire.size());
 }
 }

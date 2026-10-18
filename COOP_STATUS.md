@@ -42538,3 +42538,77 @@ it before using the existing held-debugger transaction. Keep that transport
 disconnected until full admission, then add bounded stopped/quiescent worker
 output and explicit exam startup. Preserve the existing read-only capture
 prediction/evidence and all enemy-writer prohibitions; no live success yet.
+
+### 2026-10-18 — Versioned enemy offer and external candidate reader (NO game exam)
+
+**STATIC — separate offer, unchanged legacy ABI:** TllEnemyPrepareV1 now derives
+an internal128-bit BCrypt nonce after binding dormant originals/collector and
+preparing retained relays. It publishes the existing184-byte BindingV1 first,
+then separate TllEnemyOfferV1:384 fixed little-endian bytes in a dedicated4096-byte
+image page. The request remains48 bytes; neither legacy layout is expanded.
+The new contract carries PID/creation/nonce, image extents/frequency, entry and
+both publication addresses, six originals, seven hooks/relays and direct
+postpose. Both ingress sites1417815B7/141782B3A share a hook but retain distinct
+relays;1466D0C58 stays direct. Unknown versions, nonzero reserved bytes, aliases,
+invalid/overflowing image ranges and wrong fallback RVAs/rel32 ranges refuse.
+
+Both publication classes use the same guarded one-shot helper. Only successful
+publication of BOTH pages returns dormant_bound. Any partial failure retains
+all pages/resources/PIN, including full RO bytes after a false-after-effect
+seal; no erase, retry or activation. Load/refusal tests confirm the new page
+starts and stays zero until accepted explicit preparation. Full positive
+retail preparation remains UNTESTED. Built DLL exports exactly PrepareV1,
+BindingV1 and OfferV1; main coop_runtime does not link this reader/preparation.
+
+**STATIC — candidate is not an admission certificate:** new read_candidate
+accepts a borrowed process HANDLE and a separately supplied expected Offer.
+It checks actual PID/creation, self AMD64 PE extent, full RO MEM_IMAGE offer and
+legacy binding pages, expected RX image ownership for entry/hooks/postpose,
+and all4096 bytes of each private RX relay (14-byte FF25 leaf plus zero tail).
+Every copy has owner/type/protection checks before and after, exact RPM success
+and byte count; final offer re-read and process identity check reject changes.
+read_held additionally binds actual debugger Session/WindowsOps owner, received
+event and selected main before/after. No attach, patch, target call, allocation,
+arm, cleanup, release or conversion to installer Prepared is present.
+
+This validates address/page relationships, NOT exact wrapper ABI instructions,
+native main/sites/fallbacks, mapped dependencies, configured FLS/sink, PIN/flush
+evidence or global snapshot retention. Final re-read covers the offer, not an
+atomic retained dependency graph. Both admission constants remain FALSE.
+Independent expected-record provenance is OPEN: production nonce/relay values
+currently leave preparation only through OfferV1. Copying them from the page
+and comparing the page to that copy is NOT independent authentication.
+
+**CONFIRMED — owned component tests only:** Release /W4 /WX build and focused
+CTest77/77 PASS (10 added offer cases; existing32 preparation cases preserved).
+Codec546 checks cover truncation/reserved bytes/shape/ranges. Production-reader
+owned fixture checks actual dedicated image pages and retained RX allocations;
+mutations46 checks and separate audit175 checks pass, including short-success
+and false-full RPM, every33 query and12 read position, before/after owner/type/
+protection failures, altered binding/relay/tail bytes and late offer mutation.
+The fixture projects retail main extent/RVAs as metadata only; its otherwise
+unmapped suffix is reserved NOACCESS so relays cannot occupy that declared
+range. It does not execute retail code or bypass the real preparation profile.
+
+An actual hidden self-child supplies its known fixture setup record separately
+from the publication.18 checks pass for cross-process reads and real received
+debug-event gating, foreign Ops/thread/main and stale released Session refusal.
+Read-only child release is based on the independent absence of writes, NOT on
+candidate success. Tests also cover16 racing publishers, one-shot refusal,
+partial writes, seal-before/after and post-read protection changes; old Binding
+survives failed Offer publication. False-after-effect sealing demonstrates that
+candidate reading can succeed although publication reported failure. This is
+explicitly a REJECTED inference: exact RO offer is not full preparation success.
+Production-library symbol audit finds no fault seams/g_audit. Independent
+read-only source review reports no remaining scoped defect; tests not rerun by
+reviewer. No new native discovery/IDB label, game launch/injection/input or
+enemy-state write. Main DLL SHA remains
+3ACCA2A17891BA1D5CA14EC39CC0024827556BE71B5DE0E22E9C227063BBD710.
+
+**Next concrete step:** establish independently bound preparation-result and
+expected-record provenance without trusting a self-reported offer or executing
+target work under debugger hold. Then close full mapped code/dependency and
+configuration/lifetime admission before connecting the existing external
+transaction; bounded quiescent worker output and explicit runtime exam remain
+later steps. Enemy correspondence/movement, HP/death/AI writers and P99 remain
+unadmitted; owned tests are not visible enemy synchronization.

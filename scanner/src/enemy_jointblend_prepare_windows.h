@@ -1,5 +1,6 @@
 #pragma once
 #include "enemy_jointblend_prepare.h"
+#include "enemy_jointblend_offer.h"
 #include <Windows.h>
 #include <atomic>
 
@@ -53,6 +54,16 @@ private:
 // after a reported seal failure that took effect: success requires the entire
 // preparation protocol, not this predicate, a magic, or page protection alone.
 bool published(const prep::Page*, Address self, const prep::Binding&) noexcept;
+class OfferPublisher final {
+public:
+    OfferPublisher() = default;
+    OfferPublisher(const OfferPublisher&) = delete;
+    OfferPublisher& operator=(const OfferPublisher&) = delete;
+    PublishResult publish(enemy_jointblend_offer::Page*, const enemy_jointblend_offer::Offer&) noexcept;
+private:
+    std::atomic<bool> attempted_{false};
+};
+bool published(const enemy_jointblend_offer::Page*, const enemy_jointblend_offer::Offer&) noexcept;
 
 #if defined(TLL_ENEMY_PREPARE_AUDIT)
 // Separate owned fixture build only; not present in the production library/DLL.

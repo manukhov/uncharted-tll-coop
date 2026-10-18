@@ -1,4 +1,5 @@
 #include "enemy_jointblend_prepare.h"
+#include "enemy_jointblend_offer.h"
 #include "enemy_jointblend_collector.h"
 #include "enemy_jointblend_read_windows.h"
 #include <Windows.h>
@@ -79,6 +80,9 @@ void dll_case(const wchar_t* mode, const wchar_t* path) {
     check(module != nullptr, "load explicit preparation DLL"); if (!module) return;
     const auto entry = reinterpret_cast<p::Entry>(GetProcAddress(module, "TllEnemyPrepareV1"));
     const auto* page = reinterpret_cast<const p::Page*>(GetProcAddress(module, "TllEnemyBindingV1"));
+    const auto* offer = reinterpret_cast<const coop::enemy_jointblend_offer::Page*>(GetProcAddress(module, "TllEnemyOfferV1"));
+    const coop::enemy_jointblend_offer::Page empty_offer{};
+    check(offer && std::memcmp(offer, &empty_offer, sizeof(empty_offer)) == 0, "separate external offer starts zero/inert");
     check(entry && page, "exact exported ABI"); if (!entry || !page) return;
     check((reinterpret_cast<std::uintptr_t>(page) & 4095) == 0 && zero(page), "load is inert: dedicated binding page stays zero");
     check(protection(page, PAGE_READWRITE) || protection(page, PAGE_WRITECOPY), "unpublished page is not a read-only offer");
@@ -137,6 +141,7 @@ void dll_case(const wchar_t* mode, const wchar_t* path) {
         check(GetLastError() == 0xEA551234, "entry preserves LastError");
     }
     check(zero(page), "refused prepare never publishes binding");
+    check(offer && std::memcmp(offer, &empty_offer, sizeof(empty_offer)) == 0, "refused prepare never publishes external offer");
     // A reused call must not even inspect a deliberately inaccessible request.
     check(entry(reinterpret_cast<const p::Request*>(1), sizeof(request)) == static_cast<std::uint32_t>(p::Result::reused),
         "repeat refuses before touching invalid caller memory");

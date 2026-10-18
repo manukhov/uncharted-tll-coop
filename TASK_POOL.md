@@ -201,9 +201,32 @@ return/LastError and SEH unwinding. Focused CTest67/67 PASS (32 prep cases).
 V1 ABI is unchanged184-byte Binding: relay addresses remain PRIVATE in retained
 Resources, not an external offer. Full positive retail entry and partial FLS
 configuration are still untested; game/main DLL and runtime admission unchanged.
-NEXT: finish a versioned external enemy preparation offer and independent
-consumer admission using these retained relays; do not expand/reinterpret V1.
-Certify mapped module/dependency identity, ABI and relay lifetime before
+2026-10-18 external offer (candidate-only): separate TllEnemyOfferV1 now publishes
+384 explicit little-endian bytes in its own4096-byte RO image page after the
+unchanged184-byte BindingV1. Identity, internally generated128-bit nonce,
+originals/hooks/postpose/retained relays have fixed versioned fields; unknown
+versions/reserved bytes, aliases, bad extents and out-of-range relays refuse.
+Terminal partial failures retain both pages/resources, no retry/erase/unload.
+New read-only Windows consumer checks actual PID/creation/self PE extent,
+both full RO pages, RX image ownership and seven exact full RX relay pages.
+Held form additionally requires the exact owner/Ops/received debug event and
+actual main selected by WindowsOps. No installer conversion or runtime admission.
+Owned hidden self-child, foreign/stale holds, every33 query/12 read fault stage,
+mutated pages/relays and concurrent publication pass. Focused CTest77/77 PASS;
+codec546 checks, Windows mutations46, read faults175 and child18 checks.
+Explicit counterexample: a false-after-effect seal reports preparation failure
+but leaves an exact RO offer that passes candidate reading. Therefore candidate
+success is NOT preparation success or install/release authority.
+OPEN: independent expected-record provenance. Production generates nonce/relays
+internally and exposes them only through the offer; echoing that page into the
+reader is not independent evidence. Child test has a separate owned fixture
+setup record, NOT a solved production channel. Native main extent/RVAs in this
+fixture are metadata; reserved NOACCESS suffix is not mapped retail code.
+No positive retail preparation, native ABI/dependency identity, PIN inspection,
+configured FLS/sink proof, worker or live budget proof added. Main DLL unchanged.
+NEXT: close independently bound preparation-result/expected-record provenance
+before any production consumer-to-installer path. Then certify mapped
+module/dependency identity, ABI and relay lifetime before
 connecting the external transaction to an explicit exam. Its byte/protection
 verification is NOT a release certificate or module-identity/retention proof;
 reattach/uninstall after release is unsupported. Add bounded worker timeout,
