@@ -12,6 +12,21 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy Synchronization (2026-10-18)
 
+2026-10-18 continuation: shared retained_player_object now checks native
+generation identity (1410F0D10/1410F0F60), bounds, observed turnover and read
+faults. Real DLL E816B0B2...D5C1F2 builds; machine-code/SEH review passes.
+This removes a concrete stale-generation acceptance defect, NOT a proved
+menu-crash cause or a lifetime lease. Stopped enemy wrapper has no found
+ABI/unwind defect; exact Pirate destructor1404A3510 changes vtable before
+controllers are freed. IDB labeled/saved/read back. No runtime this turn.
+Continue the menu reset boundary and baseline pointer lifetime; do not reopen
+raw-address churn as corruption (native relocation already explains it).
+Exact quit-to-main-menu command ingress1403480D0 sets1437DFD5E; postrender
+140166811/81A consumes/clears it BEFORE1413C80D0->1409BCA80->141CDA800.
+NEXT trace that task/VM dispatch to observer callbacks1413C6AF0/1413C7170 and
+reset1413B9820. Request flag is NOT a lifetime/unload guard; full GameClose and
+separately registered Reset Actors are not substitutes for this path.
+
 LATEST RESULT: one copy CRASHED on returning to the main menu (user report).
 Revised PID22652(A)/23592(B) run is REJECTED as usable; both processes are gone.
 Both channels stopped in first census at2389/2925us with just2 VQ attempts

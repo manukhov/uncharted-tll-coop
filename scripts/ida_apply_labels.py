@@ -8,6 +8,24 @@ import idc
 
 
 FUNCTIONS = {
+    0x1403480D0: (
+        "Script_QuitToMainMenu_Request",
+        "STATIC: registered for literal quit-to-main-menu14291AEC0 by14003FA20 "
+        "(callback store14003FA6C). Sets byte1437DFD5E=1 and clears script "
+        "result; no destruction here. Postrender140166811/81A consumes/clears "
+        "request, then1413C80D0 and1409BCA80 select/enter the menu task route. "
+        "Does not prove its later VM/reset or object-exclusion boundary.",
+    ),
+    # --- 2026-10-18: exact Pirate destruction leaves patched vtable first ---
+    0x1404A3510: (
+        "Pirate_ScalarDeletingDestructor",
+        "STATIC: exact Pirate vtable14294B9D0 slot0. Writes Human vtable at "
+        "1404A3523 BEFORE1403FEBB0 (Npc/base teardown); conditionally frees "
+        "0xF460 bytes if destructor flag bit0. Deeper141DE1CE0 frees+15C8 "
+        "and+15D0 controllers only after further base-vtable replacements. "
+        "Rejects fresh exact-Pirate+408 dispatch during that ordinary base "
+        "destruction, NOT an already in-flight call or an unload race.",
+    ),
     # --- 2026-10-12: owned normal-Perform invocation, not job-pointer identity ---
     0x141782B20: (
         "AnimManager_SyncVisitPerformBlendAndDispatchPostBlendJob",
@@ -8023,7 +8041,8 @@ FUNCTIONS = {
         "GetRetainedPlayerEntityBySlot",
         "Reads a 16-byte entry from g_RetainedPlayerSlotTable[slot], validates "
         "the embedded runtime id against entity+0xBC, and returns the live "
-        "entity pointer when the slot is still valid.",
+        "entity pointer when the slot is still valid. Also writes entity+0x72=1 "
+        "at1410F0D4E; not a side-effect-free reader or lifetime lease.",
     ),
     0x1410F0D60: (
         "CopyRetainedPlayerSlotEntry",
@@ -15325,6 +15344,13 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x1437DFD5E: (
+        "g_QuitToMainMenuRequested",
+        "STATIC byte set by Script_QuitToMainMenu_Request1403480D0. Only other "
+        "direct IDB xrefs: read140166811 and clear14016681A in "
+        "GameFramePostRenderUpdate. Cleared BEFORE menu task dispatch: not a "
+        "world-loaded flag or a teardown/lifetime exclusion lease.",
+    ),
     0x1466D0C50: (
         "g_AnimMgrPhasePluginCallback",
         "STATIC first qword of three-callback registry; copied into job+18, "

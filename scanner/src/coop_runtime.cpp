@@ -14807,19 +14807,37 @@ void register_nadine_as_character() {
 
 // Resolve the live Player object for retained slot `index` from
 // g_RetainedPlayerSlotTable: entry {ptr,id} at table+index*0x10; player object =
-// *(entry.ptr + 8). Returns nullptr if the slot is empty.
+// *(entry.ptr + 8), with entry.id == object+BC as in native1410F0D10.
+// This is a checked observation, NOT a lifetime/relocation lease for callers.
 extern volatile int g_drive_slot_index;
 
 void* retained_player_object(int index) {
-    if (g_module == 0) {
+    if (g_module == 0 || static_cast<unsigned>(index) >= 6) {
         return nullptr;
     }
-    auto* table = reinterpret_cast<std::uint8_t*>(g_module + kRetainedSlotTableRva);
-    void* entry_ptr = *reinterpret_cast<void**>(table + static_cast<std::size_t>(index) * 0x10);
-    if (entry_ptr == nullptr) {
+    // No VirtualQuery/allocator/native resolver here: this is a shared hot path.
+    // In particular, the native helper also writes object+72; do not import that
+    // side effect into readers on arbitrary threads. Volatile forces the final
+    // re-reads; equal observations still do not exclude ABA or a later free.
+    const auto slot = g_module + kRetainedSlotTableRva +
+                      static_cast<std::size_t>(index) * 0x10;
+    __try {
+        const auto record = *reinterpret_cast<const volatile std::uintptr_t*>(slot);
+        const auto generation = *reinterpret_cast<const volatile std::uint32_t*>(slot + 8);
+        if (record == 0 || generation == 0) return nullptr;
+        const auto object = *reinterpret_cast<const volatile std::uintptr_t*>(record + 8);
+        if (object == 0 ||
+            *reinterpret_cast<const volatile std::uint32_t*>(object + 0xBC) != generation) return nullptr;
+        if (*reinterpret_cast<const volatile std::uintptr_t*>(slot) != record ||
+            *reinterpret_cast<const volatile std::uint32_t*>(slot + 8) != generation ||
+            *reinterpret_cast<const volatile std::uintptr_t*>(record + 8) != object ||
+            *reinterpret_cast<const volatile std::uint32_t*>(object + 0xBC) != generation) return nullptr;
+        return reinterpret_cast<void*>(object);
+    } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ||
+                GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR
+                    ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
         return nullptr;
     }
-    return *reinterpret_cast<void**>(static_cast<std::byte*>(entry_ptr) + 8);
 }
 
 void __fastcall hooked_player_bump_controller_update(void* player) {

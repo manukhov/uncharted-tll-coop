@@ -2,6 +2,17 @@
 
 ## Current user priority / handoff (2026-10-18)
 
+LATEST CODE: fixed shared retained_player_object's missing generation contract
+against native1410F0D10/1410F0F60. Bounded SEH reads now reject null/zero/stale
+identity and observed tuple turnover, without VQ/native calls or writes.
+Real DLL built (E816B0B2...D5C1F2); emitted loads/SEH independently verified.
+NOT a lifetime lease or a confirmed fix for the menu crash. No game launched.
+Stopped enemy-wrapper ABI/unwind audit found no defect; ordinary Pirate base
+destruction replaces its exact vtable before freeing controllers. The menu
+request ingress is now located:1403480D0->1437DFD5E->postrender140166811.
+Its flag clears BEFORE task transition; not an unload guard. Task/VM/reset
+execution and post-return pointer lifetime remain open. See latest entry.
+
 LATEST RESULT: user reports one copy CRASHED while returning to the main menu.
 Revised PID22652(A)/23592(B) run is REJECTED as usable; both processes are now
 gone. Both enemy channels terminally stopped at their first census (2.389ms /
@@ -43096,3 +43107,116 @@ new per-run output directory, second-chance dump/exit record); do not build
 another observer framework. It changes timing, so that run cannot certify
 performance. Its last handled-exception list also is NOT a crash PC if no
 second-chance context exists. No new IDB function discovery/label this turn.
+
+## 2026-10-18 — Restore native retained-player identity checks; narrow menu-crash candidates
+
+**STATIC defect corrected, crash cause still HYPOTHESIS.** The shared mod
+retained_player_object previously read slot.handle and returned record+8 while
+ignoring slot.generation. Native GetRetainedPlayerEntityBySlot1410F0D10 rejects
+zero handle/id (1410F0D33/3B), resolves record+8, and requires object+BC==id
+(1410F0D4C). Independent resolver1410F0F60 repeats the same test at1410F0FB9/CA.
+Both also write object+72=1, so calling them from arbitrary mod readers would
+introduce an unwanted side effect. Existing retained-slot registry and base
+runtime-ID constructor1416A3330/1416A38A0 support that field contract.
+
+The ordinary runtime now bounds indices to[0,6), guards all actual loads with
+SEH, requires nonzero/equal generation, and re-reads slot handle/id plus object
+pointer/id before returning. AV/in-page errors return null; other exceptions
+continue search. No native call, allocation, object write or VirtualQuery.
+Stable relocated objects still resolve through record+8. This rejects observed
+turnover and stale/reused identities, NOT ABA, reclamation after return or
+concurrent relocation as a whole. Existing callers still need their own native
+lifetime boundary; world_stable is not a retention primitive.
+
+**Production verification, not game validation:** main tll_coop_runtime target
+built successfully. DLL SHA256
+E816B0B2E023688D06749852491CBB724CD823C870C866508EA2F8060ED5C1F2;
+PDB SHA2569F41AB17AFC3A77422B2421BEA5FCDFE300905A8A74489C97E2BD9E8B4476476.
+Independent built-code audit: resolver RVA51F80 size131; real final loads at
+51FC7/51FCF/51FD7/51FE0. SEH scope[51FA2,51FFC) covers all pointer loads;
+filter6CF80 handles onlyC0000005/C0000006, handler51FFC returns zero. No calls
+or stores in that resolver. Source review independently found no blocker.
+No standalone test/loader framework was added. No game launch/injection/input;
+the crash is NOT declared fixed and enemy synchronization remains unvalidated.
+
+**STATIC stopped-wrapper audit, no defect found in inspected contract:** exact
+crash DLL8006D716...414E4F2 and matching PDB were inspected. Bridge RVA14B0 is
+mov rdx,rsi; jmp6A6C0. Wrapper6A6C0..6A70D preserves the four nonvolatiles,
+0x28 shadow/alignment, original game return PC at[rsp+48], stock RAX and
+LastError; .pdata matches all five prologue operations. It calls141DE9910
+exactly once. Stock reads RCX owner; exact+3C0 getter1403CFB80 returns+15D0,
+and tail141E9C220 remains one-argument. Direct stock callers1404A2F79/1404A39A9
+bypass the changed vtable. Stopped postblend gates480C3..48102 precede any
+actor/job read, WorkBudget or mailbox work. Its0x810 stack frame still exists:
+this is NOT unhooking, zero overhead, or proof the hook cannot affect a crash.
+No guessed ABI/unwind rewrite is justified.
+
+**STATIC REJECTED specific destructor mechanism:** ordinary partial Pirate
+destruction does not keep its exact patched vtable until controllers are freed.
+Slot0 at14294B9D0 resolves1404A3510. Its store1404A3523 switches to Human
+BEFORE1403FEBB0; that switches to Npc at1403FEC0B, then1403D0830/base teardown
+reaches141DE1CE0. Controller+15D0 free141DE1DB5/null1DBB and+15C8 release occur
+after the base-vtable transitions. Character_Destroy141E991F0 later releases
++698/+580, then NdGameObject141BB3660 calls FreeAnimData14177FA70 at141BB3724.
+Evidence kinds: exact virtual slot; concrete store/free ordering; destructor
+call graph consistent with prior lifecycle findings. This excludes FRESH exact
+Pirate-vtable dispatch in that interval, not an in-flight call or any race.
+1404A3510 named Pirate_ScalarDeletingDestructor in scripts/ida_apply_labels.py;
+native1410F0D10 comment corrected to disclose+72 write. Sole ida/tll.i64 saved
+with save_database returned True (reports/apply_menu_lifetime_20261018.txt),
+MCP restarted and new name/xrefs/comment read back.
+
+**Do not revive rejected pointer-churn interpretation:** final alias log rows
+for PID22652 have moving raw player/records addresses but status2/count42->42,
+not repeated record appends. Native relocation14109DC40 (already recorded
+July23) rebases owner fields. Log memoization includes these raw addresses, so
+relocation can repeat the rows. This does not identify which copy crashed.
+The baseline alias path remains relevant because generation-unsafe lookup fed
+it: roleA via apply_peer_held_weapon_state/latest_peer_state, roleB directly
+from NadineBuddy update. net_tick's unstable-world return does not stop its
+enclosing hooked_update or every later baseline operation.
+
+**Open alternatives / next discriminator:** original fault may be an in-flight
+native/stock call, another baseline post-return pointer use, or unrelated game
+failure. The specific missing-generation contract is repaired, but old logs do
+not contain the rejected tuple needed to attribute this crash to it. Normal
+animation job waits precede dead-process cleanup; FreeAnimData has no own wait.
+Do not generalize normal-frame ordering to all menu/world-reset paths. Further
+static frontier: reset1413B9820 and Level update141B3B5C0 reach
+ProcessMgr_DestroyDeadProcesses1416229C0. ProcessMgr::Shutdown1416223C0 is
+under full GameClose14014FC00/14014EAB0, not automatically return-to-menu.
+A later admitted reproduction must watch BOTH roles with existing crash_watch
+and distinguish wrapper/unwind, stock controller access, and other baseline/
+native fault stacks; a successful exit alone would not confirm causality.
+Do not repeat the unchanged enemy-cost exam or increase its1ms cutoff.
+
+**STATIC menu request ingress, not full teardown closure:** registration14003FA20
+loads literal quit-to-main-menu14291AEC0 at14003FA27, resolves its identifier
+through off143682D30(1417AA820), and stores callback1403480D0 in143D37070 at
+14003FA6C. Callback only sets byte1437DFD5E=1 and clears its script result.
+The only other direct IDB xrefs to this byte are postrender read140166811 and
+clear14016681A. This gives three evidence kinds: command string registration,
+callback store semantics, and independent consumer/data xrefs.
+
+GameFramePostRenderUpdate140165B50 consumes the request, calls1413C80D0 at
+140166821, then1409BCA80 at140166833 with manager143DC9980 and the returned
+task.1413C80D0 references authored main-menu/menu and e3/ndi variants.
+1409BCA80 calls141CDA800 at1409BCBAB. Do NOT describe it merely as queueing:
+141CDA800 can reach ScriptVm_ExecuteBytecode at141CDB71F; synchronous execution
+and later scheduling remain to be classified. Later frame calls are task graph
+update14016685D, dead-process destruction140166884, free141622A60 at140166889,
+and compaction141622130 at14016688E. No post-clear lifetime gate is implied.
+
+**STATIC distinction:**1413B9820 callers1402F3B10/14033D000 are registered as
+Reset Actors/reset-actors respectively, not direct proof of quit-to-menu.
+Callbacks1413C6AF0/1413C7170 occupy data slots142A7E270/288; their observer
+class and task-phase dispatch remain unresolved. NEXT trace141CDA800/VM and
+observer dispatch to those callbacks and1413B9820, then find where retained
+identities become invalid relative to remaining baseline reads. Do not hook
+GameClose or latch only the short request byte as a guessed unload guard.
+
+Only the proven ingress is labeled: Script_QuitToMainMenu_Request1403480D0
+and g_QuitToMainMenuRequested1437DFD5E. Saved in the sole IDB (second apply log
+reports/apply_menu_request_20261018.txt); save/readback verified before handoff.
+This adds no runtime hook and does not establish that the user's exact UI
+action traversed this command in the failed run.
