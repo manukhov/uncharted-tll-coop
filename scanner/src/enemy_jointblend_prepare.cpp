@@ -1,4 +1,5 @@
 #include "enemy_jointblend_prepare.h"
+#include "enemy_jointblend_prepare_windows.h"
 #include "enemy_jointblend_collector.h"
 #include "enemy_jointblend_read_windows.h"
 #include <Windows.h>
@@ -12,6 +13,7 @@ namespace hooks = coop::enemy_jointblend_hooks;
 namespace native = coop::enemy_jointblend_native_contract;
 namespace collect = coop::enemy_jointblend_collector;
 namespace read = coop::enemy_jointblend_read;
+namespace prepared = coop::enemy_jointblend_prepare_windows;
 
 #pragma section(".enemy", read, write)
 extern "C" {
@@ -105,30 +107,12 @@ std::uint64_t tick(void*) noexcept {
 struct Resources {
     read::Reader reader{};
     collect::Collector<read::Reader> collector;
+    prepared::Relays relays{};
+    prepared::Publisher publisher{};
     Resources(native::ModuleImage image, std::uint64_t frequency) noexcept : collector(reader, image, {nullptr, tick, frequency}) {}
 };
 // No destructor, free, unload, worker or arm path. All partial allocations and
 // the self PIN are deliberately retained until process exit, including refusals.
-bool publish(const prep::Binding& binding, std::uintptr_t self) noexcept {
-    auto* page = &TllEnemyBindingV1;
-    MEMORY_BASIC_INFORMATION m{};
-    if ((reinterpret_cast<std::uintptr_t>(page) & 4095) || VirtualQuery(page, &m, sizeof(m)) != sizeof(m) ||
-        m.State != MEM_COMMIT || m.Type != MEM_IMAGE || m.AllocationBase != reinterpret_cast<void*>(self) ||
-        (m.Protect != PAGE_READWRITE && m.Protect != PAGE_WRITECOPY) ||
-        !pages(reinterpret_cast<std::uintptr_t>(page), sizeof(*page), self)) return false;
-    prep::Page before{};
-    if (!copy(reinterpret_cast<std::uintptr_t>(page), &before, sizeof(before), self)) return false;
-    const prep::Page zero{};
-    if (std::memcmp(&before, &zero, sizeof(before))) return false;
-    page->binding = binding;
-    DWORD old{};
-    if (!VirtualProtect(page, sizeof(*page), PAGE_READONLY, &old)) return false;
-    prep::Page after{};
-    if (!copy(reinterpret_cast<std::uintptr_t>(page), &after, sizeof(after), self) ||
-        VirtualQuery(page, &m, sizeof(m)) != sizeof(m) || m.Protect != PAGE_READONLY) return false;
-    prep::Page expected{}; expected.binding = binding;
-    return std::memcmp(&after, &expected, sizeof(after)) == 0;
-}
 prep::Result prepare(const prep::Request* input, std::uint32_t bytes) noexcept {
     using R = prep::Result;
     // Gate before reading caller memory: refusals are terminal, not retries.
@@ -182,7 +166,11 @@ prep::Result prepare(const prep::Request* input, std::uint32_t bytes) noexcept {
     // collector yet; only the configured sink retains it.
     if (!pages(targets.postpose, 1, request.self, true) || resources->collector.requested()) return R::configuration_refused;
     binding.hooks = targets.code; binding.postpose = targets.postpose;
-    return publish(binding, request.self) ? R::dormant_bound : R::publication_refused;
+    if (!resources->relays.prepare(image, {binding.self, binding.self_size}, binding.hooks)) return R::resources_refused;
+    // V1 remains a local binding, with NO relay addresses or external install
+    // authorization. Relays are retained privately for the future full offer.
+    return resources->publisher.publish(&TllEnemyBindingV1, request.self, binding) == prepared::PublishResult::published ?
+        R::dormant_bound : R::publication_refused;
 }
 }
 // Explicit caller thread ONLY, outside loader lock, callbacks and debugger hold.

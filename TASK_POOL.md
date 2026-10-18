@@ -184,8 +184,25 @@ Review fixed a prepare blocker: fresh lease is NOT stopped/quiescent; do not
 require quiescent() or call stop() before its future one-shot arm. Positive
 production prepare/page sealing and its late configure/publication failures
 remain untested, not runtime-confirmed. Main DLL unchanged; game not launched.
-NEXT: finish the external enemy preparation offer/consumer and retained near
-relays, with direct positive sealing and fault tests before live startup.
+2026-10-18 publication/relay closure (owned fixtures): extracted the actual
+Windows preparation helpers, replacing unguarded publication stores with a
+POD SEH write leaf and exact before/after page checks. One-shot Publisher now
+requires the seal's returned old protection to match the post-COW writable
+snapshot. Partial writes/false-after-effect seals are terminal and retained.
+Positive RO publication,16 racing calls, guard/dirty/private pages and eight
+publication faults pass on a real dedicated test DLL image page. Seven near
+private pages now prepare RW->exact14-byte absolute jumps->RX+checked flush,
+with pinned code targets, full-page readback and no free/retry/patch path.
+Each ingress1417815B7/141782B3A has a distinct relay to the same wrapper;
+postpose1466D0C58 stays direct. Eight failures at each of seven relay stages,
+bounded allocation exhaustion at all seven stages and unexpected addresses refuse
+while retaining allocations. Actual owned relay calls preserve six arguments,
+return/LastError and SEH unwinding. Focused CTest67/67 PASS (32 prep cases).
+V1 ABI is unchanged184-byte Binding: relay addresses remain PRIVATE in retained
+Resources, not an external offer. Full positive retail entry and partial FLS
+configuration are still untested; game/main DLL and runtime admission unchanged.
+NEXT: finish a versioned external enemy preparation offer and independent
+consumer admission using these retained relays; do not expand/reinterpret V1.
 Certify mapped module/dependency identity, ABI and relay lifetime before
 connecting the external transaction to an explicit exam. Its byte/protection
 verification is NOT a release certificate or module-identity/retention proof;

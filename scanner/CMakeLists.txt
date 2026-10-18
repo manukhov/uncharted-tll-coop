@@ -37,7 +37,13 @@ target_compile_definitions(tll_enemy_jointblend_core PRIVATE WIN32_LEAN_AND_MEAN
 target_compile_options(tll_enemy_jointblend_core PRIVATE /W4 /WX /permissive- /EHsc)
 # Inert, explicit-only local binding artifact. Does not include coop_runtime,
 # install hooks, arm observation or create a worker when loaded.
+add_library(tll_enemy_jointblend_prepare_windows STATIC EXCLUDE_FROM_ALL src/enemy_jointblend_prepare_windows.cpp)
+target_include_directories(tll_enemy_jointblend_prepare_windows PUBLIC src)
+target_compile_features(tll_enemy_jointblend_prepare_windows PUBLIC cxx_std_20)
+target_compile_definitions(tll_enemy_jointblend_prepare_windows PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(tll_enemy_jointblend_prepare_windows PRIVATE /W4 /WX /permissive- /EHsc)
 add_library(tll_enemy_jointblend_prepare SHARED EXCLUDE_FROM_ALL src/enemy_jointblend_prepare.cpp)
+target_link_libraries(tll_enemy_jointblend_prepare PRIVATE tll_enemy_jointblend_prepare_windows)
 target_link_libraries(tll_enemy_jointblend_prepare PRIVATE tll_enemy_jointblend_core bcrypt)
 target_compile_definitions(tll_enemy_jointblend_prepare PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(tll_enemy_jointblend_prepare PRIVATE /W4 /WX /permissive- /EHsc)
@@ -201,6 +207,33 @@ if(BUILD_TESTING)
     endforeach()
     add_test(NAME enemy_jointblend_prepare_retail COMMAND tll_enemy_jointblend_prepare_tests retail
         "C:/UNCHARTED Legacy of Thieves Collection (2016-2017-2022)/Uncharted Legacy of Thieves Collection/tll.exe")
+    add_library(tll_enemy_jointblend_prepare_fixture SHARED tests/enemy_jointblend_prepare_fixture.cpp)
+    target_include_directories(tll_enemy_jointblend_prepare_fixture PRIVATE src)
+    target_compile_features(tll_enemy_jointblend_prepare_fixture PRIVATE cxx_std_20)
+    target_compile_definitions(tll_enemy_jointblend_prepare_fixture PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(tll_enemy_jointblend_prepare_fixture PRIVATE /W4 /WX /permissive- /EHsc)
+    add_executable(tll_enemy_jointblend_prepare_windows_tests tests/enemy_jointblend_prepare_windows_tests.cpp)
+    target_link_libraries(tll_enemy_jointblend_prepare_windows_tests PRIVATE tll_enemy_jointblend_prepare_windows)
+    add_executable(tll_enemy_jointblend_prepare_faults_tests tests/enemy_jointblend_prepare_windows_tests.cpp
+        src/enemy_jointblend_prepare_windows.cpp)
+    target_compile_definitions(tll_enemy_jointblend_prepare_faults_tests PRIVATE TLL_ENEMY_PREPARE_AUDIT=1)
+    foreach(prepare_target windows faults)
+        target_include_directories(tll_enemy_jointblend_prepare_${prepare_target}_tests PRIVATE src)
+        target_compile_features(tll_enemy_jointblend_prepare_${prepare_target}_tests PRIVATE cxx_std_20)
+        target_compile_definitions(tll_enemy_jointblend_prepare_${prepare_target}_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+        target_compile_options(tll_enemy_jointblend_prepare_${prepare_target}_tests PRIVATE /W4 /WX /permissive- /EHsc)
+        add_dependencies(tll_enemy_jointblend_prepare_${prepare_target}_tests tll_enemy_jointblend_prepare_fixture)
+    endforeach()
+    foreach(prepare_case normal concurrent invalid private dirty guard readonly relays)
+        add_test(NAME enemy_jointblend_prepare_windows_${prepare_case} COMMAND tll_enemy_jointblend_prepare_windows_tests
+            ${prepare_case} "$<TARGET_FILE:tll_enemy_jointblend_prepare_fixture>")
+        set_tests_properties(enemy_jointblend_prepare_windows_${prepare_case} PROPERTIES TIMEOUT 30)
+    endforeach()
+    foreach(prepare_case write-seh partial seal-before seal-after seal-old tail binding readback relay-faults)
+        add_test(NAME enemy_jointblend_prepare_faults_${prepare_case} COMMAND tll_enemy_jointblend_prepare_faults_tests
+            ${prepare_case} "$<TARGET_FILE:tll_enemy_jointblend_prepare_fixture>")
+        set_tests_properties(enemy_jointblend_prepare_faults_${prepare_case} PROPERTIES TIMEOUT 30)
+    endforeach()
     add_executable(tll_enemy_jointblend_hooks_tests tests/enemy_jointblend_hooks_tests.cpp
         src/enemy_jointblend_hooks.cpp $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
         $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)

@@ -42447,3 +42447,94 @@ coordinator. Before launch retain the written three-kind evidence/prediction
 for a live read-only normal-mode2 capture; cmd16/live asset identity and native
 movement authority are still separate open requirements. Do not enable enemy
 position/HP/death writes, AI pause, old g_enemy_sync or P99 appearance startup.
+
+## 2026-10-18 — Guard local publication and retain seven inert enemy relays
+
+**STATIC — corrected preparation defects, no game behavior claim:** the prior
+publication path's raw Binding assignment could AV if its page became readonly
+after preflight. It also ignored VirtualProtect's old protection, allowing an
+unexpected protection transition to appear successful. Both were found during
+read-only review and are replaced in shared enemy_jointblend_prepare_windows.
+The main preparation DLL now uses exactly this component, not a copied test
+implementation and not the rejected local two-census installer.
+
+Publisher is one-shot before inspecting inputs/pages. It checks the V1 Binding
+shape and zero dedicated writable MEM_IMAGE page, then writes only through a
+POD-only memory-fault-filtered SEH leaf. It rechecks writable protection AFTER
+the write (allowing ordinary COW), requires the seal to report that exact old
+protection, and checks full4096-byte equality plus owner/type/RO protection
+before and after readback. No game calls, output worker or observation arm.
+Faults are terminal: never erase/unseal/retry. False-after-effect may leave
+the exact RO bytes even when publish reports failure; published() is only a
+local readback predicate, NOT full preparation/install/release admission.
+Protection queries remain snapshots; concurrent flips can race, including a
+new guard bit. Existing guards are refused without touch, not globally leased.
+
+**STATIC — inert retained relay preparation:** Relays prepares seven distinct
+MEM_PRIVATE4096-byte pages near each existing native instruction-end RVA:
+1417815BE,141782B3F,141A92BAA,141A92E7D,141A932FD,141BBE11E,141CF0F3B.
+The two JointBlend routes must target the same wrapper but have distinct
+reservations. Postpose1466D0C58 remains a direct wrapper, not an eighth relay.
+Self code must be executable/nonwritable MEM_IMAGE and is PINned before any
+allocation. The bounded64KiB-granularity search claims ranges with VirtualAlloc,
+records every successful address before further checks, and verifies exact
+requested address and signed-rel32 reachability. Unexpected addresses are
+retained and refused. No game image page is written or reprotected.
+
+Each page goes RW -> exact14-byte FF25 absolute jump -> RX -> checked instruction
+cache flush. Original protection must be RW. Full page bytes (zero tail),
+allocation ownership, RX protection and target image pages are rechecked.
+No RWX, calls through relays, hook installation, retry or freeing destructor
+occurs in production. Partial failures retain every allocated page and the
+target PIN. Verification/address reads are serialized after prepare returns;
+the attempt gate is not a concurrent snapshot or unload/drain fence.
+
+Relays and Publisher now live in the same process-lifetime Resources as the
+fresh Reader/Collector. They complete before local Binding publication. The
+V1 request/export/layout is deliberately UNCHANGED: Binding is184 bytes,
+originals@72/hooks@120/postpose@176 with compile-time assertions. Relays remain
+private; V1 gains no relay addresses or new external meaning. A future external
+offer must use its own versioned contract, not reinterpret this local page.
+
+**CONFIRMED — actual owned Windows allocations/images only:** Release /W4 /WX
+build and focused CTest67/67 PASS; preparation suite32/32 (17 new cases).
+The ordinary helper tests link the uninstrumented production static library.
+A separate inert owned DLL exports a dedicated nonexecutable image page and
+fake six-argument code target; it is NOT a fake retail host or a bypass of the
+production SHA/profile check. Positive publication seals its real page RO,
+refuses subsequent writes, and preserves exact bytes. Of16 concurrent callers,
+one publishes and15 refuse before page access. Also tested: invalid binding,
+private/dirty/readonly/guard pages, LastError and retained DLL after FreeLibrary.
+
+The separately compiled fault build tests actual write SEH after a protection
+change, partial write, seal failure before/after effect, unexpected old
+protection, changed tail/binding and protection changed after readback. The
+production library symbol audit contains no fault hooks/g_audit; the main
+preparation DLL exports only TllEnemyPrepareV1 and TllEnemyBindingV1.
+
+Relay positive fixture73 checks PASS: all seven real RX leaves forward owned
+register/stack arguments, uint64 return and LastError; native SEH unwinds
+through the frameless tail jumps. Source ranges are projected values, NOT
+executed retail sites. Distinct reservations/rel32 reach, PIN retention,
+no-free destruction, changed protection/target bytes, image overflow and
+mismatched JointBlend wrappers are tested. Relay fault fixture576 checks PASS:
+eight failure types at each of seven positions (56 cases), bounded exhaustion
+after each of zero through six completed relays, and unexpected successful
+allocation address. Every partial allocation remains
+owned after refusal/destruction; no new page after the first failed stage.
+Independent read-only review found no remaining scoped blocker. Its noted
+partial-allocation-exhaustion coverage gap is closed by the seven-stage test.
+
+**Still unverified:** whole positive TllEnemyPrepareV1 in retail, partial FLS
+configuration, externally bound offer/module/dependency integrity, live cost,
+worker output and game observation. Component success does not satisfy those
+requirements or enable enemy movement. No game launch/injection/input/AI/HP
+write and no new IDB claim; addresses reuse existing labeled site contracts.
+Main DLL SHA remains3ACCA2A17891BA1D5CA14EC39CC0024827556BE71B5DE0E22E9C227063BBD710.
+
+**Next concrete step:** publish a separate versioned external preparation offer
+with identity-bound original/wrapper/relay addresses and independently validate
+it before using the existing held-debugger transaction. Keep that transport
+disconnected until full admission, then add bounded stopped/quiescent worker
+output and explicit exam startup. Preserve the existing read-only capture
+prediction/evidence and all enemy-writer prohibitions; no live success yet.

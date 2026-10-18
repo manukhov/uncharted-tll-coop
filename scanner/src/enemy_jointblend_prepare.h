@@ -43,6 +43,8 @@ struct Binding {
     std::array<Address, 7> hooks{};
     Address postpose{};
 };
+static_assert(sizeof(Binding) == 184 && offsetof(Binding, originals) == 72 &&
+    offsetof(Binding, hooks) == 120 && offsetof(Binding, postpose) == 176);
 struct alignas(4096) Page {
     Binding binding{};
     std::array<std::uint8_t, 4096 - sizeof(Binding)> padding{};
