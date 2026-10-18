@@ -12,6 +12,10 @@
 namespace coop::enemy_jointblend_hooks {
 namespace {
 
+#if defined(TLL_ENEMY_HOOK_AUDIT)
+std::atomic<std::uint64_t> g_reads{}, g_writes{}, g_bootstraps{};
+#endif
+
 // Reuse only the reviewed generic slot mechanism. These two FLS allocations
 // and their bootstrap marker are enemy-private, never P99 observer state.
 struct EnemyWindowsApi {
@@ -40,12 +44,18 @@ struct EnemyWindowsApi {
         return id;
     }
     static bool read(DWORD index, void*& value) noexcept {
+#if defined(TLL_ENEMY_HOOK_AUDIT)
+        g_reads.fetch_add(1, std::memory_order_relaxed);
+#endif
         const DWORD error = GetLastError();
         const bool ok = p99_group_fiber::read_bootstrapped([&]() {
             SetLastError(ERROR_SUCCESS);
             void* result = FlsGetValue(index);
             return p99_group_fiber::ReadResult{result, GetLastError()};
         }, []() {
+#if defined(TLL_ENEMY_HOOK_AUDIT)
+            g_bootstraps.fetch_add(1, std::memory_order_relaxed);
+#endif
             const DWORD bootstrap = bootstrap_index.load(std::memory_order_acquire);
             return bootstrap != FLS_OUT_OF_INDEXES &&
                 FlsSetValue(bootstrap, const_cast<unsigned char*>(&bootstrap_marker)) != FALSE;
@@ -54,6 +64,9 @@ struct EnemyWindowsApi {
         return ok;
     }
     static bool write(DWORD index, void* value) noexcept {
+#if defined(TLL_ENEMY_HOOK_AUDIT)
+        g_writes.fetch_add(1, std::memory_order_relaxed);
+#endif
         const DWORD error = GetLastError();
         const bool ok = FlsSetValue(index, value) != FALSE;
         SetLastError(error);
@@ -81,8 +94,25 @@ p99_group_fiber::Slot<Frame, EnemyWindowsApi> g_frames;
 std::atomic_flag g_configure_attempt = ATOMIC_FLAG_INIT;
 std::atomic<bool> g_ready{false};
 std::atomic<std::uint64_t> g_nonce{0};
+// Optimization hint only, NOT admission, collector publication, retention or
+// unload proof. Registration races stop(); all configuration remains permanent.
+// Forced DeleteFiber may omit finally and leave this nonzero forever. Never
+// repair it from another thread or use zero as permission to free anything.
+std::atomic<std::uint64_t> g_entered_wrappers{0};
 NativeCalls g_native{};
 Sink g_sink{};
+
+bool register_wrapper() noexcept {
+    auto count = g_entered_wrappers.load(std::memory_order_acquire);
+    // Bounded contention failure disables observation rather than spinning or
+    // wrapping to a false zero. Physical scopes cannot approach uint64 max.
+    for (unsigned attempt = 0; attempt != 16; ++attempt) {
+        if (count == std::numeric_limits<std::uint64_t>::max()) return false;
+        if (g_entered_wrappers.compare_exchange_weak(count, count + 1,
+            std::memory_order_acq_rel, std::memory_order_acquire)) return true;
+    }
+    return false;
+}
 
 Event event_for(const Frame& frame, Kind kind, ProcessSite site,
     std::uintptr_t return_pc, std::uintptr_t return_slot,
@@ -142,6 +172,9 @@ void exception(Frame& frame, ProcessSite site, std::uintptr_t pc,
 }
 
 Frame* observable() noexcept {
+    // A same-fiber ancestor registers before any FLS access and unregisters only
+    // after cleanup. A foreign active fiber merely causes conservative lookup.
+    if (g_entered_wrappers.load(std::memory_order_acquire) == 0) return nullptr;
     Frame* frame = g_frames.current();
     return frame && frame->observed && !frame->invalid && !frame->emitting ? frame : nullptr;
 }
@@ -157,12 +190,9 @@ bool requested() noexcept {
     return result;
 }
 
-__declspec(noinline) void __fastcall jointblend(void* job) {
-    const auto pc = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
-    const auto slot = reinterpret_cast<std::uintptr_t>(_AddressOfReturnAddress());
-    const DWORD entry_error = GetLastError();
+void jointblend_observed(void* job, std::uintptr_t pc, std::uintptr_t slot, DWORD entry_error, bool wanted) {
     Frame* outer = g_frames.current();
-    if (!outer && (!requested() || g_frames.failed())) {
+    if (!outer && (!wanted || g_frames.failed())) {
         SetLastError(entry_error);
         g_native.jointblend(job);
         return;
@@ -202,6 +232,36 @@ __declspec(noinline) void __fastcall jointblend(void* job) {
             args, 0, normal));
         g_frames.leave(frame, previous);
         SetLastError(native_error);
+    }
+}
+
+__declspec(noinline) void __fastcall jointblend(void* job) {
+    const auto pc = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    const auto slot = reinterpret_cast<std::uintptr_t>(_AddressOfReturnAddress());
+    const DWORD entry_error = GetLastError();
+    const bool wanted = requested();
+    // Do not touch FLS on the dormant root path. An existing scope still needs
+    // nested-invocation rejection even after the request gate closes.
+    if (!wanted && g_entered_wrappers.load(std::memory_order_acquire) == 0) {
+        SetLastError(entry_error);
+        g_native.jointblend(job);
+        return;
+    }
+    if (!register_wrapper()) {
+        // Do not let this unregistered subtree silently join an existing scope.
+        if (auto* outer = g_frames.current())
+            invalidate(*outer, pc, slot, {reinterpret_cast<std::uintptr_t>(job)});
+        g_frames.poison();
+        SetLastError(entry_error);
+        g_native.jointblend(job);
+        return;
+    }
+    __try {
+        jointblend_observed(job, pc, slot, entry_error, wanted);
+    } __finally {
+        const DWORD error = GetLastError();
+        g_entered_wrappers.fetch_sub(1, std::memory_order_acq_rel);
+        SetLastError(error);
     }
 }
 
@@ -388,5 +448,14 @@ Targets targets() noexcept {
         reinterpret_cast<std::uintptr_t>(&primary), reinterpret_cast<std::uintptr_t>(&store)},
         reinterpret_cast<std::uintptr_t>(&postpose)};
 }
+
+#if defined(TLL_ENEMY_HOOK_AUDIT)
+AuditSnapshot audit_snapshot() noexcept {
+    return {g_reads.load(), g_writes.load(), g_bootstraps.load(), g_entered_wrappers.load()};
+}
+void audit_exhaust_counter() noexcept {
+    g_entered_wrappers.store(std::numeric_limits<std::uint64_t>::max());
+}
+#endif
 
 } // namespace coop::enemy_jointblend_hooks

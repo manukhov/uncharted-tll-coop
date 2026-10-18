@@ -81,4 +81,14 @@ struct Targets {
 [[nodiscard]] bool configure(const NativeCalls& native, Sink sink) noexcept;
 [[nodiscard]] Targets targets() noexcept; // All zero until configure succeeds.
 
+#if defined(TLL_ENEMY_HOOK_AUDIT)
+// Separate deterministic fixture only. Not compiled into the real core or
+// performance fixture; no reset/reconfiguration surface in production.
+struct AuditSnapshot {
+    std::uint64_t reads{}, writes{}, bootstraps{}, entered_wrappers{};
+};
+[[nodiscard]] AuditSnapshot audit_snapshot() noexcept;
+void audit_exhaust_counter() noexcept; // Terminal fixture case only.
+#endif
+
 } // namespace coop::enemy_jointblend_hooks

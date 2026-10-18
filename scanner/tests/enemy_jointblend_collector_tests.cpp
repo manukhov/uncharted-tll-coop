@@ -1,10 +1,12 @@
 #include "enemy_jointblend_collector.h"
+#include <Windows.h>
 
 #include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <map>
 #include <vector>
+#include <cstdio>
 
 namespace {
 namespace col = coop::enemy_jointblend_collector;
@@ -16,7 +18,7 @@ using A = std::uintptr_t;
 
 struct Reader {
     std::map<A, std::vector<std::byte>> memory;
-    std::size_t calls{}, forbidden_calls{};
+    std::size_t calls{}, forbidden_calls{}, copied_bytes{};
     bool forbidden{};
     void block(A at, std::size_t bytes) { memory[at].resize(bytes); }
     template<class T> void put(A at, T value) {
@@ -36,6 +38,7 @@ struct Reader {
         const auto offset = at - p->first;
         if (offset > p->second.size() || bytes > p->second.size() - offset) return false;
         std::memcpy(destination, p->second.data() + offset, bytes);
+        copied_bytes += bytes;
         return true;
     }
 };
@@ -61,11 +64,14 @@ struct Fixture {
     Clock clock;
     col::Collector<Reader> collector{reader, {module, 0x7000000}, {&clock, Clock::now, 1000000}};
     std::uint64_t nonce = 1;
-    Fixture() {
+    unsigned body_count = 3;
+    explicit Fixture(unsigned count = 3, col::Clock real_clock = {})
+        : collector(reader, {module, 0x7000000}, real_clock.now ? real_clock : col::Clock{&clock, Clock::now, 1000000}),
+          body_count(count) {
         reader.block(module + cap::kForceMode2Rva, 3);
         reader.block(job, 0x18); reader.block(owner, 0x240); reader.block(record, 16);
         reader.block(fg, 0x2A8); reader.block(control, 0x28); reader.block(art, 0x48);
-        reader.block(raw, 0x9400); reader.block(composite, 0x128); reader.block(bodies, 0x110 * 3);
+        reader.block(raw, 0x9400); reader.block(composite, 0x128); reader.block(bodies, 0x110 * body_count);
         reader.block(matrices, 64 * 90); reader.block(locators, 32 * 90); reader.block(payload, 8);
         reader.block(segment, 0x60); reader.block(process_context, 8);
         reader.block(input, 32); reader.block(store_slot + 0xB0, 8);
@@ -84,8 +90,8 @@ struct Fixture {
         reader.put(raw + 0x2C, std::uint32_t{0x40}); reader.put(raw + 0x34, std::uint32_t{0x140});
         reader.put(raw + 0x4F, std::uint8_t{1}); reader.put(raw + 0x50, std::uint16_t{90}); reader.put(raw + 0x52, std::uint16_t{55});
         reader.put(raw + 0x142, std::uint16_t{0x40B0}); reader.put(raw + 0x144, std::uint32_t{0x5340});
-        reader.put(composite + 8, owner); reader.put(composite + 0x10, std::uint32_t{3}); reader.put(composite + 0x48, bodies);
-        for (std::size_t b = 0; b < 3; ++b) {
+        reader.put(composite + 8, owner); reader.put(composite + 0x10, static_cast<std::uint32_t>(body_count)); reader.put(composite + 0x48, bodies);
+        for (std::size_t b = 0; b < body_count; ++b) {
             const A body = bodies + 0x110 * b, n = native + 0x200 * b;
             reader.block(n, 0x161); reader.put(n + 0x160, std::uint8_t{4});
             reader.put(body + 0x40, n); reader.put(body + 0x68, owner);
@@ -161,7 +167,7 @@ struct Fixture {
     }
     void primary_events() {
         send(hook::Kind::PrimaryEnter);
-        for (unsigned body = 0; body < 3; ++body) body_events(body);
+        for (unsigned body = 0; body < body_count; ++body) body_events(body);
         send(hook::Kind::PrimaryReturn);
     }
     void full() { through_process(); primary_events(); send(hook::Kind::Exit); }
@@ -393,9 +399,40 @@ bool process_and_export_provenance_rejects_mismatches() {
     }
     return true;
 }
+std::uint64_t wall_tick(void*) noexcept {
+    LARGE_INTEGER value{};
+    return QueryPerformanceCounter(&value) ? static_cast<std::uint64_t>(value.QuadPart) : 0;
+}
+bool collector_cost() {
+    LARGE_INTEGER frequency{};CHECK(QueryPerformanceFrequency(&frequency) && frequency.QuadPart>=1000);
+    const auto freq=static_cast<std::uint64_t>(frequency.QuadPart);
+    std::array<std::uint64_t,128> samples{};
+    std::size_t completed{},budget_rejections{},max_reads{},max_bytes{};
+    for (auto& sample:samples) {
+        // Allocate/map the synthetic objects BEFORE timing. The real Collector
+        // and real QPC budget then run over all16 bodies, but Reader is the
+        // fixture's map-backed byte reader, not a live game/SEH transport.
+        Fixture f(static_cast<unsigned>(obs::kMaxBodies),{nullptr,wall_tick,freq});
+        CHECK(f.collector.arm());
+        const auto start=wall_tick(nullptr);f.full();f.collector.stop();const auto end=wall_tick(nullptr);
+        CHECK(start && end>=start && f.collector.quiescent());
+        sample=end-start;
+        if (col::complete(f.first())) ++completed;
+        else { CHECK(f.first().failure==col::Failure::budget);++budget_rejections; }
+        max_reads=std::max(max_reads,f.reader.calls);max_bytes=std::max(max_bytes,f.reader.copied_bytes);
+    }
+    std::sort(samples.begin(),samples.end());
+    const auto us=[freq](auto n){return 1000000.0*static_cast<double>(n)/static_cast<double>(freq);};
+    std::printf("OWNED_COLLECTOR_COMPONENT_ONLY bodies=16 n=%zu complete=%zu budget_reject=%zu p50_us=%.3f p95_us=%.3f max_us=%.3f reads_max=%zu bytes_max=%zu\n",
+        samples.size(),completed,budget_rejections,us(samples[64]),us(samples[121]),us(samples.back()),max_reads,max_bytes);
+    CHECK(completed+budget_rejections==samples.size());
+    return true; // A duration is diagnostic data, not automatic game admission.
+}
 } // namespace
 
-int main() {
+int main(int argc,char** argv) {
+    if (argc==2 && std::strcmp(argv[1],"--cost")==0) return collector_cost() ? 0 : 1;
+    if (argc!=1) return 2;
     const std::pair<const char*, bool (*)()> tests[]{
         {"complete/exit", complete_chain_is_event_only_and_exit_reads_nothing},
         {"missing stages", absent_or_misordered_stages_fail_closed},

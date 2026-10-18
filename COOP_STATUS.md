@@ -42091,3 +42091,97 @@ prepared enemy DLL integrity/ABI/fallback configuration and permanent lifetime,
 plus bounded worker output/missing-Exit handling, before wiring an exam. Do not
 admit queued-callback unload or abandoned-fiber reuse. Cmd16 execution, actual
 live asset identity and native pose-writing admission still need separate proof.
+
+## 2026-10-18 — Remove dormant FLS work and measure complete fixture invocations
+
+**Scope:** enemy observer implementation only. No game launch, injection, input,
+enemy pose write or activation. Appearance remains PARKED. No new game address
+or structure claim; the existing sole-IDB labels remain current without a write.
+
+**STATIC defect and competing accounting models.** The previous JointBlend
+wrapper consulted g_frames.current() BEFORE requested(), and every unscoped
+leaf used the same lookup. EnemyWindowsApi::read can bootstrap via FlsSetValue,
+so an installed but dormant observer could do cold FLS work. Collector's clock
+starts only inside emit/enter and ends before wrapper leave/return; it cannot
+represent the full wrapper cost at1417815B7/141782B3A and descendant sites.
+
+- Requested-only bypass everywhere is REJECTED: a scope already in native code
+  must still finish and detect nested JointBlend after stop closes the gate.
+- A global registered-wrapper count plus the requested gate permits dormant
+  root bypass; leaves may bypass when count==0. An active same-fiber ancestor
+  registers before lookup and remains registered through its final cleanup.
+  Other active fibers only cause conservative extra lookup, not shared scope.
+- Collector callback timing alone and subtraction of noisy direct/observed
+  sample means are REJECTED as complete-cost proof. An external timestamp pair
+  around the actual target call measures its full inclusive fixture duration,
+  including native work and scheduling, without guessing a subtraction.
+
+**STATIC implementation:** jointblend now captures its real patched-entry PC/
+slot and forwards those explicitly to jointblend_observed. Both native return
+slots still come from the existing MASM bridges. Registration uses bounded
+compare/exchange attempts; exhaustion poisons observation and invalidates a
+current parent before forwarding native work. It never wraps to false zero.
+An outer finally unregisters only after all inner FLS cleanup and preserves
+native LastError. Dormant/unscoped paths forward native calls exactly once.
+All configuration/resources remain process-lifetime.
+
+The count is an optimization hint, not a worker publication or unload fence:
+registration and the request gate are independent atomics. Stop can race a new
+registration; no teardown authority follows from a zero count. DeleteFiber may
+omit finally and leave a registration permanently nonzero. Never manufacture
+a decrement, reuse an abandoned collector buffer or free callback resources.
+
+**CONFIRMED — owned fixture only:** the written test prediction requires zero
+FLS reads, writes AND bootstrap attempts on fresh dormant threads/fibers and
+unscoped/late leaves. A separate audit build counts these API boundaries; all
+assertions pass. Stop during native execution still yields a complete trace;
+nested JointBlend after stop still emits rejection. All six SEH sites, fiber
+interleaving, migration, abandonment, exhaustion with and without an active
+parent, full-width results/arguments and original native slots pass3373 checks.
+Independent review found and corrected a test-only checks/failures data race
+between the new cold thread and its parent (also present in the older migration
+fixture); those counters are now atomic. No remaining scoped review blocker.
+
+The separate enemy_jointblend_cost test links the REAL core without audit
+instrumentation. QPC surrounds the actual wrapper pointer call and finishes
+after full return or SEH catch. Thread/fiber creation occurs before the clock;
+their first wrapper FLS access is inside it. The native fixture includes both
+Process sites, postpose, primary and14 stores. No game patch/attachment/input.
+One recorded Release run, QPC frequency10000000 (microseconds below):
+
+- Fresh thread dormant:64 samples, median0.6/max7.3; fresh fiber dormant:
+  median0.3/max2.7. Fresh thread armed:median2.4/max3.8; fresh fiber armed:
+  median4.1/max5.7.
+- Warm2048-sample groups: direct-native median0.0/max0.1 (clock resolution,
+  NOT zero work); dormant median0.2/max1.3; armed empty sink1.5/2.4;
+  armed synthetic byte copies2.0/8.8; stop-in-native1.5/2.9;
+  nested-after-stop1.5/18.9; store-SEH2.3/39.2.
+- An intentionally delayed native fixture measured3709.4us, exceeding1ms as
+  predicted: native delay remains in the inclusive envelope, not subtracted.
+  No performance percentile is a CTest acceptance threshold or runtime GO.
+
+The real collector has a SEPARATE --cost fixture with QPC as its policy clock,
+all16 admitted body slots, existing exact synthetic metadata/return-PC model
+and a map-backed Reader. All setup allocations precede timing.128/128 completed
+without budget rejection: median101.4us/p95=102.9us/max155.9us; maximum3703 reads
+and531858 copied bytes. This reveals the actual repeated metadata-read workload;
+it is not the live SEH reader, native-game scheduling or an integrated wrapper+
+collector result. Do not add these separate distributions into a game bound.
+
+Verification: /W4 /WX core, audit and uninstrumented cost fixtures build PASS;
+focused CTest25/25 PASS. Existing collector mutation groups remain14/14.
+The main DLL SHA256 remains
+3ACCA2A17891BA1D5CA14EC39CC0024827556BE71B5DE0E22E9C227063BBD710.
+No tll process was launched. Preexisting untracked tmp/ is untouched.
+
+**HYPOTHESIS / next concrete implementation:** make final sample completion and
+full-cost accounting follow wrapper cleanup, not merely collector Exit. Today
+Exit releases the collector lease BEFORE g_frames.leave and wrapper return;
+late cleanup failures/time cannot be charged to an already completed sample.
+Design an explicit post-cleanup completion carrying no game pointers, preserve
+native invocation/return-slot/SEH semantics, and test late failure and abandoned
+fiber nonpublication before integrating the actual guarded Reader. Cold armed
+FLS may still allocate. kCompleteWrapperBudgetMeasured and kRuntimeAdmission
+remain false: component timing is useful evidence, not a complete production
+budget certificate. Prepared module identity/fallback/lifetime, worker output
+and native live-capture admission still precede a game exam.

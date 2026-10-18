@@ -179,10 +179,13 @@ if(BUILD_TESTING)
     add_executable(tll_enemy_jointblend_hooks_tests tests/enemy_jointblend_hooks_tests.cpp
         src/enemy_jointblend_hooks.cpp $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
         $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
+    target_compile_definitions(tll_enemy_jointblend_hooks_tests PRIVATE TLL_ENEMY_HOOK_AUDIT=1)
+    add_executable(tll_enemy_jointblend_cost_tests tests/enemy_jointblend_cost_tests.cpp)
+    target_link_libraries(tll_enemy_jointblend_cost_tests PRIVATE tll_enemy_jointblend_core)
     add_executable(tll_enemy_jointblend_install_windows_tests tests/enemy_jointblend_install_windows_tests.cpp
         src/enemy_jointblend_install_windows.cpp)
     target_compile_definitions(tll_enemy_jointblend_install_windows_tests PRIVATE TLL_ENEMY_INSTALL_TESTING=1)
-    foreach(enemy_part capture collector hooks install_windows remote_install remote_faults)
+    foreach(enemy_part capture collector hooks cost install_windows remote_install remote_faults)
         target_include_directories(tll_enemy_jointblend_${enemy_part}_tests PRIVATE src)
         target_compile_features(tll_enemy_jointblend_${enemy_part}_tests PRIVATE cxx_std_20)
         target_compile_definitions(tll_enemy_jointblend_${enemy_part}_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
@@ -190,6 +193,8 @@ if(BUILD_TESTING)
         add_test(NAME enemy_jointblend_${enemy_part} COMMAND tll_enemy_jointblend_${enemy_part}_tests)
         set_tests_properties(enemy_jointblend_${enemy_part} PROPERTIES TIMEOUT 30)
     endforeach()
+    add_test(NAME enemy_jointblend_collector_cost COMMAND tll_enemy_jointblend_collector_tests --cost)
+    set_tests_properties(enemy_jointblend_collector_cost PROPERTIES TIMEOUT 30)
     add_test(NAME enemy_jointblend_arm COMMAND tll_enemy_jointblend_arm --self-test)
     # Value-only enemy observer contracts. Not linked into the runtime DLL;
     # passing these tests does not install hooks or admit a game-side writer.

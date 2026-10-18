@@ -126,10 +126,23 @@ the enumeration-as-fence gap for the external transport ONLY; the old local
 two-census installer remains unadmitted. No target allocations or lock-taking
 coordinator work occur inside the stopped process. The external class never
 continues/detaches; debugger death is still not crash-atomic. No new game launch.
-NEXT: complete wrapper/FLS/bridge cost accounting, starting BEFORE
-jointblend's g_frames.current() (which can bootstrap FLS even while unarmed)
-and including leave/exception cleanup and MASM bridge bookkeeping. Current1ms
-collector-only accounting excludes these; first-touch FLS may allocate. Keep
+2026-10-18 cost pass: dormant JointBlend and unscoped leaves now bypass FLS
+when no wrapper is registered. Active scopes still finish/reject nested calls
+after stop; the count spans FLS cleanup and SEH. DeleteFiber may leave a
+conservative count forever; this is NOT an admission/unload/quiescence fence.
+Audit3373 checks PASS including zero FLS reads/writes/bootstrap on fresh dormant
+threads/fibers and terminal counter exhaustion. Uninstrumented whole-target
+timing includes full C++/FLS/MASM return or catch: synthetic-copy median2.0us,
+maximum8.8us in the recorded run. Separate real-Collector/map-reader timing
+with16 bodies completes128/128 samples, median101.4us/max155.9us;3703 reads and
+531858 copied bytes per complete fixture. No noisy baseline subtraction and no
+game latency claim. Do not repeat these component probes as runtime proof.
+NEXT: integrate a complete cost/completion contract with the actual bounded
+reader: collector Exit currently publishes before wrapper FLS leave and final
+return. A post-cleanup failure/time charge must not inherit a completed sample.
+Retain one native invocation and preserve original return-slot/SEH semantics;
+do not call collector-only ticks complete observer time or derive a hard1ms
+guarantee from synthetic percentiles. Armed cold FLS may still allocate. Keep
 all runtime-admission constants false. Then certify the prepared enemy module,
 native fallbacks/config/relay lifetime and immutable preparation offer before
 connecting the external transaction to an explicit exam. Its byte/protection

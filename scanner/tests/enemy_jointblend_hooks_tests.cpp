@@ -5,12 +5,13 @@
 #include <Windows.h>
 #include <intrin.h>
 #include <array>
+#include <atomic>
 #include <cstdio>
 
 namespace hooks = coop::enemy_jointblend_hooks;
 
 namespace {
-unsigned checks = 0, failures = 0;
+std::atomic<unsigned> checks{0}, failures{0};
 void check(bool condition, const char* name) noexcept {
     ++checks;
     if (!condition) { ++failures; std::printf("FAIL %s\n", name); }
@@ -39,6 +40,8 @@ struct Job {
     ThrowAt throw_at = ThrowAt::none;
     bool reenter_jointblend = false;
     bool reenter_process = false;
+    bool stop_in_native = false;
+    bool exhaust_in_native = false;
     unsigned jointblend_depth = 0;
     unsigned process_depth = 0;
     std::uintptr_t native_jointblend_slot = 0;
@@ -188,6 +191,8 @@ __declspec(noinline) void __fastcall native_jointblend(void* pointer) {
             "native JointBlend resumed on other OS thread");
     }
     maybe_throw(job, ThrowAt::jointblend);
+    if (job.stop_in_native) state.gate = false;
+    if (job.exhaust_in_native) hooks::audit_exhaust_counter();
     if (job.reenter_jointblend && job.jointblend_depth == 0) {
         ++job.jointblend_depth;
         SetLastError(kEntryError);
@@ -286,6 +291,60 @@ void normal_and_gate_tests() {
     check(state.event_count == 0 && state.calls == std::array<unsigned, 6>{0, 1, 1, 1, 1, 1},
         "unscoped calls and descendants never create an enemy frame");
 }
+void check_no_fls(const hooks::AuditSnapshot& before, const char* text) {
+    const auto after=hooks::audit_snapshot();
+    check(before.reads==after.reads && before.writes==after.writes && before.bootstraps==after.bootstraps &&
+        before.entered_wrappers==0 && after.entered_wrappers==0,text);
+}
+DWORD WINAPI cold_dormant_thread(void*) {
+    Job job{};
+    const auto before=hooks::audit_snapshot();
+    check(!run_catching(job),"cold dormant thread forwards native");
+    check_no_fls(before,"cold dormant thread performs zero FLS operations");
+    return 0;
+}
+void WINAPI cold_dormant_fiber(void* caller) {
+    cold_dormant_thread(nullptr);
+    SwitchToFiber(caller);
+}
+void dormant_and_stop_tests() {
+    clear();state.gate=false;
+    const auto before=hooks::audit_snapshot();
+    Job job{};
+    check(!run_catching(job),"initial dormant root returns");
+    check_no_fls(before,"initial dormant root and all descendants perform zero FLS operations");
+    HANDLE thread=CreateThread(nullptr,0,cold_dormant_thread,nullptr,0,nullptr);
+    check(thread!=nullptr,"create fresh dormant fixture thread");
+    if (thread) {
+        if (WaitForSingleObject(thread,10000)!=WAIT_OBJECT_0) ExitProcess(2);
+        CloseHandle(thread);
+    }
+    void* caller=ConvertThreadToFiber(nullptr);
+    check(caller!=nullptr,"fresh dormant fiber caller");
+    if (caller) {
+        void* fiber=CreateFiber(0,cold_dormant_fiber,caller);
+        check(fiber!=nullptr,"fresh dormant fiber");
+        if (fiber) { SwitchToFiber(fiber);DeleteFiber(fiber); }
+        check(ConvertFiberToThread()!=FALSE,"dormant fiber caller restored");
+    }
+    // Direct/late queued leaves cannot invent a root even while armed.
+    clear();
+    const auto leaves_before=hooks::audit_snapshot();
+    SetLastError(kEntryError);reset_hook(&job,reinterpret_cast<void*>(kRoot));
+    SetLastError(kEntryError);first_hook(reinterpret_cast<const std::uint32_t*>(&job),0xF1234567,&job,0,
+        reinterpret_cast<void*>(kA5),reinterpret_cast<void*>(kA6),reinterpret_cast<void*>(kA7));
+    SetLastError(kEntryError);primary_hook(&job);
+    check_no_fls(leaves_before,"unscoped and late queued leaves never touch FLS");
+    clear();job.stop_in_native=true;
+    check(!run_catching(job),"request closes while scope is native");
+    check_complete_trace(job);
+    check(hooks::audit_snapshot().entered_wrappers==0,"scope stays counted through complete cleanup after stop");
+    clear();job.reenter_jointblend=true;
+    check(!run_catching(job),"nested native after stop returns");
+    check(count(hooks::Kind::Reentry)==1 && count(hooks::Kind::Entry)==1 && count(hooks::Kind::Exit)==1,
+        "stop cannot hide nested JointBlend from active outer scope");
+    check(hooks::audit_snapshot().entered_wrappers==0,"nested stopped scopes retire exactly once");
+}
 void reentry_tests() {
     clear();
     Job job{};
@@ -325,6 +384,7 @@ void exception_tests() {
         check(count(hooks::Kind::Exception) == 1 && count(hooks::Kind::Exit) == 1 &&
             !state.events[state.event_count - 1].normal_return,
             "unwind emits reject and exactly one abnormal outer Exit");
+        check(hooks::audit_snapshot().entered_wrappers==0,"all SEH sites retire root registration after FLS cleanup");
         const auto before = state.event_count;
         job.throw_at = ThrowAt::none;
         SetLastError(kEntryError);
@@ -396,6 +456,7 @@ void fiber_tests() {
     void* doomed = CreateFiber(0, fiber_entry, &abandoned);
     check(doomed != nullptr, "create disposable suspended fiber");
     if (doomed) { SwitchToFiber(doomed); DeleteFiber(doomed); }
+    check(hooks::audit_snapshot().entered_wrappers==1,"abandoned fiber leaves conservative registration, never synthetic zero");
     clear();
     Job fresh{};
     fresh.return_to = main_fiber;
@@ -432,6 +493,7 @@ void fiber_tests() {
     Job after{};
     check(!run_catching(after), "ordinary thread works after fiber conversion");
     check_complete_trace(after);
+    check(hooks::audit_snapshot().entered_wrappers==1,"migration and new scopes preserve abandoned registration");
 }
 } // namespace
 
@@ -461,10 +523,19 @@ int main() {
     check(RtlLookupFunctionEntry(reinterpret_cast<DWORD64>(
         &coop::p99_process_native_frame::p99_process_invoke_native), &image, nullptr) != nullptr,
         "original Process bridge has Windows unwind metadata");
+    dormant_and_stop_tests();
     normal_and_gate_tests();
     reentry_tests();
     exception_tests();
     fiber_tests();
-    std::printf("%u checks, %u failures\n", checks, failures);
-    return failures ? 1 : 0;
+    clear();Job terminal{};terminal.exhaust_in_native=true;terminal.reenter_jointblend=true;
+    check(!run_catching(terminal) && count(hooks::Kind::Reentry)==1 && count(hooks::Kind::Exit)==1,
+        "counter exhaustion inside a nested native invocation invalidates its parent");
+    check(hooks::audit_snapshot().entered_wrappers==UINT64_MAX-1,"exhaustion with an owned registration never produces false zero");
+    clear();hooks::audit_exhaust_counter();terminal={};
+    check(!run_catching(terminal) && state.event_count==0 && state.calls==std::array<unsigned,6>{1,1,2,2,1,1},
+        "counter exhaustion disables observation but forwards every native call");
+    check(hooks::audit_snapshot().entered_wrappers==UINT64_MAX,"counter exhaustion never wraps to a false zero");
+    std::printf("%u checks, %u failures\n", checks.load(), failures.load());
+    return failures.load() ? 1 : 0;
 }
