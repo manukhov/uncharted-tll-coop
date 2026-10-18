@@ -47,12 +47,119 @@ std::atomic<ULONGLONG> census_valid_until{};
 std::atomic<ULONGLONG> worker_gap_ms{};
 std::atomic<std::uint64_t> sent{}, send_dropped{};
 
+// One nonwaiting permit covers ALL synchronous enemy census/native guard work.
+// A QPC wall-time cutoff contains repeated work; it cannot preempt one blocked
+// OS call/page fault and must never be described as a hard frame-time bound.
+std::atomic_flag work_busy = ATOMIC_FLAG_INIT;
+std::uint64_t qpc_frequency{}, work_window{}, work_spent{};
+unsigned work_queries{};
+std::atomic<unsigned> cost_stop{}, cost_site{}, peak_queries{};
+std::atomic<std::uint64_t> cost_total_ticks{}, peak_scope_ticks{}, peak_window_ticks{}, query_total{}, work_skips{};
+HANDLE stop_request{}, stop_ack{}; // retained for the pinned process lifetime
+std::atomic<bool> external_stop{};
+std::atomic<bool> native_apply_fault{};
+enum : unsigned { kCostClock = 1, kCostTime = 2, kCostQueries = 3 };
+void stop_cost(unsigned reason, unsigned site) noexcept {
+    unsigned expected{};
+    if (cost_stop.compare_exchange_strong(expected, reason)) cost_site.store(site);
+    stopped.store(true, std::memory_order_release);
+    active_scope.store(false, std::memory_order_release);
+}
+template<class T> void set_peak(std::atomic<T>& peak, T value) noexcept {
+    // Called only by the permit owner; readers are the transport worker.
+    if (value > peak.load(std::memory_order_relaxed)) peak.store(value, std::memory_order_relaxed);
+}
+struct WorkBudget {
+    bool owned{};
+    unsigned site{};
+    std::uint64_t begin{}, last{};
+    explicit WorkBudget(unsigned where) noexcept : site(where) {
+        owned = !work_busy.test_and_set(std::memory_order_acquire);
+        if (!owned) { work_skips.fetch_add(1, std::memory_order_relaxed); return; }
+        LARGE_INTEGER now{};
+        if (!qpc_frequency || !QueryPerformanceCounter(&now) || now.QuadPart <= 0 ||
+            static_cast<std::uint64_t>(now.QuadPart) < work_window) { stop_cost(kCostClock, site); return; }
+        begin = last = static_cast<std::uint64_t>(now.QuadPart);
+        // Never reset a window mid-scope: a stalled scope stays fully charged.
+        if (!work_window || begin-work_window >= qpc_frequency/20) {
+            work_window = begin; work_spent = 0; work_queries = 0;
+        }
+    }
+    WorkBudget(const WorkBudget&) = delete;
+    WorkBudget& operator=(const WorkBudget&) = delete;
+    bool check(bool query = false) noexcept {
+        if (!owned || !last) return false;
+        LARGE_INTEGER now{};
+        if (!QueryPerformanceCounter(&now) || now.QuadPart < 0 || static_cast<std::uint64_t>(now.QuadPart) < last) {
+            stop_cost(kCostClock, site); return false;
+        }
+        const auto value = static_cast<std::uint64_t>(now.QuadPart), delta = value-last;
+        last = value; work_spent += delta;
+        cost_total_ticks.fetch_add(delta, std::memory_order_relaxed);
+        set_peak(peak_scope_ticks, value-begin); set_peak(peak_window_ticks, work_spent);
+        if (work_spent >= qpc_frequency/1000) { stop_cost(kCostTime, site); return false; }
+        if (stopped.load(std::memory_order_acquire)) return false;
+        if (query) {
+            if (work_queries == 256) { stop_cost(kCostQueries, site); return false; }
+            ++work_queries; query_total.fetch_add(1, std::memory_order_relaxed); set_peak(peak_queries, work_queries);
+        }
+        return true;
+    }
+    void finish() noexcept {
+        if (owned) { check(); owned = false; work_busy.clear(std::memory_order_release); }
+    }
+    ~WorkBudget() noexcept { finish(); }
+};
+
+DWORD WINAPI stop_waiter(void*) {
+    // No logging, sockets, RNG or game pointers on this emergency path.
+    while (!stopped.load(std::memory_order_acquire)) {
+        const DWORD state = WaitForSingleObject(stop_request, 50);
+        if (state != WAIT_TIMEOUT) {
+            external_stop.store(true);
+            stopped.store(true, std::memory_order_release);
+            active_scope.store(false, std::memory_order_release);
+        }
+    }
+    // ACK means all admitted game work (including a setter already in flight)
+    // has left. New scopes recheck stopped after acquiring this same permit.
+    while (work_busy.test_and_set(std::memory_order_acquire)) Sleep(1);
+    active_scope.store(false, std::memory_order_release);
+    SetEvent(stop_ack);
+    work_busy.clear(std::memory_order_release);
+    return 0;
+}
+bool start_stop_control() {
+    FILETIME created{}, exited{}, kernel{}, user{};
+    if (!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user)) return false;
+    const auto stamp = (std::uint64_t{created.dwHighDateTime} << 32) | created.dwLowDateTime;
+    char request_name[128]{}, ack_name[128]{};
+    std::snprintf(request_name, sizeof(request_name), "Local\\TllEnemyRootStop_v1_%lu_%016llX", GetCurrentProcessId(), stamp);
+    std::snprintf(ack_name, sizeof(ack_name), "%s_ACK", request_name);
+    const auto fail = [] {
+        if (stop_request) CloseHandle(stop_request);
+        if (stop_ack) CloseHandle(stop_ack);
+        stop_request = stop_ack = nullptr; return false;
+    };
+    stop_request = CreateEventA(nullptr, TRUE, FALSE, request_name);
+    if (!stop_request || GetLastError() == ERROR_ALREADY_EXISTS) return fail();
+    stop_ack = CreateEventA(nullptr, TRUE, FALSE, ack_name);
+    if (!stop_ack || GetLastError() == ERROR_ALREADY_EXISTS) return fail();
+    const HANDLE thread = CreateThread(nullptr, 0, stop_waiter, nullptr, 0, nullptr);
+    if (!thread) return fail();
+    CloseHandle(thread);
+    return true;
+}
+
 struct ReadCache {
     struct Region { std::uintptr_t begin{}, end{}; };
     std::array<Region, 64> regions{};
     std::size_t count{};
+    WorkBudget* budget{};
 };
 bool copy(std::uintptr_t at, void* out, std::size_t size, ReadCache* cache = nullptr) noexcept {
+    auto* budget = cache ? cache->budget : nullptr;
+    if (budget && !budget->check()) return false;
     if (!size || size > 4096 || at < 0x10000 || at > 0x7FFFFFFFFFFFULL-size) return false;
     for (auto cursor = at; cursor < at+size;) {
         bool found{};
@@ -63,16 +170,21 @@ bool copy(std::uintptr_t at, void* out, std::size_t size, ReadCache* cache = nul
         }
         if (found) continue;
         MEMORY_BASIC_INFORMATION m{};
-        if (VirtualQuery(reinterpret_cast<void*>(cursor), &m, sizeof(m)) != sizeof(m) || m.State != MEM_COMMIT ||
+        if (budget && !budget->check(true)) return false;
+        const auto queried = VirtualQuery(reinterpret_cast<void*>(cursor), &m, sizeof(m));
+        if (budget && !budget->check()) return false;
+        if (queried != sizeof(m) || m.State != MEM_COMMIT ||
             (m.Protect & (PAGE_GUARD | PAGE_NOACCESS)) || !(m.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY))) return false;
         const auto end = reinterpret_cast<std::uintptr_t>(m.BaseAddress)+m.RegionSize;
         if (end <= cursor) return false;
         if (cache && cache->count < cache->regions.size()) cache->regions[cache->count++] = {reinterpret_cast<std::uintptr_t>(m.BaseAddress), end};
         cursor = end;
     }
-    __try { std::memcpy(out, reinterpret_cast<const void*>(at), size); return true; }
+    bool copied{};
+    __try { std::memcpy(out, reinterpret_cast<const void*>(at), size); copied = true; }
     __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION || GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR ||
-        GetExceptionCode() == EXCEPTION_GUARD_PAGE ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) { return false; }
+        GetExceptionCode() == EXCEPTION_GUARD_PAGE ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {}
+    return (!budget || budget->check()) && copied;
 }
 template<class T> bool read(std::uintptr_t at, T& out) noexcept { return copy(at, &out, sizeof(out)); }
 std::uintptr_t current_player(ReadCache* shared = nullptr) noexcept {
@@ -125,10 +237,10 @@ bool identity(std::uintptr_t actor, Local& out, ReadCache* shared = nullptr) noe
         !read(actor+0xBC, id_after) || id_after != value.generation) return false;
     out = value; return true;
 }
-bool census(Roster& out) noexcept {
+bool census(Roster& out, WorkBudget& budget) noexcept {
     // One synchronous read pass, no game callbacks or pointer publication.
     // Reuse region checks inside this pass, never across ticks/native phases.
-    ReadCache cache{};
+    ReadCache cache{}; cache.budget = &budget;
     const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
     Roster value{};
     value.player = current_player(&cache);
@@ -212,9 +324,14 @@ void tick() {
     }
     if (ticking.test_and_set()) return;
     const auto now = GetTickCount64();
-    if (now-last_tick < 50) { ticking.clear(); return; } last_tick = now;
+    if (now-last_tick < 50) { ticking.clear(); return; }
+    WorkBudget budget(1);
+    // No observation was attempted on contention. Do not refresh the existing
+    // 150ms lease or last_tick; the next game update can try without waiting.
+    if (!budget.check()) { ticking.clear(); return; }
+    last_tick = now;
     Roster current{};
-    const bool valid = census(current);
+    const bool valid = census(current, budget) && budget.check();
     if (!valid) {
         census_gap = true;
         active_scope.store(false, std::memory_order_release);
@@ -259,8 +376,9 @@ void tick() {
             }
         }
     }
-    census_valid_until.store(valid && session ? now+150 : 0, std::memory_order_release);
-    active_scope.store(session && confirmed && now-peer_seen <= 1000 && !stopped.load(), std::memory_order_release);
+    const bool within_budget = budget.check();
+    census_valid_until.store(valid && session && within_budget ? now+150 : 0, std::memory_order_release);
+    active_scope.store(session && confirmed && now-peer_seen <= 1000 && within_budget && !stopped.load(), std::memory_order_release);
     ReleaseSRWLockExclusive(&lock);
     ticking.clear();
 }
@@ -349,7 +467,11 @@ DWORD WINAPI transport_worker(void*) {
                 line << "ENEMY-ROOT role=" << (g_net_role_b ? 'B' : 'A') << " actors=" << local_count << " paired=" << paired
                      << " capture=" << captured.load() << " recv=" << received.load() << " match=" << matched.load()
                      << " apply=" << applied.load() << " reject=" << rejected.load() << " sent=" << sent.load()
-                     << " sendDrop=" << send_dropped.load() << " lastGate=" << last_rejection.load() << " stopped=" << stopped.load();
+                     << " sendDrop=" << send_dropped.load() << " lastGate=" << last_rejection.load() << " stopped=" << stopped.load()
+                     << " costStop=" << cost_stop.load() << " costSite=" << cost_site.load()
+                     << " peakScopeUs=" << peak_scope_ticks.load()*1000000/qpc_frequency
+                     << " peakWindowUs=" << peak_window_ticks.load()*1000000/qpc_frequency
+                     << " queries=" << query_total.load() << " peakQueries=" << peak_queries.load() << " workSkips=" << work_skips.load();
                 write_status(line.str());
             }
         }
@@ -360,6 +482,11 @@ DWORD WINAPI transport_worker(void*) {
     closesocket(transport_socket); WSACleanup();
     std::ostringstream line; line << "ENEMY-ROOT STOPPED apply=" << applied.load() << " match=" << matched.load()
         << " workerGapMs=" << worker_gap_ms.load()
+        << " external=" << external_stop.load() << " nativeFault=" << native_apply_fault.load()
+        << " costStop=" << cost_stop.load() << " costSite=" << cost_site.load()
+        << " peakScopeUs=" << peak_scope_ticks.load()*1000000/qpc_frequency
+        << " peakWindowUs=" << peak_window_ticks.load()*1000000/qpc_frequency
+        << " queries=" << query_total.load() << " peakQueries=" << peak_queries.load()
         << "; native AI/root resumes; no automatic rearm";
     write_status(line.str());
     if (log != INVALID_HANDLE_VALUE) CloseHandle(log);
@@ -396,6 +523,25 @@ bool start_transport() {
     std::ostringstream line; line << "ENEMY-ROOT dedicated nonblocking UDP local=" << local_port+2 << " peer=" << peer_port+2;
     boot_log_line(line.str().c_str());
     return true;
+}
+
+void apply_root_and_release(void* object, const void* transform, WorkBudget* budget) {
+    using SetLocalRoot = void(__fastcall*)(void*, const void*);
+    // Finally cleans up even if an outer native SEH handler resumes the game.
+    // Do NOT catch/translate the game's exception or count a partial write as
+    // success. Normal return leaves the permit with the enclosing scope.
+    __try {
+        reinterpret_cast<SetLocalRoot>(g_module+0x1E7D0D0)(object, transform);
+        applied.fetch_add(1, std::memory_order_relaxed);
+    } __finally {
+        ReleaseSRWLockExclusive(&lock);
+        if (AbnormalTermination()) {
+            native_apply_fault.store(true);
+            stopped.store(true, std::memory_order_release);
+            active_scope.store(false, std::memory_order_release);
+            budget->finish();
+        }
+    }
 }
 
 bool ordinary(std::uintptr_t actor, std::uintptr_t job, std::array<float, 8>& transform, unsigned& gate, ReadCache* shared = nullptr) noexcept {
@@ -492,6 +638,8 @@ bool ordinary(std::uintptr_t actor, std::uintptr_t job, std::array<float, 8>& tr
 void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     if (pc != g_module+0x1A929A7 || !installed.load(std::memory_order_acquire) || !active_scope.load(std::memory_order_acquire) ||
         stopped.load(std::memory_order_relaxed) || g_dll_inert) return;
+    WorkBudget budget(2);
+    if (!budget.check()) return;
     const auto actor = reinterpret_cast<std::uintptr_t>(object);
     // Metadata-only scheduling first. A roster pointer match is NOT admission:
     // all identity/ordinary/final generation checks below remain mandatory.
@@ -522,7 +670,7 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     if (!due) return;
     // Cache protections only for this callback, after stock and before setter.
     // Repeated identity/eligibility checks below still reread actual game data.
-    ReadCache cache{};
+    ReadCache cache{}; cache.budget = &budget;
     const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
     Local local{}; std::array<float, 8> transform{}; unsigned gate{};
     if (!identity(actor, local, &cache) || !ordinary(actor, reinterpret_cast<std::uintptr_t>(native_job), transform, gate, &cache)) {
@@ -543,7 +691,7 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
         if (!g_net_role_b) {
             packet.kind = wire::Kind::root; packet.key = local.key;
             std::copy_n(transform.begin(), 3, packet.position.begin()); std::copy_n(transform.begin()+4, 4, packet.rotation.begin());
-            if (wire::valid_pose(packet)) { row.outgoing = packet; row.captured = now; row.dirty = true; captured.fetch_add(1, std::memory_order_relaxed); }
+            if (wire::valid_pose(packet) && budget.check()) { row.outgoing = packet; row.captured = now; row.dirty = true; captured.fetch_add(1, std::memory_order_relaxed); }
         } else if (confirmed && now-peer_seen <= 1000 && row.received && now-row.received <= 200 &&
             scheduled_packet.sender == peer && scheduled_packet.receiver == session &&
             row.incoming.sequence == scheduled_packet.sequence) {
@@ -580,17 +728,14 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     // The final memory reads can themselves be delayed. Do not use a timestamp
     // captured before them to authorize a write after the packet/scope expired.
     const auto write_now = GetTickCount64();
-    if (g_dll_inert || stopped.load() || !active_scope.load(std::memory_order_acquire) ||
+    if (!budget.check() || g_dll_inert || stopped.load() || !active_scope.load(std::memory_order_acquire) ||
         write_now > census_valid_until.load(std::memory_order_acquire) ||
         write_now-peer_seen > 1000 || write_now-rows[index].received > 200 || write_now-first_apply > 30000) {
         ReleaseSRWLockExclusive(&lock); return;
     }
     std::copy_n(packet.position.begin(), 3, fresh.begin()); // keep receiver +13C service lane
     std::copy(packet.rotation.begin(), packet.rotation.end(), fresh.begin()+4);
-    using SetLocalRoot = void(__fastcall*)(void*, const void*);
-    reinterpret_cast<SetLocalRoot>(g_module+0x1E7D0D0)(object, fresh.data());
-    applied.fetch_add(1, std::memory_order_relaxed);
-    ReleaseSRWLockExclusive(&lock);
+    apply_root_and_release(object, fresh.data(), &budget);
 }
 } // namespace enemy_root
 
@@ -623,7 +768,14 @@ bool install_enemy_root_sync() {
     HMODULE pinned{};
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN,
         reinterpret_cast<LPCWSTR>(&TllEnemyRootPostblend), &pinned) || reinterpret_cast<std::uintptr_t>(pinned) != g_self_module) return false;
+    LARGE_INTEGER frequency{};
+    if (!QueryPerformanceFrequency(&frequency) || frequency.QuadPart < 1000) return false;
+    enemy_root::qpc_frequency = static_cast<std::uint64_t>(frequency.QuadPart);
+    if (!enemy_root::start_stop_control()) {
+        boot_log_line("ENEMY-ROOT installation refused: terminal stop control unavailable"); return false;
+    }
     if (!enemy_root::start_transport()) {
+        enemy_root::stopped.store(true);
         boot_log_line("ENEMY-ROOT installation refused: dedicated transport unavailable"); return false;
     }
     auto** slot = reinterpret_cast<void**>(g_module+enemy_root::kPirate+0x408);

@@ -5,7 +5,8 @@ param(
     [int]$SettleSeconds = 14,
     [ValidateRange(0, 30)]
     [int]$InjectionGapSeconds = 5,
-    [switch]$LocalPair
+    [switch]$LocalPair,
+    [switch]$EnemyRootSync
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,17 +37,15 @@ $gameDirectory = [IO.Path]::GetDirectoryName($GamePath)
 $processes = @()
 for ($instance = 1; $instance -le $Count; $instance++) {
     Write-Host "== launching instance $instance =="
-    if ($LocalPair) {
-        # Per-process A/B roles: do not rewrite the shared user's coop_role.txt.
-        $startInfo = [Diagnostics.ProcessStartInfo]::new()
-        $startInfo.FileName = $GamePath
-        $startInfo.WorkingDirectory = $gameDirectory
-        $startInfo.UseShellExecute = $false
-        $startInfo.EnvironmentVariables['TLL_COOP_ROLE'] = [string]$instance
-        $process = [Diagnostics.Process]::Start($startInfo)
-    } else {
-        $process = Start-Process -FilePath $GamePath -WorkingDirectory $gameDirectory -PassThru
-    }
+    # Per-process A/B roles: do not rewrite the shared user's coop_role.txt.
+    # Set 0 explicitly on ordinary launches, even if the parent inherited 1.
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $GamePath
+    $startInfo.WorkingDirectory = $gameDirectory
+    $startInfo.UseShellExecute = $false
+    if ($LocalPair) { $startInfo.EnvironmentVariables['TLL_COOP_ROLE'] = [string]$instance }
+    $startInfo.EnvironmentVariables['TLL_ENEMY_ROOT_SYNC'] = if ($EnemyRootSync) { '1' } else { '0' }
+    $process = [Diagnostics.Process]::Start($startInfo)
     Start-Sleep -Seconds 2
     if ($process.HasExited) {
         throw "Instance $instance exited during startup"

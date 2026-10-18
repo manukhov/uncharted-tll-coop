@@ -24,11 +24,16 @@ not the player sockets or game-thread sendto. RNG and recurring private-file
 logging also moved off game update. B reserves/copies each packet sequence
 before deep reads and tries it only once; shared ReadCache stays lexical to
 one postblend, with actual final re-reads preserved. No runtime validation.
-NEXT: bound/time remaining synchronous census/VirtualQuery guard work before
-another enemy-enabled run; add a build-current terminal stop before that exam.
-The old hash/PDB emergency script intentionally rejects this new DLL. Do NOT
-relax it to arbitrary hashes. No new standalone tests/offer expansion, damage/
-AI writer, automatic rearm or claimed visible sync/performance success.
+Now built: one nonwaiting work permit, shared1ms wall-time/256-query cutoff
+per fixed50ms window, all rejection paths charged; one delayed OS call cannot
+be preempted. Independent PID+creation-bound stop request/ACK is available via
+scripts/stop_enemy_root_channel.ps1 (signals both before waiting; no memory
+writes). Old hash/PDB stop remains restricted. Revised native-root exam has
+written evidence/prediction in latest COOP_STATUS and is ready for two copies.
+NEXT: launch -Count2 -LocalPair -EnemyRootSync; user alone loads the same living
+enemy encounter, no initial shooting/reload; compare visible motion/smoothness
+with per-PID enemy_root logs. Cost cutoff is containment, NOT sync success.
+No standalone tests/offer expansion, damage/AI writer or automatic rearm.
 
 PREVIOUS IMPLEMENTATION (superseded by rejection above): ordinary main
 DLL now contains native root-only A->B replication through exact Pirate+408

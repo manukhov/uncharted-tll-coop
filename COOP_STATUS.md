@@ -13,8 +13,9 @@ load alone does NOT explain it. Exact hotspot remains unmeasured. Both games
 are now CLOSED. The revised main DLL BUILDS with default-OFF startup: enemy
 UDP, nonce generation and recurring logging run on an isolated worker; B
 checks each new packet only once. It is NOT injected or runtime-validated.
-Remaining admission item: bound/time the synchronous census and native read
-guards without removing identity/protection checks. Do not launch yet.
+The latest entry adds a cumulative guard-work cutoff and PID/creation-bound
+terminal stop; a revised bounded same-encounter exam is now prepared. Read its
+prediction and actual launch/result below; compilation is not gameplay proof.
 
 USER CORRECTION (2026-10-18): implement enemy synchronization, not additional
 standalone tests or loader/offer infrastructure. The latest entry connects an
@@ -42952,3 +42953,78 @@ the old hash/PDB emergency script deliberately rejects this rebuilt image.
 Do not weaken its hash check or resume separate offer/test infrastructure.
 No new game-address finding: prior Pirate+408/141A929A7/141E7D0D0 labels remain
 saved in the sole IDB; no database rewrite was required for this source change.
+
+## 2026-10-18 — Bound repeated enemy guard work before revised native-root exam
+
+**IMPLEMENTED and build-confirmed, not runtime-confirmed:** main DLL SHA256
+8006D7169D9C65F104D8BB32569EE778B665CEB0C686645A8E8DF51BD414E4F2.
+One nonwaiting work permit serializes admitted census/postblend work, ordered
+ticking -> work permit -> mailbox. A busy attempt performs no game reads and
+does not reserve a packet, advance last_tick or refresh the150ms census lease.
+Actual census invalidation/unpublished census still uses the prior gap latch.
+
+All admitted attempts, including rejection, SEH-copy failure and mailbox
+refusal, charge QPC deltas to a shared fixed50ms window. At1ms cumulative
+wall time or BEFORE a257th VirtualQuery the channel stops terminally. QPC
+is sampled around every guarded copy/query, before publication/native setter,
+and on scope exit. Window reset is entry-only: a delayed call cannot erase its
+cost by crossing the next window. Busy/dormant fast returns and stock+408 are
+not included. This is NOT a sliding-window limit, pure CPU measurement, OS-call
+preemption or hard1ms frame guarantee; one VQ/page fault can still stall once.
+No readable/guard-page/identity/parent/health/physics check was removed.
+
+Alternatives: per-enemy budgets fail to bound total cost; independent unlocked
+scope counters admit concurrent stalled readers; caching protections across
+callbacks would change safety assumptions. Those are not this implementation.
+Telemetry in enemy_root_<PID>.log: costStop1=clock,2=time,3=query cap;
+costSite1=census,2=postblend; peakScopeUs/peakWindowUs/queries/peakQueries and
+workSkips distinguish admitted cost from skipped work. Thresholds are fixed,
+not runtime tuning knobs. A cutoff is NOT a successful synchronization result.
+
+**Emergency stop:** separate no-I/O waiter observes manual-reset request event
+Local\TllEnemyRootStop_v1_<PID>_<raw creation FILETIME hex>. Matching _ACK is
+signaled only after stopped=true and work-permit quiescence. Named objects are
+created non-signaled, fail on preexistence and remain for the pinned process.
+No rearm. scripts/stop_enemy_root_channel.ps1 opens existing events only with
+a retained PID/creation-verified process handle; it signals all requested
+copies BEFORE waiting for acknowledgements. Timeout is not called success.
+The old exact-hash/PDB emergency writer is unchanged, not generalized.
+The sole native setter helper has __finally cleanup: always releases mailbox;
+on abnormal native unwind it terminally stops/releases the work permit while
+propagating the original exception. A partial failed write is not counted as
+success. It is not a crash-recovery mechanism.
+
+**STATIC evidence rechecked before launch:**
+
+1. MCP disassembly of Perform141A928F0 confirms job inRSI, exact call
+   [vtable+408]141A929A1/return141A929A7 then phase40 dispatch141A929C1.
+2. MCP setter141E7D0D0 confirms32byte+130/+140 copy then virtual+208; xrefs
+   independently reach NavCharacter_UpdateRootLocator141DEDA11 and
+   BuildInteractHookRuntimeStateFromLiveObject1408BF18F/1E9. Existing exact
+   Pirate-vtable/empty+208 facts and native body ordering are unchanged; retail
+   install bytes, full reciprocal identities and ordinary/body gates remain.
+3. Structural consistency: the confirmed user A/B stopped only new enemy work
+   with apply=0 and removed lag, leaving the stock-forwarding shim. New source
+   removes per-field census queries/repeated packet guards, separates network
+   I/O and makes remaining admitted work terminally cost-limited. No claim
+   that this identifies a single dominant API in the previous run.
+
+**Falsifiable revised prediction, written BEFORE launch:** in the same living
+enemy encounter, A capture and B match/apply should correspond to visible B
+root movement following the same uniquely matched A enemy, without renewed
+sustained severe lag or model/body separation. The native seam prediction is
+unchanged from the first exam. If the guarded work exceeds its limit, a terminal
+costStop and quiescent ACK must appear, and admitted work/apply must not keep
+growing; that rejects the current usable-sync implementation but validates only
+containment. A single scheduling/VQ delay may still occur. Growing counters
+with wrong/stationary/rubber-banding B, renewed severe lag or crash is failure.
+AI/death/damage/animation-state authority remains OFF/out of scope.
+
+Launch uses -Count2 -LocalPair -EnemyRootSync, explicitly sets child opt-in1;
+every ordinary launcher invocation now sets0 even if parent environment had1.
+Only the user operates menus/saves/characters. Load the same encounter in both,
+initially no shooting/reload, observe one moving counterpart and smoothness.
+Source review fixed sequential-stop timeout and inherited-opt-in defects;
+PowerShell parsing, C# stop-tool compilation/non-game refusal and Release main
+build pass. No new standalone test suite, no new game-address labels. Sole IDB
+existing labels were read/verified, not rewritten. Runtime outcome pending.
