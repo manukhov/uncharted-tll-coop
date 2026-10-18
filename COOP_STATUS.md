@@ -42371,3 +42371,79 @@ fixture instead of repeating separate component timings. The current external
 patch transaction is not a module/release certificate. Explicit exam startup
 and a discriminating live capture prediction are still required before launch;
 cmd16/live asset proof and enemy movement admission remain separate and open.
+
+## 2026-10-18 — Explicit dormant enemy module and local native binding
+
+**STATIC — implementation, not live preparation admission:** added separate
+EXCLUDE_FROM_ALL tll_enemy_jointblend_prepare.dll. It links the enemy wrappers,
+Windows Reader and MASM bridges only; it does not include coop_runtime.cpp or
+invoke the old local installer. No custom DllMain/constructor, auto worker,
+hook patch, arm, native game call, enemy writer or game input is introduced.
+Existing local Chloe/Nadine and player synchronization remain unchanged.
+
+TllEnemyPrepareV1 is an explicit caller-thread ABI (48-byte versioned Request),
+to be invoked OUTSIDE loader lock, native callbacks and any held debugger event.
+An atomic one-shot gate precedes copying caller memory. Guard/noaccess pages,
+wrong size/version/reserved, PID, creation time, actual main module or actual
+self module refuse; repeat/concurrent calls cannot resnapshot or retry. No
+caller-provided original function address is accepted. The entry preserves
+LastError. Request accessibility is not a cross-thread atomic-snapshot claim.
+
+After actual process/module identity, self is permanently PINned BEFORE FLS,
+resource allocation or publication. Later refusal intentionally retains this
+PIN and any allocated resources; there is no reset, unload or cleanup retry.
+The main image must be AMD64 PE32+, section alignment4096, stamp649F75A0 and
+SizeOfImage07047000. On-disk tll.exe must have60851712 bytes and SHA256
+ed1371a4b47961abc160e92aa0b9bdfd787638fa1a39ba2403b423ab45c210be.
+Opening/hash work occurs only on explicit preparation, never game callbacks.
+
+Six32-byte executable/nonwritable MEM_IMAGE prefixes and the existing seven
+site instructions are checked before binding internally derived originals:
+JointBlend141A92A00, Reset1416878F0, Process141AB97C0, GAME postpose1406CD220,
+Primary141E5AEE0, Store141CF3790. Aligned callback1466D0C58 must still equal
+Game postpose, NOT ND dispatcher141937D20. The fresh process-lifetime
+Collector<WindowsReader> stays unarmed; only successful hook configuration
+publishes code targets. No captured game objects or borrowed pointers exist.
+
+TllEnemyBindingV1 is a dedicated, initially zero4096-byte image page. Local
+publication writes the bound identity/fallbacks/hooks/QPC frequency, seals RO
+and rechecks the entire page. No external offer/relay/arm/release fields are
+provided. Consumers must not accept magic/prefix alone: failed publication
+can have partial side effects. Disk SHA, image type and these prefixes are NOT
+whole mapped-code, dependency, loader retention or transitive ABI proof; COW
+pages may still be MEM_IMAGE. The external installer is NOT connected to this
+page, and kRuntimeAdmission remains false.
+
+**CONFIRMED — owned process / nonexecuting retail file only:** Release /W4 /WX
+build and focused CTest50/50 PASS, including15 new cases. Actual DLL tests
+cover inert load/unload/reload, malformed/guarded/split requests, four exact
+identity mismatches, repeated calls,16 racing callers (one late refusal and
+15 reused), and a late unsupported-host refusal whose self PIN survives
+FreeLibrary. Refused pages remain zero; existing guard bits stay unconsumed.
+The nonexecuting retail-file audit verifies the SHA/profile, all six prefixes
+and seven instruction contracts, then rejects each individually modified or
+unreadable location (26 negative variants). File bytes are never executed.
+
+An independent review caught and fixed a blocker before game use: a fresh
+collector's lease state0 is dormant, NOT stopped/quiescent. Requiring
+quiescent() always refused configuration; calling stop() to satisfy it would
+permanently consume the later one-shot arm. The new owned dormant fixture
+configures fake originals, forwards all eight entrypoints with exact return
+semantics, makes zero Reader queries/copies, then confirms the future arm
+still succeeds. Only a subsequent stop establishes worker quiescence.
+
+**Unverified:** the successful production entry after all retail checks, page
+sealing, and partial FLS/configuration/publication failure branches have NOT
+been executed in a game or positive production-host fixture. Do not count
+negative-load tests as successful preparation or repeat component tests as
+visible enemy synchronization. No game launch/injection/input or IDB write;
+native addresses/names reuse existing labeled contracts, not new discoveries.
+Main DLL SHA remains3ACCA2A17891BA1D5CA14EC39CC0024827556BE71B5DE0E22E9C227063BBD710.
+
+**Next concrete step:** close positive publication/failure tests, retained near
+relay preparation and an independently validated immutable EXTERNAL offer.
+Then add the bounded, stopped/quiescent-only worker output and explicit exam
+coordinator. Before launch retain the written three-kind evidence/prediction
+for a live read-only normal-mode2 capture; cmd16/live asset identity and native
+movement authority are still separate open requirements. Do not enable enemy
+position/HP/death writes, AI pause, old g_enemy_sync or P99 appearance startup.

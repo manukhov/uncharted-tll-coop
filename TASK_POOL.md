@@ -169,8 +169,24 @@ fresh-fiber samples all completed, median367.9/397.9/386.7us and maxima
 The deliberately delayed native call remains inclusive (3585.4us). Packed
 fixture allocations are not fragmented game memory, and timings are not a hard
 1ms guarantee or a live budget certificate. Both admission constants stay false.
-NEXT: certify the prepared enemy module,
-native fallbacks/config/relay lifetime and immutable preparation offer before
+2026-10-18 dormant preparation: separate explicit-only DLL now builds without
+coop_runtime or automatic hook installation/arm/worker. TllEnemyPrepareV1 takes
+one guarded48-byte request, validates actual PID/creation/main/self, pins self,
+checks PE profile/on-disk retail SHA256, then six native prefixes/seven stock
+sites and exact Game postpose slot. Original addresses are derived internally;
+no supplied native pointers. Fresh Reader/Collector and FLS stay process-lifetime
+and unarmed. TllEnemyBindingV1 is a dedicated4096-byte local RO publication,
+NOT a full immutable external install/release certificate. No relays exist yet.
+Actual DLL load/unload, early/late refusal, guard preservation, concurrent entry
+and PIN-after-late-refusal tests PASS; owned dormant forwarding plus actual
+retail-file contract audit also PASS. Focused CTest50/50 (15 new cases).
+Review fixed a prepare blocker: fresh lease is NOT stopped/quiescent; do not
+require quiescent() or call stop() before its future one-shot arm. Positive
+production prepare/page sealing and its late configure/publication failures
+remain untested, not runtime-confirmed. Main DLL unchanged; game not launched.
+NEXT: finish the external enemy preparation offer/consumer and retained near
+relays, with direct positive sealing and fault tests before live startup.
+Certify mapped module/dependency identity, ABI and relay lifetime before
 connecting the external transaction to an explicit exam. Its byte/protection
 verification is NOT a release certificate or module-identity/retention proof;
 reattach/uninstall after release is unsupported. Add bounded worker timeout,

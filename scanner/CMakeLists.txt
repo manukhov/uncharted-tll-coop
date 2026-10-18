@@ -35,6 +35,12 @@ target_include_directories(tll_enemy_jointblend_core PUBLIC src)
 target_compile_features(tll_enemy_jointblend_core PUBLIC cxx_std_20)
 target_compile_definitions(tll_enemy_jointblend_core PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(tll_enemy_jointblend_core PRIVATE /W4 /WX /permissive- /EHsc)
+# Inert, explicit-only local binding artifact. Does not include coop_runtime,
+# install hooks, arm observation or create a worker when loaded.
+add_library(tll_enemy_jointblend_prepare SHARED EXCLUDE_FROM_ALL src/enemy_jointblend_prepare.cpp)
+target_link_libraries(tll_enemy_jointblend_prepare PRIVATE tll_enemy_jointblend_core bcrypt)
+target_compile_definitions(tll_enemy_jointblend_prepare PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(tll_enemy_jointblend_prepare PRIVATE /W4 /WX /permissive- /EHsc)
 # Read-only external transport, built without private fixture seams. Not linked
 # into a game-side installer and never opens/attaches to a process by itself.
 add_library(tll_p99_wrist_remote_read STATIC src/nadine_p99_wrist_remote_read.cpp)
@@ -181,6 +187,20 @@ if(BUILD_TESTING)
     target_link_libraries(tll_enemy_jointblend_integration_tests PRIVATE tll_enemy_jointblend_core)
     add_executable(tll_enemy_jointblend_read_windows_tests tests/enemy_jointblend_read_windows_tests.cpp)
     target_link_libraries(tll_enemy_jointblend_read_windows_tests PRIVATE tll_enemy_jointblend_core)
+    add_executable(tll_enemy_jointblend_prepare_tests tests/enemy_jointblend_prepare_tests.cpp)
+    target_include_directories(tll_enemy_jointblend_prepare_tests PRIVATE src)
+    target_compile_features(tll_enemy_jointblend_prepare_tests PRIVATE cxx_std_20)
+    target_compile_definitions(tll_enemy_jointblend_prepare_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(tll_enemy_jointblend_prepare_tests PRIVATE /W4 /WX /permissive- /EHsc)
+    target_link_libraries(tll_enemy_jointblend_prepare_tests PRIVATE bcrypt tll_enemy_jointblend_core)
+    add_dependencies(tll_enemy_jointblend_prepare_tests tll_enemy_jointblend_prepare)
+    foreach(prepare_case inert size version reserved pid creation main self null guard split concurrent late dormant)
+        add_test(NAME enemy_jointblend_prepare_${prepare_case} COMMAND tll_enemy_jointblend_prepare_tests
+            ${prepare_case} "$<TARGET_FILE:tll_enemy_jointblend_prepare>")
+        set_tests_properties(enemy_jointblend_prepare_${prepare_case} PROPERTIES TIMEOUT 30)
+    endforeach()
+    add_test(NAME enemy_jointblend_prepare_retail COMMAND tll_enemy_jointblend_prepare_tests retail
+        "C:/UNCHARTED Legacy of Thieves Collection (2016-2017-2022)/Uncharted Legacy of Thieves Collection/tll.exe")
     add_executable(tll_enemy_jointblend_hooks_tests tests/enemy_jointblend_hooks_tests.cpp
         src/enemy_jointblend_hooks.cpp $<TARGET_OBJECTS:tll_p99_native_frame_bridge>
         $<TARGET_OBJECTS:tll_p99_process_frame_bridge>)
