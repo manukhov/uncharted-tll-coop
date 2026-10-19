@@ -9,10 +9,13 @@ Menu transition141CDA800 reaches GameTaskGraphMgr_Reset141CB9C40 and exact
 TaskObserver1413C6AF0, which kills the primary Player and resets actors.
 Real DLL A7A98C27...9A072 built; emitted reads/SEH independently verified.
 NOT a lifetime lease or a confirmed fix for the previous menu crash.
-RUNTIME PENDING USER RESULT: baseline pair A=25612/B=10364 launched/injected;
-enemy root OFF confirmed by both boot logs. Existing crash watchers on BOTH
-roles report READY. Written prediction/run identities below. User alone loads
-and returns to menu; no performance verdict or enemy-sync success claim.
+LATEST RESULT (2026-10-19): user reports HANG and requests termination.
+Only A=PID25612 remained; agent verified image/creation and force-stopped it.
+No tll.exe remains. B=PID10364 was already absent; its watcher recorded exit0,
+second_chance0. A's watcher had detached (timeout_or_stop=1), so it did not
+observe this forced termination. Regression REJECTED as a clean pass; no new
+crash cause, successful menu-return result or enemy-sync success established.
+Enemy root was OFF. No relaunch. See final result entry.
 
 LATEST RESULT: user reports one copy CRASHED while returning to the main menu.
 Revised PID22652(A)/23592(B) run is REJECTED as usable; both processes are now
@@ -43342,3 +43345,22 @@ User asked to load same encounter, briefly move, return A then B separately to
 main menu, and leave both open. Agent performed NO game input. NEXT read user
 result and both watcher logs/dumps; no repeat/rearm. Successful injection and
 READY are not evidence that menu-exit regression passed or crash is fixed.
+
+## 2026-10-19 — Stop hung baseline run at user's request
+
+**CONFIRMED user report/action; regression REJECTED as a clean pass:** user
+reports the game hung and explicitly asks to kill it. Only tll.exe PID25612
+remained, matching role A's exact image and creation2026-10-18T22:38:40.1395154
++03:00. Agent force-terminated that process and verified no tll.exe remained.
+B=PID10364 was already gone; do not claim the agent killed both copies or
+infer which earlier user action caused B's exit. No relaunch or game input.
+
+Existing A watcher records DETACHED=1 timeout_or_stop=1, not an exit event for
+this forced stop. B watcher records EXIT code=0x0 second_chance=0 and
+NO_SECOND_CHANCE_CONTEXT. Listed first-chance exceptions cannot establish a
+crash PC. This is a reported hang followed by requested termination, NOT a
+new spontaneous-crash confirmation. Both menu-return outcomes/timing remain
+unknown. OnKill admission change and enemy root (OFF during this run) are not
+proven causes. Artifacts remain in reports/menu-onkill-20261018-2238.
+No code or IDB finding changed. If investigation resumes, distinguish the hang
+from the earlier crash using this evidence; do not repeat the run unchanged.
