@@ -2,6 +2,14 @@
 
 ## Current user priority / handoff (2026-10-24)
 
+CURRENT EXAM WAITING FOR USER LOAD: new owned-reset DLL0764C5BF... launched/
+injected in A=PID9172 (16:27:06) /B=PID20628 (16:27:08), enemy root OFF in both.
+Both exact reset/LOCAL-LOOK READY; watchers12628/15304 READY,1800second bounds.
+No OWNERSHIP CAPTURED yet at handoff: user alone first loads SAME EMPTY scene,
+waits for counterparts and reports ready. Inspect per-PID ownership before
+asking for A-menu FIRST/B-menu NEXT. No repair/appearance/performance verdict;
+do not rearm/reinject/relaunch automatically. Artifacts reports/owned-reset-20261024-1627.
+
 CURRENT BASELINE BLOCKER / USER CORRECTION: A/Chloe returns to menu FIRST;
 B/Nadine crashes when B ALSO returns to menu. This supersedes the earlier
 "B untouched in scene after peer loss" interpretation; no1500ms timeout cause
@@ -44235,3 +44243,23 @@ Prepared exact exam image: DLL SHA256
 PDB DFADB8E15198D93EF9346968C577FD0AF4C40DC05D535612CE5241AA03B59540.
 No tll.exe/watcher present at16:26:40+03:00 before launch. Both reviewed source
 and fresh built image include initial-load and terminal-refusal corrections.
+
+**Actual exam launched after implementation/prediction commit8a87ac4 pushed:**
+normal launch_coop.ps1 -Count2 -LocalPair, WITHOUT EnemyRootSync. Successful
+injections: A9172 created2026-10-24T16:27:06.2174310+03:00; B20628 created
+2026-10-24T16:27:08.2316150+03:00; exact retail image paths verified. Both report
+REMOTE-PLAYER-RESET READY build2026-10-24owned-reset plus LOCAL-LOOK READY,
+roleA requestedChloe/roleB requestedNadine, ENEMY-ROOT disabled. Actual rendered
+appearance and stability remain user-unverified. No game input controlled.
+
+Existing watcherA12628 /B15304 attached to those exact PID/creation/image
+identities, separate NEW dirs A-PID9172/B-PID20628 under
+reports/owned-reset-20261024-1627. BOTH ready.txt/eventsREADY confirmed;1800s
+bound. Raw creations31286203:1561157229 /31286203:1581299067. Parent preserves
+exact DLL/PDB/watcher and NEW boot-locomotion_hook.log without overwriting an
+older run. Both games/watchers alive at check. No owned-capture marker yet;
+user has been told load SAME EMPTY location and report ready, NOT exit yet.
+NEXT per-PID ownership CAPTURED/REFUSED before admitting menu scenario; then
+user alone exitsA first/B next, keeping both processes open for inspection.
+READY does not confirm the repair. No automatic repeat/rearm or performance
+claim. Pre-existing untracked tmp/ is untouched; all tracked changes committed.
