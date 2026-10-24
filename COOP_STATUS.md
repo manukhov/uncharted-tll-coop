@@ -2,13 +2,21 @@
 
 ## Current user priority / handoff (2026-10-24)
 
-ACTIVE EXAM (20:20 MSK): A6648/B21908 freshly launched/injected with exact
-E2697C89... DLL, taskManagerGate1413C26C5/generationBudget1 and local look/reset
-READY, enemyOFF. Watchers14712/7144 both READY. Artifacts under
-reports/taskmanager-nadine-gate-20261024-2020. User alone loads sameEMPTY and
-reportsready BEFORE menu exit; require one retirement + exact owner-tuple
-SUPPRESSED marker + visible NPC absence and both Players functional. No result
-yet. No live rebuild, agent game input, automatic repeat or success claim.
+CURRENT USER P0: return to enemy (NPC) synchronization. Stock-Nadine removal
+CONFIRMED BOUNDED: user accepts result; A6648/B21908 each retire exactly one
+captured NPC and suppress native TaskManager recreation with the SAME tuple.
+Exact E2697C89... DLL/PDB and confirmed log preserved. No full campaign/explicit
+collision-walk or peer-leave-removal claim. After saving evidence agent closed
+only these PID/image/creation-validated copies under the user's authority;
+watchers exitFFFFFFFF/second_chance0 is intentional termination, not a crash.
+
+Enemy root path remains defaultOFF. Last enabled run stopped on first census
+2558us/2queries/apply0; no usable enemy sync confirmed. Native seam141A929A7
+and setter141E7D0D0 remain correct STATIC path; new source reduces startup,
+entry-snapshot and not-due guard work and integrates explicit leave. Limits,
+all native eligibility/late checks and manual same-encounter scope remain.
+First-stop attribution uses existing QPC samples, no new observer/test pipeline.
+Fresh build/source review/prediction required before the next enabled exam.
 
 CURRENT EXAM REJECTED: user screenshot shows extra NPC in BOTH A17736/B14220.
 Both logs: exact NPC found, correct native getter1401D5C80 returnsNULL,
@@ -45007,3 +45015,32 @@ candidate; trace the precise alternate owner/admission instead of repeated kill.
 Explicit peer-leave visibility/collision and AltTab preservation remain separate
 user-controlled checks. Sole IDB prior2109/97 saveTrue/readback remains valid;
 no new native labels/source changes in this launch turn. No agent game input.
+
+### 2026-10-24 — CONFIRM bounded stock-companion removal; resume enemy sync
+
+CONFIRMED visible bounded result: user says "Yes, excellent" and explicitly
+returns P0 to enemy synchronization. A6648/B21908 exact E2697C89... image.
+Each logs companionRetired1/owner-gated-native-killed/spawnGateArmed1 once,
+then COMPANION-SPAWN SUPPRESSED with native live-manager stored tuple equal
+to the captured NPC. A record10E020ABB0/gen4D1, manager10E09B4900;
+B record10E020AB60/gen4D2, manager10E0A02F00. Both managerVT142904C78 (relocated
+module+2904C78), descriptor1C2C8E5C, classHashC785414E, returnPCmodule+13C26CA.
+This binds the actual native resurrection owner, not just a guessed class or
+kill marker. User-visible stock-NPC absence is accepted; no collision-walk,
+all-story/outfit/level-rearm or explicit remote-player-departure result claimed.
+Appearance/hand work stays parked; preserve the accepted companion/menu code.
+
+Preserved confirmed-npc-removal-locomotion_hook.log under
+reports/taskmanager-nadine-gate-20261024-2020 beside exact DLL/PDB and boot log.
+With the exam finished and user-authorized closure, agent revalidated each exact
+executable and creationFILETIME then terminated ONLY6648/21908, without game
+input/menu actions. Both watcher logs EXIT FFFFFFFF/second_chance0 are expected
+agent termination, NOT native menu success or a diagnosed crash. Games/watchers
+now absent. Explicit peer-leave/collision test is deferred to the resumed P0.
+
+Enemy baseline recovered rather than reopened: last enabled B10876 census
+costStop2/site1/2558us/2query attempts, capture/match/apply0; batching initial
+identity fields was insufficient. Two query attempts do not identify which
+query/copy/scheduler interval dominated. Native phase/setter, authored-key
+matching, exact Pirate/normal-body/HP38 admission and ENR2 own socket remain.
+No HP/death/damage/AI pause or old CONE/root writer is re-enabled.

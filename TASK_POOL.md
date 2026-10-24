@@ -10,9 +10,24 @@ Full campaign co-op between two game copies. Current user-directed order:
   boundary; keep enemy damage/death/HP writes and AI pause OFF.
 - Complete combat authority and remaining player/appearance work separately.
 
-## P0 CURRENT: Explicit Peer Departure; preserve confirmed menu cleanup (2026-10-24)
+## P0 CURRENT: Enemy synchronization; preserve confirmed companion/menu fixes (2026-10-24)
 
-ACTIVE20:20 EXAM: fresh A6648/B21908 exact E2697C89... DLL injected, enemyOFF;
+User accepts stock-Nadine removal in both copies and explicitly resumes enemies.
+A6648/B21908 exactE2697C89... each one native kill + exact matching TaskManager
+SUPPRESSED tuple; visible absence accepted. Preserve this implementation.
+Explicit collision-walk/peer-leave removal and full story/rearm remain unproved.
+Agent saved confirmed log, then closed only exact PID/image/creation-bound old
+copies as authorized; watchers FFFFFFFF/no second chance = intentional stop.
+
+Enemy sync still OFF by default. Last enabled census stopped2558us/2queries,
+apply0. Keep native Pirate408 return141A929A7/setter141E7D0D0 + all safety limits.
+Source now reducing startup-before-owned, bulk entry-copy and not-due callback
+work, plus terminal Statev18 leave integration. No budget increase, worker game
+pointers, old CONE/HP/AI writer or new test framework. Raw-address relocation
+still conservatively stops this bounded first slice; not silently rebinding.
+Require fresh source/build review and explicit visible movement/smoothness exam.
+
+PREVIOUS20:20 EXAM snapshot (result accepted above): A6648/B21908 E2697C89...;
 taskManagerGate1413C26C5/budget1, look/reset READY. Watchers14712/7144 both
 READY; reports/taskmanager-nadine-gate-20261024-2020 has exact DLL/PDB and boot
 log. User alone sameEMPTY/reportready BEFORE menu exit. Require one native
