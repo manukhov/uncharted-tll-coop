@@ -12,13 +12,15 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy Synchronization (2026-10-24)
 
-PREPARED SURVIVOR-CAPTURE EXAM: unchanged7FBAD416... main DLL, enemy OFF,
-two local roles, existing crash watchers on BOTH before loading. User alone
-loads SAME EMPTY scene then A/Chloe menu ONCE, B/Nadine untouched. Watcher
-readiness is not repair/success; terminal B stack is the desired discriminator.
-Fresh main/watcher build check passes. No new collector/writer/protocol change.
-Full hypotheses/quota/falsifiable prediction in latest COOP_STATUS. No performance
-claim under debugger, no automatic retry/rearm. Run identities recorded next.
+SURVIVOR-CAPTURE EXAM PENDING USER: unchanged7FBAD416... main DLL injected
+in A=PID13124/B=PID14900; enemy OFF verified, both LOCAL-LOOK READY. Existing
+watchers20312/3328 both READY14:46:24,1800second bound. User alone loads SAME
+EMPTY scene, waits for counterpart, then A/Chloe menu ONCE, B/Nadine untouched.
+Keep A open if B faults. Artifact root reports/peer-survivor-watch-20261024-A13124-B14900,
+separate A-PID13124/B-PID14900 logs/dump dirs; exact DLL/PDB/watcher preserved.
+NEXT user outcome + BOTH logs, then fresh exception-context/all-thread/module
+inspection if a new dump exists. READY is not repair/success; no performance
+claim under debugger or automatic repeat/rearm/reinjection. No new writer.
 
 IMMEDIATE BASELINE BLOCKER: user confirms LAST pair, SAME EMPTY scene: A/Chloe
 PID4872 returns main menu; B/Nadine PID10876 remains and crashes1..2s later.

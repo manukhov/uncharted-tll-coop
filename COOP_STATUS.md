@@ -2,11 +2,12 @@
 
 ## Current user priority / handoff (2026-10-24)
 
-CURRENT EXAM PREPARED: capture the established A-menu/B-survivor crash with
-unchanged7FBAD416... DLL, enemy root OFF, existing second-chance watchers on
-BOTH roles before user scene load. Written hypotheses/prediction at final entry.
-This is fault capture, not a repair or performance exam. No new diagnostic
-framework/packet/timeout writer; preserve June29 suspension safeguards.
+CURRENT EXAM PENDING USER RESULT: unchanged7FBAD416... DLL launched/injected
+in A=PID13124/B=PID14900, enemy root OFF confirmed in both boot logs. Existing
+watchers20312/3328 BOTH READY at14:46:24, bounded1800seconds. User alone loads
+same EMPTY scene then A/Chloe menu ONCE, B/Nadine untouched; keep A open if B
+faults. This is fault capture, not repair/performance proof. Run identities and
+artifact root at final entry; do not relaunch/reinject or infer success from READY.
 
 CURRENT BLOCKER: user confirms LAST pair loaded SAME EMPTY location; A/Chloe
 PID4872 returned to main menu, B/Nadine PID10876 stayed in scene and CRASHED
@@ -43915,3 +43916,29 @@ game actions remain user-only. Debugger changes timing: no performance verdict,
 and disappearance of the crash under it does not exonerate a path. If a crash
 occurs leave the other copy open for inspection. No automatic repeat/rearm or
 speculative timeout/OnKill/health change. Enemy root stays OFF throughout.
+
+**Actual bounded capture launched after prediction commit3dfd15b was pushed:**
+launch_coop.ps1 -Count2 -LocalPair (NO -EnemyRootSync), successful injection
+reports for A=PID13124 and B=PID14900. Exact creations
+2026-10-24T14:45:48.6374482+03:00 /2026-10-24T14:45:50.6482864+03:00;
+expected full retail image verified. Both co-op role/LOCAL-LOOK READY banners
+and ENEMY-ROOT disabled verified. Requested Chloe A/Nadine B appearance remains
+visually unconfirmed until user loads. Player UDP31338/31339.
+
+Existing watchers started14:46:24: A watcherPID20312, B watcherPID3328,1800s.
+Both events.txt report READY (attach breakpoint continued), ready.txt created;
+target creations raw FILETIME31286189:914899538 /31286189:935007920.
+Both games/watchers alive at READY check. Separate NEW absolute directories:
+reports/peer-survivor-watch-20261024-A13124-B14900/A-PID13124 and B-PID14900.
+Parent root preserves exact DLL/PDB/watcher binary and boot log snapshot.
+No old run directory/dump overwritten. No input or menus controlled by agent.
+
+User has been told: same EMPTY scene in both, wait for visible counterpart,
+then A/Chloe main menu ONCE while B/Nadine stays untouched. If B faults, keep
+A open and report it. No shots, artificial hold period or agent gameplay.
+NEXT read user outcome and BOTH watcher logs; if a fresh B second-chance dump
+exists, inspect its exception context/all-thread stacks/module map with the
+preserved matching PDB using installed cdb, not an old July dump. Without
+second-chance context, remain explicit that last handled PCs are not fatal.
+Watchers expire/detach after1800s; no automatic repeat/rearm. No new crash-fix,
+enemy-sync, baseline stability or performance result yet.
