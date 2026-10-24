@@ -2,6 +2,13 @@
 
 ## Current user priority / handoff (2026-10-24)
 
+CURRENT RELOCATION-CORRECTED EXAM WAITING USER LOAD: D6AC5B3F... injected into
+A8960/B10816 (16:39:43/45). Both owned-reset-r2/LOCAL-LOOK READY, enemyOFF.
+Watchers8568/17456 bothREADY,1800s. No newownershipcapture at check; useralone
+loads SAME EMPTY scene and reportsready BEFORE anymenu exit. Then verifyboth
+capturedtuples before admittingA-menuFIRST/B-menuNEXT. Artifact root
+reports/owned-reset-r2-20261024-1640. No success claim or automatic repeat/rearm.
+
 LATEST RUNTIME REJECTED: user reports crash again; watcher confirms B20628
 second-chance SAME142227B8C/null Havok lock+TLS. A9172 exits0, no second chance;
 both games/watchers now absent. Both owned tuples were CAPTURED, but BOTH reset
@@ -44403,3 +44410,22 @@ same crash after full admission supports H3. Ownership refusal/no stage or
 different crash are not success. No automatic repeat/rearm, agent game input,
 safe level-reload rearm or performance claim. User clarification of the last
 run's exact crash stage remains pending; wrapper logs prove bothreason2 resets ran.
+
+**Actual corrected exam launched after prediction/implementation commitfd9c1bd
+was pushed:** launch_coop.ps1 -Count2 -LocalPair, noEnemyRootSync. Fresh exact
+DLLD6AC5B3F... injected successfully. A8960 creation
+2026-10-24T16:39:43.1014820+03:00; B10816 creation
+2026-10-24T16:39:45.1160050+03:00, retail image paths verified. Both logs show
+REMOTE-PLAYER-RESET READY build2026-10-24owned-reset-r2 identity=record-generation,
+LOCAL-LOOK READY requestedChloe(A)/Nadine(B), ENEMY-ROOT disabled. Rendered
+appearance and menu stability unverified. No agent game input or menus.
+
+Existing watchers8568/17456 BOTH READY attached to those exact PID/image/
+creation identities,1800s. Separate NEW A-PID8960/B-PID10816 directories under
+reports/owned-reset-r2-20261024-1640; preserved matchingDLL/PDB/watcher plus
+newboot-locomotion_hook.log. No prior dump/log overwritten. Both games/watchers
+alive at check. User told only load SAME EMPTY scene and reportready, no menu
+exit yet. NEXT inspect both OWNERSHIP CAPTURED then admit the written scenario.
+Do not mistake READY or absence of crash while loading for a repaired menu exit.
+No automatic repeat/rearm or performance verdict; tracked work committed/pushed,
+pre-existing untracked tmp/ untouched.

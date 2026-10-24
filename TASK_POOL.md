@@ -12,6 +12,12 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy Synchronization (2026-10-24)
 
+CURRENT R2 EXAM WAITING USER LOAD: A8960/B10816 injectedD6AC5B3F...; bothreset-r2/
+LOCAL-LOOK READY,enemyOFF; watchers8568/17456 BOTH READY1800s. Newrunartifacts
+reports/owned-reset-r2-20261024-1640. Noownershipyetatcheck; useronlyloadsSAMEEMPTY
+sceneandreportsready BEFOREmenuexit. Verifybothcapturedidentitiesthenadmit
+A-menufirst/B-menunext. Noautolaunch/rearm/repeat,gameinputorperformanceclaim.
+
 RELOCATION CORRECTION BUILT, RUNTIME PENDING: matcher/currentProcessveto now
 useexactcapturedrecord/gen +currentnativeargA8/BC/VT/OnKill/currentrecord+8
 rereads. Spawnaddresslogonly; entryObject/matchedObjectwillbindtiming. Native
