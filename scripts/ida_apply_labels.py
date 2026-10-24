@@ -7615,21 +7615,34 @@ FUNCTIONS = {
     0x140D79C00: (
         "PlayerDeathEntry_BE8",
         "Player vtable +0xBE8. Native death-entry variant; clears/updates the "
-        "HealthSystem and publishes `player-died`. Remote replicas must not "
+        "HealthSystem and publishes `player-died`. STATIC owner-local state+C0; "
+        "event recipient is weak pair at Player+21C8, validated by record+8, "
+        "object+BC and dead bit+40&1 before recipient virtual+D0 at140D79E53 "
+        "under ThreadContext. Not directly retained player0, KillTree or menu; "
+        "live recipient class/script unresolved. Remote replicas must not "
         "author this transition while their peer still reports HP > 0.",
     ),
     0x140D79950: (
         "PlayerDeathEntry_BF0",
-        "Player vtable +0xBF0. Native player-died publisher variant.",
+        "Player vtable +0xBF0. Native player-died publisher variant. STATIC "
+        "owner state+C0 and owner weak event recipient+21C8 via virtual+D0, "
+        "not a direct primary-player/menu teardown call. Recipient runtime "
+        "class/script remains unresolved; see PlayerDeathEntry_BE8.",
     ),
     0x140D78EC0: (
         "PlayerDeathEntry_BF8",
         "Player vtable +0xBF8. Native death-entry variant; clears/updates the "
-        "HealthSystem and publishes `player-died`.",
+        "HealthSystem and publishes `player-died`. STATIC owner state+C0 and "
+        "weak event recipient+21C8 via virtual+D0, not directly retained "
+        "player0/KillTree/menu. See PlayerDeathEntry_BE8; runtime recipient "
+        "class/script unresolved.",
     ),
     0x140D792D0: (
         "PlayerDeathEntry_C00",
-        "Player vtable +0xC00. Native player-died publisher variant.",
+        "Player vtable +0xC00. Native player-died publisher variant. STATIC "
+        "owner state+C0 and weak event recipient+21C8 via virtual+D0, not "
+        "directly retained player0/KillTree/menu. See PlayerDeathEntry_BE8; "
+        "runtime recipient class/script unresolved.",
     ),
     0x14042B400: (
         "CharacterDeathCleanupAndPublishFriendDied",

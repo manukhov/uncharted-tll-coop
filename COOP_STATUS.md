@@ -2,7 +2,17 @@
 
 ## Current user priority / handoff (2026-10-24)
 
-LATEST RUNTIME RESULT: user-requested batch run REJECTED as usable sync.
+CURRENT BLOCKER: user confirms LAST pair loaded SAME EMPTY location; A/Chloe
+PID4872 returned to main menu, B/Nadine PID10876 stayed in scene and CRASHED
+1..2seconds later. Investigate the SURVIVOR's peer-loss path, not merely local
+menu teardown. Delay matches1500ms snapshot cutoff but is not a proved cause.
+Both enemy channels were already stopped with apply0/quiescent ACKs. Fresh
+crash markers14:29:51/54, no fresh dump/PC. Both processes are now absent.
+No code patch/relaunch in this diagnostic turn. Preserve the June29 confirmed
+alt-tab health/root/death protection; simply deleting cached state is unsafe.
+See latest entry for exact evidence, scoped rejections and next discriminator.
+
+PREVIOUS RUNTIME RESULT: user-requested batch run REJECTED as usable sync.
 B=PID10876 terminally stopped at its first census:2558us,2VQ attempts,
 costStop2/costSite1, capture/match/apply0. A=PID4872 had work0. Agent then
 stopped BOTH enemy channels using existing events; quiescent ACK=True for
@@ -43738,3 +43748,112 @@ a result entry, no code/native finding/IDB change. NEXT needs per-query wall
 attribution versus residual work (using existing samples with immutable terminal
 publication), or a separately proved cost-reducing implementation; do not
 repeat/rearm this terminal run or raise the limit to force a write.
+
+## 2026-10-24 — Bind survivor crash to A menu exit and 1500ms peer-loss boundary
+
+**CONFIRMED user reproduction report, not fault attribution:** in the LAST
+PID4872(A/Chloe)/PID10876(B/Nadine) run both loaded the same location WITHOUT
+enemies. A returned to main menu; B, which remained in the scene, crashed
+1..2seconds later. User answered role, run and latency questions explicitly.
+This materially narrows earlier ambiguous menu-exit reports: the fault is
+reported in the OTHER/surviving copy, not necessarily the one tearing down
+its own world. Do not generalize one reported A->B direction to both roles.
+Both processes were already absent at inspection; the agent did not kill them.
+How/when A subsequently exited the process is unknown, not another reported crash.
+
+Both enemy channels had already terminally stopped (B cost stop, A external
+request) and returned quiescent ACKs, with capture/match/apply0. No new enemy
+root setter ran. This rules out an executed new root write as the trigger, not
+every installed hook or native resource interaction. Stop enemy-cost optimization
+while this baseline peer-departure crash blocks meaningful co-op checks.
+
+**Fresh corroboration preserved, no current stack:** locomotion_hook.log is
+21710311bytes, last write14:29:42; game crash.info14:29:51, Crashpad metadata
+14:29:54. The metadata still references only the July12 f07c69b6...dmp, not a
+new crash dump. No new tll Application1000/1001 event or LocalCrashDumps file
+was found in the checked interval/locations. No external watcher was attached
+to this performance run. Markers cannot establish terminal PC, thread or stack.
+reports/peer-menu-crash-20261024-1429 preserves actual DLL/PDB7FBAD416.../
+D03ACD29..., both terminal enemy logs, crash.info, Crashpad metadata and full
+baseline log SHA256D2661BAFD6B279FF667A8754FC7950AEDA418D1996554D164A9C16DE5B92BEB1.
+Late log rows show ordinary player/fire/aim processing, not a serialized last
+health/packet-silence transition. Do not infer those missing fields from silence.
+
+**STATIC peer lifecycle:** StatePacket has no explicit menu/leave/session state.
+Sender20939 resolves local once20954 and returns without sending when unavailable;
+it does NOT intentionally send a zero-player/despawn packet. Sockets remain
+alive in menu. Receiver15647+ admits StatePacket by size/version/positionXYZ;
+there is no active has_peer_state=false/received_ms=0 disconnect publication.
+copy_peer_state_snapshot2183 rejects receive age>1500ms; copy_last2455 has no
+age limit. latest_peer_state21603 returns false on stale input. The1..2second
+reported delay therefore fits the freshness transition but does not prove a
+particular operation there faulted.
+
+**STATIC timeout branch, narrower than cleanup/despawn:** drive_remote_slot1
+actions37547 repeatedly reapplies last HP, clears40bytes of synthetic branch
+input and its spin gate, then returns. Called through net_tick39633 and ordinary
+hooked_update41002/41051; native update follows. It does not free the replica or
+call a native death/destruction callback. fs=*(module+3FE1088); index=Player+39B8
+is restricted to0..5; branchfs+6FC8+28*index/spinfs+70B8+index fit the checked
+7100hex span. Fresh MCP of FrameState_PerSlotInputApply140289150 shows gates
+at1402891C3/14028938B; neutral branch selects Input_ScaleCopyVirtual1402893B4,
+not a destruction primitive. Manual drive/per-slot apply remains default-OFF.
+Thus timeout itself manufacturing a null/default snapshot, zeroHP or immediate
+replica ProcessKillTree is REJECTED in the inspected paths.
+
+**Do not remove an intentional confirmed safeguard:** FINDINGS_ARCHIVE21233..73
+records the June29 alt-tab failure after this same1500ms cutoff. Last confirmed
+health, root preservation and four guarded death entries were intentionally
+added to stop the local replica falling/dying while the real peer is suspended.
+The stale transform fallback is NOT an accidental defect merely because an older
+comment says transforms require freshness. Real menu exit and temporary pause
+currently cannot be distinguished by the protocol. Replacing everything with
+fresh-only state would reopen a recorded failure. Current g_clone_freerun=true
+does soften the old literal freeze: below4m only horizontal nudging occurs,
+with no Y pinning; that difference is a candidate, not a proved crash mechanism.
+
+**STATIC gaps/candidates, none causally confirmed:**
+
+- On stale data, apply_puppet_velocity_pre21935 stops writing velocity rather
+  than zeroing it; transform post32721 still reconciles last root/HP. Pending
+  traversal/cover forces and button latches are not all cleared by the timeout
+  branch; active command/input hooks3597/5131 can consume some without age gates.
+  This proves incomplete input release, not that the final packet held those
+  actions or that they caused B's fault.
+- Sender captures raw HP>=0 (including0) at21082..98, calls native capture code
+  and sends21570 without final retained/OnKill revalidation. A final transient
+  zeroHP packet could raw-write replica HP at21727 and let the death guard fall
+  through. No saved final packet establishes that. Position W/direct velocity
+  consumers also lack whole-packet admission, although some movement/orientation
+  consumers validate separately. No NaN/transient field was observed here.
+- Native death slots+BE8/BF0/BF8/C00 map to140D79C00/140D79950/140D78EC0/
+  140D792D0. They update OWNER state and publish player-died to weak recipient
+  Player+21C8 through virtual+D0 after record/id/dead checks; they do NOT directly
+  resolve primary slot0, call ProcessKillTree or request main menu. Actual recipient
+  runtime/script path remains unbound. A recipient/fault stack would distinguish
+  this from ordinary timeout input/physics continuation.
+
+**STATIC rejection of an unsupported newer-guard attribution:** no direct chain
+from ProcessKillTree1416A5C20/Player_OnKill1410D84B0/Character_OnKill141E9C750/
+NdGameObject_OnKill141BB95C0 to those4death entries was found. OnKill conditionally
+publishes different player-destroyed at1410D8A4D under network mode. Raw HP0 does
+not set enteredOnKill; it already makes peer_alive=false independently of that
+new guard. This is not exhaustive script/observer closure, but no basis to remove
+the generation/OnKill checks as a guessed fix.
+
+No production edits or launch/rearm in this diagnostic turn. Existing death-entry
+comments were enriched with owner weak death-event recipient+21C8 semantics;
+no new function name or resolved runtime recipient is claimed. Sole-IDB save/
+readback recorded below. NEXT bind B's fresh exception stack and
+whether its FIRST1500ms timeout had run versus last accepted packet/HP/death-entry
+execution. Use the EXISTING watcher on BOTH roles for an admitted reproduction,
+enemy root OFF, same EMPTY location, A menu/B untouched; it is a crash-capture
+scenario, not performance validation. Do not repeat the enemy-cost exam or build
+a new observer framework. Last handled exceptions alone are not a crash PC.
+
+IDB handoff: after stopping MCP, enriched the4existing PlayerDeathEntry comments
+with owner+21C8 weak event-recipient semantics (runtime class still unresolved).
+reports/apply_peer_death_recipient_20261024.txt records2049functions/87data
+names/3types and save_database returned True for sole ida/tll.i64. MCP restarted;
+comment/name/slot readback verified before handoff. No production DLL rebuild
+or runtime behavior change from these annotations.

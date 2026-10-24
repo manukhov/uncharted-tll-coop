@@ -12,6 +12,21 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy Synchronization (2026-10-24)
 
+IMMEDIATE BASELINE BLOCKER: user confirms LAST pair, SAME EMPTY scene: A/Chloe
+PID4872 returns main menu; B/Nadine PID10876 remains and crashes1..2s later.
+Both enemy channels were already stopped/quiescent, apply0. Both now absent;
+fresh14:29 crash markers but no fresh fault PC/dump. Investigation is SURVIVOR
+peer-loss, not only departing-copy teardown. Park cost work until this is bound.
+1500ms freshness cutoff matches delay but is not proved cause. Timeout clears
+synthetic branch/spin and reapplies cachedHP; no puppet free/defaultHP0 found.
+Preserve June29 confirmed alt-tab lastHP/root/deathguards—do NOT simply remove
+cached state. Incomplete force/latch release, soft free-run Y and final transient
+packet remain competing candidates, not fixes. No production code/game change.
+Evidence: reports/peer-menu-crash-20261024-1429 and latest COOP_STATUS.
+NEXT B exception stack + first-timeout/last-packet boundary; admitted reproduction
+uses existing watchers on BOTH, enemy OFF, EMPTY scene, A menu/B untouched.
+No new framework, speculative OnKill rollback, or repeat of enemy-cost run.
+
 LATEST RUNTIME REJECTED: user-requested7FBAD416... pair A=PID4872/B=PID10876
 launched ready, but B stopped in its first census at2558us/2VQ attempts,
 costStop2/costSite1, capture/match/apply0. A still had work0. Agent stopped BOTH
