@@ -65,6 +65,25 @@ constexpr std::uintptr_t kActorResetCurrentPredicateReturnRva = 0x13B9E93;
 constexpr std::uintptr_t kActorResetCollectPredicateReturnRva = 0x13B975B;
 constexpr std::uintptr_t kActorResetShutdownPredicateReturnRva = 0x13B97C2;
 constexpr std::uintptr_t kActorResetKillPredicateReturnRva = 0x13B952F;
+// Ordinary postrender lifecycle seam: after frame jobs, BEFORE dead-object
+// destruction/compaction and deferred Havok close. Do not hook the callee globally.
+constexpr std::uintptr_t kPostRenderDestroyDeadCallsiteRva = 0x166884;
+constexpr std::uintptr_t kProcessMgrDestroyDeadRva = 0x16229C0;
+constexpr std::uintptr_t kProcessMgrVisitTreeRva = 0x1623050;
+constexpr std::uintptr_t kProcessMgrRva = 0x6466FE0;
+constexpr std::uintptr_t kProcessTreeRootRva = 0x64670D0; // load Process*, not address
+constexpr std::uintptr_t kProcessKillAllowedRva = 0x6467008;
+constexpr std::uintptr_t kHavokWorldRva = 0x6917C20;
+constexpr std::uintptr_t kHavokTlsIndexRva = 0x37AC384;
+constexpr std::uintptr_t kHavokReferencedLockRva = 0x37AC388;
+// Fiber-owner recursive world brackets, in native order BEFORE ProcessMgr.
+// The separate Havok heap allocator lock is NOT recursive; do not take it here.
+constexpr std::uintptr_t kHavokWorldScopeEnterRva = 0x1B409A0;
+constexpr std::uintptr_t kHavokWorldScopeLeaveRva = 0x1B40A60;
+constexpr std::uintptr_t kHavokWorldBodiesEnterRva = 0x1B40C10;
+constexpr std::uintptr_t kHavokWorldBodiesLeaveRva = 0x1B40CB0;
+constexpr std::uintptr_t kPostRenderQuitMenuCallsiteRva = 0x166833;
+constexpr std::uintptr_t kTaskManagerEnterMainMenuRva = 0x9BCA80;
 // Player vtable +0x448. NdGameObject::Init calls this after creating
 // Player+0x1E0 and before PlayerWeaponController/GiveWeapon construction.
 constexpr std::uintptr_t kPlayerSetupAttachSystemVtableSlotRva =

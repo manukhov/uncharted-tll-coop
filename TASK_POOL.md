@@ -18,13 +18,22 @@ watchersDETACHEDtimeout/stop—notwatchedexit0. Artifacts/postrunlogpreserved at
 reports/owned-reset-r2-20261024-1640. Boundedmenu-crashrepairconfirmed, notall
 campaign/reset/reconnect/performance. PreserveD6AC5B3F...baseline andnative3passes.
 
-NEW USER SUBTASK: whenAexitsmenu,B'sownedAavatarshoulddisappear,andviceversa.
-NeedsEXPLICITsession-boundleave,not1500mstimeout(Alt-Tabprotectionsremain).
-Networkworkerpublishonly; gameeffectsownedrecord/gen +provedphase. Visualnative
-DontRenderThisFrame routefound; isolatedphysicalcleanupnotyetproved. Pending
-userchoicevisual-onlyvsalso-collision. Transportcanproceedindependently:
-Statev18sessionID+smallleavepacket,endpoint/epoch/sequencechecks,tombstone,
-boundedretransmitinexistingrecvworker withcheckedtimeout. No newgame yet.
+NEW USER SCOPECONFIRMED: FULLpeeractor/collisionremoval onexplicitmenuexit,
+symmetric; ONLYstockNadineBuddyNPCalsoremovedbothcopies—notenemies/otherNPCs.
+IMPLEMENTED,NOTRUNTIMEVALIDATED: Statev18session+Leave24 packet,endpoint/epoch/
+seqchecks,tombstone,boundedexistingworkerrepeats. Exactmenu833queuessignalAFTER
+nativesuccess. Postrender884consumerWORLD409A0/C10 ->Mgrvisitor ->nativeKillTree/
+OnKill; liveWorld/TLS/killAllowed,ownedweakidentity/current/primaryguards;
+rootrefreshedAFTERworld-lockyield,finallyCB0/A60release. NPCnav4190/Flank4C0
+nullgatesavoidnewwaitunderMgrlock. Donor48Bcached, Player-updateservicescontinue,
+oldlocalmenureset3passesunchanged. Max8NPCgenerationsfuse; noframecensusloop.
+FreshC46A83F1...DLLbuild/reviewpass; IDBsaved2096functions/96data/readbackdone.
+LatestCOOP_STATUSrecords3+evidencekinds,context-specificrejections/prediction.
+NEXTfreshpair: sameEMPTY, expectbothstockNPCgone/local+remotePlayersremain;
+checkAltTabdoesNOTdespawn; thenA-menufirst/B-survivor seesChloegone+nocollision.
+RequirematchingLeaveSEND/RECV+native-retiredmarkers+useroutcome, notREADYalone.
+B-firstmirrorneedsfreshpairlatersessionterminal; noautorepeat/rearm/input.
+Campaignbuddy-scriptinteractions,crash/forcedclose,reconnectnotvalidated.
 
 RELOCATION CORRECTION BUILT, RUNTIME PENDING: matcher/currentProcessveto now
 useexactcapturedrecord/gen +currentnativeargA8/BC/VT/OnKill/currentrecord+8

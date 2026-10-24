@@ -986,6 +986,19 @@ std::atomic<bool> g_remote_player_reset_ready{false};
 std::atomic<bool> g_remote_player_teardown{false};
 std::atomic<bool> g_remote_player_spawn_consumed{false};
 std::atomic<bool> g_remote_player_ownership_refused{false};
+std::atomic<bool> g_player_update_hook_ready{false};
+std::atomic<bool> g_peer_lifecycle_ready{false};
+std::atomic<bool> g_peer_lifecycle_busy{false};
+bool g_peer_retirement_walk_done = false; // postrender consumer only
+bool g_peer_phase_guard_reported = false; // bounded pending-effect diagnostics
+std::uintptr_t g_companion_deferred_record = 0;
+std::uint32_t g_companion_deferred_generation = 0;
+OwnedRemotePlayerIdentity g_stock_nadine_identity{};
+// 0 empty, 1 one publisher, 2 ready, 3 retired (a new native instance may queue),
+// 4 refused. Publication is per generation, never a cached object lease.
+std::atomic<unsigned> g_stock_nadine_identity_state{0};
+std::atomic<unsigned> g_stock_nadine_retired_generations{0};
+std::atomic<bool> g_stock_nadine_respawn_budget_logged{false};
 
 struct LookProbeHashes {
     std::uint32_t chloe_base = 0;
@@ -1790,10 +1803,15 @@ struct StateNetState {
     std::atomic<bool> running = false;
     bool winsock_ready = false;
     std::atomic<bool> has_peer_state = false;
+    // Explicit departure is terminal for this DLL session. A pause/timeout does
+    // not set either flag, and cached last state/health remain available.
+    std::atomic<bool> peer_left = false;
+    std::atomic<bool> local_leave_queued = false;
     std::atomic<ULONGLONG> peer_state_received_ms = 0;
     SRWLOCK peer_state_lock = SRWLOCK_INIT;
     coop::StatePacket peer_state{};        // latest received peer state
     std::uint32_t peer_state_sequence = 0;
+    std::uint64_t peer_state_session_id = 0; // peer_state_lock; pin once, no reconnect
     std::atomic<bool> has_peer_idle_arm_pose = false;
     std::atomic<ULONGLONG> peer_idle_arm_pose_received_ms = 0;
     SRWLOCK peer_idle_arm_pose_lock = SRWLOCK_INIT;
@@ -2036,14 +2054,95 @@ std::ptrdiff_t g_player_fire_controller_offset = -1;
 constexpr std::size_t kPlayerFireControllerOwnerOffset = 0x108;
 constexpr std::size_t kPlayerActiveWeaponVtableOffset = 0x8C0;
 
-void publish_peer_state_snapshot(const coop::StatePacket& packet) {
+// The exact native menu request hook only publishes this atomic request. The
+// existing socket worker performs bounded sends even after game updates stop.
+void queue_local_peer_leave() {
+    g_state_net.local_leave_queued.store(true, std::memory_order_release);
+}
+
+struct LocalPeerLeaveSendState {
+    coop::PeerLeavePacket packet{};
+    unsigned attempts = 0;
+    ULONGLONG last_attempt_ms = 0;
+    bool initialized = false;
+};
+
+void pump_local_peer_leave(LocalPeerLeaveSendState& send_state) {
+    constexpr unsigned kMaximumAttempts = 10;
+    constexpr ULONGLONG kAttemptIntervalMs = 50;
+    if (!g_state_net.local_leave_queued.load(std::memory_order_acquire) ||
+        !g_state_net.peer_set || g_state_net.recv_socket == INVALID_SOCKET ||
+        send_state.attempts >= kMaximumAttempts) return;
+    const ULONGLONG now = GetTickCount64();
+    if (send_state.attempts != 0 &&
+        now - send_state.last_attempt_ms < kAttemptIntervalMs) return;
+    if (!send_state.initialized) {
+        if (g_state_net.idle_arm_pose_session_id == 0) return;
+        send_state.packet.session_id = g_state_net.idle_arm_pose_session_id;
+        send_state.packet.sequence = g_state_net.send_seq.fetch_add(
+            1, std::memory_order_acq_rel) + 1;
+        if (send_state.packet.sequence == 0) {
+            send_state.packet.sequence = g_state_net.send_seq.fetch_add(
+                1, std::memory_order_acq_rel) + 1;
+        }
+        send_state.initialized = true;
+    }
+    send_state.last_attempt_ms = now;
+    ++send_state.attempts;
+    const int sent = sendto(
+        g_state_net.recv_socket,
+        reinterpret_cast<const char*>(&send_state.packet),
+        sizeof(send_state.packet), 0,
+        reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
+        sizeof(g_state_net.peer_addr));
+    if (send_state.attempts == 1 || send_state.attempts == kMaximumAttempts) {
+        std::ostringstream line;
+        line << "PEER-LEAVE-SEND session=0x" << std::hex
+             << send_state.packet.session_id << std::dec
+             << " seq=" << send_state.packet.sequence
+             << " attempt=" << send_state.attempts << " bytes=" << sent;
+        boot_log_line(line.str().c_str());
+    }
+}
+
+bool publish_peer_leave_snapshot(const coop::PeerLeavePacket& packet) {
+    if (packet.magic != coop::kPeerLeavePacketMagic ||
+        packet.version != coop::kPeerLeavePacketVersion ||
+        packet.reserved != 0 ||
+        packet.menu_reason != coop::kPeerLeaveReasonMainMenu ||
+        packet.session_id == 0 || packet.sequence == 0) return false;
     AcquireSRWLockExclusive(&g_state_net.peer_state_lock);
-    if (g_state_net.has_peer_state.load(std::memory_order_relaxed) &&
+    const bool accepted =
+        !g_state_net.peer_left.load(std::memory_order_relaxed) &&
+        g_state_net.has_peer_state.load(std::memory_order_relaxed) &&
+        g_state_net.peer_state_session_id == packet.session_id &&
         static_cast<std::int32_t>(packet.sequence -
-                                  g_state_net.peer_state_sequence) <= 0) {
+                                  g_state_net.peer_state_sequence) > 0;
+    if (accepted) {
+        g_state_net.peer_state_sequence = packet.sequence;
+        // Retain last HP/root and has_peer_state for the confirmed pause/death
+        // safeguards. A game/native boundary consumes the separate departure.
+        g_state_net.peer_left.store(true, std::memory_order_release);
+    }
+    ReleaseSRWLockExclusive(&g_state_net.peer_state_lock);
+    return accepted;
+}
+
+void publish_peer_state_snapshot(const coop::StatePacket& packet) {
+    if (packet.session_id == 0 || packet.sequence == 0) return;
+    AcquireSRWLockExclusive(&g_state_net.peer_state_lock);
+    if (g_state_net.peer_left.load(std::memory_order_relaxed) ||
+        (g_state_net.peer_state_session_id != 0 &&
+         g_state_net.peer_state_session_id != packet.session_id) ||
+        (g_state_net.has_peer_state.load(std::memory_order_relaxed) &&
+         static_cast<std::int32_t>(packet.sequence -
+                                   g_state_net.peer_state_sequence) <= 0)) {
         ReleaseSRWLockExclusive(&g_state_net.peer_state_lock);
         return;
     }
+    // Pin the first valid state epoch. Do not silently adopt another process
+    // or resurrect a departed peer; reconnect/new-level rearm is out of scope.
+    g_state_net.peer_state_session_id = packet.session_id;
     coop::StatePacket sanitized = packet;
     sanitized.input_buttons =
         remote_puppet_actions_from_peer(packet.input_buttons);
@@ -2198,7 +2297,8 @@ void publish_peer_state_snapshot(const coop::StatePacket& packet) {
 }
 
 bool copy_peer_state_snapshot(coop::StatePacket& out) {
-    if (!g_state_net.has_peer_state.load(std::memory_order_acquire)) {
+    if (g_state_net.peer_left.load(std::memory_order_acquire) ||
+        !g_state_net.has_peer_state.load(std::memory_order_acquire)) {
         return false;
     }
     const ULONGLONG received =
@@ -2207,6 +2307,10 @@ bool copy_peer_state_snapshot(coop::StatePacket& out) {
         return false;
     }
     AcquireSRWLockShared(&g_state_net.peer_state_lock);
+    if (g_state_net.peer_left.load(std::memory_order_relaxed)) {
+        ReleaseSRWLockShared(&g_state_net.peer_state_lock);
+        return false;
+    }
     out = g_state_net.peer_state;
     ReleaseSRWLockShared(&g_state_net.peer_state_lock);
     return true;
@@ -15652,7 +15756,12 @@ DWORD WINAPI state_recv_thread(void*) {
     // One buffer big enough for the largest packet (EnemyPacket); dispatch by magic.
     alignas(8) char buf[sizeof(coop::EnemyPacket) + 64];
     static_assert(sizeof(buf) >= sizeof(coop::IdleArmPosePacket));
+    static_assert(sizeof(buf) >= sizeof(coop::PeerLeavePacket));
+    LocalPeerLeaveSendState leave_send{};
     while (g_state_net.running.load()) {
+        // Pump before every receive, including under continuous inbound traffic.
+        // Checked socket timeouts also let this progress after both menus idle.
+        pump_local_peer_leave(leave_send);
         sockaddr_in source_addr{};
         int source_addr_size = sizeof(source_addr);
         const int received = recvfrom(
@@ -15665,11 +15774,40 @@ DWORD WINAPI state_recv_thread(void*) {
         if (received < static_cast<int>(sizeof(std::uint32_t))) continue;
         std::uint32_t magic;
         std::memcpy(&magic, buf, sizeof(magic));
+        const bool configured_peer_ip = g_state_net.peer_set &&
+            source_addr_size >= static_cast<int>(sizeof(sockaddr_in)) &&
+            source_addr.sin_family == g_state_net.peer_addr.sin_family &&
+            source_addr.sin_addr.s_addr ==
+                g_state_net.peer_addr.sin_addr.s_addr;
+        if (magic == coop::kPeerLeavePacketMagic &&
+            received == static_cast<int>(sizeof(coop::PeerLeavePacket))) {
+            coop::PeerLeavePacket leave{};
+            std::memcpy(&leave, buf, sizeof(leave));
+            // Unlike ordinary state's ephemeral sender socket, lifecycle
+            // control comes from the peer's bound state receive endpoint.
+            if (configured_peer_ip &&
+                source_addr.sin_port == g_state_net.peer_addr.sin_port &&
+                publish_peer_leave_snapshot(leave)) {
+                std::ostringstream line;
+                line << "PEER-LEAVE-RECV session=0x" << std::hex
+                     << leave.session_id << std::dec
+                     << " seq=" << leave.sequence << " reason=main-menu";
+                boot_log_line(line.str().c_str());
+            }
+            continue;
+        }
+        // Explicit leave is a terminal tombstone, not a receive-age timeout.
+        // The worker never touches Player/native physics or frees anything.
+        if (g_state_net.peer_left.load(std::memory_order_acquire) ||
+            g_state_net.local_leave_queued.load(std::memory_order_acquire)) {
+            continue;
+        }
         if (magic == coop::kStatePacketMagic &&
             received == static_cast<int>(sizeof(coop::StatePacket))) {
             coop::StatePacket packet{};
             std::memcpy(&packet, buf, sizeof(packet));
-            if (packet.version == coop::kStatePacketVersion &&
+            if (configured_peer_ip &&
+                packet.version == coop::kStatePacketVersion &&
                 valid_network_position(packet.pos)) {
                 static std::atomic<bool> first_state_receive_logged{false};
                 if (!first_state_receive_logged.exchange(
@@ -16112,6 +16250,22 @@ bool start_state_net() {
             reinterpret_cast<std::uintptr_t>(&g_state_net));
     if (g_state_net.idle_arm_pose_session_id == 0) {
         g_state_net.idle_arm_pose_session_id = 1;
+    }
+    // The existing receive worker also owns lifecycle retransmissions. Neither
+    // an empty menu nor a full socket send buffer may block it indefinitely.
+    const DWORD lifecycle_timeout_ms = 50;
+    if (setsockopt(g_state_net.recv_socket, SOL_SOCKET, SO_RCVTIMEO,
+            reinterpret_cast<const char*>(&lifecycle_timeout_ms),
+            sizeof(lifecycle_timeout_ms)) == SOCKET_ERROR ||
+        setsockopt(g_state_net.recv_socket, SOL_SOCKET, SO_SNDTIMEO,
+            reinterpret_cast<const char*>(&lifecycle_timeout_ms),
+            sizeof(lifecycle_timeout_ms)) == SOCKET_ERROR) {
+        boot_log_line("state net: lifecycle socket timeout setup failed");
+        closesocket(g_state_net.recv_socket);
+        closesocket(g_state_net.send_socket);
+        g_state_net.recv_socket = INVALID_SOCKET;
+        g_state_net.send_socket = INVALID_SOCKET;
+        return false;
     }
     g_state_net.running.store(true);
     g_state_net.thread = CreateThread(nullptr, 0, state_recv_thread, nullptr, 0, nullptr);
@@ -19496,6 +19650,18 @@ struct alignas(16) NadineAttachRecord48 {
     std::byte bytes[48];
 };
 
+// Preserve authored scalar data, never an NPC/AttachSystem allocation. The
+// native companion can then retire without becoming a dangling holster donor.
+struct NadineCompanionPistolHolsterDonor {
+    NadineAttachRecord48 record{};
+    std::int16_t marker_joint = -1;
+    std::int16_t parent_joint = -1;
+};
+
+NadineCompanionPistolHolsterDonor g_nadine_companion_pistol_holster_donor{};
+std::atomic<bool> g_nadine_companion_donor_cache_claimed{false};
+std::atomic<bool> g_nadine_companion_donor_cached{false};
+
 struct NadineSpinePropAliasResult {
     int status = 0;
     std::uintptr_t target_table = 0;
@@ -20051,16 +20217,90 @@ bool seh_repair_legacy_nadine_attach_points(
     }
 }
 
+bool cache_native_nadine_pistol_holster_game_thread(void* native_npc) {
+    if (g_nadine_companion_donor_cached.load(std::memory_order_acquire)) {
+        return true;
+    }
+    NadineCompanionPistolHolsterDonor candidate{};
+    __try {
+        if (!seh_is_exact_nadine_buddy(native_npc)) {
+            return false;
+        }
+        auto* const npc = static_cast<const std::byte*>(native_npc);
+        auto* const record = *reinterpret_cast<const std::byte* const*>(
+            npc + 0xA8);
+        const auto generation = *reinterpret_cast<const std::uint32_t*>(
+            npc + 0xBC);
+        if (record == nullptr || generation == 0 ||
+            (*reinterpret_cast<const std::uint8_t*>(npc + 0x40) & 5u) != 0 ||
+            *reinterpret_cast<void* const*>(record + 0x8) != native_npc) {
+            return false;
+        }
+        auto* const table = *reinterpret_cast<std::byte* const*>(npc + 0x1E0);
+        if (table == nullptr) {
+            return false;
+        }
+        const auto capacity = *reinterpret_cast<const std::uint32_t*>(table);
+        const auto count = *reinterpret_cast<const std::uint32_t*>(table + 0x4);
+        void* const records = *reinterpret_cast<void* const*>(table + 0x8);
+        if (capacity == 0 || capacity > 256 || count == 0 || count > capacity ||
+            records == nullptr) {
+            return false;
+        }
+        const std::byte* const donor = raw_find_attach_record(
+            table, kPistolHolsterAttachId, nullptr);
+        candidate.marker_joint = raw_resolve_attach_joint(
+            table, kRLegHolsterJointNameId);
+        candidate.parent_joint = raw_resolve_attach_joint(
+            table, kRUpperLegJointNameId);
+        if (donor == nullptr || candidate.marker_joint < 0 ||
+            candidate.parent_joint < 0 ||
+            *reinterpret_cast<const std::int16_t*>(donor + 0x24) !=
+                candidate.marker_joint) {
+            return false;
+        }
+        std::memcpy(candidate.record.bytes, donor, sizeof(candidate.record.bytes));
+        // Recheck the current native argument, not an immutable allocation
+        // address: Process allocations can move while their weak identity lives.
+        if (!seh_is_exact_nadine_buddy(native_npc) ||
+            *reinterpret_cast<const std::byte* const volatile*>(npc + 0xA8) != record ||
+            *reinterpret_cast<const volatile std::uint32_t*>(npc + 0xBC) != generation ||
+            (*reinterpret_cast<const volatile std::uint8_t*>(npc + 0x40) & 5u) != 0 ||
+            *reinterpret_cast<void* const volatile*>(record + 0x8) != native_npc ||
+            *reinterpret_cast<std::byte* const volatile*>(npc + 0x1E0) != table ||
+            *reinterpret_cast<void* const volatile*>(table + 0x8) != records ||
+            *reinterpret_cast<const volatile std::uint32_t*>(table + 0x4) != count ||
+            raw_find_attach_record(table, kPistolHolsterAttachId, nullptr) != donor ||
+            std::memcmp(candidate.record.bytes, donor, sizeof(candidate.record.bytes)) != 0) {
+            return false;
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+    bool expected = false;
+    if (g_nadine_companion_donor_cache_claimed.compare_exchange_strong(
+            expected, true, std::memory_order_acq_rel)) {
+        g_nadine_companion_pistol_holster_donor = candidate;
+        g_nadine_companion_donor_cached.store(true, std::memory_order_release);
+        return true;
+    }
+    return g_nadine_companion_donor_cached.load(std::memory_order_acquire);
+}
+
 bool raw_append_native_nadine_pistol_holster(
     void* native_npc, void* target_player,
     NativeNadinePistolHolsterRepairResult* result) {
-    auto* const donor_table = *reinterpret_cast<std::byte**>(
-        static_cast<std::byte*>(native_npc) + 0x1E0);
+    auto* const donor_table = native_npc != nullptr
+        ? *reinterpret_cast<std::byte**>(
+              static_cast<std::byte*>(native_npc) + 0x1E0)
+        : nullptr;
     auto* const target_table = *reinterpret_cast<std::byte**>(
         static_cast<std::byte*>(target_player) + 0x1E0);
     result->donor_table = reinterpret_cast<std::uintptr_t>(donor_table);
     result->target_table = reinterpret_cast<std::uintptr_t>(target_table);
-    if (donor_table == nullptr || target_table == nullptr) {
+    const bool use_cached_donor = native_npc == nullptr &&
+        g_nadine_companion_donor_cached.load(std::memory_order_acquire);
+    if ((!use_cached_donor && donor_table == nullptr) || target_table == nullptr) {
         result->status = -1;
         return false;
     }
@@ -20077,18 +20317,21 @@ bool raw_append_native_nadine_pistol_holster(
         return false;
     }
 
-    std::byte* const donor_record = raw_find_attach_record(
-        donor_table, kPistolHolsterAttachId, nullptr);
+    const std::byte* const donor_record = use_cached_donor
+        ? g_nadine_companion_pistol_holster_donor.record.bytes
+        : raw_find_attach_record(donor_table, kPistolHolsterAttachId, nullptr);
     if (donor_record == nullptr) {
         result->status = -3;
         return false;
     }
-    result->donor_marker_joint = raw_resolve_attach_joint(
-        donor_table, kRLegHolsterJointNameId);
+    result->donor_marker_joint = use_cached_donor
+        ? g_nadine_companion_pistol_holster_donor.marker_joint
+        : raw_resolve_attach_joint(donor_table, kRLegHolsterJointNameId);
     result->target_marker_joint = raw_resolve_attach_joint(
         target_table, kRLegHolsterJointNameId);
-    result->donor_parent_joint = raw_resolve_attach_joint(
-        donor_table, kRUpperLegJointNameId);
+    result->donor_parent_joint = use_cached_donor
+        ? g_nadine_companion_pistol_holster_donor.parent_joint
+        : raw_resolve_attach_joint(donor_table, kRUpperLegJointNameId);
     result->target_parent_joint = raw_resolve_attach_joint(
         target_table, kRUpperLegJointNameId);
     result->marker = *reinterpret_cast<const std::int16_t*>(
@@ -20339,6 +20582,9 @@ void log_native_nadine_attach_records(void* npc) {
 }
 
 void ensure_legacy_nadine_attach_points_game_thread() {
+    // Both roles need the original companion's authored scalar row before its
+    // native retirement, including role A before a remote Nadine Player exists.
+    cache_native_nadine_pistol_holster_game_thread(g_last_nadine_object);
     void* donor = nullptr;
     void* target = nullptr;
     int target_owner = -1;
@@ -20387,11 +20633,12 @@ void ensure_legacy_nadine_attach_points_game_thread() {
     }
 
     NativeNadinePistolHolsterRepairResult pistol_result{};
-    if (!native_nadine_valid) {
+    if (!native_nadine_valid &&
+        !g_nadine_companion_donor_cached.load(std::memory_order_acquire)) {
         pistol_result.status = -10;
     } else {
         seh_append_native_nadine_pistol_holster(
-            native_nadine, target, &pistol_result);
+            native_nadine_valid ? native_nadine : nullptr, target, &pistol_result);
     }
 
     std::uint64_t signature = 1469598103934665603ULL;
@@ -20517,15 +20764,21 @@ void sync_local_nadine_rifle_visibility_game_thread();
 void run_initial_local_nadine_cross_slot_refresh_cycle_game_thread();
 
 void service_initial_local_nadine_weapon_presentation_game_thread() {
+    cache_native_nadine_pistol_holster_game_thread(g_last_nadine_object);
+    // Moving this service to Player update must not make the one-shot cold
+    // rebind attempts run BEFORE the native companion donor was initialized.
+    if (!g_nadine_companion_donor_cached.load(std::memory_order_acquire) ||
+        !g_nadine_visual_identity_valid) return;
+    // Scalar compatibility records are needed by either role. After the native
+    // donor retires, the immutable copy also serves later Player look rebuilds.
+    ensure_legacy_nadine_attach_points_game_thread();
     if (!g_net_role_b) {
         return;
     }
     // These are local Player/look repairs. Driving them from peer-held-state
     // reconciliation left the cold P99/Mazur on rightHand until the first peer
-    // packet arrived. NadineBuddy's native update is already the game-thread
-    // boundary that proves the native donor exists; every callee remains
-    // generation-guarded and one-shot/retryable until the local Player is ready.
-    ensure_legacy_nadine_attach_points_game_thread();
+    // packet arrived. The exact local Player update keeps their existing
+    // generation-guarded, one-shot/retryable service alive after NPC retirement.
     if constexpr (kEnableInitialLocalNadineP99ColdHipRepair ||
                   kEnableInitialLocalNadineRifleRebind) {
         process_deferred_initial_local_nadine_holster_refresh_game_thread();
@@ -20960,6 +21213,7 @@ void apply_peer_held_weapon_state() {
 }
 
 void send_local_player_state() {
+    if (g_state_net.local_leave_queued.load(std::memory_order_acquire)) return;
     apply_pending_peer_grenade_event();
     apply_pending_peer_breakable_event();
     pump_deferred_breakable_sync();
@@ -21001,8 +21255,14 @@ void send_local_player_state() {
         return;
     }
     coop::StatePacket pkt{};
+    pkt.session_id = g_state_net.idle_arm_pose_session_id;
+    if (pkt.session_id == 0) return;
     pkt.sequence = g_state_net.send_seq.fetch_add(
         1, std::memory_order_acq_rel) + 1;
+    if (pkt.sequence == 0) {
+        pkt.sequence = g_state_net.send_seq.fetch_add(
+            1, std::memory_order_acq_rel) + 1;
+    }
     pkt.timestamp_ms = static_cast<std::uint32_t>(GetTickCount64());
     pkt.flags = 1;
     const bool grenade_arc_active =
@@ -21590,6 +21850,9 @@ void send_local_player_state() {
             }
         }
     }
+    // A menu request can arrive while the snapshot is being prepared. Do not
+    // issue another continuous state after its explicit departure was queued.
+    if (g_state_net.local_leave_queued.load(std::memory_order_acquire)) return;
     const int sent = sendto(
         g_state_net.send_socket, reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
         reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
@@ -41030,6 +41293,91 @@ void maybe_queue_remote_cloth_rebuild() {
     force_log_line(line.str().c_str());
 }
 
+bool seh_matches_retirement_actor(
+    void* actor, const OwnedRemotePlayerIdentity& identity,
+    std::uintptr_t expected_vtable_rva) {
+    if (actor == nullptr || identity.record == 0 || identity.generation == 0) return false;
+    __try {
+        const auto address = reinterpret_cast<std::uintptr_t>(actor);
+        const auto* bytes = static_cast<const std::byte*>(actor);
+        return *reinterpret_cast<const volatile std::uintptr_t*>(bytes) ==
+                   g_module + expected_vtable_rva &&
+               *reinterpret_cast<const volatile std::uintptr_t*>(bytes + 0xA8) == identity.record &&
+               *reinterpret_cast<const volatile std::uint32_t*>(bytes + 0xBC) == identity.generation &&
+               (*reinterpret_cast<const volatile std::uint8_t*>(bytes + 0x40) & 5u) == 0 &&
+               *reinterpret_cast<const volatile std::uintptr_t*>(identity.record + 8) == address &&
+               *reinterpret_cast<const volatile std::uintptr_t*>(bytes + 0xA8) == identity.record &&
+               *reinterpret_cast<const volatile std::uint32_t*>(bytes + 0xBC) == identity.generation &&
+               (*reinterpret_cast<const volatile std::uint8_t*>(bytes + 0x40) & 5u) == 0 &&
+               *reinterpret_cast<const volatile std::uintptr_t*>(identity.record + 8) == address;
+    } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ||
+                GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR
+                    ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+        return false;
+    }
+}
+
+bool seh_capture_stock_nadine_identity(
+    void* actor, OwnedRemotePlayerIdentity& identity) {
+    identity = {};
+    if (actor == nullptr) return false;
+    __try {
+        const auto* bytes = static_cast<const std::byte*>(actor);
+        if (*reinterpret_cast<const std::uintptr_t*>(bytes) !=
+                g_module + kNadineBuddyVtableRva ||
+            std::memcmp(bytes + 8, "nadine-buddy", sizeof("nadine-buddy")) != 0) return false;
+        identity.object = reinterpret_cast<std::uintptr_t>(actor); // diagnostic only
+        identity.record = *reinterpret_cast<const std::uintptr_t*>(bytes + 0xA8);
+        identity.generation = *reinterpret_cast<const std::uint32_t*>(bytes + 0xBC);
+        return seh_matches_retirement_actor(actor, identity, kNadineBuddyVtableRva);
+    } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ||
+                GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR
+                    ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+        return false;
+    }
+}
+
+void maybe_capture_stock_nadine_for_retirement(void* actor) {
+    if (!g_peer_lifecycle_ready.load(std::memory_order_acquire) ||
+        !g_player_update_hook_ready.load(std::memory_order_acquire) ||
+        !g_owned_remote_player_ready.load(std::memory_order_acquire) ||
+        !g_nadine_companion_donor_cached.load(std::memory_order_acquire) ||
+        !g_autotest_done ||
+        (g_remote_player_teardown.load(std::memory_order_acquire) &&
+         !g_state_net.peer_left.load(std::memory_order_acquire)) ||
+        g_state_net.local_leave_queued.load(std::memory_order_acquire)) return;
+    // Do not turn an unexpected script respawn loop into unbounded create/kill
+    // churn. Ordinary co-op needs one generation; further campaign behavior is
+    // not a claim of this single-session implementation.
+    if (g_stock_nadine_retired_generations.load(std::memory_order_acquire) >= 8) {
+        if (!g_stock_nadine_respawn_budget_logged.exchange(true, std::memory_order_relaxed)) {
+            boot_log_line("COMPANION-RETIRE REFUSED respawn budget (8 generations); no repeated cull loop");
+        }
+        return;
+    }
+    unsigned state = g_stock_nadine_identity_state.load(std::memory_order_acquire);
+    if (state != 0 && state != 3) return;
+    const unsigned previous = state;
+    if (!g_stock_nadine_identity_state.compare_exchange_strong(
+            state, 1, std::memory_order_acq_rel)) return;
+    if (g_stock_nadine_retired_generations.load(std::memory_order_acquire) >= 8) {
+        g_stock_nadine_identity_state.store(previous, std::memory_order_release);
+        return;
+    }
+    OwnedRemotePlayerIdentity captured{};
+    if (!seh_capture_stock_nadine_identity(actor, captured)) {
+        g_stock_nadine_identity_state.store(previous, std::memory_order_release);
+        return;
+    }
+    g_stock_nadine_identity = captured;
+    g_stock_nadine_identity_state.store(2, std::memory_order_release);
+    std::ostringstream line;
+    line << "COMPANION-RETIRE CAPTURED object=0x" << std::hex << captured.object
+         << " record=0x" << captured.record << " generation=0x" << captured.generation
+         << " donorCached=1 playerUpdate=1";
+    boot_log_line(line.str().c_str());
+}
+
 void __fastcall hooked_update(void* object) {
     // DIAGNOSTIC: when inert, the DLL does NOTHING but pass the update through (no
     // clone spawn, no drives, no per-frame logic) - used to isolate whether our
@@ -41049,6 +41397,13 @@ void __fastcall hooked_update(void* object) {
         }
     }
     net_tick();
+    if (object != nullptr &&
+        *reinterpret_cast<const std::uintptr_t*>(object) ==
+            g_module + kPlayerVtableRva &&
+        object == retained_player_object(0)) {
+        service_initial_local_nadine_weapon_presentation_game_thread();
+        maybe_queue_remote_cloth_rebuild();
+    }
     // (PLAY-AS-CLONE camera comes from the retained-slot SWAP done on toggle, not
     // a per-frame attach.)
     // ANIM FROM PLAYER-1 VIEW: the engine only auto-updates the ACTIVE player's
@@ -41077,8 +41432,7 @@ void __fastcall hooked_update(void* object) {
         }
         g_last_nadine_object = object;  // set EARLY so the clone auto-spawn (below)
                                         // can read Nadine's look2 for the body swap.
-        service_initial_local_nadine_weapon_presentation_game_thread();
-        maybe_queue_remote_cloth_rebuild();
+        cache_native_nadine_pistol_holster_game_thread(object);
         // Deep body/joint inspection remains manual (Insert) only. Running that
         // large pointer walk automatically in both instances raced scene teardown.
         // (Removed: a leftover diagnostic auto-injected ly=22000 on controller 0
@@ -41135,6 +41489,7 @@ void __fastcall hooked_update(void* object) {
                 log_line("clone spawned passive (drive OFF; use NUMPAD3 to control it)");
             }
         }
+        maybe_capture_stock_nadine_for_retirement(object);
         g_last_nadine_object = object;
         force_split_render_mode();
         auto& control_state = g_object_states[object];
@@ -41450,6 +41805,291 @@ void __fastcall hooked_update(void* object) {
         apply_puppet_transform_post(object);
     }
     publish_nadine_body_visual_target_game_thread(object);
+}
+
+using LifecycleDestroyDeadFunction = std::uintptr_t(__fastcall*)(void*);
+using LifecycleEnterMenuFunction = char(__fastcall*)(std::uintptr_t, std::uintptr_t, int);
+using LifecycleTreeVisitor = std::uint8_t(__fastcall*)(void*, void*);
+using LifecycleVisitTreeFunction = std::uintptr_t(__fastcall*)(
+    void*, void*, LifecycleTreeVisitor, void*);
+using LifecycleWorldBracketFunction = void(__fastcall*)();
+LifecycleDestroyDeadFunction g_lifecycle_original_destroy_dead = nullptr;
+LifecycleEnterMenuFunction g_lifecycle_original_enter_menu = nullptr;
+
+bool seh_live_world_retirement_ready(void** root_out) {
+    *root_out = nullptr;
+    __try {
+        if (*reinterpret_cast<const volatile std::uintptr_t*>(g_module + kHavokWorldRva) == 0 ||
+            *reinterpret_cast<const volatile std::uintptr_t*>(g_module + kHavokReferencedLockRva) == 0 ||
+            *reinterpret_cast<const volatile std::uint8_t*>(g_module + kProcessKillAllowedRva) == 0) return false;
+        const auto tls_index = *reinterpret_cast<const volatile DWORD*>(g_module + kHavokTlsIndexRva);
+        if (tls_index == TLS_OUT_OF_INDEXES || TlsGetValue(tls_index) == nullptr) return false;
+        *root_out = *reinterpret_cast<void* const volatile*>(g_module + kProcessTreeRootRva);
+        return *root_out != nullptr;
+    } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ||
+                GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR
+                    ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+        return false;
+    }
+}
+
+bool seh_companion_jobs_quiescent(void* actor) {
+    // These are EXACTLY the two optional counters waited by Npc_OnKill's
+    // 140420F60. Never introduce such a wait while holding the visitor lock.
+    __try {
+        const auto* bytes = static_cast<const std::byte*>(actor);
+        if (*reinterpret_cast<const volatile std::uintptr_t*>(bytes + 0x4190) != 0) return false;
+        const auto* skill = *reinterpret_cast<const std::byte* const volatile*>(bytes + 0x1FF0);
+        return skill == nullptr ||
+            *reinterpret_cast<const volatile std::uint32_t*>(skill + 0x78) != 0x5FB40892u ||
+            *reinterpret_cast<const volatile std::uintptr_t*>(skill + 0x4C0) == 0;
+    } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ||
+                GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR
+                    ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+        return false;
+    }
+}
+
+bool seh_observe_companion_quiescent(const OwnedRemotePlayerIdentity& identity) {
+    // Observation only. The effect target is supplied later by the locked
+    // native visitor and is independently checked again there.
+    __try {
+        auto* actor = *reinterpret_cast<void* const volatile*>(identity.record + 8);
+        return seh_matches_retirement_actor(actor, identity, kNadineBuddyVtableRva) &&
+               seh_companion_jobs_quiescent(actor);
+    } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ||
+                GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR
+                    ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+        return false;
+    }
+}
+
+bool seh_native_kill_completed(void* actor) {
+    // KillTree invalidates BC and marks dead before DestroyDead frees it. This
+    // observation occurs on the native visitor's argument BEFORE that free.
+    __try {
+        const auto* bytes = static_cast<const std::byte*>(actor);
+        return *reinterpret_cast<const volatile std::uint32_t*>(bytes + 0xBC) == 0 &&
+               (*reinterpret_cast<const volatile std::uint8_t*>(bytes + 0x40) & 1u) != 0;
+    } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ||
+                GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR
+                    ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+        return false;
+    }
+}
+
+struct PeerLifecycleVisit {
+    OwnedRemotePlayerIdentity peer;
+    OwnedRemotePlayerIdentity companion;
+    bool want_peer;
+    bool want_companion;
+    bool peer_found = false;
+    bool companion_found = false;
+    bool peer_retired = false;
+    bool companion_retired = false;
+    bool companion_deferred = false;
+};
+
+std::uint8_t __fastcall visit_peer_lifecycle_actor(void* actor, void* opaque) {
+    auto& work = *static_cast<PeerLifecycleVisit*>(opaque);
+    const bool is_peer = work.want_peer && !work.peer_found &&
+        seh_matches_retirement_actor(actor, work.peer, kPlayerVtableRva);
+    const bool is_companion = work.want_companion && !work.companion_found &&
+        seh_matches_retirement_actor(actor, work.companion, kNadineBuddyVtableRva);
+    if (!is_peer && !is_companion) return 1;
+    const auto current = reinterpret_cast<CurrentProcessFunction>(
+        g_module + kThreadContextGetCurrentProcessRva)();
+    // Never kill this callback's current Process or a promoted primary Player.
+    if (current == actor || (is_peer && retained_player_object(0) == actor)) {
+        if (is_peer) work.peer_found = true;
+        if (is_companion) work.companion_found = true;
+        return 1;
+    }
+    if (is_companion && !seh_companion_jobs_quiescent(actor)) {
+        work.companion_deferred = true;
+        return work.want_peer && !work.peer_found ? 1 : 0;
+    }
+    if (is_peer) {
+        work.peer_found = true;
+        g_puppet_net_apply = false;
+        g_drive_slot1 = false;
+        g_auto_stick_active = false;
+        g_remote_player_teardown.store(true, std::memory_order_release);
+    } else {
+        work.companion_found = true;
+        // No dangling donor/control pointer: the scalar record was cached, and
+        // continuing presentation/cloth work is driven by the local Player.
+        g_last_nadine_object = nullptr;
+        g_controlled_object = nullptr;
+        g_object_states.erase(actor);
+        g_object_states.erase(reinterpret_cast<void*>(work.companion.object));
+    }
+    // LIVE-world native OnKill removes THIS actor's rigid bodies/managers/draw.
+    // Not the rejected shortcut during global menu/Havok shutdown. The iterator
+    // supplies the live argument under ProcessMgr's own recursive lock.
+    reinterpret_cast<ProcessKillTreeFunction>(g_module + kProcessKillTreeRva)(actor);
+    const bool retired = seh_native_kill_completed(actor);
+    if (is_peer) work.peer_retired = retired;
+    else work.companion_retired = retired;
+    return (work.want_peer && !work.peer_found) ||
+           (work.want_companion && !work.companion_found && !work.companion_deferred) ? 1 : 0;
+}
+
+void log_peer_lifecycle_result(const PeerLifecycleVisit& work) {
+    std::ostringstream line;
+    line << "PEER-LIFECYCLE phase=postrender peerRequested=" << work.want_peer
+         << " peerFound=" << work.peer_found << " peerRetired=" << work.peer_retired
+         << " companionRequested=" << work.want_companion
+         << " companionFound=" << work.companion_found
+         << " companionRetired=" << work.companion_retired
+         << " companionDeferred=" << work.companion_deferred
+         << " slot1Live=" << (retained_player_object(1) != nullptr);
+    boot_log_line(line.str().c_str());
+}
+
+void service_peer_lifecycle_postrender(void* manager) {
+    if (!g_peer_lifecycle_ready.load(std::memory_order_acquire) || g_dll_inert ||
+        manager != reinterpret_cast<void*>(g_module + kProcessMgrRva) ||
+        !g_owned_remote_player_ready.load(std::memory_order_acquire) ||
+        g_state_net.local_leave_queued.load(std::memory_order_acquire)) return;
+    const bool left = g_state_net.peer_left.load(std::memory_order_acquire);
+    if (g_remote_player_teardown.load(std::memory_order_acquire) && !left) return;
+    const bool want_peer = left && !g_peer_retirement_walk_done;
+    const bool companion_pending =
+        g_player_update_hook_ready.load(std::memory_order_acquire) &&
+        g_nadine_companion_donor_cached.load(std::memory_order_acquire) &&
+        g_stock_nadine_identity_state.load(std::memory_order_acquire) == 2;
+    const bool want_companion = companion_pending &&
+        seh_observe_companion_quiescent(g_stock_nadine_identity);
+    if (companion_pending && !want_companion &&
+        (g_companion_deferred_record != g_stock_nadine_identity.record ||
+         g_companion_deferred_generation != g_stock_nadine_identity.generation)) {
+        g_companion_deferred_record = g_stock_nadine_identity.record;
+        g_companion_deferred_generation = g_stock_nadine_identity.generation;
+        boot_log_line("COMPANION-RETIRE DEFERRED unresolved identity or navigation counter; no kill/wait");
+    }
+    if (!want_peer && !want_companion) return;
+    void* root = nullptr;
+    if (!seh_live_world_retirement_ready(&root)) {
+        if (!g_peer_phase_guard_reported) {
+            g_peer_phase_guard_reported = true;
+            boot_log_line("PEER-LIFECYCLE DEFERRED world/TLS/kill/root gate; no native mutation");
+        }
+        return;
+    }
+    bool idle = false;
+    if (!g_peer_lifecycle_busy.compare_exchange_strong(idle, true, std::memory_order_acq_rel)) return;
+    PeerLifecycleVisit work{g_owned_remote_player, {}, want_peer, want_companion};
+    if (want_companion) work.companion = g_stock_nadine_identity;
+    bool world_scope = false;
+    bool world_bodies = false;
+    bool visited = false;
+    __try {
+        // Native order is WORLD -> ProcessMgr, never the reverse. OnKill's
+        // inner world brackets recurse by fiber owner. Its allocator lock is
+        // deliberately NOT acquired here (that lock is nonrecursive).
+        reinterpret_cast<LifecycleWorldBracketFunction>(g_module + kHavokWorldScopeEnterRva)();
+        world_scope = true;
+        reinterpret_cast<LifecycleWorldBracketFunction>(g_module + kHavokWorldBodiesEnterRva)();
+        world_bodies = true;
+        // Acquiring world access can yield. Refresh the root and readiness
+        // afterward; never carry an earlier raw object address across that wait.
+        if (seh_live_world_retirement_ready(&root)) {
+            visited = true;
+            if (want_peer) g_peer_retirement_walk_done = true;
+            reinterpret_cast<LifecycleVisitTreeFunction>(g_module + kProcessMgrVisitTreeRva)(
+                manager, root, &visit_peer_lifecycle_actor, &work);
+        }
+    } __finally {
+        __try {
+            if (world_bodies) reinterpret_cast<LifecycleWorldBracketFunction>(
+                g_module + kHavokWorldBodiesLeaveRva)();
+        } __finally {
+            __try {
+                if (world_scope) reinterpret_cast<LifecycleWorldBracketFunction>(
+                    g_module + kHavokWorldScopeLeaveRva)();
+            } __finally {
+                g_peer_lifecycle_busy.store(false, std::memory_order_release);
+            }
+        }
+    }
+    if (!visited) return;
+    if (want_companion && !work.companion_deferred) {
+        // One native walk per captured generation; no per-frame roster polling
+        // if it was absent/refused. A genuinely new native instance may queue.
+        if (work.companion_retired) {
+            g_stock_nadine_retired_generations.fetch_add(1, std::memory_order_release);
+        }
+        g_stock_nadine_identity_state.store(work.companion_retired ? 3u : 4u,
+                                            std::memory_order_release);
+    }
+    log_peer_lifecycle_result(work);
+}
+
+std::uintptr_t __fastcall hooked_lifecycle_destroy_dead(void* manager) {
+    service_peer_lifecycle_postrender(manager);
+    return g_lifecycle_original_destroy_dead(manager);
+}
+
+char __fastcall hooked_lifecycle_enter_menu(
+    std::uintptr_t a1, std::uintptr_t a2, int a3) {
+    const char result = g_lifecycle_original_enter_menu(a1, a2, a3);
+    if (g_peer_lifecycle_ready.load(std::memory_order_acquire) &&
+        result != 0 && g_owned_remote_player_ready.load(std::memory_order_acquire) &&
+        g_state_net.running.load(std::memory_order_acquire)) {
+        queue_local_peer_leave(); // atomic publication ONLY; socket worker sends
+    }
+    return result;
+}
+
+bool install_peer_lifecycle_callsite(
+    std::uintptr_t call_rva, std::uintptr_t target_rva, const void* hook) {
+    std::uint8_t* call = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t displacement = 0;
+    if (!prepare_plain_callsite_relay(call_rva, target_rva, hook, call, relay, displacement)) return false;
+    SuspendedProcessThreads suspended{};
+    if (!suspend_other_process_threads(suspended)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        return false;
+    }
+    std::int32_t old_displacement = 0;
+    std::memcpy(&old_displacement, call + 1, sizeof(old_displacement));
+    const bool unchanged = call[0] == 0xE8 &&
+        reinterpret_cast<std::uintptr_t>(call + 5) +
+            static_cast<std::intptr_t>(old_displacement) == g_module + target_rva;
+    DWORD old_protection = 0;
+    if (!unchanged || !VirtualProtect(call, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        resume_suspended_process_threads(suspended);
+        VirtualFree(relay, 0, MEM_RELEASE);
+        return false;
+    }
+    std::memcpy(call + 1, &displacement, sizeof(displacement));
+    FlushInstructionCache(GetCurrentProcess(), call, 5);
+    DWORD ignored = 0;
+    const bool restored = VirtualProtect(call, 5, old_protection, &ignored) != FALSE;
+    const bool readback = std::memcmp(call + 1, &displacement, sizeof(displacement)) == 0;
+    resume_suspended_process_threads(suspended);
+    // Published relay stays resident on restoration/readback failure too.
+    return restored && readback;
+}
+
+bool install_peer_lifecycle() {
+    g_lifecycle_original_destroy_dead = reinterpret_cast<LifecycleDestroyDeadFunction>(
+        g_module + kProcessMgrDestroyDeadRva);
+    g_lifecycle_original_enter_menu = reinterpret_cast<LifecycleEnterMenuFunction>(
+        g_module + kTaskManagerEnterMainMenuRva);
+    const bool cleanup = install_peer_lifecycle_callsite(
+        kPostRenderDestroyDeadCallsiteRva, kProcessMgrDestroyDeadRva,
+        reinterpret_cast<const void*>(&hooked_lifecycle_destroy_dead));
+    const bool menu = cleanup && install_peer_lifecycle_callsite(
+        kPostRenderQuitMenuCallsiteRva, kTaskManagerEnterMainMenuRva,
+        reinterpret_cast<const void*>(&hooked_lifecycle_enter_menu));
+    g_peer_lifecycle_ready.store(cleanup && menu, std::memory_order_release);
+    boot_log_line(cleanup && menu
+        ? "PEER-LIFECYCLE READY explicitMenu=1 liveWorldOnKill=1 ownedOnly=1 companion=native-nadine-buddy"
+        : "PEER-LIFECYCLE REFUSED phase/menu callsite; native pass-through retained");
+    return cleanup && menu;
 }
 
 char __fastcall hooked_player_input_state_update(void* player) {
@@ -82355,6 +82995,7 @@ DWORD WINAPI install_hook(void*) {
     install_give_weapon_diagnostic();
     install_weapon_interact_world_lifecycle();
     install_owned_remote_player_reset();
+    install_peer_lifecycle();
     install_build_fire_args_gate();
     install_projectile_launch_record_direction_relay();
     install_tracer_visual_origin_relay();
@@ -82470,7 +83111,10 @@ DWORD WINAPI install_hook(void*) {
                 *pslot = reinterpret_cast<std::uintptr_t>(&hooked_update);
                 FlushInstructionCache(GetCurrentProcess(), pslot, sizeof(*pslot));
                 DWORD ign = 0;
-                VirtualProtect(pslot, sizeof(*pslot), oldp, &ign);
+                const bool restored = VirtualProtect(pslot, sizeof(*pslot), oldp, &ign) != FALSE;
+                g_player_update_hook_ready.store(
+                    restored && *pslot == reinterpret_cast<std::uintptr_t>(&hooked_update),
+                    std::memory_order_release);
                 log_line("Player vtable update hook installed (puppet sync apply)");
             }
         } else {

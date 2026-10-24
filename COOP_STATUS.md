@@ -11,13 +11,15 @@ normal process exits; both games are now absent. ExactD6AC5B3F... artifacts at
 reports/owned-reset-r2-20261024-1640, postrun log preserved. This is not universal
 campaign/reset/reconnect or performance validation.
 
-NEW USER REQUEST: replica should disappear in the surviving copy when the other
-player exits to menu, symmetrically. Implement explicit session-bound leave,
-NOT the1500ms snapshot timeout: June29 alt-tab lastHP/root/death protection stays.
-Network thread only publishes departure; native/visual action needs owned identity
-and proved game phase. Existing visibility hook can suppress body/weapon through
-native DontRenderThisFrame; safe isolated physical removal is not yet established.
-Question pending: visual-only versus full collision removal. No new game launch.
+NEW USER SCOPE CONFIRMED: FULL remote-player removal, including collision, when
+either peer exits to menu; also remove ONLY stock NadineBuddy NPC in BOTH co-op
+copies, not enemies/otherNPCs. Visual-only fallback is NOT the requested result.
+Implementation now includes session-bound explicit leave and live-world native
+OnKill retirement at the proved postrender seam. June29 alt-tab protections and
+confirmed local-menu3passes remain unchanged. Donor scalar data is cached before
+NPC removal; Player update keeps networking/presentation alive. Latest entry has
+static quota, precise lock order, bounded guards and prelaunch prediction.
+Runtime validation of this NEW behavior remains pending; no full-campaign claim.
 
 LATEST RUNTIME REJECTED: user reports crash again; watcher confirms B20628
 second-chance SAME142227B8C/null Havok lock+TLS. A9172 exits0, no second chance;
@@ -44488,3 +44490,163 @@ despawn, and the prior directKillTree equivalence remains REJECTED. An exact
 unconditional postrender consumer call140166884 ->1416229C0 exists, but phase
 alone does not validate an unproved cleanup primitive. User clarification about
 collision removal is pending; transport work is independent and may proceed.
+
+## 2026-10-24 — Implement explicit peer-menu departure and full stock-companion retirement
+
+**User scope CONFIRMED:** not merely invisible models: remove the departing
+player's replica including collision. Separately remove stock NadineBuddy in
+both co-op copies; leave enemies and other NPCs untouched. The user explicitly
+confirmed this class/scope. June29 pause/HP/root/death protection and r2's
+CONFIRMED local menu reset stay intact. NPC story/boost interactions and general
+campaign progression are NOT claimed solved by removing the companion.
+
+**Competing approaches, distinct contexts:**
+
+- Selected H1: explicit leave bound to current peer session; consume on the
+  ordinary live-world postrender seam and use native KillTree/OnKill, with
+  world locks acquired BEFORE ProcessMgr traversal. Exact owned weak identities
+  and native iterator arguments determine targets, never cached raw addresses.
+- REJECTED as the requested full result: render-only DontRenderThisFrame/mesh
+  mask hiding leaves collision/AI/actor alive. No hide fallback is installed.
+- REJECTED: infer leave from1500ms silence/HP0; would reopen confirmed Alt-Tab
+  failures. Explicit signal and terminal session tombstone are independent.
+- REJECTED: call globalResetActors for one actor; it changes world/UI/scripts.
+  Existing REJECTED directKillTree-as-MENU-reset-equivalence remains valid:
+  the established local-menu bulk3passes are still used. New H1 is a LIVE-world
+  OnKill path with independently proved per-actor body removal and lock order.
+- REJECTED lock order: ProcessMgr ->first Havok acquisition could yield/invert.
+  Source review caught this before launch; implementation now uses WORLD->Mgr.
+
+**Static quota / independent evidence kinds:**
+
+1. Virtual identity/source chain: exact Player+190 ->1410D84B0 ->Character_OnKill
+   141E9C750 ->NdGO_OnKill141BB95C0. CharacterManager remove141E9C763; Character
+   composite+580 removes141E56C40 at141E9C78E. NdGO composite+238 removes at
+   141BB9732, shuts draw141BB9743, blocksFg141BB97D0 and unlinks level. Dedicated
+   live-world cleanup does NOT depend on global actor reset.
+2. Per-actor dataflow: CompositeBody_RemoveActiveRigidBodiesFromWorld141E56C40
+   gathers only its own active rows, acquires native world scopes and allocator
+   lock, batch-removes through14238C350 at141E56D29, records removed-count,
+   releases allocator/world scopes. Destructor shutdown141E56800 calls the
+   same removal before RigidBody shutdown. No manual body-buffer transplant.
+3. Exact NadineBuddy RTTI142949638+190 ->1404921A0 ->Npc_OnKill140407D00. Native
+   cleanup waits navigation140420F60, destroys AI knowledge+1FC0 at140407E09,
+   removes weak spot/path registry14040807D, path request1404080CE, Character
+   manager1404081CF, own body1404081FA, tailNdGO140408254. KillTree, not direct
+   callbacks, owns enteredOnKill/children/id0/dead/deferred free semantics.
+4. Phase + independent producer/consumer: unconditional call140166884 is
+   E8 37C14B01 ->ProcessMgr_DestroyDeadProcesses1416229C0, RCX=146466FE0,
+   originalRAX preserved. It follows ordinary animation/physics/nav job drains
+   and precedes free/compaction/Havokclose. NPC drain callback14015C7C0 ->
+   1403E4AF0 ->1403E71B0 ->140420F60 has counter submitted140166243, explicitly
+   waited1401667D0. Still require target-specific counters null (below), not a
+   universal assumption that every NPC is registered in that manager list.
+5. World lock order:141B409A0 then141B40C10 are fiber-owner recursive through
+   owners146917BC0/146917BF0 and depths146917BE0/146917C10. ReleaseCB0 thenA60.
+   Independent Level::KillDependentProcesses141EE7C60, level.cpp:2796, uses
+   same world/allocator/batch order (level list, NOT a ProcessMgr visitor).
+   Allocator141B45730 is NONrecursive; outer consumer deliberately does not
+   acquire it. Native inner OnKill takes/releases it once per body removal.
+
+**IMPLEMENTED transport (unvalidated runtime):** StatePacket v18 appends
+uint64 session_id at1304; size1312 stays below1472-byte UDP payload limit and
+fits existing1488-byte receive buffer. PeerLeavePacket is24bytes with its own
+magic/version, session/sequence and main-menu reason. Both peers need new DLL;
+old v17 is not wire-compatible. Sender epoch reuses existing per-process idle-arm
+session nonce. First accepted State pins peer epoch; different epoch/reconnect
+is refused, not silently rebound to the existing owned actor.
+
+Only exact quit-to-main-menu call140166833 is hooked: preserve RCX/RDX/R8D and
+original char result of1409BCA80. Queue one atomic request AFTER successful
+nonzero native result with owned token and atomic network-running readiness.
+No game-thread socket send/lock/native free in this wrapper. Existing socket
+worker pumps before everyrecv, with checked50ms receive/send timeouts and at
+most10 attempts50ms apart. It sends identical leave tuple from BOUND recv_socket;
+receiver requires configuredIP+port, current nonzero pinned epoch and newer
+shared sequence. Ordinary State remains on its existing ephemeral sender socket
+and checks configuredIP/version/size/epoch. This is endpoint checking, NOT crypto
+authentication; finite UDP repeats are NOT guaranteed delivery/ACK transport.
+
+Accepted leave sets a terminal atomic tombstone and rejects delayed gameplay
+dispatch, preventing same-session resurrection. Cached last state/HP/hasPeerState
+stay intact; freshness getter refuses only EXPLICIT leave, unchanged1500ms pause
+rule otherwise. Outgoing State stops at entry/final-send checks after local leave.
+No worker touches game pointers or physics. Forced process close/crash detection,
+automatic reconnect and safe new-level rearm remain unsupported.
+
+**IMPLEMENTED native consumer (unvalidated runtime):** new callsite-specific
+140166884 relay preserves original cleanup call/manager argument/RAX. It consumes
+explicit leave and queued companion identity BEFORE forwarding nativeDestroyDead.
+Requires live world6917C20, referenced lock37AC388, nonnull TLS via index37AC384,
+stock kill-allowed byte6467008 (never sets it), local session not closing.
+Acquires world409A0/C10 outside ProcessMgr; because acquisition may yield,
+REFRESHES world/TLS/killAllowed and root POINTER[64670D0] after acquiring. Nested
+finally releases CB0/A60 and busy guard on every exit.
+
+ProcessMgr_VisitProcessTreeLocked141623050 supplies current live arguments under
+its recursive lock. Match owned record/gen plus currentA8/BC/record+8/VT/OnKill,
+veto currentProcess and any primary Player alias. Remote identity comes ONLY
+from our prior spawn output. Stock companion identity is captured ONLY from
+exact live NadineBuddy/update/name nadine-buddy, after co-op spawn/donor/Player
+update readiness. It is immutable per published generation; no enemy/general
+NPC selection. No cached raw object is an effect target. Native KillTree then
+performs per-actor manager/AI/body/draw/child cleanup; before nativeDestroyDead,
+require actor+BC=0 and+40 dead bit1 for the retirement marker.
+
+NPC admission additionally requires primary nav counterNpc+4190 null and active
+skillNpc+1FF0 absent/notFlankSkill(hash5FB40892 atskill+78), or FlankSkill+4C0
+counter null. Rechecked on the native visitor argument. These are exactly the
+two waits in140420F60, so no new navigation wait is introduced under Mgr lock.
+ProducerNpc::KickNavigationAnalysis140420310 andNav::BeginSinglePathFind141E0AD50
+independently establish those fields. Deferred jobs cause no kill and can retry
+after a later nonblocking observation. Other native child callbacks are not a
+universal nonblocking guarantee; watcher/user outcome remain required.
+
+One native walk per departure/captured companion generation; early callback0
+ends once requested targets handled. Missing/refused targets do not cause
+continuous world census. Unexpected stock-script respawn churn has a terminal
+8-generation fuse; hitting it is REFUSED, not full NPC-removal success. Do not
+hide that limitation or raise the fuse blindly if scripts recreate the buddy.
+
+**Companion dependency preservation:** networking already ran through shared
+Player/Buddy update, BEFORE the buddy filter. Keep that timing; do NOT move the
+entire mutation-heavy net_tick into postrender. Verify Player update patch /
+protection readback before removing NPC. Cache exact validated48-byte pistol
+holster scalar record + joint metadata, no retained NPC pointer; preserve visual
+identity scalars. Local Player update now drives presentation/cloth service;
+one-shot cold attempts wait for donor cache/visual identity initialization.
+Null-NPC append uses cached data with unchanged target mapping/runtime-field
+clearing. Clear raw NPC/control pointer and known object-state keys before kill.
+Initial NPC stays until those prerequisites exist; standalone no-peer behavior
+keeps stock companion. Native story scripts/other outfits are not validated.
+
+**Verification before exam:** fresh normal MSVC x64 DLL builds; independent
+transport/cache/native ABI/FLS/lock-order reviews found no remaining material
+blocker in targeted path. git diff --check clean. DLL SHA256
+C46A83F10F942BCCA36A7FDC38532586A95ADCA4FC69BE8F0FE90EA1B10278D4;
+PDB EFAF884311D923F57D9CA246D7C2FEB885C1896D8E6E6233685529E9B593A74D.
+No current game/watcher. Sole IDB labeled/saved after stopping MCP:20functions /
+3data names added,2096functions/96data/3types, save_database returned True in
+reports/apply_peer_departure_20261024.txt. MCP restarted; body/NPC/visitor/TLS
+names and exact postrender caller read back. No parallel IDB/framework added.
+
+**Falsifiable prediction BEFORE launch:** fresh LocalPair2, enemyOFF, existing
+separate1800s watchers, exact new DLL/PDB preserved. User alone loads sameEMPTY
+scene and reportsready BEFORE menu exit. Require bothOWNERSHIP CAPTURED,
+COMPANION-RETIRE CAPTURED(donorCached/playerUpdate1) and native
+companionFound1/companionRetired1; user should see NO stockNPC, but BOTH Player
+avatars/local control/weapon presentation remain. Avatar merely hidden with
+remaining collision is NOT success. User may switch windows/briefly pause:
+NOPEER-LEAVE marker, peer avatar must stay (June29 preservation).
+
+Then user exitsA/Chloe to MAIN MENU whileB stays in scene. A must log SEND,
+B matching RECV epoch, postrenderpeerFound1/peerRetired1 andslot1Live0, and user
+must see Chloe/weapon gone and be able to walk through her old spot while local
+Nadine remains playable. B's later own menu reset may legitimately see0 stages
+because its replica is already dead; slot1Live must remain0/no crash. Keepboth
+open for inspection. Mirror B-first/A-survivor requires a separate fresh pair
+because session tombstone/replay are terminal; do not automatically repeat.
+Signal without native retirement, uncleared collision, NPC respawn/fuse/refusal,
+loss on Alt-Tab, appearance/control regression, lag/hang/crash all reject usable
+implementation. No success from build/READY/packets alone; no performance claim
+under watcher or universal campaign/scripting/reconnect claim. No agent input.

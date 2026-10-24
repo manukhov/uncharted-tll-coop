@@ -26,7 +26,7 @@ struct InputPacket {
 // One-shot gameplay actions need a separate reliable ordered event stream.
 constexpr std::uint16_t kStatePort = 31338;
 constexpr std::uint32_t kStatePacketMagic = 0x53504F43;  // "COPS"
-constexpr std::uint16_t kStatePacketVersion = 17;
+constexpr std::uint16_t kStatePacketVersion = 18;
 
 // StatePacket.flags extension bits (v7+):
 // 0x0100 — camera_quat mirrors sender CameraManager(0) @+0x1B0.
@@ -124,9 +124,12 @@ struct StatePacket {
     std::uint8_t aim_leg_base_pose_joint_count[2]{};
     std::uint8_t aim_leg_base_pose_reserved[2]{};
     float aim_leg_base_pose_local[2][8][12]{};
+    // v18: per-process sender epoch shared with explicit peer departure. The
+    // receiver pins its first accepted epoch; reconnect is not supported yet.
+    std::uint64_t session_id = 0;
 };
 
-static_assert(sizeof(StatePacket) == 1304);
+static_assert(sizeof(StatePacket) == 1312);
 static_assert(sizeof(StatePacket) <= 1472);  // IPv4 UDP payload under 1500-byte MTU.
 static_assert(offsetof(StatePacket, fganim_world_quat) == 144);
 static_assert(offsetof(StatePacket, aim_pitch_up) == 472);
@@ -139,6 +142,26 @@ static_assert(offsetof(StatePacket, strafe_ik_forward_y_valid) == 520);
 static_assert(offsetof(StatePacket, aim_leg_base_pose_sequence) == 524);
 static_assert(offsetof(StatePacket, aim_leg_base_pose_joint_count) == 528);
 static_assert(offsetof(StatePacket, aim_leg_base_pose_local) == 532);
+static_assert(offsetof(StatePacket, session_id) == 1304);
+
+constexpr std::uint32_t kPeerLeavePacketMagic = 0x564C5043;  // "CPLV"
+constexpr std::uint16_t kPeerLeavePacketVersion = 1;
+constexpr std::uint32_t kPeerLeaveReasonMainMenu = 1;
+
+// Explicit lifecycle control, never inferred from missing state or zero HP.
+// Send from the bound state receive socket so the configured endpoint matches.
+struct PeerLeavePacket {
+    std::uint32_t magic = kPeerLeavePacketMagic;
+    std::uint16_t version = kPeerLeavePacketVersion;
+    std::uint16_t reserved = 0;
+    std::uint64_t session_id = 0;
+    std::uint32_t sequence = 0;
+    std::uint32_t menu_reason = kPeerLeaveReasonMainMenu;
+};
+
+static_assert(sizeof(PeerLeavePacket) == 24);
+static_assert(offsetof(PeerLeavePacket, session_id) == 8);
+static_assert(offsetof(PeerLeavePacket, sequence) == 16);
 
 // Stable drawn-idle arm palette returned by the host-rendered Nadine puppet to
 // the client that locally controls Nadine. These 3x4 rows are directly weighted

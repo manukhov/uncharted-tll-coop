@@ -8,6 +8,142 @@ import idc
 
 
 FUNCTIONS = {
+    0x141EE7C60: (
+        "Level_KillDependentProcesses",
+        "STATIC exact Level::KillDependentProcesses, level.cpp:2796. Reason7 "
+        "takes world141B409A0/141B40C10 before own level-list body collection, "
+        "allocator lock141B45730, batch remove141EE7DAE, unlock141B45810, "
+        "body/world release. Independent lock-order precedent, NOT a ProcessMgr "
+        "visitor and NOT an isolated single-actor API for the mod.",
+    ),
+    0x141BC8460: (
+        "NdGameObject_BatchDestroyCompositeBodyPass1",
+        "STATIC exact source batch-destroy first pass. Virtual+228 invoked "
+        "byActorReset_CollectCompositeBodiesPass1, gathers body handles before "
+        "global world batch removal. Distinct from live OnKill self-removal.",
+    ),
+    0x141BC85B0: (
+        "NdGameObject_BatchDestroyCompositeBodyPass2",
+        "STATIC native batch-destroy second pass, virtual+230 invoked after "
+        "global body removal byActorReset_ShutdownCompositeBodiesPass2. Keep "
+        "menu ordering; live-world OnKill has its own body cleanup path.",
+    ),
+    0x140420310: (
+        "Npc_KickNavigationAnalysis",
+        "STATIC exact Npc::KickNavigationAnalysis. Publishes NPC+4190 counter "
+        "at140420F02 through Nav::BeginSinglePathFind141E0AD50; also contains "
+        "FlankSkill producer path. Counter consumers140420F60 and postrender "
+        "manager drain establish the zero-counter retirement guard.",
+    ),
+    0x141E0AD50: (
+        "Nav_BeginSinglePathFind",
+        "STATIC exact Nav::BeginSinglePathFind; begins navigation work whose "
+        "callback141E0AD40 reaches141FF0B00. NPC and FlankSkill store returned "
+        "counters at+4190 /+4C0, waited byNpc_WaitAndCommitNavigationAnalysisJobs.",
+    ),
+    # --- 2026-10-24: live-world per-actor retirement, not global menu reset ---
+    0x141E56C40: (
+        "CompositeBody_RemoveActiveRigidBodiesFromWorld",
+        "STATIC removes ONLY this composite's active bodies: brackets141B409A0/"
+        "141B40C10, gathers body+10 handles from own rows, allocator lock141B45730, "
+        "world batch remove14238C350 at141E56D29, allocator unlock141B45810, "
+        "sets own removed-count+24 to row-count+10, releases world brackets. "
+        "Reached by Character_OnKill141E9C78E and NdGO_OnKill141BB9732, also "
+        "CompositeBody shutdown. Live-world OnKill owns per-actor physics cleanup; "
+        "this does NOT make direct KillTree equivalent to full menu ResetActors.",
+    ),
+    0x141B409A0: (
+        "HavokWorld_EnterScopedAccess",
+        "STATIC world-present gate. Fiber-owner146917BC0 (nativeFLS+8) and "
+        "depth146917BE0 make same-owner recursion explicit; otherwise waits "
+        "counter146917BB0 before ownership. Acquire BEFORE ProcessMgr tree lock. "
+        "Pair141B40A60; no claim it is the separate allocator lock.",
+    ),
+    0x141B40A60: (
+        "HavokWorld_LeaveScopedAccess",
+        "STATIC inverse141B409A0. Decrements nested depth146917BE0 or on last "
+        "owner releases counter/owner146917BC0/gate146917BD0. Outer finally "
+        "releases this AFTER body-access141B40CB0 and ProcessMgr visitor return.",
+    ),
+    0x141B40C10: (
+        "HavokWorld_EnterScopedBodyAccess",
+        "STATIC second world bracket after141B409A0. Same nativeFLS+8 owner "
+        "146917BF0 recurses via146917C10; other owner waits146917BE8. "
+        "Pair141B40CB0. Inner per-actor OnKill can recurse while outer world "
+        "scope precedes ProcessMgr lock; do NOT outer-lock allocator141B45730.",
+    ),
+    0x141B40CB0: (
+        "HavokWorld_LeaveScopedBodyAccess",
+        "STATIC inverse141B40C10. Decrements146917C10; last owner releases "
+        "counter146917BE8 and clears owner146917BF0/gate146917C00. "
+        "Per-actor141E56C40 contains equivalent inline release.",
+    ),
+    0x141B45730: (
+        "HavokHeapAllocator_LockForThisThread",
+        "STATIC source-identified LockForThisThread, used around world body "
+        "batch removal. NONrecursive: asserts allocator lockThreadIndex<0. "
+        "Unlike fiber-recursive world brackets, never acquire outside a visitor "
+        "whose OnKill takes it internally. Pair141B45810.",
+    ),
+    0x141B45810: (
+        "HavokHeapAllocator_UnlockForThisThread",
+        "STATIC inverse141B45730 after batch world body removal at141E56D35. "
+        "Separate from world-access nesting locks; do not confuse ownership.",
+    ),
+    0x141623050: (
+        "ProcessMgr_VisitProcessTreeLocked",
+        "STATIC manager+0D0 fiber-owner recursive lock, loaded root Process* "
+        "argumentRDX (native1464670D0), callbackR8/userdataR9. Resolves tree "
+        "parent+80/firstchild+88/next+90 weak links via current record+8, skips "
+        "nonlive/dead nodes, invokes callbackRCX=liveObject/RDX=userdata. "
+        "Callback0 stops and releases lock. Native reset kill visitor uses "
+        "KillTree on its argument; live-world caller must acquire world locks FIRST.",
+    ),
+    0x140407D00: (
+        "Npc_OnKillProcess",
+        "STATIC shared NPC virtual+190 target via NadineBuddy thunk1404921A0. "
+        "Waits navigation140420F60 at140407D30, destroys knowledge+1FC0 through "
+        "140639E50, unregisters weak spot actor1403E8860 at14040807D, removes "
+        "pathfind request141D70550, CharacterManager141D63640 at1404081CF, "
+        "own+580 body141E56C40 at1404081FA; tailNdGO_OnKill141BB95C0 at140408254. "
+        "Do not call callback directly: KillTree owns flags/children/id/deferred free.",
+    ),
+    0x1404921A0: (
+        "Npc_OnKillProcess_Thunk",
+        "STATIC five-byte thunk140407D00; exact NadineBuddy142949638 slot+190 "
+        "and multiple other NPC classes share it. Not a Nadine-only destructor.",
+    ),
+    0x1403E8860: (
+        "NpcManager_UnregisterSpotActor",
+        "STATIC inverse RegisterSpotActor1403E84F0, removes exact{Process+A8,BC} "
+        "from NPC spot/path-search registry143D3C0D0. Called during Npc_OnKill "
+        "14040807D. CORRECTION not active-Player roster/CharacterManager itself.",
+    ),
+    0x140639E50: (
+        "AiKnowledge_Destroy",
+        "STATIC exact AiKnowledge::Destroy source assertion knowledge.cpp. "
+        "Npc_OnKill calls it for NPC+1FC0 at140407E09 before native body teardown.",
+    ),
+    0x141D70550: (
+        "PathfindManager_RemoveRequest",
+        "STATIC exact PathfindManager::RemoveRequest source name. Npc_OnKill "
+        "calls1404080CE while removing actor-owned AI/path state; not a whole-world reset.",
+    ),
+    0x140420F60: (
+        "Npc_WaitAndCommitNavigationAnalysisJobs",
+        "STATIC waits/releases NPC+4190 counter, clears+4190/+4198 and commits "
+        "results. For active FlankSkill(hash5FB40892 atskill+78,NPC+1FF0) also "
+        "waits/releases skill+4C0, clears+4C0/+4C8. Npc_OnKill calls140407D30; "
+        "ordinary manager drain1403E729C reaches SAME helper. Nonblocking live "
+        "retirement requires BOTH applicable counters already null under visitor lock.",
+    ),
+    0x1403E71B0: (
+        "NpcManager_DrainNavigationAnalysisJobs",
+        "STATIC manager loop callsNpc_WaitAndCommitNavigationAnalysisJobs "
+        "at1403E729C. Ordinary postrender schedules14015C7C0->1403E4AF0->this "
+        "and waits its counter at1401667D0 before lifecycle seam140166884. "
+        "Not proof every possible NPC belongs to the traversed spot list.",
+    ),
     # --- 2026-10-24: Process weak identity survives heap object relocation ---
     0x1415FDE50: (
         "RelocatableHeap_MoveBlockAndRebindRecord",
@@ -15624,6 +15760,22 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x1437AC384: (
+        "g_HavokThreadTlsIndex",
+        "STATIC DWORD loaded by addReference142227B74 beforeTlsGetValue. "
+        "Instruction bytes8B0D0A485801 resolve this address. Adjacent lock "
+        "1437AC388 is a DIFFERENT QWORD. Live-world retirement must require valid TLS.",
+    ),
+    0x146467008: (
+        "g_ProcessKillAllowed",
+        "STATIC byte ProcessMgr+28 checked byKillTree1416A5C43/81 assertion. "
+        "Never force it to authorize an unsafe phase; refuse native retirement if0.",
+    ),
+    0x1464670D0: (
+        "g_ProcessTreeRoot",
+        "STATIC LOW QWORD is loaded Process* root for141623050 at1413B9FEE. "
+        "Pass its VALUE, not address/global weak record; high QWORD type not inferred.",
+    ),
     0x1437AC388: (
         "g_HavokReferencedObjectLock",
         "STATIC hkReferencedObjectLock singleton, node142FEA2F0 output slot. "
@@ -16209,6 +16361,22 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x140166884: (
+        "STATIC exactE8 37C14B01 ->ProcessMgr_DestroyDeadProcesses1416229C0; "
+        "RCX=&ProcessMgr146466FE0 from14016687D, preserveRAX. Unconditional "
+        "ordinary postrender seam AFTER jobs/nav/physics waits, BEFORE free/"
+        "compaction/Havokclose. Liveworld effects require WORLD->Mgr lock order."
+    ),
+    0x140166833: (
+        "STATIC exactE8 48628500 ->1409BCA80 char(a1,a2,int). RCX=143DC9980, "
+        "RDX=1413C80D0 result,R8D=actualR15D. Preserve3args/AL. Explicit menu "
+        "leave queues only AFTER original successful nonzero result, not timeout."
+    ),
+    0x1401667D0: (
+        "STATIC wait/release NPC drain callback counter[RBP+20] submitted "
+        "140166243:14015C7C0->1403E4AF0->1403E71B0->140420F60. Before166884; "
+        "still recheck target-specific navigation counter slots before live retirement."
+    ),
     0x1415FDF1F: (
         "STATIC rebind stable allocation record+8 to moved object AFTER memmove. "
         "For Process, +A8 record/+BC generation are copied unchanged. Ownership "
