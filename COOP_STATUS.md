@@ -2,7 +2,22 @@
 
 ## Current user priority / handoff (2026-10-24)
 
-CURRENT USER P0: return to enemy (NPC) synchronization. Stock-Nadine removal
+CURRENT USER P0: restore mutual Players after empty->enemy location change,
+then return to enemy synchronization. User clarified BOTH remote Players were
+absent, not merely unmatched enemies. Ordinary reason2 reset retires the old
+replicas, but the deployed one-shot spawn cannot recreate them. A7788/B22492
+are now absent; user explicitly says he closed BOTH himself, not a crash.
+
+STAGED ONLY: player_world_runtime.h/transport.inl and spawn_capture.inl contain
+owned fresh-input capture and per-location transport admission; rollout constant
+kEnablePlayerWorldRearm=false. No new protocol/hooks/rearm are active and no new
+game was launched. Next native consumer/lifetime exclusion is NOT established:
+graph lock covers GraphMgr Reset, not all direct ActorReset callers or same-token
+recursive resets. Do not enable the constant, clear one-shot flags or replay old
+raw pointers. Latest entry has exact static findings, review and next steps.
+Enemy channel stays OFF while this P0 is repaired; appearance remains PARKED.
+
+Stock-Nadine removal
 CONFIRMED BOUNDED: user accepts result; A6648/B21908 each retire exactly one
 captured NPC and suppress native TaskManager recreation with the SAME tuple.
 Exact E2697C89... DLL/PDB and confirmed log preserved. No full campaign/explicit
@@ -29,8 +44,8 @@ User loaded empty location then enemy location and reports no synchronization.
 Separately, reason2 reset retired owned second Players (seen7/forced7/slot1Live0)
 and permanent teardown/consumed capture prevents new-location rearm; no second
 ownership capture. So Player lifecycle and enemy cost are INDEPENDENT blockers.
-Both games remain open per request; scope of user's missing-sync symptom asked
-(players/enemies/both), answer pending. Evidence in latest outcome entry. Do not
+The user has now clarified missing mutual Players and closed both himself.
+Evidence in latest outcome entry. Do not
 reset flags/replay old scene ctx pointers or assume a fresh launch solves cost.
 
 CURRENT EXAM REJECTED: user screenshot shows extra NPC in BOTH A17736/B14220.
@@ -45245,3 +45260,147 @@ state reset. This is not implemented. Next priorities must distinguish fixing
 that lifecycle from the separately localized query-bracket cost; simply loading
 directly into enemies in the same rejected image is not an established cure.
 No code/native-label change in this diagnostic unit; existing IDB labels current.
+
+### 2026-10-24 — STATIC fresh spawn values; stage per-location admission without activating rearm
+
+User clarification supersedes the previous ambiguous symptom: BOTH players failed
+to appear in the other copy after EMPTY->enemy location transition. This is the
+Player lifecycle blocker, separately from ENR2 current_player query cost. User
+also explicitly reports closing both copies himself. Agent's later PID-bound
+closure attempt found them already absent and killed neither; no crash verdict.
+Saved confirmed-players-missing-locomotion_hook.log in the existing ignored
+reports/enemy-resume-20261024-2042 before that check. No new game/input/injection.
+
+#### STATIC input ABI and value ownership (three-plus independent evidence kinds)
+
+1. CALL GRAPH + DISASSEMBLY: only direct calls to1410F1910 are TaskManager
+   1413C076A (E8A111D3FF, return076F) and ScriptSpawnPlayer140F73C34
+   (E8D7DC1700, return3C39). TaskManager explicitly sets EDX=0 at0763; old
+   Secondary function name was wrong. Base142904C78 and MainMenu142904A18
+   virtual+248 resolve1413C04A0; recurring primary-missing branch calls it at
+   1413C2383. At076A RCX is16B OUTPUT weak{record,id}, R8=Continue/R13,
+   R14=live TaskManager and arg6 is fresh caller-local CharacterPersistentState.
+   Commit1410F14C0 publishes retained slot at1410F17E9 before output17FD/1806.
+
+2. DATA FLOW + TYPE STRINGS: signature/source literal identifies DC::Continue
+   and GameSave::CharacterPersistentState. Complete1410F1910 retail body reads
+   Continue scalars/IDs/flags: DWORD+4/+8/+C/+10/+1C/+6C, QWORD+40 and float+84;
+   required extent88, no whole pointer handoff, writes or pointer dereference
+   through a loaded field. R9 and stackarg5 are unused. +4/+1C are authored
+   player/camera selectors, +C/+10 actor/level IDs. These values require a fresh
+   world binding even when stored in owned memory; they are not a lifetime lease.
+
+3. INDEPENDENT SERIALIZATION PATH: GameSave_ReadCheckpoint141589700 validates
+   tag size1C60/7264 then memcpy reads that checkpoint from SaveBuffer at
+   14158980F without pointer fixups. Initializer14158E500 has two persistent
+   states at0 and+E20. Independent29-state copiers14158F5D0/14158F720 advanceE20.
+   The native copiers1413C07E0 and140F73C90 contain only scalar/SIMD field copies
+   through DWORD+E10, extentE14, not the old misleading184h description. No
+   allocation/AddRef/destructor. A zero-initialized owned alignedE20 destination
+   +native fieldcopy preserves defined values and makes untouched gaps inert.
+   +DC8 is inline treasure bits, not a borrowed pointer.
+
+REJECTED alternatives for1410F1910 replay:
+- RCX as input descriptor: contradicted by output stores and both callers.
+- Keep captured ctx/a4/out from the first scene: their native caller-local
+  lifetime ends on return; clearing terminal flags cannot restore that lifetime.
+- Capture only central1410F14C0: too early and lacks upper Continue/persistent
+  input provenance. After outer virtual+248 returns, local persistent input is
+  already dead. Use exact native call-return seams, not an arbitrary worker.
+- Build state from a supposed pure live-player getter: RememberCheckpoint141590430
+  has broader fill/checkpoint side effects; no such getter contract established.
+
+#### STATIC reset exclusion: useful boundary, not sufficient spawn authority
+
+GameTaskGraphMgr_Reset141CB9C40 acquires manager+200 owner and+210 depth;
+singleton146A51370 gives globals146A51570/146A51580. Normal Reset holds that lock
+through observer+8 at141CB9CF5, all subnode resets, release141CB9E80/9E88.
+GameTaskGraphMgr_Update141CB9820 and reader141CBA6B0 use the same protocol.
+ThreadContext_GetRecursiveLockOwnerToken1415C5E50 returns native FLS+8 for
+execution index<18h, else native thread ID|4000000000000000. It is NOT an OS
+thread-only lock and NOT a worker/job counter. Normal paths do not unlock early.
+
+Candidate service seam1413C31D2->141DA2B60 is TaskManager_ProcessTask1413C31B0:
+RCX=live manager, preserved inRDI. Stock RAX is immediately overwritten by
+GetProcessDeltaTime at31D7; still preserve it in a typed wrapper. Unlike the old
+Nadine-only auto-spawn branch, this TaskManager process path does not require a
+surviving NPC. TaskManagerActive_Update1413C4880 dispatch+1E0@48DA has no local
+preceding graph-lock acquire, so a FREE-only nonblocking graph tryguard is not
+necessarily permanently refused. This is a candidate, NOT an installed consumer.
+
+REJECTED as universal exclusion: graph lock +observer-inflight==0 alone.
+Foreign-token GraphMgr Reset is excluded while held, but same-token recursive
+reset is allowed. Spawn has unresolved virtual callbacks despite no direct
+Reset callee. Direct ActorReset(2,0) calls1402F3B1E/14033D013/140BB8300 bypass
+observer1413C6B1F; no graph-owned caller-chain proof for all of them. Observer
+itself continues after inner actor reset, and GraphMgr continues after observer.
+ActorReset sleeps/yields and runs DestroyDead1413BA76F before returning. Therefore
+null old slot/unreadable old memory/counter0 is not a positive retirement lease.
+Do not broaden the confirmed menu admission to arbitrary direct reset contexts.
+
+#### IMPLEMENTED, COMPILED, NOT ACTIVE OR RUNTIME CONFIRMED
+
+New player_world transport owns scalar Key(task/level/Continue selectors), local
+monotonic world serial and pinned process session. CPWC control from the bound
+endpoint requires opposite role/same authored key/mutual epoch echo/actual sent
+echo; after a previous pair BOTH world IDs must advance before a new pair.
+CPWE40-byte envelope targets the exact peer world for all15 world-data sends.
+Largest1424 inner+40=1464<=1472. No unwrapped fallback when enabled. Explicit
+CPLV stays process-terminal/raw; local/peer tombstones and process pin MUST NOT
+be cleared for ordinary reload. True menu-session rejoin remains unsupported.
+
+IngressGuard stays counted through full legacy dispatch; close uses exclusive
+WorldLock against final shared-lock admission, then consumer must wait drain0
+before clearing queues. This fixes a review-found two-independent-atomic race.
+Snapshot state/timestamp/has-state/accepted epoch publish under peer_state_lock.
+Deferred FIRE carries CAPTURE epoch through completion/timeout/overflow; origin0
+is DROP, never stamp-new-world. World locks never span socket/native/log calls.
+Disabled rollout preserves unwrapped transport and June29 last-health behavior.
+
+New player_world_spawn_capture.inl stages EXACT two native call wrappers and
+full TaskObserver142A7E268+8 invalidation wrapper (original1413C6AF0). Primary
+17-byte relay moves liveR14->unusedR9; original six-argument native spawn runs
+once, primary RAX/output and entry/native LastError preserved. Owned Continue88
+and optional field-copied PersistentE20 contain no borrowed input/manager pointer.
+Output must bind exact current slot0/A8/BC/record+8/PlayerVT/noOnKill. Capture is
+bound to reset serial and numeric primary identity, short recipe-lock only;
+no lock across native call/yield. Recipes may be captured during a reset and
+therefore valid is explicitly NOT post-reset authorization. Review corrected
+observer LastError and removed an invalid nested-reset completion-ticket idea:
+there is NO completion/retirement ticket from this observer counter.
+
+Rollout constant player_world::kEnablePlayerWorldRearm=false is MANDATORY until
+the native consumer is complete. No fresh-capture hook/protocol/rearm is active.
+If activated prematurely, legacy raw-pointer replay is explicitly refused,
+not used as fallback. No new native route1 spawn or graph-lock mutation added.
+Existing initial one-shot behavior is unchanged; do NOT claim missing Players
+fixed from compilation/transport/source review. No game was launched this unit.
+
+NEXT SPECIFIC WORK, before enabling/testing:
+1. Trace direct ResetActors caller ownership and nested-callback reachability;
+   obtain a real native exclusion/retirement witness, not counter0 or memory fault.
+2. Implement TaskManager service1413C31D2 using owned recipe, fresh primary/reset
+   binding, peer-world readiness and short synchronized owned/companion tuple
+   publication. Never hold SRW locks across native spawn/waits. Fail closed if
+   old identity retirement is unknown; do not adopt arbitrary live slot1.
+3. Clear/drain per-world input/HP/fire/pickup/give/grenade/breakable/raw-pointer
+   caches only at that proved boundary; version each deferred producer too.
+   Reinitialize companion suppression budget once per VERIFIED world, preserve
+   asset-owned donor48B/visual scalars and confirmed menu native3passes.
+4. Only then enable constant, build/review, write distinguishing prediction and
+   launch fresh pair with enemyOFF. User alone loads same empty scene then same
+   enemy scene. Require BOTH new primary+owned tuples/new mutual epochs AND
+   visible mutual Players/control, no old HP/action replay, stock NPC absent,
+   no menu crash. No success from packet/READY/capture markers alone.
+
+Verification/handoff for this STAGED unit: normal tll_coop_runtime C++ build
+and link pass (expected C4324 alignment-padding warning on owned Recipe).
+DLL SHA2565CDDCCFB0DD35DB67EA846E1DB5AC675F230C01E63CC75859F3CD2DA9720D298;
+PDB6EA605D6E2C5111679C917337E8548F92260AB3973B663BCD9A243CBC1C84C8B.
+These artifacts were NOT injected/behaviorally tested. Independent source
+reviews covered ABI/extents/LastError/nested-reset and transport lock/epoch
+admission; no new test harness. Sole IDB labeled via stopped-MCP headless run;
+reports/apply_player_world_inputs_20261024.txt records2115functions/99data/3types,
+save_database returned True. MCP restarted;8 new/renamed functions and both spawn
+xrefs read back correctly. No parallel IDB, enemy rearm, appearance edit or
+process input/kill. ROADMAP.md is absent in this checkout, not recreated.

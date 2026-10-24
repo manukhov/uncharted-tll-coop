@@ -5,12 +5,33 @@
 Full campaign co-op between two game copies. Current user-directed order:
 
 - Preserve local Chloe in copy A, local Nadine in copy B and current player sync.
-- Work on enemy synchronization now; appearance/hand repair is PARKED.
+- Restore mutual Players across empty->enemy location change FIRST, then resume
+  enemy synchronization; appearance/hand repair is PARKED.
 - First prove A->B enemy correspondence and a safe native living-NPC movement
   boundary; keep enemy damage/death/HP writes and AI pause OFF.
 - Complete combat authority and remaining player/appearance work separately.
 
-## P0 CURRENT: Enemy synchronization; preserve confirmed companion/menu fixes (2026-10-24)
+## P0 CURRENT: Player level rearm before enemies; preserve companion/menu fixes (2026-10-24)
+
+User clarified BOTH remote Players are absent after changing locations, as if
+not connected; not only enemy mismatch. A7788/B22492 are closed by USER, not a
+crash/agent kill. Latest COOP_STATUS entry supersedes pending clarification below.
+
+STAGED SOURCE ONLY, DO NOT ENABLE/LAUNCH AS A FIX: player_world_runtime.h,
+player_world_transport.inl +player_world_spawn_capture.inl own fresh Continue88/
+PersistentE20 and per-world transport admission. kEnablePlayerWorldRearm=false
+preserves the deployed one-shot baseline. Exact fresh primary seams1413C076A /
+140F73C34; future service candidate1413C31D2 after native policy141DA2B60.
+Native consumer/retirement/cache reset NOT implemented, no route1 spawn added.
+
+STATIC BLOCKER: GraphMgr lock146A51570/depth146A51580 (token1415C5E50) excludes
+foreign GraphMgr Reset, NOT same-token nested callbacks or direct ResetActors
+1402F3B1E/14033D013/140BB8300. Observer/inner-reset counter0 is not a lease and
+Graph Reset continues afterward. Next trace those caller chains/native lifetime
+fence, then implement fresh-primary-bound TaskManager service +short locked
+owned/companion publication, positive old-retirement and ingress/action drain.
+Preserve donor caches/menu3passes; enemyOFF. Do not clear terminal flags/replay
+old ctx/a4/out, adopt arbitraryslot1 or call capture/compile a visible fix.
 
 CURRENT EXAM REJECTED: A7788/B22492 first census stops on SECOND current_player
 copy/query(record+8), before actor copy/roster/body/matching/setter. A2930us with

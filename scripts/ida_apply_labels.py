@@ -8,6 +8,54 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-10-24: own fresh per-primary spawn inputs, not borrowed stacks ---
+    0x1413C07E0: (
+        "PlayerPersistentState_CopyCheckpointFieldsThroughE10",
+        "STATIC pure GameSave::CharacterPersistentState field copier. Called "
+        "by TaskManager1413C0675 and independent checkpoint/save paths. Copies "
+        "inline fields through DWORD+E10 (required extentE14), not just184h; "
+        "native arrays advanceE20 per record. No calls, allocation, AddRef or "
+        "destruction. Preserves gaps/padding; do not call this a contiguous "
+        "E20 memcpy or an owner/world lifetime lease.",
+    ),
+    0x141589700: (
+        "GameSave_ReadCheckpointValueFromSaveBuffer",
+        "STATIC source GameSave::SaveDataImplementation::ReadCheckpoint, "
+        "savedata.cpp:2425. Requires tag size7264/1C60; bounds-checks SaveBuffer "
+        "then directly memcpy reads1C60 bytes into checkpoint at14158980F and "
+        "advances its cursor. No pointer fixups or reference-count operations "
+        "follow. Independent evidence that embedded CharacterPersistentState "
+        "is an inline save value, not a captured raw scene-pointer graph.",
+    ),
+    0x14158E500: (
+        "GameSaveCheckpoint_InitializeValueFields",
+        "STATIC initializes checkpoint's CharacterPersistentState values at0 "
+        "and+E20: HP100, first170h payload zero, count+174 zero, inline treasure "
+        "bitsets+DC8 zero and flags+DC0..DC2 zero; initializes checkpoint tail "
+        "clock/default continue. Does not initialize every array byte or imply "
+        "that an arbitrary zero buffer is a semantically current checkpoint.",
+    ),
+    0x14158F5D0: (
+        "GameSave_Copy29PersistentStateRecordsToGlobal",
+        "STATIC copies scalar header and29 inline CharacterPersistentState "
+        "records to global pointer143F21B58 under146A8C860. Each calls "
+        "1413C07E0 at14158F6D7 and advancesE20 at14158F6DC. Pure inline field "
+        "copy does not retain borrowed spawn-context pointers.",
+    ),
+    0x14158F720: (
+        "GameSave_Copy29PersistentStateRecords",
+        "STATIC two-argument inline value copier: scalar header then29 "
+        "CharacterPersistentState records, calling1413C07E0 at14158F807 and "
+        "advancingE20 at14158F80C. No allocation, AddRef or destructor calls; "
+        "does not establish a current world/session for a deferred spawn.",
+    ),
+    0x1415C5E50: (
+        "ThreadContext_GetRecursiveLockOwnerToken",
+        "STATIC returns native FLS block QWORD+8 when142207E90 reports an "
+        "execution index below18h; otherwise obtains current native thread ID "
+        "through142204FB0/142205040 and ORs4000000000000000. Used as recursive "
+        "lock ownership identity, not an active-job counter or quiescence fence.",
+    ),
     # --- 2026-10-24: TaskManager-owned companion recreation, not actor+150 ---
     0x1413C2270: (
         "TaskManager_MaintainCompanionActors",
@@ -260,7 +308,10 @@ FUNCTIONS = {
         "at1413BA040, kill1413B9500 at1413BA07D, thenDestroyDead1413BA76F. "
         "Current-process+110 safety check1413B9E8C must remain stock. "
         "Observer1413C6B1F invokes after explicit primary kill; not every "
-        "direct reason2 caller has ordinary postrender lifetime context.",
+        "direct reason2 caller has ordinary postrender lifetime context. "
+        "Direct calls1402F3B1E/14033D013/140BB8300 do not traverse this "
+        "observer seam; GraphMgr146A51570 locking is not a universal actor "
+        "reset fence. Entry may sleep/yield, and DestroyDead precedes return.",
     ),
     0x1413B9740: (
         "ActorReset_CollectCompositeBodiesPass1",
@@ -439,7 +490,11 @@ FUNCTIONS = {
         "task-graph-mgr.cpp:254. Under manager+200 recursive lock, invokes "
         "observer+8 at141CB9CF5 BEFORE resetting task subnodes. Exact installed "
         "TaskObserver142A7E268 resolves1413C6AF0, which calls actor reset1413B9820. "
-        "Reached synchronously by141CDA945 and141CDB519, not only queued VM work.",
+        "Reached synchronously by141CDA945 and141CDB519, not only queued VM work. "
+        "For singleton146A51370 this lock is146A51570/depth146A51580, also used "
+        "by GameTaskGraphMgr_Update. Ownership token comes from1415C5E50. "
+        "No active TaskManager ProcessTask drain precedes observer+8 here; "
+        "shared recursive locking alone does not prove worker exclusion.",
     ),
     0x1413C6AF0: (
         "TaskObserver_OnReset_DispatchActorReset",
@@ -8434,9 +8489,13 @@ FUNCTIONS = {
         "slot record at 0x143EEBF00.",
     ),
     0x140F73C90: (
-        "CopySpawnDescriptor_0x184",
-        "Memcpy-like helper for the retained spawn-player descriptor block. "
-        "Copies two 0x80-byte chunks plus tail fields through offset 0x184.",
+        "PlayerPersistentState_CopyFieldsThroughE10",
+        "STATIC ScriptSpawnPlayer helper copying inline "
+        "GameSave::CharacterPersistentState fields, including blocks+DC8/+DF0/"
+        "+E00 and DWORD+E10. Required extentE14; independent native arrays "
+        "advanceE20. Old CopySpawnDescriptor_0x184 name was incomplete. Pure "
+        "scalar/SIMD copy, no calls/ownership transfer; untouched gaps remain "
+        "untouched. Not an input descriptor copied from spawn RCX.",
     ),
     0x1410F14C0: (
         "CommitResolvedPlayerSpawn",
@@ -10855,19 +10914,18 @@ FUNCTIONS = {
     ),
     0x1410F1910: (
         "SpawnPlayerFromRetainedDescriptor",
-        "Retained spawn-player path that consumes an explicit descriptor block "
-        "and then commits spawn state through 0x1410F14C0. It now also reads "
-        "as a richer Player-facing packet builder around "
-        "`*player-starting-weapons*` and the "
-        "`TrySpawnPlayerAtContinue(): m_pistol=%s, m_longGun=%s, m_rope=%s, "
-        "useCheckpointed=%d` branch. Nearby literals tie it directly to "
-        "TaskManager::SpawnPlayer / TrySpawnPlayerAtContinue and "
-        "player/camera spawner lookup. STATIC ABI correction: RCX/a1 is OUTPUT "
-        "weak {record,id}, not the input descriptor. Success copies16B at "
-        "1410F2A37/1410F3266; failure zeros record/id1410F2A71/74. Fallback "
-        "CommitResolvedPlayerSpawn(a1) writes+A8/+BC pair at1410F17FD/1806. "
-        "Mod private g_spawn_desc is therefore an output scratch buffer; it "
-        "can bind ownership immediately after our synchronous slot1 call.",
+        "STATIC six-slot ABI: RCX=16B OUTPUT weak{record,id}, EDX=route, "
+        "R8=const DC::Continue input (required extent88h), R9/arg5 unused in "
+        "this retail body, arg6 at entryRSP+30=const "
+        "GameSave::CharacterPersistentState input (extentE14/native strideE20). "
+        "Saved Continue R15 has only scalar reads: DWORD+4/+8/+C/+10/+1C/+6C, "
+        "QWORD flags+40 and float+84; no whole input-pointer handoff or writes. "
+        "Only direct callers1413C076A and140F73C34 build fresh caller-local "
+        "persistent values. Success copies16B1410F2A37/3266; failure zeros "
+        "record/id1410F2A71/74; CommitResolvedPlayerSpawn publishes slot at "
+        "1410F17E9. Historical descriptor name does not make RCX an input. "
+        "Owned input copies still need primary/reset/world-generation binding; "
+        "a native spawn invocation is not a global teardown exclusion fence.",
     ),
     0x140B56090: (
         "HandleNetSpawnCoopBuddy",
@@ -12024,18 +12082,16 @@ FUNCTIONS = {
         "the retained Player1 and native NadineBuddy own independent Fg data.",
     ),
     0x1413C04A0: (
-        "RunSecondaryRetainedPlayerSpawnAndNotifyOuterOwner240",
-        "Independent upper runtime caller of 0x1410F1910. Builds local retained "
-        "spawn state, publishes a large local retained/runtime snapshot through "
-        "0x141C88050, validates the returned retained/live pair, and if valid "
-        "dispatches outer-owner virtual +0x240 with the incoming context. "
-        "Sibling upper methods around 0x1413BC7E0 reuse the same owner family "
-        "with virtual +0x238 and +0x258, and RTTI now pins that family to "
-        "TaskManager / TaskManagerPlayMovie. The slot family is therefore a "
-        "real retained-notify surface, but not a direct Player promotion hook: "
-        "+0x240 is flashlight-oriented and +0x238 is menu/main-menu bootstrap. "
-        "Surrounding literals tie this path to TaskManager::SpawnPlayer and "
-        "the checkpoint/continue branch of task-manager.cpp.",
+        "TaskManager_SpawnPrimaryPlayerFromPersistentState",
+        "STATIC source TaskManager::SpawnPlayer, task-manager.cpp:320; base "
+        "and MainMenu virtual+248, reached from1413C2383 when primary weak "
+        "slot is invalid. Copies fresh checkpoint CharacterPersistentState "
+        "into caller-local storage via1413C0675, then explicitly EDX=0 at "
+        "1413C0763 and calls1410F1910 at1413C076A. Old Secondary name was wrong. "
+        "At call R14=live manager, R13=Continue/R8; arg6 points to local value. "
+        "Checks returned record/id at1413C076F..0790, then virtual+240 "
+        "slot0 state/flashlight publication. Borrowed local arg6 dies on "
+        "outer return; deferred spawning needs its own value copy, not replay.",
     ),
     0x1413BF7B0: (
         "TaskManager_PublishRetainedFlashlightRuntimeRecords_Slot240",
@@ -14981,7 +15037,10 @@ FUNCTIONS = {
         "0x146A51568, stride 0x28), advancing active subnodes (objectives). This "
         "IS the campaign progression backbone (script 'task-complete' issues "
         "commands via AddCommand). Co-op Option 1 follower-apply target: replay "
-        "the driver's relayed task-graph commands here.",
+        "the driver's relayed task-graph commands here. STATIC owns recursive "
+        "global146A51570/depth146A51580, same singleton+200 lock as Reset; "
+        "token1415C5E50 follows native execution/FLS identity. This lock alone "
+        "does not establish TaskManager active ProcessTask quiescence.",
     ),
     0x141CB95B0: (
         "GameTaskGraphMgr_AddCommand",
@@ -15857,6 +15916,19 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x146A51570: (
+        "g_GameTaskGraphRecursiveLockOwnerToken",
+        "STATIC QWORD singleton146A51370+200; GameTaskGraphMgr_Reset and "
+        "GameTaskGraphMgr_Update recursively acquire it with execution token "
+        "1415C5E50, releasing to0 when depth reaches0. Not an active TaskManager "
+        "update counter, resource lease or proof all workers have drained.",
+    ),
+    0x146A51580: (
+        "g_GameTaskGraphRecursiveLockDepth",
+        "STATIC DWORD singleton146A51370+210; recursive depth paired with "
+        "owner token146A51570 in task-graph Update/Reset. Depth0 observed alone "
+        "does not atomically authorize a spawn against concurrent teardown.",
+    ),
     0x143D464C0: (
         "g_NadineBuddyTypeFactoryRecord",
         "STATIC registered by14004D930 through TypeFactory_Register1417C4650: "
@@ -16464,6 +16536,35 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x1413C076A: (
+        "STATIC E8A111D3FF ->1410F1910, primary routeEDX=0. RCX=local16B "
+        "output; R8=Continue held inR13; R14=live TaskManager; sixth argument "
+        "is fresh local CharacterPersistentState. Return076F still lies inside "
+        "that value's lifetime, unlike replay after the outer function returns."
+    ),
+    0x1413C076F: (
+        "STATIC native primary-spawn return: RAX points to output weak pair; "
+        "record/id/record+8/actor+BC checked through0790 before owner+240. "
+        "A wrapper must preserve PRIMARY RAX and output, using separate slot1 "
+        "scratch. This marker is not a global reset/physics exclusion fence."
+    ),
+    0x140F73C34: (
+        "STATIC E8D7DC1700 ->1410F1910. ScriptSpawnPlayer supplies script route "
+        "inESI/EDX, R8=Continue held inR14, RCX=local16B output and sixth input "
+        "local CharacterPersistentState built by140F73C90. Return140F73C39 "
+        "precedes caller cleanup; output RCX is not the copied descriptor."
+    ),
+    0x1410F17E9: (
+        "STATIC native16B publication of resolved Player+A8/+BC weak pair to "
+        "143EEBE80+16*route. Output record/id follow at17FD/1806; nil materialized "
+        "Player publishes an empty pair. Never replace this with raw slot pokes."
+    ),
+    0x14158980F: (
+        "STATIC ReadCheckpoint directly memcpy reads1C60-byte checkpoint from "
+        "SaveBuffer after tag/bounds checks, then advances cursor; no pointer "
+        "rebinding/refcount pass. Inline persistent states can be owned by "
+        "value, but captured IDs/locators still require current scene binding."
+    ),
     0x1413C26C5: (
         "STATIC exact Nadine maintainer CALL1413BF090, bytesE8C6C9FFFF. "
         "ECX=task-default+A8 descriptor, RDX=hashNadineBuddy C785414E, "

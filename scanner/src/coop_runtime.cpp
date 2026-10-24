@@ -96,6 +96,7 @@
 // ============================================================================
 
 namespace {
+#include "player_world_runtime.h"
 
 #if defined(TLL_P99_PREPARATION_AUDIT)
 namespace p99_prep_audit = coop::p99_preparation_audit;
@@ -1204,6 +1205,7 @@ unsigned increment_pending_tracer_visual_counter(
 struct PendingLocalFirePacket {
     coop::FirePacket packet{};
     ULONGLONG queued_ms = 0;
+    std::uint64_t world_epoch = 0;
 };
 constexpr std::size_t kPendingLocalFirePacketCapacity = 16;
 constexpr ULONGLONG kPendingLocalFirePacketTimeoutMs = 250;
@@ -1817,6 +1819,7 @@ struct StateNetState {
     coop::StatePacket peer_state{};        // latest received peer state
     std::uint32_t peer_state_sequence = 0;
     std::uint64_t peer_state_session_id = 0; // peer_state_lock; pin once, no reconnect
+    std::uint64_t peer_state_world_epoch = 0; // peer_state_lock; accepted local world
     std::atomic<bool> has_peer_idle_arm_pose = false;
     std::atomic<ULONGLONG> peer_idle_arm_pose_received_ms = 0;
     SRWLOCK peer_idle_arm_pose_lock = SRWLOCK_INIT;
@@ -2119,7 +2122,7 @@ bool publish_peer_leave_snapshot(const coop::PeerLeavePacket& packet) {
     AcquireSRWLockExclusive(&g_state_net.peer_state_lock);
     const bool accepted =
         !g_state_net.peer_left.load(std::memory_order_relaxed) &&
-        g_state_net.has_peer_state.load(std::memory_order_relaxed) &&
+        (player_world::kEnablePlayerWorldRearm || g_state_net.has_peer_state.load(std::memory_order_relaxed)) &&
         g_state_net.peer_state_session_id == packet.session_id &&
         static_cast<std::int32_t>(packet.sequence -
                                   g_state_net.peer_state_sequence) > 0;
@@ -2136,7 +2139,7 @@ bool publish_peer_leave_snapshot(const coop::PeerLeavePacket& packet) {
 void publish_peer_state_snapshot(const coop::StatePacket& packet) {
     if (packet.session_id == 0 || packet.sequence == 0) return;
     AcquireSRWLockExclusive(&g_state_net.peer_state_lock);
-    if (g_state_net.peer_left.load(std::memory_order_relaxed) ||
+    if (!player_world::data_admitted() || g_state_net.peer_left.load(std::memory_order_relaxed) ||
         (g_state_net.peer_state_session_id != 0 &&
          g_state_net.peer_state_session_id != packet.session_id) ||
         (g_state_net.has_peer_state.load(std::memory_order_relaxed) &&
@@ -2145,8 +2148,8 @@ void publish_peer_state_snapshot(const coop::StatePacket& packet) {
         ReleaseSRWLockExclusive(&g_state_net.peer_state_lock);
         return;
     }
-    // Pin the first valid state epoch. Do not silently adopt another process
-    // or resurrect a departed peer; reconnect/new-level rearm is out of scope.
+    // The control channel pins process identity; world admission never clears
+    // explicit departures or adopts a different process.
     g_state_net.peer_state_session_id = packet.session_id;
     coop::StatePacket sanitized = packet;
     sanitized.input_buttons =
@@ -2296,13 +2299,14 @@ void publish_peer_state_snapshot(const coop::StatePacket& packet) {
         g_state_net.pending_authoritative_teleport.store(
             true, std::memory_order_release);
     }
-    ReleaseSRWLockExclusive(&g_state_net.peer_state_lock);
     g_state_net.peer_state_received_ms.store(GetTickCount64(), std::memory_order_release);
+    g_state_net.peer_state_world_epoch = player_world::local_epoch();
     g_state_net.has_peer_state.store(true, std::memory_order_release);
+    ReleaseSRWLockExclusive(&g_state_net.peer_state_lock);
 }
 
 bool copy_peer_state_snapshot(coop::StatePacket& out) {
-    if (g_state_net.peer_left.load(std::memory_order_acquire) ||
+    if (!player_world::data_admitted() || g_state_net.peer_left.load(std::memory_order_acquire) ||
         !g_state_net.has_peer_state.load(std::memory_order_acquire)) {
         return false;
     }
@@ -2312,7 +2316,9 @@ bool copy_peer_state_snapshot(coop::StatePacket& out) {
         return false;
     }
     AcquireSRWLockShared(&g_state_net.peer_state_lock);
-    if (g_state_net.peer_left.load(std::memory_order_relaxed)) {
+    if (!player_world::data_admitted() || g_state_net.peer_left.load(std::memory_order_relaxed) ||
+        !g_state_net.has_peer_state.load(std::memory_order_relaxed) ||
+        (player_world::kEnablePlayerWorldRearm && g_state_net.peer_state_world_epoch != player_world::local_epoch())) {
         ReleaseSRWLockShared(&g_state_net.peer_state_lock);
         return false;
     }
@@ -2547,7 +2553,7 @@ void send_idle_arm_pose_packet() {
             sent_all = false;
             break;
         }
-        const int sent = sendto(
+        const int sent = player_world::send_datagram(
             // Send this safety-critical return channel from the bound receive
             // socket.  The peer can then authenticate both configured IP and
             // port; the normal state socket is intentionally left unchanged.
@@ -2579,10 +2585,15 @@ void send_idle_arm_pose_packet() {
 // Input and transform require a fresh packet. The last confirmed health remains
 // authoritative while an alt-tabbed instance is suspended and stops sending.
 bool copy_last_peer_state_snapshot(coop::StatePacket& out) {
-    if (!g_state_net.has_peer_state.load(std::memory_order_acquire)) {
+    if (!player_world::data_admitted() || !g_state_net.has_peer_state.load(std::memory_order_acquire)) {
         return false;
     }
     AcquireSRWLockShared(&g_state_net.peer_state_lock);
+    if (!player_world::data_admitted() || !g_state_net.has_peer_state.load(std::memory_order_relaxed) ||
+        (player_world::kEnablePlayerWorldRearm && g_state_net.peer_state_world_epoch != player_world::local_epoch())) {
+        ReleaseSRWLockShared(&g_state_net.peer_state_lock);
+        return false;
+    }
     out = g_state_net.peer_state;
     ReleaseSRWLockShared(&g_state_net.peer_state_lock);
     return true;
@@ -7223,7 +7234,7 @@ char __fastcall hooked_player_pickup_start(
     }
     std::memcpy(packet.controller_start_args, start_args,
                 sizeof(packet.controller_start_args));
-    sendto(g_state_net.send_socket,
+    player_world::send_datagram(g_state_net.send_socket,
            reinterpret_cast<const char*>(&packet), sizeof(packet), 0,
            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
            sizeof(g_state_net.peer_addr));
@@ -7426,7 +7437,7 @@ std::int64_t __fastcall hooked_pickup_request_interact(
         seh_read_dword(reinterpret_cast<const void*>(pickup + 0xD8),
                        pkt.interact_name_id);
         if (sent) {
-            sendto(g_state_net.send_socket,
+            player_world::send_datagram(g_state_net.send_socket,
                    reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
                    reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
                    sizeof(g_state_net.peer_addr));
@@ -7944,7 +7955,7 @@ void send_grenade_event_payload(void* grenade) {
     }
     int sent = SOCKET_ERROR;
     if (built) {
-        sent = sendto(
+        sent = player_world::send_datagram(
             g_state_net.send_socket,
             reinterpret_cast<const char*>(&packet), sizeof(packet), 0,
             reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
@@ -7984,7 +7995,7 @@ void send_grenade_kinematics_update(const GrenadeDump& gd) {
     packet.sequence = seq;
     std::memcpy(packet.pos, gd.pos, sizeof(packet.pos));
     std::memcpy(packet.vel, gd.vel, sizeof(packet.vel));
-    const int sent = sendto(
+    const int sent = player_world::send_datagram(
         g_state_net.send_socket,
         reinterpret_cast<const char*>(&packet), sizeof(packet), 0,
         reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
@@ -8865,7 +8876,7 @@ bool capture_breakable_event_for_relay(void* event) {
         std::memcpy(packet.event_blob, event, cls.blob_size);
         std::memcpy(packet.world_pos, g_breakable_sync_world_pos,
                     sizeof(packet.world_pos));
-        sent = sendto(
+        sent = player_world::send_datagram(
             g_state_net.send_socket,
             reinterpret_cast<const char*>(&packet), sizeof(packet), 0,
             reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
@@ -8886,7 +8897,7 @@ bool capture_breakable_event_for_relay(void* event) {
         packet.event_kind = cls.kind;
         packet.net_object_id = net_id;
         std::memcpy(packet.event_blob, event, cls.blob_size);
-        sent = sendto(
+        sent = player_world::send_datagram(
             g_state_net.send_socket,
             reinterpret_cast<const char*>(&packet), sizeof(packet), 0,
             reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
@@ -8904,7 +8915,7 @@ bool capture_breakable_event_for_relay(void* event) {
         packet.event_kind = cls.kind;
         packet.net_object_id = net_id;
         std::memcpy(packet.event_blob, event, cls.blob_size);
-        sent = sendto(
+        sent = player_world::send_datagram(
             g_state_net.send_socket,
             reinterpret_cast<const char*>(&packet), sizeof(packet), 0,
             reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
@@ -9936,7 +9947,7 @@ void __fastcall hooked_give_weapon_tail(
                 relay_pkt.weapon_art_id, found_slot);
             relay_pkt.manager_slot = static_cast<std::int8_t>(slot);
         }
-        sendto(g_state_net.send_socket,
+        player_world::send_datagram(g_state_net.send_socket,
                reinterpret_cast<const char*>(&relay_pkt), sizeof(relay_pkt), 0,
                reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
                sizeof(g_state_net.peer_addr));
@@ -9960,7 +9971,7 @@ void __fastcall hooked_give_weapon_tail(
             anim_pkt.weapon_art_id = relay_pkt.weapon_art_id;
             anim_pkt.interact_class_id = relay_pickup_class_id;
             anim_pkt.interact_name_id = relay_pickup_name_id;
-            sendto(g_state_net.send_socket,
+            player_world::send_datagram(g_state_net.send_socket,
                    reinterpret_cast<const char*>(&anim_pkt), sizeof(anim_pkt), 0,
                    reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
                    sizeof(g_state_net.peer_addr));
@@ -10518,7 +10529,7 @@ void __fastcall hooked_weapon_interact_on_interact(
                     completed.dropped_payload,
                     sizeof(packet.dropped_pickup_event_payload));
     }
-    const int sent = sendto(
+    const int sent = player_world::send_datagram(
         g_state_net.send_socket, reinterpret_cast<const char*>(&packet),
         sizeof(packet), 0,
         reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
@@ -15757,6 +15768,8 @@ void swap_character_manager_0_1() {
 #include "enemy_root_sync_runtime.inl"
 #endif
 
+#include "player_world_transport.inl"
+
 DWORD WINAPI state_recv_thread(void*) {
     // One buffer big enough for the largest packet (EnemyPacket); dispatch by magic.
     alignas(8) char buf[sizeof(coop::EnemyPacket) + 64];
@@ -15767,9 +15780,10 @@ DWORD WINAPI state_recv_thread(void*) {
         // Pump before every receive, including under continuous inbound traffic.
         // Checked socket timeouts also let this progress after both menus idle.
         pump_local_peer_leave(leave_send);
+        player_world::pump_control();
         sockaddr_in source_addr{};
         int source_addr_size = sizeof(source_addr);
-        const int received = recvfrom(
+        int received = recvfrom(
             g_state_net.recv_socket, buf, sizeof(buf), 0,
             reinterpret_cast<sockaddr*>(&source_addr), &source_addr_size);
         if (received == SOCKET_ERROR) {
@@ -15784,6 +15798,7 @@ DWORD WINAPI state_recv_thread(void*) {
             source_addr.sin_family == g_state_net.peer_addr.sin_family &&
             source_addr.sin_addr.s_addr ==
                 g_state_net.peer_addr.sin_addr.s_addr;
+        if (player_world::receive_control(buf, received, source_addr, source_addr_size)) continue;
         if (magic == coop::kPeerLeavePacketMagic &&
             received == static_cast<int>(sizeof(coop::PeerLeavePacket))) {
             coop::PeerLeavePacket leave{};
@@ -15807,6 +15822,9 @@ DWORD WINAPI state_recv_thread(void*) {
             g_state_net.local_leave_queued.load(std::memory_order_acquire)) {
             continue;
         }
+        player_world::IngressGuard world_ingress(buf, received, source_addr, source_addr_size);
+        if (!world_ingress) continue;
+        std::memcpy(&magic, buf, sizeof(magic));
         if (magic == coop::kStatePacketMagic &&
             received == static_cast<int>(sizeof(coop::StatePacket))) {
             coop::StatePacket packet{};
@@ -21858,7 +21876,7 @@ void send_local_player_state() {
     // A menu request can arrive while the snapshot is being prepared. Do not
     // issue another continuous state after its explicit departure was queued.
     if (g_state_net.local_leave_queued.load(std::memory_order_acquire)) return;
-    const int sent = sendto(
+    const int sent = player_world::send_datagram(
         g_state_net.send_socket, reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
         reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
         sizeof(g_state_net.peer_addr));
@@ -35846,14 +35864,14 @@ bool prepare_fire_packet(
     return true;
 }
 
-void send_prepared_fire_packet(const coop::FirePacket& packet) {
+void send_prepared_fire_packet(const coop::FirePacket& packet, std::uint64_t world_epoch) {
     if (!g_state_net.enabled || !g_state_net.peer_set) {
         return;
     }
-    sendto(g_state_net.send_socket, reinterpret_cast<const char*>(&packet),
+    player_world::send_datagram(g_state_net.send_socket, reinterpret_cast<const char*>(&packet),
            sizeof(packet), 0,
            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
-           sizeof(g_state_net.peer_addr));
+           sizeof(g_state_net.peer_addr), world_epoch);
     std::ostringstream line;
     line << "FIRE-RELAY send seq=" << packet.sequence
          << " art=0x" << std::hex << packet.weapon_art_id
@@ -35875,7 +35893,8 @@ std::size_t pending_local_fire_packet_count() {
     return count;
 }
 
-void enqueue_pending_local_fire_packet(const coop::FirePacket& packet) {
+void enqueue_pending_local_fire_packet(const coop::FirePacket& packet, std::uint64_t world_epoch) {
+    if (!world_epoch) return;
     PendingLocalFirePacket overflow{};
     bool send_overflow = false;
     AcquireSRWLockExclusive(&g_pending_local_fire_packet_lock);
@@ -35893,6 +35912,7 @@ void enqueue_pending_local_fire_packet(const coop::FirePacket& packet) {
         g_pending_local_fire_packets[g_pending_local_fire_packet_count++];
     pending.packet = packet;
     pending.queued_ms = GetTickCount64();
+    pending.world_epoch = world_epoch;
     ReleaseSRWLockExclusive(&g_pending_local_fire_packet_lock);
 
     if (send_overflow) {
@@ -35902,12 +35922,12 @@ void enqueue_pending_local_fire_packet(const coop::FirePacket& packet) {
             "FIRE-PENDING-FALLBACK seq=%u reason=overflow",
             overflow.packet.sequence);
         boot_log_line(line);
-        send_prepared_fire_packet(overflow.packet);
+        send_prepared_fire_packet(overflow.packet, overflow.world_epoch);
     }
 }
 
 bool take_pending_local_fire_packet(
-    coop::FirePacket& packet, ULONGLONG& age_ms) {
+    coop::FirePacket& packet, ULONGLONG& age_ms, std::uint64_t& world_epoch) {
     PendingLocalFirePacket pending{};
     bool found = false;
     AcquireSRWLockExclusive(&g_pending_local_fire_packet_lock);
@@ -35926,6 +35946,7 @@ bool take_pending_local_fire_packet(
     }
     packet = pending.packet;
     age_ms = GetTickCount64() - pending.queued_ms;
+    world_epoch = pending.world_epoch;
     return true;
 }
 
@@ -35954,7 +35975,7 @@ void flush_stale_pending_local_fire_packets() {
             stale[i].packet.sequence,
             static_cast<unsigned long long>(now - stale[i].queued_ms));
         boot_log_line(line);
-        send_prepared_fire_packet(stale[i].packet);
+        send_prepared_fire_packet(stale[i].packet, stale[i].world_epoch);
     }
 }
 
@@ -36093,7 +36114,8 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
         if (owner0 && !g_dll_inert && g_state_net.enabled) {
             coop::FirePacket packet{};
             ULONGLONG age_ms = 0;
-            if (take_pending_local_fire_packet(packet, age_ms)) {
+            std::uint64_t world_epoch{};
+            if (take_pending_local_fire_packet(packet, age_ms, world_epoch)) {
                 PeerFireDirectionCapture capture{};
                 std::memcpy(
                     capture.final_direction,
@@ -36132,7 +36154,7 @@ std::int64_t __fastcall hooked_process_weapon_spawn_projectile(
                         capture.final_origin[1], capture.final_origin[2]);
                     boot_log_line(line);
                 }
-                send_prepared_fire_packet(packet);
+                send_prepared_fire_packet(packet, world_epoch);
             }
         // Slot 1 is the retained remote puppet in both processes.  Applying
         // only to owner1 also prevents a received shot from being re-sent.
@@ -36941,12 +36963,13 @@ void __fastcall hooked_player_fire(
                  << g_player_fire_controller_offset << std::dec;
             log_line(line.str().c_str());
         }
+        const auto fire_world_epoch = player_world::capture_epoch();
         coop::FirePacket local_fire_packet{};
         local_fire_packet_prepared = prepare_fire_packet(
             controller, fire_args, weapon, scalar,
             local_fire_packet);
         if (local_fire_packet_prepared) {
-            enqueue_pending_local_fire_packet(local_fire_packet);
+            enqueue_pending_local_fire_packet(local_fire_packet, fire_world_epoch);
         }
         static std::atomic<bool> first_packet_prep_logged{false};
         if (!first_packet_prep_logged.exchange(true, std::memory_order_acq_rel)) {
@@ -39277,7 +39300,7 @@ std::uint64_t __fastcall hooked_npc_damage(void* a1, void* a2, void* a3) {
                     coop::ClientDamagePacket dp{};
                     dp.name_hash = coop_name_hash(nm, 64);
                     dp.damage = dmg;
-                    sendto(g_state_net.send_socket, reinterpret_cast<const char*>(&dp),
+                    player_world::send_datagram(g_state_net.send_socket, reinterpret_cast<const char*>(&dp),
                            sizeof(dp), 0,
                            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
                            sizeof(g_state_net.peer_addr));
@@ -39524,7 +39547,7 @@ void send_enemy_states() {
     pkt.timestamp_ms = static_cast<std::uint32_t>(GetTickCount64());
     const int bytes = static_cast<int>(offsetof(coop::EnemyPacket, enemies) +
                                        static_cast<std::size_t>(n) * sizeof(coop::EnemyState));
-    sendto(g_state_net.send_socket, reinterpret_cast<const char*>(&pkt), bytes, 0,
+    player_world::send_datagram(g_state_net.send_socket, reinterpret_cast<const char*>(&pkt), bytes, 0,
            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
            sizeof(g_state_net.peer_addr));
 }
@@ -40664,7 +40687,16 @@ bool seh_capture_owned_remote_player_identity(
     }
 }
 
+#include "player_world_spawn_capture.inl"
+
 void reissue_spawn_for_slot1() {
+    if constexpr (player_world::kEnablePlayerWorldRearm) {
+        // The staged native recipe is owned data, but is NOT a lifetime lease.
+        // Its future TaskManager consumer must prove retirement/exclusion first.
+        // Never fall back to replaying old borrowed ctx/a4/out after activation.
+        log_line("reissue spawn refused: per-world native consumer not yet admitted");
+        return;
+    }
     if (!g_remote_player_reset_ready.load(std::memory_order_acquire) ||
         g_remote_player_teardown.load(std::memory_order_acquire) ||
         g_remote_player_spawn_consumed.load(std::memory_order_acquire)) {
@@ -83587,9 +83619,15 @@ DWORD WINAPI install_hook(void*) {
     }
     install_xinput_hook();
     g_velprobe_enabled = false;
-    // FUNCTIONAL: remote slot-1 creation consumes the captured slot-0 descriptor.
-    // This is not an optional diagnostic; without it UDP works but no peer spawns.
-    g_spawn_veh = AddVectoredExceptionHandler(1, &spawn_capture_veh);
+    if constexpr (player_world::kEnablePlayerWorldRearm) {
+        boot_log_line(player_world_spawn::install()
+            ? "PLAYER-WORLD fresh native capture installed; deferred spawn remains closed"
+            : "PLAYER-WORLD fresh native capture REFUSED; no legacy-pointer fallback");
+    } else {
+        // Preserve the deployed one-shot baseline while the per-world native
+        // service/retirement boundary is still under static investigation.
+        g_spawn_veh = AddVectoredExceptionHandler(1, &spawn_capture_veh);
+    }
     if constexpr (kEnableLegacyRuntimeDiagnostics) {
         CreateThread(nullptr, 0, &aux_input_thread, nullptr, 0, nullptr);
         g_velwriter_veh = AddVectoredExceptionHandler(0, &velwriter_capture_veh);
@@ -83615,7 +83653,9 @@ DWORD WINAPI install_hook(void*) {
           << " target(coop-drake)=0x" << g_inject_look_hash << std::dec;
         log_line(l.str().c_str());
     }
-    arm_spawn_breakpoint_all_threads();
+    if constexpr (!player_world::kEnablePlayerWorldRearm) {
+        arm_spawn_breakpoint_all_threads();
+    }
     // DIAGNOSTIC input-capture HW breakpoints (perslot / inputstate / inputwrite /
     // stick) are NO LONGER auto-armed: they hook stick/input processing and BREAK
     // AIMING (right stick) for the main player on inject. They were only needed for
