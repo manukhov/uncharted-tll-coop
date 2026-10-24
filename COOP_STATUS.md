@@ -2,14 +2,13 @@
 
 ## Current user priority / handoff (2026-10-24)
 
-RUNTIME PENDING USER RESULT: user explicitly requested launch/check. Fresh
-7FBAD416...8620999 DLL launched/injected with enemy opt-in in A=PID4872 and
-B=PID10876; both LOCAL-LOOK READY and Pirate+408 installation banners verified.
-Enemy UDP31340/31341, stop-control events available; stopped=0/costStop0 and
-capture/match/apply0 at pre-scene check. User alone loads same living-enemy
-encounter; asks10..15seconds movement/smoothness, no shooting/menu return yet.
-No debugger attached to avoid timing distortion; this is NOT menu-crash
-reproduction or a crash-fix claim. Exact run identities/prediction below.
+LATEST RUNTIME RESULT: user-requested batch run REJECTED as usable sync.
+B=PID10876 terminally stopped at its first census:2558us,2VQ attempts,
+costStop2/costSite1, capture/match/apply0. A=PID4872 had work0. Agent then
+stopped BOTH enemy channels using existing events; quiescent ACK=True for
+both. Both games remain open. No debugger/input/rearm/relaunch or budget raise.
+Batching did NOT make this census fit the1ms limit; no visible sync success
+or smoothness verdict. Exact stopped logs preserved; see final result entry.
 
 LATEST IMPLEMENTATION: same-path enemy admission batches initial neighboring
 fields through unchanged guarded copy: current_player11->9 copy call sites,
@@ -43703,3 +43702,39 @@ enemy_root_10876.log. NEXT read user visual/smoothness report and both logs;
 do not mistake ready/zero counters for synchronization. Emergency stop:
 scripts/stop_enemy_root_channel.ps1 -ProcessIds4872,10876. Do not terminate
 either game unless requested or required by an immediate safety issue.
+
+## 2026-10-24 — Reject batched-admission run after PID10876 census cost stop
+
+**REJECTED usable enemy synchronization, CONFIRMED narrow stop containment:**
+after both ready banners were verified, B=PID10876 recorded terminal costStop2
+at costSite1 on its first census: peakScopeUs=peakWindowUs=2558, queries=
+peakQueries=2. Final actors/paired/capture/receive/match/apply0, workerGapMs0,
+external0/nativeFault0. A=PID4872 still had all work/query/apply counters0.
+No new enemy root setter executed. No user visual/smoothness result has been
+received; don't invent one or infer a completed scene/menu return.
+
+The reduced initial-copy count did NOT make this B census meet the unchanged
+1ms wall limit. This rejects batching as a sufficient usable-performance fix,
+NOT its statically verified instruction reduction. It still cannot identify
+which query/copy/scheduling interval dominated:2attempts are aggregate, not
+per-call timing. No debugger was attached; debugger first-chance overhead is
+not an explanation for THIS measured stop. No baseline-hang/crash repair or
+responsibility is established, and this run did not report a crash.
+
+**Actual stop action:** because B's terminal channel could not synchronize,
+agent invoked stop_enemy_root_channel.ps1 -ProcessIds4872,10876. Both PID/
+creation-bound ACKs returned stoppedAndQuiescent=True. A final log confirms
+STOPPED external1 with cost/query/match/apply0; B retains its costStop2 line.
+This validates existing quiescent-stop acknowledgement for this exact build,
+NOT unhooking, zero overhead, general crash safety or successful replication.
+Both tll.exe instances were verified alive afterward and left open; agent
+sent no game input, termination, reinjection, rearm or new launch. User was
+told the check failed and both enemy channels were stopped. No budget change.
+
+Exact DLL/PDB, terminal enemy_root_4872.log/enemy_root_10876.log and a separate
+postrun-locomotion_hook.log snapshot preserved under
+reports/enemy-batch-run-20261024-1423. Boot snapshot remains separate. This is
+a result entry, no code/native finding/IDB change. NEXT needs per-query wall
+attribution versus residual work (using existing samples with immutable terminal
+publication), or a separately proved cost-reducing implementation; do not
+repeat/rearm this terminal run or raise the limit to force a write.
