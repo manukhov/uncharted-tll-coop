@@ -1,8 +1,18 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
-## Current user priority / handoff (2026-10-18)
+## Current user priority / handoff (2026-10-24)
 
-LATEST CODE: retained_player_object now also rejects enteredOnKill at object+40
+LATEST IMPLEMENTATION: enemy_root current_player/identity now also reject
+enteredOnKill(+40 &0x04), including final re-reads; current_player rechecks+BC.
+Receiver rechecks both actor/player kill flags and IDs after animation/physics
+validation, before final time/budget admission and setter141E7D0D0. Fresh DLL
+F559F64D...13E70D4 built; independent source/emitted-code review passed.
+Enemy channel remains OFF;1ms/256-query budget unchanged. This is NOT a fix for
+the enemy-OFF baseline hang, a lifetime lease, or usable/visible synchronization.
+User cannot recall hang stage. No defensible null-result loop/lock cycle found;
+no speculative socket/lock change or new launch. See latest entry for limits.
+
+PREVIOUS CODE: retained_player_object now also rejects enteredOnKill at object+40
 bit4, before and after the generation/tuple checks. Native1416A5E2A sets this
 flag BEFORE Player cleanup; identity is zeroed only at1416A6044 afterward.
 Menu transition141CDA800 reaches GameTaskGraphMgr_Reset141CB9C40 and exact
@@ -43364,3 +43374,96 @@ unknown. OnKill admission change and enemy root (OFF during this run) are not
 proven causes. Artifacts remain in reports/menu-onkill-20261018-2238.
 No code or IDB finding changed. If investigation resumes, distinguish the hang
 from the earlier crash using this evidence; do not repeat the run unchanged.
+
+## 2026-10-24 — Extend early-OnKill rejection to enemy admission; narrow hang candidates
+
+**CONFIRMED user clarification/evidence limits:** user cannot recall whether
+the hang was during loading, gameplay, or menu return. Do not silently promote
+this into a menu-only reproduction. No live tll.exe remains. The preserved
+postrun log shows both PID25612/10364 spawned a remote Player, enabled player
+replication, and consumed changing aim packets/epochs. It establishes gameplay
+processing occurred, NOT smoothness, a completed menu return, or the hang PC.
+The original log (21580234bytes; last write2026-10-18 22:43:56) was copied to
+reports/menu-onkill-20261018-2238/postrun-locomotion_hook.log, SHA256
+948FFA5B8A9955D18B678F7F7E0B43683E5F048E40AB4DD473648C71D5F15A16.
+A watcher counted53024 first-chance exceptions and detached on timeout/stop;
+B counted70116 and exited0 without second-chance context. Counts/last32 PC
+samples are NOT a hang stack, an exception rate timeline, or fatal attribution.
+
+**STATIC scoped rejections from active caller review:** retained_player_object
+has bounded scalar reads, no retry/wait/lock/native call. Its null result makes
+net_tick skip mod work, but hooked_update still forwards native141BB8320.
+Player input hook still calls140C9F8B0 unconditionally; command-state hook calls
+141E39FB0 BEFORE retained-slot classification. guard_remote_player_death falls
+through to native when the remote classification fails. Automatic spawn sets
+g_slot1_auto_reissue_done BEFORE issuing the spawn, and never resets this flag;
+a later null slot cannot repeatedly respawn an already-spawned pair. These
+reject those specific guard-null mechanisms, not all hook/lifetime failures.
+Legacy auxiliary diagnostics and parked pose/round-trip repairs remain compiled
+out; do not revive them as active hang explanations.
+
+**STATIC lock review, no proved deadlock:** input SRW protects the previously
+confirmed free-pool race around AddJoypadDisabledCommands141839FB0. MCP shows
+bounded normal array work, not a normal ProcessMgr wait/reentrant input callback;
+do not remove the lock on suspicion. Packet snapshots release before native
+apply. Snapshot->log locking exists, but no reverse log->snapshot edge was
+found in the inspected code; an ABBA cycle is not established. Baseline
+sendto and synchronous log writes still run from game callbacks. Potential
+blocking is not evidence they caused this hang.
+
+**REJECTED as a behavior-preserving guessed fix:** setting baseline send_socket
+nonblocking without event handling would avoid socket buffer waiting but can
+drop already-consumed one-shot fire/pickup/give events on WSAEWOULDBLOCK.
+All send sites make one attempt; only repeating state naturally refreshes.
+The receive socket is separate and must NOT be made nonblocking: its immediate
+error retry would spin. No socket modes/queues/locks were changed. Reference
+semantics: https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-sendto
+and https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-ioctlsocket.
+
+**STATIC separate enemy admission defect corrected:** enemy_root::current_player
+and identity duplicated the generation/vtable checks but did NOT inherit the
+baseline helper's OnKill rejection. current_player also omitted final actor+BC
+re-read. identity's byte flags were spawner+51; ordinary's flags were Fg+0, not
+Process+40. Positive HP likewise does not mean actor destruction has not begun.
+Native ProcessKillTree1416A5C20 was re-read through sole-IDB MCP:1416A5E2A sets
+enteredOnKill at+40 before virtual+190 at1416A5E33;1416A6044 zeros+BC afterward.
+Assertion strings identify m_enteredOnKill. Existing exact vtable/callback and
+constructor findings agree. These are independent store-order, string, and
+structural/call-graph evidence, not three copies of the same runtime dump.
+
+Implementation in enemy_root_sync_runtime.inl: initial/final+40 bit0x04 checks
+in current_player and identity, plus final+BC in current_player. After the
+receiver's long ordinary animation/physics walk and distance check, re-read
+both enemy and roster Player+BC/+40 before fresh time/budget admission to the
+existing setter. New reads all use budgeted copy/SEH and actual field values;
+ReadCache caches protection regions, never the field contents. Every new
+receiver rejection releases the mailbox lock and existing RAII releases the
+work permit. No native call, protocol, socket, enable flag, or budget changed.
+This narrows observed admission only, NOT a post-read lifetime/ABA guarantee.
+The sender still has no lifetime lease after its identity/ordinary checks.
+
+**Production verification, no runtime claim:** real tll_coop_runtime builds.
+DLL SHA256 F559F64DB8A32A4273FC56C30CBA38117329715339A8F036682D812CA13E70D4;
+PDB SHA256 B95D26D36030E8BC0B99F135CC271236200ED3C994DFECED66F503C1845DA594.
+Independent source review and PDB/Capstone audit: current_player RVA16E70,
+initial/final kill reads172CD/173C8 and final ID173A7; identity RVA34D00,
+kill reads35105/354F9 and final ID354CA. postblend RVA47CC0 final enemy ID/kill
+reads48EAF/48ECD, Player ID/kill48EF5/48F27; rejects converge to unlock48E65.
+Fresh time48F3F/budget48F4F follow; apply wrapper49036 is later. Reader thunks
+1940/1960 tail-call copy16710, which checks passed budget at16756. No standalone
+test/observer framework added. Retail version rechecked:1.4.21058.0.
+
+**No launch admitted:** enemy root was OFF during the baseline hang, so this
+enemy-only fix cannot explain that outcome. Prior enemy census still exceeded
+the unchanged1ms budget after2queries; this patch does not improve that cost.
+Do not repeat the stopped exam or raise the budget. No new native names were
+discovered; relevant ProcessKillTree/OnKill labels/comments are already saved
+in ida/tll.i64 and were read back. MCP was restarted after losing its listener;
+no second IDB or headless write was needed.
+
+NEXT: for the baseline hang, distinguish socket/log/SRW waits from native task/
+render waits using a hang-time all-thread snapshot plus module map if a newly
+justified run reproduces it; last handled exceptions cannot substitute. For
+enemy sync, resolve first-census guard cost without removing lifecycle/page
+checks or moving game-object traversal into the network worker. No visible
+enemy-sync success, stable performance, or corrected hang claimed.

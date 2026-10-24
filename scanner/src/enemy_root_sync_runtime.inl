@@ -191,12 +191,18 @@ std::uintptr_t current_player(ReadCache* shared = nullptr) noexcept {
     ReadCache local_cache{};
     auto* cache = shared ? shared : &local_cache;
     const auto read = [cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), cache); };
-    std::uintptr_t record{}, actor{}, vt{}, record_after{}, actor_after{}; std::uint32_t id{}, actor_id{}, id_after{};
+    std::uintptr_t record{}, actor{}, vt{}, record_after{}, actor_after{};
+    std::uint32_t id{}, actor_id{}, id_after{}, actor_id_after{}; std::uint8_t kill_flags{};
+    // ProcessKillTree1416A5E2A marks enteredOnKill before virtual+190 cleanup;
+    // generation+BC remains valid until1416A6044. Identity alone is not live admission.
     if (!read(g_module+kRetainedSlotTableRva, record) || !read(g_module+kRetainedSlotTableRva+8, id) || !id ||
-        !read(record+8, actor) || !read(actor, vt) || vt != g_module+kPlayerVtableRva || !read(actor+0xBC, actor_id) || actor_id != id ||
+        !read(record+8, actor) || !read(actor, vt) || vt != g_module+kPlayerVtableRva ||
+        !read(actor+0x40, kill_flags) || (kill_flags & 0x04) || !read(actor+0xBC, actor_id) || actor_id != id ||
         !read(g_module+kRetainedSlotTableRva, record_after) || record_after != record ||
         !read(g_module+kRetainedSlotTableRva+8, id_after) || id_after != id ||
-        !read(record+8, actor_after) || actor_after != actor) return 0;
+        !read(record+8, actor_after) || actor_after != actor ||
+        !read(actor+0xBC, actor_id_after) || actor_id_after != id ||
+        !read(actor+0x40, kill_flags) || (kill_flags & 0x04)) return 0;
     return actor;
 }
 bool identity(std::uintptr_t actor, Local& out, ReadCache* shared = nullptr) noexcept {
@@ -207,8 +213,9 @@ bool identity(std::uintptr_t actor, Local& out, ReadCache* shared = nullptr) noe
     const auto read = [cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), cache); };
     Local value{}; value.actor = actor;
     std::uintptr_t vtable{}, bound_actor{}, owner_record{}, name{};
-    std::uint32_t bound_id{}; std::uint8_t flags{};
-    if (!read(actor, vtable) || vtable != g_module+kPirate || !read(actor+0xA8, value.record) ||
+    std::uint32_t bound_id{}; std::uint8_t flags{}, kill_flags{};
+    if (!read(actor, vtable) || vtable != g_module+kPirate ||
+        !read(actor+0x40, kill_flags) || (kill_flags & 0x04) || !read(actor+0xA8, value.record) ||
         !read(actor+0xBC, value.generation) || !value.generation || !read(actor+0x150, value.spawner) || !value.spawner ||
         !read(value.record+8, bound_actor) || bound_actor != actor ||
         !read(value.spawner+0x30, owner_record) || owner_record != value.record ||
@@ -234,7 +241,8 @@ bool identity(std::uintptr_t actor, Local& out, ReadCache* shared = nullptr) noe
     if (!ended || !wire::valid_key(value.key) || !read(value.spawner+0x20, name_after) || name_after != name ||
         !read(actor+0x150, spawner_after) || spawner_after != value.spawner ||
         !read(value.record+8, actor_after) || actor_after != actor ||
-        !read(actor+0xBC, id_after) || id_after != value.generation) return false;
+        !read(actor+0xBC, id_after) || id_after != value.generation ||
+        !read(actor+0x40, kill_flags) || (kill_flags & 0x04)) return false;
     out = value; return true;
 }
 bool census(Roster& out, WorkBudget& budget) noexcept {
@@ -725,6 +733,16 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     double fresh_distance{};
     for (unsigned axis = 0; axis < 3; ++axis) { const double delta = packet.position[axis]-fresh[axis]; fresh_distance += delta*delta; }
     if (!(fresh_distance <= 100.0)) { ReleaseSRWLockExclusive(&lock); return; }
+    // ordinary() walks animation/physics after identity(). Recheck kill state
+    // and generations after that walk, before the final freshness/cost cutoff.
+    // These are actual budgeted SEH reads, NOT a lifetime lease across the setter.
+    std::uint8_t actor_kill{}, player_kill{}; std::uint32_t actor_id{};
+    if (!read(actor+0xBC, actor_id) || actor_id != local.generation ||
+        !read(actor+0x40, actor_kill) || (actor_kill & 0x04) ||
+        !read(roster.player+0xBC, player_id) || player_id != roster.player_id ||
+        !read(roster.player+0x40, player_kill) || (player_kill & 0x04)) {
+        ReleaseSRWLockExclusive(&lock); return;
+    }
     // The final memory reads can themselves be delayed. Do not use a timestamp
     // captured before them to authorize a write after the packet/scope expired.
     const auto write_now = GetTickCount64();

@@ -10,7 +10,22 @@ Full campaign co-op between two game copies. Current user-directed order:
   boundary; keep enemy damage/death/HP writes and AI pause OFF.
 - Complete combat authority and remaining player/appearance work separately.
 
-## P0 CURRENT: Enemy Synchronization (2026-10-18)
+## P0 CURRENT: Enemy Synchronization (2026-10-24)
+
+2026-10-24 IMPLEMENTED: enemy_root current_player/identity now reject
+enteredOnKill(+40 bit0x04) initially/finally; current_player rechecks actor+BC.
+Receiver rechecks enemy/player kill flags and IDs after ordinary/distance,
+before final time/budget cutoff and141E7D0D0. DLL F559F64D...13E70D4 built;
+independent source/emitted-code review passes. Enemy root stays OFF;1ms/256
+queries unchanged. This is not a lifetime lease, cost fix, or baseline-hang fix.
+User cannot recall the hang stage; preserved log proves both copies reached
+gameplay processing, not a successful menu exit. Caller/lock audit found no
+guard-null retry, withheld native update, or established ABBA cycle. Baseline
+send-only FIONBIO was NOT applied: it risks losing consumed one-shot events.
+NEXT baseline discriminator: hang-time thread/wait stacks plus module map,
+not old first-chance PCs. Enemy next: first-census guard cost without removing
+safety gates or moving pointer traversal to network worker. No new launch or
+repeat of the rejected exam. Latest COOP_STATUS contains complete evidence.
 
 2026-10-18 continuation: shared retained_player_object now ALSO rejects
 enteredOnKill at object+40 bit4, before/finally after its generation checks.
