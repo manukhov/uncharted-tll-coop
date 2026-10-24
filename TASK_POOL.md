@@ -12,30 +12,33 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy Synchronization (2026-10-24)
 
-SURVIVOR-CAPTURE EXAM PENDING USER: unchanged7FBAD416... main DLL injected
-in A=PID13124/B=PID14900; enemy OFF verified, both LOCAL-LOOK READY. Existing
-watchers20312/3328 both READY14:46:24,1800second bound. User alone loads SAME
-EMPTY scene, waits for counterpart, then A/Chloe menu ONCE, B/Nadine untouched.
-Keep A open if B faults. Artifact root reports/peer-survivor-watch-20261024-A13124-B14900,
-separate A-PID13124/B-PID14900 logs/dump dirs; exact DLL/PDB/watcher preserved.
-NEXT user outcome + BOTH logs, then fresh exception-context/all-thread/module
-inspection if a new dump exists. READY is not repair/success; no performance
-claim under debugger or automatic repeat/rearm/reinjection. No new writer.
+BASELINE CRASH BOUND2026-10-24: fresh B14900 second-chance dump, AV142227B8C
+(RVA2227B8C), null hkReferencedObjectLock1437AC388 AND null Havok TLS. Native
+Player post-animation collision probe calls addReference; cached nonnull shape
+bypasses the world check. No mod frame is on that stack; this does NOT exonerate
+mod-created object lifetime. A13124 exits0 with no second-chance; both games/
+watchers now absent. Enemy root OFF, unchangedDLL7FBAD416...; exact artifacts
+at reports/peer-survivor-watch-20261024-A13124-B14900. No new launch or patch.
 
-IMMEDIATE BASELINE BLOCKER: user confirms LAST pair, SAME EMPTY scene: A/Chloe
-PID4872 returns main menu; B/Nadine PID10876 remains and crashes1..2s later.
-Both enemy channels were already stopped/quiescent, apply0. Both now absent;
-fresh14:29 crash markers but no fresh fault PC/dump. Investigation is SURVIVOR
-peer-loss, not only departing-copy teardown. Park cost work until this is bound.
-1500ms freshness cutoff matches delay but is not proved cause. Timeout clears
-synthetic branch/spin and reapplies cachedHP; no puppet free/defaultHP0 found.
-Preserve June29 confirmed alt-tab lastHP/root/deathguards—do NOT simply remove
-cached state. Incomplete force/latch release, soft free-run Y and final transient
-packet remain competing candidates, not fixes. No production code/game change.
-Evidence: reports/peer-menu-crash-20261024-1429 and latest COOP_STATUS.
-NEXT B exception stack + first-timeout/last-packet boundary; admitted reproduction
-uses existing watchers on BOTH, enemy OFF, EMPTY scene, A menu/B untouched.
-No new framework, speculative OnKill rollback, or repeat of enemy-cost run.
+USER CORRECTION: A/Chloe exits to menu first; B/Nadine crashes when B ALSO exits
+to menu. Earlier untouched-survivor/1500ms attribution is superseded, not proved.
+Resident fault Player10E0243800 has Chloe hashes/gen1430/killbyte0; exact slot
+not in minidump. Flags008AD7E1 reject menu reason2 throughProcess_ShouldResetForReason
+1416A5B50. Observer explicitly kills primary1410F3DD0, then general actor reset;
+deferredHavokClose(0) can close singleton/TLS. Candidate: persistent remote clone
+survives reset into later collision bucket. Actual close writer order and source
+of persistence bit are not yet established. Ordinary async waits already exist.
+
+NEXT STATIC: prove exact mod-owned secondary record/id capture and native-safe
+retirement at observer reset BEFORE HavokClose; block clone reissue during
+teardown without changing normal primary reset. Inspect ProcessKillTree ordering/
+retained-slot invalidation and distinct menu/load/reset reasons before patching.
+ProcessSpawnInfo+48 bit0 setsProcess+3D80 at1417C3E31, but player packet initializer
+1417C32E5 zeros+48; descriptor replay alone is NOT proved flag provenance.
+Do not clear persistence globally, skip hk addReference on null, add ad hoc worker
+waits, or delete June29 alt-tab HP/root/death safeguards. Missing minidump pages
+are not null fields. Full evidence/alternatives in latest COOP_STATUS entry.
+No new observer framework or repeat of enemy-cost run while baseline is broken.
 
 LATEST RUNTIME REJECTED: user-requested7FBAD416... pair A=PID4872/B=PID10876
 launched ready, but B stopped in its first census at2558us/2VQ attempts,

@@ -8,6 +8,124 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-10-24: terminal B14900 Havok probe fault and reset admission ---
+    0x142227B60: (
+        "HavokReferencedObject_AddReference",
+        "STATIC hkReferencedObject addReference: nonzero WORD object+8 enables "
+        "WORD+0A reference increment. Loads hkReferencedObjectLock1437AC388 at "
+        "142227B7F, calls TlsGetValue atB86, then reads lock+10 atB8C. "
+        "CONFIRMED B14900 second-chance AV2026-10-24: RBX(lock)=0, RAX(TLS)=0; "
+        "not a null shape. Shutdown execution order remains a hypothesis.",
+    ),
+    0x142228190: (
+        "HavokReferencedObjectLock_Construct",
+        "STATIC constructor, RTTI hkReferencedObjectLock derived from "
+        "hkReferencedObject. Initializes lock mode+10, nesting+14 and Windows "
+        "critical section+28; allocated by singleton factory142228150.",
+    ),
+    0x142228150: (
+        "HavokReferencedObjectLock_CreateSingleton",
+        "STATIC allocates80 decimal/50h bytes and invokes142228190. Registration node "
+        "142FEA2F0 binds literal hkReferencedObjectLock, this factory and "
+        "output singleton slot1437AC388; independent of probe-shape identity.",
+    ),
+    0x142232740: (
+        "HavokSingletons_Shutdown",
+        "STATIC reverse-walks registration list1437AD338, releases each live "
+        "singleton through142227D80 and zeros *node->slot at142232807. "
+        "Node142FEA2F0 maps that writer to1437AC388. This is a real null writer, "
+        "not proof it executed before the B14900 fault.",
+    ),
+    0x142232510: (
+        "HavokBaseSystem_Quit",
+        "STATIC sets referenced-object lock mode0 and calls singleton "
+        "shutdown142232740 at142232524. Reached by worker141B44680 during "
+        "HavokAllocClose, including nonfinal/world-close HavokClose(0).",
+    ),
+    0x141B44680: (
+        "HavokBaseSystem_QuitWorkerCallback",
+        "STATIC callback thunk into142232510; HavokAllocClose141B446E0 "
+        "submits this in affinity1 job after worker TLS-quit jobs and waits "
+        "for completion. No direct mod frame is required for a later native fault.",
+    ),
+    0x141B446E0: (
+        "HavokAllocClose",
+        "STATIC exact source HavokAllocClose. Dispatches worker TLS-quit "
+        "callback141B44690, waits at141B4497D, then schedules base-system "
+        "quit callback141B44680 and waits at141B44A8E. Called byHavokClose "
+        "at141B4022B; not restricted to process-final shutdown.",
+    ),
+    0x141B3FEE0: (
+        "HavokClose",
+        "STATIC exact source HavokClose; closes Havok worlds/callbacks then "
+        "HavokAllocClose141B446E0 at141B4022B. Nonfinal0 caller141B3F29F "
+        "is deferred close; GameClose14014EAB0 passes1 at14014F98D. "
+        "Final-shutdown flag146917C14 is not a per-Player lifetime lease.",
+    ),
+    0x141B3F290: (
+        "Havok_ServicePendingOpenClose",
+        "STATIC pending-close byte146B4541E callsHavokClose(0) at141B3F29F "
+        "and clears flag at141B3F2A4; otherwise pending-open146B4541D calls "
+        "141B3F3C0. Called fromGameFramePostRenderUpdate at140166893. "
+        "World/menu teardown can therefore destroy singletons without process exit.",
+    ),
+    0x141ED7400: (
+        "HavokProbeShape_Construct",
+        "STATIC exact HavokProbeShape::HavokProbeShape source assertion "
+        "havok-probe-shape.cpp:51. For nonnull shape calls addReference142227B60 "
+        "at141ED74F9; return141ED74FE matches B14900 terminal stack. "
+        "The cached shape is nonnull in that dump; missing global lock faults first.",
+    ),
+    0x140D0AD90: (
+        "PlayerCollision_BuildOrReuseProbeShape",
+        "STATIC cached probe state atPlayerCollision+570. Matching parameters "
+        "reuse nonnull state+0 throughHavokProbeShape_Construct at140D0AE2C, "
+        "WITHOUT world146917C20 test; creation branch checks world at140D0AE8C. "
+        "B14900 cached shape1038D9F880 reached this reuse path.",
+    ),
+    0x140D0F400: (
+        "PlayerCollision_DoMoveProbe",
+        "STATIC exact PlayerCollision::DoMoveProbe source assertion "
+        "player-collision.cpp:805. Calls cached probe helper140D0AD90; "
+        "return140D0F9FD matches B14900 native collision stack. "
+        "Caller NdPlayerCollision2::DoMove141DB9860.",
+    ),
+    0x141DB9860: (
+        "NdPlayerCollision2_DoMove",
+        "STATIC exact NdPlayerCollision2::DoMove source assertion "
+        "nd-player-collision-2.cpp:2544; callsPlayerCollision_DoMoveProbe "
+        "with return141DB9BE4 in B14900 terminal stack. Reached via locked "
+        "wrapper141DB3E90 from post-animation ground-movement collision action.",
+    ),
+    0x141DB3E90: (
+        "NdPlayerCollision2_DoMoveLocked",
+        "STATIC wrapper locks collision+540 around141DB9860; return141DB40A7 "
+        "matches B14900 stack. Local collision lock is not a Havok singleton "
+        "or global world-lifetime lease.",
+    ),
+    0x140C412A0: (
+        "PlayerAnimGroundMoveUpdateCollideApAdjust_Update",
+        "STATIC exact RTTI PlayerAnimGroundMoveUpdateCollideApAdjust, "
+        "vtable142A07730 slot+10. Reads Player+3BD8 collision and calls "
+        "141DB3E90 at140C413C8; B14900 return140C413CD. Embedded in "
+        "PlayerCommonAction+50 under post-animation sequencer phase2.",
+    ),
+    0x140C592B0: (
+        "Action_UpdateOptionalComponents",
+        "STATIC shared dispatcher: optional pointers this+40 then+30 invoke "
+        "component virtual+10. PlayerCommonAction142A07690 slot+38 uses it; "
+        "in B14900 ONLY, this+30 points to embedded+50 ground-collide action. "
+        "Return140C592E1 matches stack throughPlayer_PostAnimUpdate1410E9210. "
+        "Not a hardcoded embedded-action callback or an animation wait.",
+    ),
+    0x1416A5B50: (
+        "Process_ShouldResetForReason",
+        "STATIC Player vtable+110 reset admission used by actor-reset visitors. "
+        "Reason7 accepts; reason6 accepts if+3E&40 clear; other reasons accept "
+        "if signed byte+3D nonnegative; otherwise returns+3C&02. Menu reason2 "
+        "comes from1409BCBAB. DumpPlayer10E0243800 flags008AD7E1 reject2; "
+        "actual reset traversal/flag writer in failed run are not established.",
+    ),
     # --- 2026-10-18: menu task reset and pre-invalidation OnKill admission ---
     0x141CB9C40: (
         "GameTaskGraphMgr_Reset",
@@ -15425,6 +15543,43 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x1437AC388: (
+        "g_HavokReferencedObjectLock",
+        "STATIC hkReferencedObjectLock singleton, node142FEA2F0 output slot. "
+        "addReference142227B60 loads atB7F; B14900 RBX=0 atB8C proves null "
+        "load although this global page is missing from minidump. Shutdown "
+        "142232807 can zero it; that writer's execution timing is unproved.",
+    ),
+    0x142FEA2F0: (
+        "g_HavokReferencedObjectLockSingletonRegistration",
+        "STATIC singleton node: +0 literal hkReferencedObjectLock142805F78, "
+        "+8 factory142228150, +10 next, +18 output-slot pointer1437AC388. "
+        "Shutdown142232740 reverse-walks registrations and zeros output slots.",
+    ),
+    0x1437AD338: (
+        "g_HavokSingletonRegistrationList",
+        "STATIC Havok singleton registration list traversed by142232740; "
+        "includes node142FEA2F0 whose output isg_HavokReferencedObjectLock.",
+    ),
+    0x146B4541E: (
+        "g_HavokClosePending",
+        "STATIC byte consumed by141B3F290 at141B3F29F:HavokClose(0), then "
+        "cleared at141B3F2A4. GameFramePostRenderUpdate calls pending service "
+        "at140166893, allowing singleton shutdown before process exit.",
+    ),
+    0x146917C14: (
+        "g_HavokFinalShutdown",
+        "STATIC source-identifiedg_havok.m_finalShutdown inHavokClose141B3FEE0. "
+        "FinalGameClose passes1; deferred/world close passes0. Not a general "
+        "collision/job-ready or retained-Player lease flag.",
+    ),
+    0x146917C20: (
+        "g_HavokWorld",
+        "STATIC primary Havok world pointer. Probe creation140D0AE8C checks "
+        "nonnull, but unchanged cached-shape reuse140D0AE21 bypasses this "
+        "test and enters addReference via141ED7400. Do not equate shape "
+        "existence with initialized world/TLS/singleton lifetime.",
+    ),
     0x1437DFD5E: (
         "g_QuitToMainMenuRequested",
         "STATIC byte set by Script_QuitToMainMenu_Request1403480D0. Only other "
@@ -15973,6 +16128,42 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x142227B7F: (
+        "STATIC movRBX,[g_HavokReferencedObjectLock1437AC388]. B14900 fault "
+        "RBX=0 therefore identifies null global lock, NOT a null shape pointer."
+    ),
+    0x142227B8C: (
+        "CONFIRMED2026-10-24 B14900 terminal AV atcmpDWORD[RBX+10],1; RBX=0 "
+        "read0x10. Immediately followsTlsGetValue atB86, RAX=0 too. "
+        "RVA2227B8C; not ffxGetResourceDX12 despite nearest export in cdb."
+    ),
+    0x142232807: (
+        "STATIC zero *singleton output-slot. Node142FEA2F0 maps this writer "
+        "to lock1437AC388. Real shutdown writer, not proof it ran before crash."
+    ),
+    0x141ED74F9: (
+        "STATIC HavokProbeShape retains nonnull supplied shape via142227B60; "
+        "return141ED74FE is exact caller in B14900 terminal dump."
+    ),
+    0x140166893: (
+        "STATIC service pending Havok open/close141B3F290 afterProcessMgr "
+        "cleanup; close(0) reaches singleton/TLS shutdown without process exit."
+    ),
+    0x1413B9529: (
+        "STATIC reset-kill visitor calls virtual+110 with forwarded reasonRDX. "
+        "Player resolves1416A5B50; reason2 rejects signed+3D<0 with+3C&02 clear."
+    ),
+    0x1413B97BC: (
+        "STATIC reset visitor calls virtual+110 with forwarded reasonRDX; "
+        "Player1416A5B50 gates admission before composite-body pass2 teardown. "
+        "Persistent secondary "
+        "need not follow explicit primary kill1410F3DD0."
+    ),
+    0x1417C3E31: (
+        "STATIC ProcessSpawnInfo+48 bit0 copies to Process+3D bit80 afterclear. "
+        "CommitResolvedPlayerSpawn initializer1417C32E5 zeros packet+48; no "
+        "proof descriptor replay itself supplied B14900's persistent flag."
+    ),
     0x1416A5E2A: (
         "STATIC Process+40 m_killFlags.m_enteredOnKill (mask04). Set BEFORE "
         "virtual+190 cleanup1416A5E33; Player vtable/id can still match here. "

@@ -2,22 +2,28 @@
 
 ## Current user priority / handoff (2026-10-24)
 
-CURRENT EXAM PENDING USER RESULT: unchanged7FBAD416... DLL launched/injected
-in A=PID13124/B=PID14900, enemy root OFF confirmed in both boot logs. Existing
-watchers20312/3328 BOTH READY at14:46:24, bounded1800seconds. User alone loads
-same EMPTY scene then A/Chloe menu ONCE, B/Nadine untouched; keep A open if B
-faults. This is fault capture, not repair/performance proof. Run identities and
-artifact root at final entry; do not relaunch/reinject or infer success from READY.
+CURRENT BASELINE BLOCKER / USER CORRECTION: A/Chloe returns to menu FIRST;
+B/Nadine crashes when B ALSO returns to menu. This supersedes the earlier
+"B untouched in scene after peer loss" interpretation; no1500ms timeout cause
+is established. Watched A13124/B14900 run is over, both games/watchers absent.
+Fresh B second-chance dump CONFIRMS native AV142227B8C, addReference reading
+null hkReferencedObjectLock1437AC388; Havok TLSGetValue also returned null.
+Fault is a Player post-animation collision probe, not a GPU/export function.
+Enemy root was OFF; exact7FBAD416... DLL/PDB and both watcher logs preserved.
 
-CURRENT BLOCKER: user confirms LAST pair loaded SAME EMPTY location; A/Chloe
-PID4872 returned to main menu, B/Nadine PID10876 stayed in scene and CRASHED
-1..2seconds later. Investigate the SURVIVOR's peer-loss path, not merely local
-menu teardown. Delay matches1500ms snapshot cutoff but is not a proved cause.
-Both enemy channels were already stopped with apply0/quiescent ACKs. Fresh
-crash markers14:29:51/54, no fresh dump/PC. Both processes are now absent.
-No code patch/relaunch in this diagnostic turn. Preserve the June29 confirmed
-alt-tab health/root/death protection; simply deleting cached state is unsafe.
-See latest entry for exact evidence, scoped rejections and next discriminator.
+STRONG STATIC CANDIDATE, NOT FIXED: B's fault job belongs to Chloe-identity
+Player10E0243800/gen1430 (consistent with remote clone, exact slot unproved),
+killbyte0. Flags008AD7E1 reject menu reset reason2 through1416A5B50, while
+observer1413C6AF0 explicitly kills only the primary before general actor reset.
+HavokClose(0) can zero singletons/TLS at deferred postrender close; cached
+probe reuse bypasses the world-null check. Normal async jobs already have
+completion waits. Actual close-before-fault ordering and flag provenance remain
+HYPOTHESIS, not a proved race or justification to add a worker lock/null guard.
+NEXT bind mod-owned secondary identity/retirement to the native reset boundary
+BEFORE HavokClose, prevent teardown re-spawn, and preserve primary behavior.
+No production patch, new launch/input/injection or enemy performance claim in
+this analysis turn. Preserve June29 alt-tab health/death protection. Full fresh
+dump/module/object evidence and competing hypotheses are in the latest entry.
 
 PREVIOUS RUNTIME RESULT: user-requested batch run REJECTED as usable sync.
 B=PID10876 terminally stopped at its first census:2558us,2VQ attempts,
@@ -43942,3 +43948,161 @@ preserved matching PDB using installed cdb, not an old July dump. Without
 second-chance context, remain explicit that last handled PCs are not fatal.
 Watchers expire/detach after1800s; no automatic repeat/rearm. No new crash-fix,
 enemy-sync, baseline stability or performance result yet.
+
+## 2026-10-24 — Bind B14900 menu-exit AV to null Havok lock in Chloe Player collision
+
+**User correction / scenario limit:** the user now reports that A/Chloe returns
+to the main menu first, and B crashes when B ALSO returns to the main menu.
+This supersedes the previous untouched-survivor interpretation. The earlier
+1..2second report does NOT prove peer-state1500ms timeout causality. An optional
+question asks whether B's own exit had started before this watched crash; no
+separate answer is required to respect the user's corrected sequence. Do not
+repeat the earlier A-menu/B-untouched test as if its exact outcome were proved.
+
+**CONFIRMED fresh terminal context, not last handled probes:** unchanged main
+DLL7FBAD416AB0E36720D1BF7E40CB00F9B3D7568ADACC4920C425A5AB508620999,
+PDBD03ACD29C27D1F77277CF6264B521C048769F82AD3ADE104F2DB5D361BED9CE7;
+enemy root OFF in both boot logs. Existing B watcher captured second-chance
+AVC0000005 at liveRIP7FF6E38D7B8C/RSP349D040, followed by exitC0000005.
+tll base7FF6E16B0000 gives RVA2227B8C / IDA142227B8C. Fresh
+B-PID14900/second-chance.dmp is1675084bytes,2026-10-24 14:50:41, SHA256
+00F12991981AAF9EFD1A3D1E94225C31685EE842CB9194536087E08AB07AB1C7.
+A watcher recorded exit0/second_chance0 and NO_SECOND_CHANCE_CONTEXT; this
+does not establish how/when A's process was closed. Both games and watchers
+are now absent; the agent did not terminate them or relaunch anything.
+
+Artifacts remain under reports/peer-survivor-watch-20261024-A13124-B14900
+(historical directory name, not proof of survivor timing). Exact binaries,
+boot log, new postrun-locomotion_hook.log, separate watcher logs, fresh dump and
+B-PID14900/analysis-context-stacks.txt preserve context/registers/all-thread
+short stacks/module map. Cdb used the matching preserved private PDB. Repeated
+handled exceptions/first_chance counts are NOT fatal PC evidence. Cdb's nearest
+export label ffxGetResourceDX12 is misleading here; no GPU attribution follows.
+
+**CONFIRMED fault boundary / STATIC native semantics, three independent kinds:**
+
+1. Actual asm/registers: HavokReferencedObject_AddReference142227B60 loads
+   global1437AC388 intoRBX at142227B7F. TlsGetValue call142227B86 is immediately
+   followed by fault142227B8C, cmpDWORD[RBX+10],1. RBX=0 proves the loaded lock
+   is null; untouchedRAX=0 independently proves the TLS call returned null.
+   Read address is0x10. ShapeRDX/RDI1038D9F880 is nonnull. WORD shape+8 enables
+   reference counting, WORD+0A is count; no null shape/weapon inference is valid.
+2. RTTI/registration data:142228190 constructs hkReferencedObjectLock derived
+   fromhkReferencedObject; factory142228150 allocates80 decimal/50h bytes.
+   Node142FEA2F0 is {name142805F78, factory142228150, next, output-slot1437AC388}.
+   Lock mode+10/nesting+14/critical-section+28 agree with the refcount routine.
+3. Source assertions/callgraph: HavokProbeShape_Construct141ED7400 identifies
+   havok-probe-shape.cpp:51 and calls addReference at141ED74F9; return141ED74FE
+   exactly matches the fresh dump. Cached probe helper140D0AD90 feeds it through
+   PlayerCollision_DoMoveProbe140D0F400 (player-collision.cpp:805), then
+   NdPlayerCollision2_DoMove141DB9860 (nd-player-collision-2.cpp:2544).
+4. Independent shutdown writer: HavokSingletons_Shutdown142232740 reverse-walks
+   list1437AD338, releases live slots and zeros *node->slot at142232807. The
+   registration node binds this writer specifically to1437AC388. Call chain:
+   HavokClose141B3FEE0 ->HavokAllocClose141B446E0 ->worker141B44680 ->
+   HavokBaseSystem_Quit142232510 ->singleton shutdown. AllocClose first dispatches
+   worker TLS-quit141B44690 and waits141B4497D, then schedules base quit and
+   waits141B44A8E. Pending-close byte146B4541E is serviced by141B3F290 through
+   HavokClose(0) at141B3F29F; GameFramePostRenderUpdate calls it at140166893.
+   Thus nonfinal/world close can remove both facilities, not only process exit.
+
+**CONFIRMED resident object identity / limits:** fault Player10E0243800 has exact
+Player vtable142A4BFE8, +A8 record10E020AF48, +BC596hex/gen1430, killbyte+40=0.
+Identity+170/+174=3F334972/CDE4B742 is Chloe. B's latest local Nadine log had
+gen1346/10E0A23A00/lookD27C074F, so this is strongly consistent with B's remote
+replica; exact retained slot is NOT proved. Player+1A0=10E02CF630, +1A8=
+11191DF400; animation data points back to the same upper control. Owner record/
+generation in uppercontrol+38/+40 independently match the Player.
+
+R14=10E0396FC0 has PlayerCollision RTTI/vtable142A112B8 and owner weakrecord
+10E020AF48/gen596 at+10/+18. R12=collision+5E0=10E03975A0 has
+PlayerCollisionOwnerPlayer RTTI/vtable142A113D8 and the same owner tuple.
+Collision+570=10E0397530 contains cachedshape1038D9F880, matchingRDX/RDI.
+Outeraction10E038B890 is PlayerCommonAction142A07690 with embedded+50
+PlayerAnimGroundMoveUpdateCollideApAdjust142A07730. Shape's resident vtable
+142822258 has no resolved MSVC COL; no concrete shape subtype is claimed.
+
+Fault stack after142227B8C:141ED74FE ->140D0AE31 ->140D0F9FD ->141DB9BE4 ->
+141DB40A7 ->140C413CD ->140C592E1 ->142052107 ->1410E92E5 ->141A8FCD2 ->
+141A913EA ->1415D11BA ->1415D1AF7 ->1415B1F49. Exact action+10 callback
+140C412A0 readsPlayer+3BD8 and calls locked collision141DB3E90 at140C413C8;
+outer+38 callback140C592B0 is driven byPlayer_PostAnimUpdate1410E9210 phase2.
+That callback is a SHARED dispatcher over optional pointers+40/+30 invoking
+component virtual+10; only this dump's outer+30 points to embedded+50. It is
+not a native function hardcoded to this particular movement action.
+No mod frame is on this stack; that does NOT exonerate mod-created lifetime.
+
+Missing minidump pages are NOT zero: retained table, record contents, joypad
++39B8, screen+4010, appearance+15A4, HP+4A8, Player collision field+3BD8,
+local Nadine+BC and global1437AC388 cannot be directly read. Null lock follows
+the loaded register plus native semantics, not an unavailable global-page read.
+Player+D0 IS resident null, but this alone does not prove an orphan. Main thread
+is sleeping through1415B547A <-140175EF4 <-1424EBCCA, not a visible GameClose
+stack. No dump-only claim of actual shutdown execution/order is justified.
+
+**STATIC reset survival discriminator:** Player vtable+110 is
+Process_ShouldResetForReason1416A5B50. Reason7 accepts. Reason6 accepts if
+Process+3E&40 is clear. Other reasons accept if signed byte+3D>=0. Otherwise
+the result is Process+3C&02, not04. Independently reread dump flags+3C=
+008AD7E1, bytesE1 D7 8A 00 00 00 00 00: reason2 therefore REJECTS this Player.
+Native menu route1409BCA80 at1409BCBAB passes2 into141CDA800 ->task reset
+141CB9C40 ->observer1413C6AF0 ->ResetActors1413B9820. Visitors1413B9740/
+1413B97B0/1413B9500 gate through+110; reasonRDX is forwarded at1413B9529/
+1413B97BC. Before general actor reset the observer explicitly invokes
+PlayerSlots_KillPrimaryAndRefreshCamera1410F3DD0, which resolves the single
+primary handle and callsProcessKillTree at1410F3E04. No equivalent explicit
+mod-secondary retirement was found in reissue_spawn_for_slot1.
+
+**STATIC flag provenance frontier, not causation:** baseProcess1416A3330 zeroes
+QWORD+3C at1416A33B7. Direct flag stores inspected inPlayerInit1410DC160 set
++3E80 at1410DC3D1 and+3D40 at1410DC98F, not persistent+3D80; this does not
+exhaustively exclude its callees. GenericSpawnProcess1417C3790 copies
+ProcessSpawnInfo+48 bit0 toProcess+3D80 at1417C3E22..31 and bit1 to+3E40 at
+1417C3E34..43. However CommitResolvedPlayerSpawn1410F14C0 uses initializer
+1417C32A0, which zeros packet+48 at1417C32E5; no subsequent direct flag write
+was established there. A later native/script writer remains possible. Therefore
+replaying the captured primary descriptor is NOT established as the flag source.
+
+**Competing hypotheses / eliminated shortcuts:**
+
+- H1, strongest STATIC candidate: an un-killed persistent secondary Player
+  survives local menu reset, then a later ordinary post-animation collision
+  bucket runs after deferred HavokClose. Object flags, explicit primary-only
+  kill, real singleton/TLS shutdown and cached-shape reuse agree. Actual reset
+  traversal, owned-secondary identity, temporal close writer and flag provenance
+  are not yet proved. This is NOT a confirmed crash fix or fully proved cause.
+- H2: an already queued collision job overlaps world shutdown. Normal async
+  paths already have completion barriers:1417816B0 waits1417829B9/C6/D4;
+  spawner1415C51E0 waits children; GameLoop waits beforeDestroyDead1416229C0
+  and bucket5 waits escaped146AF2798 at14015EAA6. This rejects asserting a
+  missing ordinary-frame wait from the stack alone, not every teardown race.
+  A surviving Player scheduled in a LATER frame is a distinct H1 mechanism.
+- H3: null global/TLS due to corruption/uninitialized state rather than normal
+  close. The dump does not observe the writer, so this remains open, although
+  the two absent Havok facilities and corrected own-menu scenario fit H1/H2.
+- Earlier timeout/HP0/last-input theories are not supported as this fault's
+  immediate boundary. Nothing here authorizes removing June29 alt-tab health/
+  root/death protection or enteredOnKill admission. Do not globally strip
+  persistence, skip null-lock addReference, or add an ad hoc worker wait.
+
+**Next specific work, STATIC BEFORE PATCH/LAUNCH:** establish exact mod-owned
+secondary record/id capture at descriptor replay, and the native-safe local
+reset retirement order BEFORE deferred HavokClose. Verify ProcessKillTree and
+retained-slot invalidation, all reason2/menu/load variants, plus blocking the
+automatic reissue during teardown. The roleB remote remains Chloe by current
+source design; do not alter localA Chloe/localB Nadine or appearance. Then
+write the repair's competing predictions and only launch a fresh built DLL
+once its ownership/reset-phase contract is complete. No new production writer,
+DLL rebuild, game input/launch/injection or performance claim in this turn.
+
+IDB handoff: stopped MCP, added17 function names/6 data names and targeted
+instruction comments throughscripts/ida_apply_labels.py; soleida/tll.i64
+saved successfully. reports/apply_havok_probe_crash_20261024c.txt records2066
+functions/93data names/3types and save_database returned True. MCP restarted;
+post-save names, lock load/data xrefs, exact Player+110 slot142A4C0F8 and
+probe caller140D0AE2C were read back successfully. The call is atAE2C with
+returnAE31 (decompilerAE29 is argument setup, not the call instruction).
+All new labels are native boundary findings; no production behavior change or
+repaired crash is claimed.
+Pre-existing untracked tmp/ remains untouched; only the findings/task notes and
+label script belong to this unit of work. Ignored raw artifacts stay local.
