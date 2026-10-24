@@ -14,11 +14,24 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 NPCREMOVAL REJECTED byuser: A7872/B13516 each8distinctweakidentitycaptures/
 8nativecompanionFound1Retired1 thenfuseREFUSED; NPCstillvisible. Bothgames/
-watcherslive;0leave. Outcome npc-removal-rejected-locomotion_hook.log under
+watchers nowclosed(exit0/no second chance);0leave observed. Outcome
+npc-removal-rejected-locomotion_hook.log under
 reports/peer-leave-nadine-20261024-1934. DoNOTraisefuse/repeatkill/relaunchsame.
 NEXTstatic1404A0F40creator/maintainedowner audit vs survivingdrawable/wrongNPC
 alternatives; trace suppress/removecontract. Peer-leavecollisionuntested.
 No live-rebuild,agentinput orsuccessclaim; latestCOOP_STATUSentry hasdetails.
+
+NEXT CANDIDATE BUILT, NOT VALIDATED: companion-only EntitySpawner_Kill141D22310
+instead of bare KillTree; exact live NadineBuddy getter+168=1401D5C80,
+normal leaf/non-indexed spawner and current own record/gen reciprocity required.
+No cached spawner, flag write, RequestKill/group queue or bare-NPC-kill fallback.
+Require AL1, BC0/dead1, bit04 set. ONE generation; a replacement refuses rather
+than loops. Native kill-entity locked-visitor precedent141C2D020, independent
+ShouldSpawn141D21830 bit04 reader; explicit Spawn/reset can still clear the bit.
+Actual old respawn caller remains unproved. Prediction in latest COOP_STATUS.
+DLL D6F9BBF0... normal build passes; IDB2102/97 savedTrue +readback complete.
+User closed old pair; both watchers exit0/no second chance. Fresh pair next,
+enemyOFF/sameEMPTY; no stockNPC must remain, local+remote Players must survive.
 
 CONFIRMED r2MENU RESULT: userreportsnowallnormal. A8960/B10816 bothownedcapture,
 entry/matchedrelocatedaddresses,seen7forced7,FLS1,slot1Live0. Bothnowabsent;

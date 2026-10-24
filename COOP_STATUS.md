@@ -7,10 +7,13 @@ each log8 captured distinct weakrecord/generation identities,8 native
 companionFound1/Retired1 results, then respawn-budget REFUSED. Repeating native
 KillTree does NOT maintain absence. Exact recreation owner remains to trace;
 do not raise the fuse or equate dead markers with user-visible completion.
-Both games/watchers still live at inspection; no leave markers yet. Preserve
+User has since closed both games; both watchers exit0/no second chance. No leave
+markers were observed. Preserve
 reports/peer-leave-nadine-20261024-1934/npc-removal-rejected-locomotion_hook.log.
-Peer-leave visibility/collision remains untested. Static creator/owner audit
-next; no relaunch, live rebuild, agent input or success claim.
+Peer-leave visibility/collision remains untested. New strictly guarded native
+spawner-kill candidate built (D6F9BBF0...), independent review passed, static
+quota/prediction recorded in latest entry. Fresh pair next; no live rebuild,
+agent input or success claim.
 
 CONFIRMED BOUNDED MENU RESULT: user reports latest run "now all normal".
 A8960/B10816 both capture owned identity and execute seen7/forced7/FLSrestore1,
@@ -44710,3 +44713,93 @@ NEXT trace factory callers, maintained companion handle, and native removal/
 suppression contract. Do NOT raise the8-generation cap, poll-kill forever or
 launch the same image again. Do not claim explicit peer-leave/collision is
 tested: no departure happened in this observation. June29/menu fixes unchanged.
+
+### 2026-10-24 — STATIC spawner-first companion retirement; bound competing creators
+
+User additionally confirms stock NPC remains in BOTH copies and both local
+characters still control normally. No visual-removal success is claimed.
+
+HYPOTHESIS H1: bare actor KillTree leaves its maintained EntitySpawner eligible
+to recreate it. H2: an explicit story/script Spawn recreates the NPC even after
+intentional spawner kill. H3: old drawables survive, or a Player is mistaken for
+the NPC. Exact VT/name/captured weak identity and eight new record/generation
+pairs favor real recreation over H3; native relocation retains that pair, and
+dead-tree reparenting141841ED0 forbids reviving out of the dead tree. The actual
+producer of the eight new generations has NOT been observed at a spawn caller.
+
+STATIC native suppression API, with independent evidence kinds:
+
+1. Source/callgraph: Script_KillEntityOrTerminate141C2D180 stores the literal
+   "kill-entity or terminate" at141C2D264. It calls actor virtual+168 then
+   EntitySpawner_Kill141D22310 at141C2D2A6, before any bare KillTree fallback.
+   Its independent dependent-actor callback141C2D020 does the same at141C2D13D
+   INSIDE ProcessMgr_VisitProcessTreeLocked141623050 (dispatch141C2D28D).
+2. Concrete disassembly/dataflow: EntitySpawner_Kill returns bool in AL, takes
+   spawner RCX. Leaf branch requires +52 sign clear and +51 bit10 clear. It sets
+   +50 bit04 at141D223CB, clears +53 bit02/+51 bit40, resolves OWN +30(record)/
+   +38(generation), marks actor+72 and calls KillTree141D223FD; AL1 at141D22402.
+3. Independent reader: EntitySpawner_ShouldSpawn141D21830 rejects +50 bit02
+   universally, and bit04 when +51 bit10 clear at141D218DC..EC. Maintained group
+   update141EDA990 calls this before Spawn141EDAD75. Raw KillTree never performs
+   the spawner state transition. This establishes automatic-respawn inhibition,
+   not proof H1 was the actual runtime producer.
+4. Exact virtual identity/reciprocity: NadineBuddy VT142949638 slot+168 (slot45,
+   memory1429497A0) resolves Object_GetEntitySpawner1401D5C80, complete body
+   mov rax,[rcx+150];ret. EntitySpawner_Spawn141D22420 initializes PSI+58 and
+   publishes actor+A8/BC to OWN spawner+30/+38 after PostInit. +60 is the parent
+   spawner, NOT this owner. Do not retain the raw spawner pointer across phases.
+
+STATIC safety boundary: use the existing live native ProcessMgr visitor
+argument and the resolved getter at effect time, following the native script
+visitor precedent; verify exact NPC identity, getter slot, leaf/non-indexed
+flags and full current reciprocal tuple immediately before calling. Keep world
+brackets before ProcessMgr and both navigation-counter guards. Do NOT introduce
+RequestKill141D22240 here: its queue141EDB150 acquires the group lock and adds a
+new lock-order surface. Do not write spawner flags manually or fall back to bare
+NPC KillTree if provenance/helper refuses. Remote Player retirement unchanged.
+
+Explicit limits / alternatives: Reset141D22150 masks +50&C2 (clears04);
+EntitySpawner_Spawn141D2278B explicitly clears04. Thus a story-driven spawn can
+defeat automatic-spawn inhibition. Global type-filter1466EC000 would be too
+broad. Exact Nadine registration143D464C0 is installed by14004D930 through
+TypeFactory_Register1417C4650 (creator+68=1404A0F40, literal+70, hash+10).
+Generic SpawnProcess1417C3790 has an intentional pre-allocation type-filter
+null/Err217120768 route. Spawner null-result path sets +50bit08 and ShouldSpawn
+rejects it; FINAL-PSI call141D227B1 is a possible later narrow suppression seam.
+It is NOT implemented/admitted as the actual producer without caller evidence.
+Suppressing the first NPC would break donor/visual identity/bootstrap, so all
+policies must wait for cached scalar donor + owned Player + Player update ready.
+
+IMPLEMENTED candidate replaces ONLY companion bare KillTree with native spawner kill,
+strict current reciprocity and success/bit04 checks. Limit to ONE generation;
+a new generation refuses instead of repeating a create/kill loop. No retained
+NPC/spawner pointer, new census, broad factory override or enemy mutation.
+
+Falsifiable prediction BEFORE any next launch: fresh pair, enemyOFF, sameEMPTY
+scene; first NPC must initialize donor/co-op normally. After exactly one native
+companion retirement per copy, require verified own-spawner marker, AL1,
+BC0/dead1 and spawner bit04 set; no second NPC generation. User must see no stock
+NPC in either copy while local/remote Player control, networking and weapons
+remain intact. If a fresh generation appears despite bit04 success, H1 alone is
+insufficient and H2/direct explicit spawn must be traced; do not raise the cap.
+Missing provenance/helper refusal, surviving NPC/collision or crash rejects the
+candidate. No success from native markers alone. No universal story/reset claim.
+Existing copies are not live-patched; user was asked to close them for rebuild.
+
+Verification/handoff: user confirms both copies closed manually. Both PID-bound
+watchers record EXIT code0, second_chance0; no surviving games/watchers. They
+also recorded many handled first-chance AVs (A417453/B376245, latest eventPC
+7FFF3D37E80F); no second-chance context, no crash attribution or performance
+verdict is possible from those totals. User-closed log preserved once beside
+the rejected outcome; do not overwrite prior images/evidence.
+
+Fresh normal MSVC x64 build succeeds. DLL SHA256
+D6F9BBF067E16865A8CE69DBB249C1C0AB9BED09301F67DEEAED0FDBA6ACF5AD;
+PDB21E86BA2C3FAF584C44BD840FD7CECCF2FD9A42E8D033F8DB792940E8DF8E1F7.
+Sole IDB labels applied after MCP stop:2102functions/97data/3types and
+save_database returned True, reports/apply_companion_spawner_kill_20261024.txt.
+MCP restarted; Kill/ShouldSpawn names and native script-visitor xrefs read back.
+No parallel database. Source/current-image runtime result remains pending.
+Independent source/ABI review passed. Post-call spawner flag read is a bounded
+SEH diagnostic, NOT a retained-resource lease; unreadable data refuses success
+and does not retry the NPC kill.

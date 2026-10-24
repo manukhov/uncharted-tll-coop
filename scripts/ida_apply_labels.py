@@ -8,6 +8,50 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-10-24: stop automatic companion recreation at its native owner ---
+    0x141D22310: (
+        "EntitySpawner_Kill",
+        "STATIC native kill-entity/terminate helper: bool in AL, RCX=spawner. "
+        "Leaf requires +52 sign clear and +51 bit10 clear. Sets +50 bit04 at "
+        "141D223CB, clears +53 bit02/+51 bit40, resolves OWN +30/+38 and "
+        "calls ProcessKillTree at141D223FD. ShouldSpawn rejects bit04; explicit "
+        "Spawn141D2278B and Reset141D22150 can clear it. No universal story "
+        "suppression claim. Called by locked ProcessMgr visitor141C2D13D.",
+    ),
+    0x141D21830: (
+        "EntitySpawner_ShouldSpawn",
+        "STATIC Group_Update141EDAD57 eligibility predicate. Rejects live own "
+        "actor, +50 bit02 universally, bit04 when +51 bit10 clear, and bit08 "
+        "failed-spawn state. Contains task/runtime-command/debug checks; NOT a "
+        "pure accessor. EntitySpawner_Kill sets bit04 to inhibit automatic retry.",
+    ),
+    0x141C2D020: (
+        "Script_KillEntityDependentProcessVisitor",
+        "STATIC callback passed at141C2D28D to ProcessMgr_VisitProcessTreeLocked. "
+        "Matching dependent locatable actor virtual+168 gets own spawner; "
+        "141C2D13D calls EntitySpawner_Kill, falling back to bare KillTree only "
+        "on missing/refused spawner. Native precedent for spawner-first kill "
+        "inside a live ProcessMgr visitor; not a cached-resource lifetime lease.",
+    ),
+    0x141C2D180: (
+        "Script_KillEntityOrTerminate",
+        "STATIC source reason string kill-entity or terminate at141C2D264. "
+        "Optional dependent ProcessMgr visitor141C2D28D; target virtual+168 "
+        "then EntitySpawner_Kill141C2D2A6, bare KillTree fallback141C2D2B2. "
+        "Spawner-first retirement distinguishes native removal from raw actor kill.",
+    ),
+    0x14004D930: (
+        "RegisterNadineBuddyTypeFactory",
+        "STATIC calls TypeFactory_Register1417C4650 at14004D98B with exact "
+        "record143D464C0, literal NadineBuddy, creator1404A0F40 and flagsC8000. "
+        "Registration, NOT an actual campaign respawn owner.",
+    ),
+    0x1417C4650: (
+        "TypeFactory_Register",
+        "STATIC source type-factory.cpp:224. Stores creator+68, literal+70, "
+        "type hash+10, parent hash+18 and registration index+14. Generic "
+        "SpawnProcess1417C3790 invokes creator+68; no direct Buddy ensure loop.",
+    ),
     0x141EE7C60: (
         "Level_KillDependentProcesses",
         "STATIC exact Level::KillDependentProcesses, level.cpp:2796. Reason7 "
@@ -4781,7 +4825,8 @@ FUNCTIONS = {
     ),
     0x1401D5C80: (
         "Object_GetEntitySpawner",
-        "STATIC exact Pirate+168 returns object+150, initialized from SpawnInfo+58 "
+        "STATIC exact Pirate AND NadineBuddy+168 returns object+150 (mov/ret); "
+        "NadineBuddy slot1429497A0 verified. Initialized from SpawnInfo+58 "
         "at141E7C9F2 only if nonnull spawner+51 bit08 clear. Not retained or "
         "guaranteed present; pointer is not cross-copy identity.",
     ),
@@ -15760,6 +15805,12 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x143D464C0: (
+        "g_NadineBuddyTypeFactoryRecord",
+        "STATIC registered by14004D930 through TypeFactory_Register1417C4650: "
+        "+68 creator1404A0F40, +70 literalNadineBuddy, +10 type hash. A type "
+        "registration is not the maintained actor's EntitySpawner owner.",
+    ),
     0x1437AC384: (
         "g_HavokThreadTlsIndex",
         "STATIC DWORD loaded by addReference142227B74 beforeTlsGetValue. "

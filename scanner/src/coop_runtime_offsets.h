@@ -70,6 +70,11 @@ constexpr std::uintptr_t kActorResetKillPredicateReturnRva = 0x13B952F;
 constexpr std::uintptr_t kPostRenderDestroyDeadCallsiteRva = 0x166884;
 constexpr std::uintptr_t kProcessMgrDestroyDeadRva = 0x16229C0;
 constexpr std::uintptr_t kProcessMgrVisitTreeRva = 0x1623050;
+// Exact NdGameObject/NadineBuddy virtual+168 getter and native leaf-spawner
+// retirement. EntitySpawner::Kill also marks its spawner killed; bare
+// ProcessKillTree leaves that resurrection predicate enabled.
+constexpr std::uintptr_t kObjectGetEntitySpawnerRva = 0x1D5C80;
+constexpr std::uintptr_t kEntitySpawnerKillRva = 0x1D22310;
 constexpr std::uintptr_t kProcessMgrRva = 0x6466FE0;
 constexpr std::uintptr_t kProcessTreeRootRva = 0x64670D0; // load Process*, not address
 constexpr std::uintptr_t kProcessKillAllowedRva = 0x6467008;
