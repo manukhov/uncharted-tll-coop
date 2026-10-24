@@ -20,7 +20,26 @@ under reports/native-spawner-kill-20261024-2003. Do not repeat same image or
 bypass owner guards. NEXT trace specific NadineBuddy literal xrefs1413C2604 /
 14061BD34/BEDF and native reverse own-spawner lookup: +150null can mean direct
 PSI58null OR authored spawner51bit08 omits publication. No origin proof yet.
-Preserve bootstrap/donor, local+remote Players; static analysis only for now.
+Preserve bootstrap/donor, local+remote Players; no live edits. New source below.
+
+NEW PRECISE CANDIDATE (object compiled, DLL link/runtime pending): native
+TaskManager_MaintainCompanionActors1413C2270, VT+1D8 (NOT+238), owns Nadine pair
+manager168/170. Invalid pair -> exactspawn1413C26C5 ->1413BF090; NULL safely
+skips ONLY Nadine publication. Helper Spawn arg4TRUE deliberately omits actor150
+and own-spawner reciprocity; previous owner API was inapplicable by construction.
+Gate only this callsite with live RDI context in R9, exact class/name/VT/returnPC
+and numeric old tuple. Initial donor/bootstrap untouched. Arm terminal captured
+tuple before ONE native NPC KillTree, no broad factory/globaltype patch or fake
+handles. Peer path unchanged. Require next SUPPRESSED tuple + visible absence
+and both Players intact; new generation rejects, not another cull. Latest
+COOP_STATUS records 5 evidence kinds/alternatives/ABI/phase/prediction. Old pair
+still active at last inspection; user asked to close for rebuild, no live edits.
+Source/ABI/relay review and C++ object compile pass; sole IDB2109/97 savedTrue,
+restarted/readback complete. CURRENT DLL STILL REJECTED D6F9BBF0...; do not inject.
+NEXT once A17736/B14220 closed: normal final DLL link, archive fresh image/PDB,
+launch LocalPair2 enemyOFF immediately, separate existing watchers, user alone
+sameEMPTY/inspect precise suppression tuple + visible removal. No fresh image or
+new launch exists yet; closing old games is the remaining preparation step.
 
 NPCREMOVAL REJECTED byuser: A7872/B13516 each8distinctweakidentitycaptures/
 8nativecompanionFound1Retired1 thenfuseREFUSED; NPCstillvisible. Bothgames/

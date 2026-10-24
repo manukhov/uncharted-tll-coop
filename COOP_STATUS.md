@@ -9,7 +9,10 @@ spawner Kill was NEVER called. No further repeated kill, hook bypass or claim
 of suppression success is justified. Both games/watchers remain live at this
 inspection; explicit peer leave still untested. Outcome/screenshot preserved in
 reports/native-spawner-kill-20261024-2003. Next STATIC trace dynamic/omitted
-spawner provenance and specific companion creator, not another identical launch.
+spawner provenance audit has now identified the specific TaskManager owner.
+Exact1413C26C5 gate written and C++ object compiled/reviewed; no NEW DLL yet.
+Linking/retest waits for user to close old A17736/B14220. Do not inject current
+scanner/build DLL: it is still the rejected D6F9BBF0... image until final link.
 
 NPC EXAM REJECTED: user reports stock Nadine did NOT disappear. A7872/B13516
 each log8 captured distinct weakrecord/generation identities,8 native
@@ -44861,3 +44864,99 @@ NEXT static targets: class-literal NadineBuddy142949620 xrefs1413C2604 /
 pre-allocation class filter remains an alternative, not a proven active birth
 caller. Preserve donor/bootstrap and local/remote Player paths. No widening to
 all NPCs, factory-null guess, fuse increase, identical relaunch or agent input.
+
+### 2026-10-24 — STATIC TaskManager companion owner and exact restoration gate
+
+STATIC specific owner found; not a generic factory guess. TaskManager common
+companion maintainer1413C2270 stores Nadine weak record at manager+168 and its
+generation at+170. At1413C2689..26B1 it resolves record+8 and compares actor+BC;
+missing/invalid identity calls1413BF090 at1413C26C5 with task-default+A8 entity
+id, hash("NadineBuddy")=C785414E, literal"nadine-buddy". On success it publishes
+actor+A8/BC to manager+168/+170 at1413C26EE. This directly explains why bare
+actor retirement can be followed by restoration. Current old run has not
+captured that spawn PC; a new bounded owner-tuple marker must bind the path.
+
+Three-plus independent evidence kinds, alternatives and both graph directions:
+
+1. Native string and dataflow: exact class/name plus weak-pair validity test,
+   spawn call and publication above. Other class-literal xref14061ADB0 is
+   AiClimbModifier::PostAnimBlending/type test14061BD6D, NOT a creator.
+2. Concrete ABI/branches:1413BF090 has exactly3 arguments (u32 id, u64 hash,
+   char*name; second unused in current body). Native call bytesE8C6C9FFFF;
+   RDI is complete live manager; no stack args. TEST RAX26CA/JE26CD->26F6 on
+   NULL skips ONLY Nadine changed-bit and pair store, then continues Cutter.
+   Later use1413C2C15..2C46 and rope-state path2DB8..2DD1 revalidates the tuple.
+   Callee already returnsNULL for id0/native disable143D441A4/missing entity/
+   failed readiness. No fabricated error/success/actor handle is needed.
+3. Exact vtable/RTTI: base TaskManager VT142904C78+1D8 and MainMenu
+   VT142904A18+1D8 both resolve1413C2270. +238 is SEPARATE menu bootstrap
+   1413C3310, not companion maintenance (earlier shorthand corrected).
+4. Independent caller path: TaskManagerActive_Update1413C4880 calls owner+1E0
+   at1413C48DA; common ProcessTask1413C31B0 calls141DA2B60 at31D2. That reads
+   default task data141CD8A00 and when byte+40&0E invokes owner+1D8 at141DA2B98.
+   TaskManagerOnline RTTI143760DA8/VT1429FB410 has same+1D8, while its+1E0
+   140BB3460 calls common ProcessTask at140BB348F. This is not only initial
+   factory allocation or the unrelated +238 bootstrap.
+5. Specific null-spawner explanation: helper1413BF090 calls EntitySpawner_Spawn
+   at1413BF304 with arg4TRUE. Spawn keeps PSI+58 nonnull but sets spawner+51bit08
+   at141D22796; Object_InitSpawnParentAndSpawner141E7C850 tests it at9EC..9F0
+   and deliberately skips actor+150 store9F2. Same arg4 skips level association
+   AND own-spawner+30/+38 publication. Thus reverse authored-spawner lookup was
+   inapplicable to THIS owner contract by construction, not just missing data.
+
+REJECTED for this scope: repeated NPC kills; reliance on actor+150; reverse own
+spawner lookup by guessed name/id; broad class-ignore global/factoryNULL patch;
+substituting Player handles into NPC ownership. H1 exact TaskManager restoration
+versus H2 a different creator/manager remains the falsifiable runtime choice.
+
+IMPLEMENTED narrow candidate: hook ONLY1413C26C5, not whole1413BF090/generic
+SpawnProcess. A17-byte nearby relay movR9,RDI (4C8BCF), then FF25 tail-jump to
+the four-argument wrapper; RSP, shadow space, native return26CA and nonvolatiles
+unchanged. Original three arguments forwarded ONCE unchanged on every refusal.
+Initial spawn/donor/bootstrap remains stock. All three lifecycle installs and
+readbacks must succeed before any retirement can arm the gate.
+
+At existing proved world->ProcessMgr visitor, after donor48B/ownedPlayer/
+PlayerUpdate/autosetup and navigation-zero guards, publish immutable captured
+NPC record/gen then arm a terminal atomic gate BEFORE ONE native KillTree.
+Remote Player path unchanged. No cached TaskManager/spawner raw pointer lease.
+On a later native restoration call, use its LIVE RDI manager argument; require
+exact returnPC26CA, hash/name, managerVT+1D8==1413C2270 and stored manager
+168/170 tuple matching that captured NPC, with rereads. Compare dead tuple
+NUMERICALLY, do not dereference its old record. Only this match returnsNULL;
+otherwise native spawning passes through. No fake manager handles or flag writes.
+Latch is not disarmed by1500ms pause/peer departure; same-session resurrection
+must not resume. One-generation cap remains; a different/new NPC refuses cull.
+
+Falsifiable prediction BEFORE launch: fresh pair enemyOFF/sameEMPTY. Initial
+NPC supplies donor and co-op Player bootstrap normally. Exactly one companion
+retirement per copy must log ownerGateArmed1/companionRetired1; the next restore
+attempt must emit bounded COMPANION-SPAWN SUPPRESSED with LIVE manager tuple
+equal to captured NPC record/gen. User must see stockNPC absent in BOTH copies,
+walk through its old spot, and retain normal local/remote Player control,
+weapons/presentation and synchronization. No new-generation refusal or repeated
+kill. If retired1 but NPC reappears/no matching suppression, H1 is incomplete
+or owner admission failed; trace that exact alternative, do not widen blindly.
+If no restoration attempt occurs, visible absence can validate removal but does
+not prove this specific birth PC was active. Later menu/AltTab behavior needs
+separate user validation. No full campaign/script/level rearm claim. No live
+patch or game input performed; old copies were asked to close before rebuild.
+
+Verification/handoff: independent ABI/relay/owner-identity/source review passed;
+17-byte context relay and numeric tuple guards checked. Normal MSVC x64 C++
+object target compiles successfully. Final DLL link intentionally deferred:
+original A17736/B14220 remain open, user has been asked to close them. NO new
+DLL build/hash, injection, restart or behavioral result is claimed this turn.
+scanner/build/tll_coop_runtime.dll is still the rejected D6F9BBF0... image.
+NEXT after closure: normal cmake --build scanner/build --target tll_coop_runtime,
+preserve fresh DLL/PDB in NEW run directory, then launch/inject LocalPair2 with
+enemyOFF immediately; attach separate existing PID/image-bound watchers and
+have user perform the exact sameEMPTY scenario/prediction above. Do not inject
+the old image or require a new launch permission once prepared.
+
+Sole ida/tll.i64 labeled after stopped MCP; log
+reports/apply_companion_owner_gate_20261024.txt records2109functions/97data/
+3types and save_database returned True. MCP restarted; maintainer/helper new
+names and1413C31D2 caller read back. No parallel IDB. Current old watchers still
+READY/live at last inspection; no second-chance/exit classification yet. No
+enemy/appearance work, new framework, raw spawner lookup or live game edits.

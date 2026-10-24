@@ -1000,6 +1000,10 @@ std::atomic<unsigned> g_stock_nadine_identity_state{0};
 std::atomic<unsigned> g_stock_nadine_retired_generations{0};
 std::atomic<bool> g_stock_nadine_respawn_budget_logged{false};
 constexpr unsigned kStockNadineRetirementGenerationLimit = 1;
+OwnedRemotePlayerIdentity g_companion_spawn_gate_identity{};
+std::atomic<bool> g_companion_spawn_gate_armed{false};
+std::atomic<bool> g_companion_spawn_callsite_ready{false};
+std::atomic<bool> g_companion_spawn_suppressed_logged{false};
 
 struct LookProbeHashes {
     std::uint32_t chloe_base = 0;
@@ -41347,12 +41351,12 @@ void maybe_capture_stock_nadine_for_retirement(void* actor) {
         (g_remote_player_teardown.load(std::memory_order_acquire) &&
          !g_state_net.peer_left.load(std::memory_order_acquire)) ||
         g_state_net.local_leave_queued.load(std::memory_order_acquire)) return;
-    // A second native generation disproves this bounded spawner-kill candidate;
+    // A second native generation disproves this bounded owner-gated candidate;
     // do not conceal an explicit story Spawn with repeated create/kill churn.
     if (g_stock_nadine_retired_generations.load(std::memory_order_acquire) >=
             kStockNadineRetirementGenerationLimit) {
         if (!g_stock_nadine_respawn_budget_logged.exchange(true, std::memory_order_relaxed)) {
-            boot_log_line("COMPANION-RETIRE REFUSED new native generation after one native-spawner kill; no repeated cull loop");
+            boot_log_line("COMPANION-RETIRE REFUSED new native generation after one owner-gated kill; no repeated cull loop");
         }
         return;
     }
@@ -41880,92 +41884,79 @@ bool seh_native_kill_completed(void* actor) {
     }
 }
 
-using LifecycleGetEntitySpawnerFunction = void*(__fastcall*)(void*);
-using LifecycleEntitySpawnerKillFunction = char(__fastcall*)(void*);
+using LifecycleCompanionSpawnFunction = void*(__fastcall*)(
+    std::uint32_t, std::uintptr_t, const char*);
+LifecycleCompanionSpawnFunction g_lifecycle_original_companion_spawn = nullptr;
+constexpr std::uintptr_t kNadineBuddyFactoryTypeHash = 0xC785414Eu;
 
-struct CompanionSpawnerKillResult {
-    const char* status = "not-requested";
-    std::uintptr_t getter = 0;
-    std::uintptr_t spawner = 0; // diagnostic only; never retained as an effect target
-    std::uintptr_t owner_record = 0;
-    std::uint32_t owner_generation = 0;
-    std::uint32_t flags_before = 0; // packed native bytes +50..+53
-    std::uint32_t flags_after = 0;
-    bool called = false;
-    bool native_return = false;
-    bool actor_dead = false;
-    bool flags_after_read = false;
+struct CompanionOwnerSpawnSnapshot {
+    std::uintptr_t manager = 0;
+    std::uintptr_t vtable = 0;
+    std::uintptr_t record = 0;
+    std::uint32_t generation = 0;
 };
 
-bool seh_prepare_companion_spawner_kill(
-    void* actor, const OwnedRemotePlayerIdentity& identity,
-    void** spawner_out, CompanionSpawnerKillResult& result) {
-    *spawner_out = nullptr;
-    result.status = "identity-refused";
+bool seh_matches_companion_owner_spawn(
+    void* manager, std::uintptr_t type_hash, const char* name,
+    const OwnedRemotePlayerIdentity& identity,
+    CompanionOwnerSpawnSnapshot& snapshot) {
     __try {
-        if (!seh_matches_retirement_actor(actor, identity, kNadineBuddyVtableRva)) return false;
-        const auto* bytes = static_cast<const std::byte*>(actor);
-        if (std::memcmp(bytes + 8, "nadine-buddy", sizeof("nadine-buddy")) != 0) return false;
+        if (manager == nullptr || identity.record == 0 || identity.generation == 0 ||
+            type_hash != kNadineBuddyFactoryTypeHash || name == nullptr ||
+            std::memcmp(name, "nadine-buddy", sizeof("nadine-buddy")) != 0) return false;
+        const auto* bytes = static_cast<const std::byte*>(manager);
         const auto vtable = *reinterpret_cast<const volatile std::uintptr_t*>(bytes);
-        result.getter = *reinterpret_cast<const volatile std::uintptr_t*>(vtable + 0x168);
-        result.status = "getter-refused";
-        if (result.getter != g_module + kObjectGetEntitySpawnerRva) return false;
-        const auto getter = reinterpret_cast<LifecycleGetEntitySpawnerFunction>(result.getter);
-        void* const spawner = getter(actor);
-        result.spawner = reinterpret_cast<std::uintptr_t>(spawner);
-        result.status = "spawner-missing";
-        if (spawner == nullptr) return false;
-        const auto* source = static_cast<const std::byte*>(spawner);
-        result.flags_before = *reinterpret_cast<const volatile std::uint32_t*>(source + 0x50);
-        result.owner_record = *reinterpret_cast<const volatile std::uintptr_t*>(source + 0x30);
-        result.owner_generation = *reinterpret_cast<const volatile std::uint32_t*>(source + 0x38);
-        // The signed +52 group branch recurses into other spawners; +51 bit10
-        // is a native veto. Admit only the normal leaf owning this exact NPC.
-        result.status = "spawner-kind-refused";
-        if ((*reinterpret_cast<const volatile std::uint8_t*>(source + 0x52) & 0x80u) != 0 ||
-            (*reinterpret_cast<const volatile std::uint8_t*>(source + 0x51) & 0x10u) != 0) return false;
-        result.status = "spawner-owner-refused";
-        if (result.owner_record != identity.record ||
-            result.owner_generation != identity.generation ||
-            *reinterpret_cast<const volatile std::uintptr_t*>(identity.record + 8) !=
-                reinterpret_cast<std::uintptr_t>(actor)) return false;
-        // Recheck getter provenance and the spawner's OWN handle immediately
-        // before native Kill. This pointer came from the live locked argument,
-        // not from the earlier update/capture or any cached spawner allocation.
-        result.status = "spawner-reread-refused";
-        if (!seh_matches_retirement_actor(actor, identity, kNadineBuddyVtableRva) ||
-            *reinterpret_cast<const volatile std::uintptr_t*>(vtable + 0x168) != result.getter ||
-            getter(actor) != spawner ||
-            *reinterpret_cast<const volatile std::uintptr_t*>(source + 0x30) != identity.record ||
-            *reinterpret_cast<const volatile std::uint32_t*>(source + 0x38) != identity.generation ||
-            *reinterpret_cast<const volatile std::uintptr_t*>(identity.record + 8) !=
-                reinterpret_cast<std::uintptr_t>(actor)) return false;
-        result.flags_before = *reinterpret_cast<const volatile std::uint32_t*>(source + 0x50);
-        // Packed +51 bit10 and +52 sign bit, respectively.
-        if ((result.flags_before & 0x00801000u) != 0) return false;
-        *spawner_out = spawner;
-        result.status = "prepared";
-        return true;
+        if (vtable == 0 ||
+            *reinterpret_cast<const volatile std::uintptr_t*>(
+                vtable + kTaskManagerMaintainCompanionsVtableOffset) !=
+                    g_module + kTaskManagerMaintainCompanionsRva ||
+            *reinterpret_cast<const volatile std::uintptr_t*>(bytes + 0x168) != identity.record ||
+            *reinterpret_cast<const volatile std::uint32_t*>(bytes + 0x170) != identity.generation) return false;
+        snapshot.manager = reinterpret_cast<std::uintptr_t>(manager);
+        snapshot.vtable = vtable;
+        snapshot.record = *reinterpret_cast<const volatile std::uintptr_t*>(bytes + 0x168);
+        snapshot.generation = *reinterpret_cast<const volatile std::uint32_t*>(bytes + 0x170);
+        return snapshot.record == identity.record && snapshot.generation == identity.generation &&
+            *reinterpret_cast<const volatile std::uintptr_t*>(bytes) == vtable &&
+            *reinterpret_cast<const volatile std::uintptr_t*>(
+                vtable + kTaskManagerMaintainCompanionsVtableOffset) ==
+                    g_module + kTaskManagerMaintainCompanionsRva &&
+            *reinterpret_cast<const volatile std::uintptr_t*>(bytes + 0x168) == identity.record &&
+            *reinterpret_cast<const volatile std::uint32_t*>(bytes + 0x170) == identity.generation;
     } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ||
                 GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR
                     ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
-        result.status = "spawner-read-fault";
         return false;
     }
 }
 
-bool seh_read_companion_spawner_flags_after(
-    void* spawner, CompanionSpawnerKillResult& result) {
-    __try {
-        result.flags_after = *reinterpret_cast<const volatile std::uint32_t*>(
-            static_cast<const std::byte*>(spawner) + 0x50);
-        result.flags_after_read = true;
-        return (result.flags_after & 4u) != 0;
-    } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ||
-                GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR
-                    ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
-        return false;
+void* __fastcall hooked_lifecycle_companion_spawn(
+    std::uint32_t descriptor_id, std::uintptr_t type_hash, const char* name,
+    void* live_manager) {
+    const auto return_pc = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    if (return_pc == g_module + kTaskManagerNadineSpawnCallsiteRva + 5 &&
+        g_peer_lifecycle_ready.load(std::memory_order_acquire) &&
+        g_companion_spawn_callsite_ready.load(std::memory_order_acquire) &&
+        g_companion_spawn_gate_armed.load(std::memory_order_acquire)) {
+        CompanionOwnerSpawnSnapshot snapshot{};
+        if (seh_matches_companion_owner_spawn(live_manager, type_hash, name,
+                g_companion_spawn_gate_identity, snapshot)) {
+            if (!g_companion_spawn_suppressed_logged.exchange(true, std::memory_order_relaxed)) {
+                std::ostringstream line;
+                line << "COMPANION-SPAWN SUPPRESSED manager=0x" << std::hex << snapshot.manager
+                     << " managerVT=0x" << snapshot.vtable << " record=0x" << snapshot.record
+                     << " generation=0x" << snapshot.generation << " descriptor=0x" << descriptor_id
+                     << " typeHash=0x" << type_hash << " name=nadine-buddy capturedRecord=0x"
+                     << g_companion_spawn_gate_identity.record << " capturedGeneration=0x"
+                     << g_companion_spawn_gate_identity.generation << " returnPC=0x" << return_pc;
+                boot_log_line(line.str().c_str());
+            }
+            // Native26CA/CD leaves its stale pair untouched on NULL, then
+            // continues with Cutter/other companions. Never publish fake handles.
+            return nullptr;
+        }
     }
+    return g_lifecycle_original_companion_spawn(descriptor_id, type_hash, name);
 }
 
 struct PeerLifecycleVisit {
@@ -41978,7 +41969,7 @@ struct PeerLifecycleVisit {
     bool peer_retired = false;
     bool companion_retired = false;
     bool companion_deferred = false;
-    CompanionSpawnerKillResult companion_spawner{};
+    const char* companion_status = "not-requested";
 };
 
 std::uint8_t __fastcall visit_peer_lifecycle_actor(void* actor, void* opaque) {
@@ -42011,9 +42002,22 @@ std::uint8_t __fastcall visit_peer_lifecycle_actor(void* actor, void* opaque) {
         work.peer_retired = seh_native_kill_completed(actor);
     } else {
         work.companion_found = true;
-        void* spawner = nullptr;
-        if (!seh_prepare_companion_spawner_kill(
-                actor, work.companion, &spawner, work.companion_spawner)) {
+        work.companion_status = "bootstrap-refused";
+        if (!g_companion_spawn_callsite_ready.load(std::memory_order_acquire) ||
+            !g_nadine_companion_donor_cached.load(std::memory_order_acquire) ||
+            !g_owned_remote_player_ready.load(std::memory_order_acquire) ||
+            !g_player_update_hook_ready.load(std::memory_order_acquire) || !g_autotest_done) {
+            return work.want_peer && !work.peer_found ? 1 : 0;
+        }
+        // This immutable tuple is published BEFORE the one native kill. The
+        // later owner-call wrapper must independently bind its live manager's
+        // stored pair to it; no manager/spawner pointer is cached across phases.
+        if (!g_companion_spawn_gate_armed.load(std::memory_order_acquire)) {
+            g_companion_spawn_gate_identity = work.companion;
+            g_companion_spawn_gate_armed.store(true, std::memory_order_release);
+        } else if (g_companion_spawn_gate_identity.record != work.companion.record ||
+                   g_companion_spawn_gate_identity.generation != work.companion.generation) {
+            work.companion_status = "armed-identity-refused";
             return work.want_peer && !work.peer_found ? 1 : 0;
         }
         // No dangling donor/control pointer: the scalar record was cached, and
@@ -42022,18 +42026,11 @@ std::uint8_t __fastcall visit_peer_lifecycle_actor(void* actor, void* opaque) {
         g_controlled_object = nullptr;
         g_object_states.erase(actor);
         g_object_states.erase(reinterpret_cast<void*>(work.companion.object));
-        // Native locked-visitor precedent141C2D020 calls actor virtual+168 and
-        // EntitySpawner::Kill141D22310. Unlike bare KillTree, its normal leaf
-        // first marks the spawner killed, closing predicate141D21830. NEVER
-        // fall back to KillTree or mutate spawner flags directly on refusal.
-        auto& result = work.companion_spawner;
-        result.called = true;
-        result.native_return = reinterpret_cast<LifecycleEntitySpawnerKillFunction>(
-            g_module + kEntitySpawnerKillRva)(spawner) != 0;
-        result.actor_dead = seh_native_kill_completed(actor);
-        const bool spawner_killed = seh_read_companion_spawner_flags_after(spawner, result);
-        work.companion_retired = result.native_return && result.actor_dead && spawner_killed;
-        result.status = work.companion_retired ? "native-spawner-killed" : "native-spawner-result-refused";
+        // This remains the proved LIVE-world native cleanup, with the specific
+        // TaskManager resurrection seam gated before its weak pair goes stale.
+        reinterpret_cast<ProcessKillTreeFunction>(g_module + kProcessKillTreeRva)(actor);
+        work.companion_retired = seh_native_kill_completed(actor);
+        work.companion_status = work.companion_retired ? "owner-gated-native-killed" : "native-kill-refused";
     }
     return (work.want_peer && !work.peer_found) ||
            (work.want_companion && !work.companion_found && !work.companion_deferred) ? 1 : 0;
@@ -42047,19 +42044,11 @@ void log_peer_lifecycle_result(const PeerLifecycleVisit& work) {
          << " companionFound=" << work.companion_found
          << " companionRetired=" << work.companion_retired
          << " companionDeferred=" << work.companion_deferred
-         << " companionMethod=native-spawner status=" << work.companion_spawner.status
-         << " nativeCalled=" << work.companion_spawner.called
-         << " nativeReturn=" << work.companion_spawner.native_return
-         << " actorDead=" << work.companion_spawner.actor_dead
-         << " flagsRead=" << work.companion_spawner.flags_after_read
+         << " companionMethod=owner-gated-native-kill status=" << work.companion_status
+         << " spawnGateArmed=" << g_companion_spawn_gate_armed.load(std::memory_order_acquire)
+         << " spawnCallsiteReady=" << g_companion_spawn_callsite_ready.load(std::memory_order_acquire)
          << std::hex << " companionRecord=0x" << work.companion.record
-         << " companionGeneration=0x" << work.companion.generation
-         << " getter=0x" << work.companion_spawner.getter
-         << " spawner=0x" << work.companion_spawner.spawner
-         << " ownerRecord=0x" << work.companion_spawner.owner_record
-         << " ownerGeneration=0x" << work.companion_spawner.owner_generation
-         << " flags50=0x" << work.companion_spawner.flags_before
-         << "->0x" << work.companion_spawner.flags_after << std::dec
+         << " companionGeneration=0x" << work.companion.generation << std::dec
          << " slot1Live=" << (retained_player_object(1) != nullptr);
     boot_log_line(line.str().c_str());
 }
@@ -42160,11 +42149,42 @@ char __fastcall hooked_lifecycle_enter_menu(
 }
 
 bool install_peer_lifecycle_callsite(
-    std::uintptr_t call_rva, std::uintptr_t target_rva, const void* hook) {
+    std::uintptr_t call_rva, std::uintptr_t target_rva, const void* hook,
+    bool pass_live_task_manager = false) {
     std::uint8_t* call = nullptr;
     std::uint8_t* relay = nullptr;
     std::int32_t displacement = 0;
-    if (!prepare_plain_callsite_relay(call_rva, target_rva, hook, call, relay, displacement)) return false;
+    if (pass_live_task_manager) {
+        // Native26C5 has three arguments, no stack parameters. RDI is its live
+        // complete TaskManager; move it into volatile R9 as hook argument four.
+        // Tail-jump only: preserve native RA, shadow space, RSP, flags and every
+        // nonvolatile register. Allocate all17 bytes, not the plain14-byte relay.
+        if (call_rva != kTaskManagerNadineSpawnCallsiteRva ||
+            target_rva != kTaskManagerCompanionSpawnRva) return false;
+        call = reinterpret_cast<std::uint8_t*>(g_module + call_rva);
+        constexpr std::array<std::uint8_t, 5> kNativeCall{0xE8, 0xC6, 0xC9, 0xFF, 0xFF};
+        if (std::memcmp(call, kNativeCall.data(), kNativeCall.size()) != 0) return false;
+        constexpr std::size_t kRelaySize = 17;
+        relay = static_cast<std::uint8_t*>(allocate_executable_near(call, kRelaySize));
+        if (relay == nullptr) return false;
+        constexpr std::array<std::uint8_t, 9> kContextJump{
+            0x4C, 0x8B, 0xCF,             // mov r9,rdi
+            0xFF, 0x25, 0, 0, 0, 0};    // jmp qword ptr[rip+0]
+        std::memcpy(relay, kContextJump.data(), kContextJump.size());
+        const auto hook_address = reinterpret_cast<std::uintptr_t>(hook);
+        std::memcpy(relay + kContextJump.size(), &hook_address, sizeof(hook_address));
+        FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+        const auto delta = reinterpret_cast<std::intptr_t>(relay) -
+            reinterpret_cast<std::intptr_t>(call + 5);
+        if (delta < INT32_MIN || delta > INT32_MAX) {
+            VirtualFree(relay, 0, MEM_RELEASE);
+            return false;
+        }
+        displacement = static_cast<std::int32_t>(delta);
+    } else if (!prepare_plain_callsite_relay(
+                   call_rva, target_rva, hook, call, relay, displacement)) {
+        return false;
+    }
     SuspendedProcessThreads suspended{};
     if (!suspend_other_process_threads(suspended)) {
         VirtualFree(relay, 0, MEM_RELEASE);
@@ -42196,17 +42216,24 @@ bool install_peer_lifecycle() {
         g_module + kProcessMgrDestroyDeadRva);
     g_lifecycle_original_enter_menu = reinterpret_cast<LifecycleEnterMenuFunction>(
         g_module + kTaskManagerEnterMainMenuRva);
+    g_lifecycle_original_companion_spawn = reinterpret_cast<LifecycleCompanionSpawnFunction>(
+        g_module + kTaskManagerCompanionSpawnRva);
     const bool cleanup = install_peer_lifecycle_callsite(
         kPostRenderDestroyDeadCallsiteRva, kProcessMgrDestroyDeadRva,
         reinterpret_cast<const void*>(&hooked_lifecycle_destroy_dead));
     const bool menu = cleanup && install_peer_lifecycle_callsite(
         kPostRenderQuitMenuCallsiteRva, kTaskManagerEnterMainMenuRva,
         reinterpret_cast<const void*>(&hooked_lifecycle_enter_menu));
-    g_peer_lifecycle_ready.store(cleanup && menu, std::memory_order_release);
-    boot_log_line(cleanup && menu
-        ? "PEER-LIFECYCLE READY explicitMenu=1 liveWorldOnKill=1 ownedOnly=1 companion=native-nadine-buddy nativeSpawnerKill=1 generationBudget=1"
-        : "PEER-LIFECYCLE REFUSED phase/menu callsite; native pass-through retained");
-    return cleanup && menu;
+    const bool companion_spawn = menu && install_peer_lifecycle_callsite(
+        kTaskManagerNadineSpawnCallsiteRva, kTaskManagerCompanionSpawnRva,
+        reinterpret_cast<const void*>(&hooked_lifecycle_companion_spawn), true);
+    const bool ready = cleanup && menu && companion_spawn;
+    g_companion_spawn_callsite_ready.store(ready, std::memory_order_release);
+    g_peer_lifecycle_ready.store(ready, std::memory_order_release);
+    boot_log_line(ready
+        ? "PEER-LIFECYCLE READY explicitMenu=1 liveWorldOnKill=1 ownedOnly=1 companion=native-nadine-buddy taskManagerGate=1413C26C5 generationBudget=1"
+        : "PEER-LIFECYCLE REFUSED phase/menu/companion callsite; native pass-through retained");
+    return ready;
 }
 
 char __fastcall hooked_player_input_state_update(void* player) {

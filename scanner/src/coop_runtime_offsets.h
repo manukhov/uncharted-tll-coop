@@ -70,11 +70,12 @@ constexpr std::uintptr_t kActorResetKillPredicateReturnRva = 0x13B952F;
 constexpr std::uintptr_t kPostRenderDestroyDeadCallsiteRva = 0x166884;
 constexpr std::uintptr_t kProcessMgrDestroyDeadRva = 0x16229C0;
 constexpr std::uintptr_t kProcessMgrVisitTreeRva = 0x1623050;
-// Exact NdGameObject/NadineBuddy virtual+168 getter and native leaf-spawner
-// retirement. EntitySpawner::Kill also marks its spawner killed; bare
-// ProcessKillTree leaves that resurrection predicate enabled.
-constexpr std::uintptr_t kObjectGetEntitySpawnerRva = 0x1D5C80;
-constexpr std::uintptr_t kEntitySpawnerKillRva = 0x1D22310;
+// Exact TaskManager maintained-Nadine call only. The context relay forwards
+// live RDI as the otherwise-unused fourth argument without changing RSP/RA.
+constexpr std::uintptr_t kTaskManagerNadineSpawnCallsiteRva = 0x13C26C5;
+constexpr std::uintptr_t kTaskManagerCompanionSpawnRva = 0x13BF090;
+constexpr std::uintptr_t kTaskManagerMaintainCompanionsRva = 0x13C2270;
+constexpr std::size_t kTaskManagerMaintainCompanionsVtableOffset = 0x1D8;
 constexpr std::uintptr_t kProcessMgrRva = 0x6466FE0;
 constexpr std::uintptr_t kProcessTreeRootRva = 0x64670D0; // load Process*, not address
 constexpr std::uintptr_t kProcessKillAllowedRva = 0x6467008;

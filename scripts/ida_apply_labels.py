@@ -8,6 +8,56 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-10-24: TaskManager-owned companion recreation, not actor+150 ---
+    0x1413C2270: (
+        "TaskManager_MaintainCompanionActors",
+        "STATIC complete MainMenuVT142904A18+1D8 (NOT+238). Default-data "
+        "policy141DA2B98 dispatches this slot when task+40&0E. Maintains Nadine "
+        "weak pair manager+168/+170 at1413C2689..26EE; invalid pair calls "
+        "1413BF090 at1413C26C5 with descriptor+A8, hashC785414E and nadine-buddy. "
+        "NULL skips ONLY Nadine publication then continues Cutter/other actors. "
+        "Later Nadine use revalidates the weak pair at1413C2C15..2C46.",
+    ),
+    0x141DA2B60: (
+        "TaskManager_ApplyTaskDefaultActorPolicy",
+        "STATIC called by1413C31B0 at1413C31D2. Resolves default data from "
+        "manager+100 via141CD8A00; byte default+40&0E invokes manager virtual "
+        "+1D8 at141DA2B98. Also dispatches virtual+208 under its actor/task "
+        "guards. This is the companion-maintenance caller, not menu+238.",
+    ),
+    0x1413C31B0: (
+        "TaskManager_ProcessTask",
+        "STATIC common task processing (+1E0 for base TaskManager): calls "
+        "TaskManager_ApplyTaskDefaultActorPolicy141DA2B60 at1413C31D2, then "
+        "GetProcessDeltaTime. Separate +238 dispatch1413C32DC is menu "
+        "bootstrap, NOT the +1D8 companion maintainer.",
+    ),
+    0x1413C4880: (
+        "TaskManagerActive_Update",
+        "STATIC active task update dispatches owner virtual+1E0 at1413C48DA. "
+        "Base ProcessTask1413C31B0 reaches task-default policy and the "
+        "+1D8 companion maintainer; not an allocation-only bootstrap path.",
+    ),
+    0x140BB3460: (
+        "TaskManagerOnline_ProcessTask",
+        "STATIC TaskManagerOnline RTTI/type143760DA8, VT1429FB410+1E0. "
+        "Calls common TaskManager_ProcessTask1413C31B0 at140BB348F; its "
+        "same VT+1D8 entry1429FB5E8 is1413C2270. Independent dispatch path.",
+    ),
+    0x141E7C850: (
+        "Object_InitSpawnParentAndSpawner",
+        "STATIC initializes spawn-parent and own spawner link from SpawnInfo. "
+        "PSI+58 read141E7C9E3; only nonnull spawner with +51bit08 CLEAR is "
+        "stored at actor+150 at141E7C9F2. Task companion Spawn arg4TRUE sets "
+        "that bit, deliberately omitting this link; NULL does not prove no "
+        "EntitySpawner participated. No retained-pointer lease is implied.",
+    ),
+    0x1417AA820: (
+        "StringId_HashAppendWithSeed",
+        "STATIC out DWORD RCX, seed EDX, text R8; MSB-first byte table "
+        "1428A38B0 append loop. Seed0 and NadineBuddy produce C785414E, "
+        "matching TaskManager maintainer's inline class-name hash loop.",
+    ),
     # --- 2026-10-24: stop automatic companion recreation at its native owner ---
     0x141D22310: (
         "EntitySpawner_Kill",
@@ -12122,12 +12172,14 @@ FUNCTIONS = {
         "not the active early bringup step.",
     ),
     0x1413BF090: (
-        "BuildExtendedRuntimeStateWrapperAndDispatchRetainedEntityCommand",
-        "Upper retained/runtime helper that resolves an object through the "
-        "global registry, builds a local extended packet through 0x1417C35A0, "
-        "then dispatches it through 0x141D21C80 / entity virtual +0x538. This "
-        "is one of the clearest retained-side producers of the same wrapper "
-        "family later matched by the upper Player apply path.",
+        "TaskManager_ResolveOrSpawnCompanionFromLevelEntity",
+        "STATIC exact3args: descriptor DWORD, class-hash QWORD (unused in "
+        "current body), name pointer. Native NULL contract for id0/disable "
+        "byte143D441A4/missing entity/readiness. Resolves existing NPC or "
+        "level entity, builds override, tail-calls EntitySpawner_Spawn at "
+        "1413BF304 with arg4TRUE. This sets spawner+51bit08 and bypasses "
+        "spawner-own weak-pair publication/level association; TaskManager "
+        "publishes its own companion pair. Nadine-only caller1413C26C5.",
     ),
     0x140A90E50: (
         "GetNetGameManagerInlineSlotBand43D0",
@@ -16412,6 +16464,26 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x1413C26C5: (
+        "STATIC exact Nadine maintainer CALL1413BF090, bytesE8C6C9FFFF. "
+        "ECX=task-default+A8 descriptor, RDX=hashNadineBuddy C785414E, "
+        "R8=nadine-buddy; RDI=live complete TaskManager. Native callee has3 "
+        "args/no stack args; private relay may pass RDI in volatile R9 ONLY."
+    ),
+    0x1413C26CA: (
+        "STATIC TEST RAX,RAX then JE26F6: NULL leaves manager+168/+170 "
+        "unchanged, skips Nadine changed flag and pair publication only, "
+        "then continues Cutter/other companion logic. Not a forged success."
+    ),
+    0x1413C26EE: (
+        "STATIC stores resolved actor+A8/+BC into TaskManager+168/+170. "
+        "This maintained weak pair, not actor+150, is the resurrection owner."
+    ),
+    0x141D22796: (
+        "STATIC Spawn arg4 TRUE sets spawner+51 bit08 before materialization; "
+        "Object_InitSpawnParentAndSpawner then deliberately omits actor+150. "
+        "1413BF090 supplies TRUE for the TaskManager-owned companion route."
+    ),
     0x140166884: (
         "STATIC exactE8 37C14B01 ->ProcessMgr_DestroyDeadProcesses1416229C0; "
         "RCX=&ProcessMgr146466FE0 from14016687D, preserveRAX. Unconditional "
