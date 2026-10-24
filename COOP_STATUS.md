@@ -7,14 +7,22 @@ sync. User now confirms A26552/B22404 mutual visible Players and synchronized
 movement, and says he closed BOTH himself. WatchersEXIT0/no second chance agree.
 No repeated-menu/epoch2 result claimed. Appearance remains PARKED.
 
-NEW ENEMY CANDIDATE: replace explicit retained-Player admission queries with
-one pinned admitted Player-world epoch; close on native primary OnKill/heap
-clear/pending HavokClose BEFORE cleanup. ENR2 remains one terminal encounter,
-all enemy identity/body/phase/late gates and1ms limit unchanged. Source static
-quota/reviews complete; labels saved/readback and fresh direct-ENEMY pair
-A25944/B21400 injected E6305EAB...; both channels waiting/unpinned, no stop/cost.
-User DIRECT same live-enemy checkpoint, no empty/menu first. This is
-position/rotation only, NOT combat-state/HP/death authority. Latest entry controls.
+ENEMY RUN REJECTED: E6305EAB... A25944/B21400 both stop before roster/match/apply
+on SECOND census read: CharacterManager+0 at1100F738A0. A3160us/query3157us;
+B4314/query4311us. Primary-independent epoch admission moved the stop away
+from retained Player, NOT solved the general region-query cost. Both stop ACKs
+already quiescent via InspectOnly; no signal. Terminal logs/image preserved.
+
+NEW STATIC CANDIDATE: hot ENR2 copies query only1..2 exact pages through
+QueryWorkingSetEx; Valid/Bad/exact readable protection filter, SEH and all
+native/epoch/late guards,1ms/50ms/256-query fuses unchanged. Cold installer
+image-byte checks alone retain VirtualQuery for nonresident code. Exact old
+manager region422105088B: external VQ3.5..12ms vs page query17..42us; this is
+wall-time correlation, NOT pureCPU cause or latency guarantee. Source reviewed,
+fresh A0BD2551... build launched/injected A10696/B23744, both native channels
+installed and waiting worldEpoch0 with no cost stop. User loads same LIVE-ENEMY
+checkpoint directly in both. Runtime/visible result PENDING; latest entry below.
+Position/rotation only; AI/combat-state/HP/death authority is NOT implemented.
 
 NEW BOUNDED CANDIDATE: full-postrender native callback tail, POSITIVE old owned
 OnKill->heap-unlink witness, observed physical menu close/reopen and fresh primary
@@ -45774,3 +45782,165 @@ shooting/grenades/kills, compare corresponding NPC movement/rotation within firs
 fixed standstill. Combat-state/attack/HP/death synchronization is NOT claimed.
 Keep both games open for bounded log/terminal inspection; never silently relaunch
 same image or weaken safeguards if later region/phase/budget rejects.
+
+### 2026-10-24 — Reject manager-region VQ census; stage exact-page hot admission
+
+REJECTED as USABLE enemy movement synchronization: the fresh E6305EAB... run
+A25944/B21400 reached admitted player-world epoch1 but BOTH enemy channels
+terminal-stopped at costStop2/time, costSite1/census, before any match or apply.
+This is NOT a successful synchronizer, nor a runtime rejection of the native
+Pirate root setter itself: that writer was never reached.
+
+Exact archived image, independently hash-checked again:
+DLL E6305EABEDEA628AB2A64538D4BF33810DCEA0D3E7E2AD4E6C4E1896E0F4EE2A;
+PDB 258DCA2CBA5C0B78CA4004D7755153A15FFDBB6503FECF48BB803F99029978FE.
+Terminal evidence is reports/enemy-world-epoch-20261024204242Z/
+terminal-enemy_root_25944.log and terminal-enemy_root_21400.log; the same run
+also retains failed-census-manager-query-locomotion_hook.log and boot images.
+Both terminal records have apply0/match0, worldEpoch1, external0/nativeFault0,
+workerGapMs0, two read calls and two protection queries. The second census
+read is CharacterManager+0, fetching its entry-array pointer at1100F738A0;
+it is NOT the removed explicit retained-primary heap admission.
+
+CONFIRMED terminal WALL-bracket measurements, microseconds (not pure CPU time):
+
+| Copy | Scope | All query brackets | Last query bracket | Other scope work |
+| --- | ---: | ---: | ---: | ---: |
+| A25944 | 3160 | 3157 | 3151 | 3 |
+| B21400 | 4314 | 4311 | 4306 | 3 |
+
+Existing InspectOnly stop/ACK inspection found both enemy channels already
+quiescent; no stop event was signaled. No live patch, native game call, game
+input, rebuild/injection, or identical retry was used to produce this result.
+The terminal fuse remains effective; increasing its budget is not the remedy.
+After preserving evidence, the coordinating agent again verified exact test
+PID/path/creation identities and InspectOnly=True for BOTH, then intentionally
+Kill()ed ONLY A25944/B21400. This was forced test cleanup, NOT a crash and NOT
+validation of native quit-to-main-menu behavior; no closure time is inferred.
+
+CONFIRMED read-only OS-metadata comparison on this exact creation-verified pair:
+the external probe used process/VM metadata queries, NO ReadProcessMemory,
+NO native game function or input. The module+3898630 global-pointer page reports
+a16KiB matching region: VQ-family brackets4.9..21us, QWSE4.6..16.2us. At the
+same observed manager address1100F738A0, the reported matching region is
+422105088bytes. Three external region/page-query comparisons per copy, us:
+
+| Copy | VQ-family region-query samples | QueryWorkingSetEx page samples |
+| --- | --- | --- |
+| A25944 | 3521.6, 3873.6, 3594.6 | 26.7, 41.5, 17.7 |
+| B21400 | 12079.7, 11788.9, 8058.0 | 29.0, 24.5, 37.3 |
+
+All observed regions were MEM_COMMIT/PAGE_READWRITE; explicit page results were
+Valid1/Bad0. External VirtualQueryEx-family samples and in-process VirtualQuery
+terminal brackets are different measurements. Their correlation with a very
+large matching region supports the query-shape hypothesis; it does NOT prove
+pure CPU cause, eliminate scheduler/kernel contention, guarantee any future
+latency, or provide a protection/residency/native-lifetime lease.
+
+STATIC API contract, checked against official Microsoft documentation:
+[VirtualQuery](https://learn.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualquery)
+reports a consecutive same-attribute region and examines subsequent pages to
+find its extent. In contrast,
+[QueryWorkingSetEx](https://learn.microsoft.com/en-us/windows/win32/api/psapi/nf-psapi-queryworkingsetex)
+accepts an explicit address array and returns information per requested page.
+[PSAPI_WORKING_SET_EX_BLOCK](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-psapi_working_set_ex_block)
+requires checking Valid FIRST: valid-layout protection members must be ignored
+when Valid0. QueryWorkingSetEx success alone does not make a page readable;
+Bad and Win32Protection remain separate admission checks.
+
+CONFIRMED OS-contract self-check, not enemy/performance proof: an ephemeral
+C#/PowerShell check used ONLY its own allocation, no repo artifact/game handle/
+input. GetSystemInfo returned4096-byte pages; native PSAPI entry/MBI extents
+were16B/48B. Two resident RW pages (Valid1/prot04/Bad0) were accepted. After
+guard+RW on page2, QWSE returned Valid0 so valid-layout protection was IGNORED
+and the page rejected; subsequent VQ still reported104h, preserving the guard.
+NOACCESS page2 likewise returned Valid0 and was rejected (VQ1); page1 remained
+accepted. Exact own allocation VirtualFree=True. This checks field ordering,
+ABI extents and conservative refusal, not game residency or query latency.
+
+HYPOTHESIS / staged production change, NOT yet a reviewed/built/runtime result:
+the lexical-cache hot path in enemy_root::copy should query ONLY the requested
+one/two native pages using QWSE, require each Valid1 THEN !Bad and an EXACT
+readable protection value: READONLY, READWRITE, WRITECOPY, EXECUTE_READ,
+EXECUTE_READWRITE or EXECUTE_WRITECOPY. Reject observed GUARD/NOACCESS/modifiers,
+unknown values, nonresident pages and API failure; no hot VQ fallback/fault-in.
+Cache exact page observations only within the current synchronous scope, never
+across native phases. Cold installer reads with cache==nullptr retain their
+original VQ region guard so nonresident image code does not become a false
+installation failure. Actual memcpy remains under SEH, including later access/
+in-page/guard faults; neither OS query makes subsequent native memory safe.
+Keep the existing1ms per50ms/256-call fuse, QPC before/after API and copy checks,
+epoch/explicit lifecycle stops, own-actor/spawner/manager/ordinary and final
+generation/enteredOnKill/freshness checks. Do not change native writer or AI/HP.
+Source implementation/review, fresh build and a new runtime exam are PENDING
+until the coordinating agent records their exact outcomes below.
+
+Competing hypotheses and independent evidence quota:
+
+- H1: region-shaped protection-query work dominates the first manager read.
+  Native/source hot-reader call graph locates it before any Pirate setter;
+  exact terminal fields identify the second8B census read/query; external
+  same-address region-vs-page comparison distinguishes query shape.
+- H2: scheduler/general kernel/native cost explains all delay. Wall brackets
+  cannot eliminate scheduling/kernel effects; the external comparison and
+  negligible other scope work narrow, but do not disprove, this alternative.
+- H3: the old primary Player/record allocation is the SOLE cause. REJECTED as
+  sole explanation: primary-independent epoch1 still stops at manager+0.
+- Three DIFFERENT evidence kinds support a bounded H1 exam: native/source
+  dataflow/caller ordering, official Win32 ABI/field semantics, and external
+  creation-bound OS-region/page metadata with comparative timing. This is not
+  three copies of one dump, and is not yet runtime movement confirmation.
+
+FALSIFIABLE prediction BEFORE any fresh test: fresh pair, user loads the SAME
+live-enemy checkpoint DIRECTLY in BOTH, no intermediate empty/menu. The initial
+manager read should no longer reproduce the old >1ms VQ-region bracket; require
+actual census progress, matching and native B setter application, plus visible
+corresponding B NPC position/rotation following A WITHOUT severe lag. Later
+guard stop, receive-only traffic, READY or counters without the visual result
+is NOT success. Preserve any new terminal context; no weaker fuse or automatic
+identical retry. This validates movement ONLY: AI decisions, attack state,
+health, damage and death authority are still not implemented/synchronized.
+
+### 2026-10-24 23:57 MSK — Launch exact-page ENR2 admission exam
+
+STATIC implemented/reviewed: hot enemy_root::copy(cache!=nullptr) now queries
+only the missing1..2 page bases per<=4096B copy. GetSystemInfo initializes and
+validates native page size before ANY installer byte read or worker publication.
+The lexical64-entry cache stores exact accepted pages, never region ranges;
+capacity exhaustion still queries every miss, never admits implicitly. All
+returned misses must pass Valid FIRST, !Bad and the exact six readable PAGE_*
+values before any are cached. No hot fallback/warming/VirtualLock. Only five
+cold installer read() calls retain original unbudgeted VirtualQuery; hot reads
+all pass a lexical cache. SEH, budget pre/post checks, terminal stops, epoch/
+native body/actor/late checks and native root writer are unchanged. Independent
+read-only source review found no blocker in arithmetic, cache, ordering or
+hot/cold call sites. The own-process OS check above supplements the API contract.
+
+Build/link PASS, expected Recipe alignment-padding C4324 only. Runtime target
+now explicitly defines PSAPI_VERSION=2 and includes psapi.h outside namespaces;
+dumpbin imports confirms K32QueryWorkingSetEx and GetSystemInfo. No Psapi.lib
+dependency or new native RE finding/label added; sole IDB remains at previous
+2126functions/99data/3types save=True/readback. No IDB writer/MCP change needed.
+
+Exact fresh DLL SHA256
+A0BD255182499DC4CBCABE1EA3D8DB128FBF867AB9584A6684AFDF75C5242D9F;
+PDB7376B924BB1F20FC414A768FF2624F3ADABB4217824F353DE9B6C20A532A261F.
+Both archived BEFORE immediate LocalPair2 -EnemyRootSync launch under
+reports/enemy-page-query-20261024205736Z, with boot-locomotion_hook.log and
+boot-enemy_root_10696.log / boot-enemy_root_23744.log preserved after injection.
+
+A/Chloe PID10696 creation2026-10-24T23:57:36.7137419+03:00;
+B/Nadine PID23744 creation2026-10-24T23:57:38.7340672+03:00; both exact retail
+image paths, no debugger. Both report readGuard=QueryWorkingSetEx-page channel
+installed, native Player-world/owned-reset/peer-lifecycle/local-look READY.
+Initial private status actors0/paired0/worldEpoch0/capture0/match0/apply0/
+stopped0/costStop0/queries0: expected BEFORE user load, NOT enemy success.
+
+Prediction written above before build/launch. User told DIRECT same live-enemy
+checkpoint BOTH, no empty/menu first, initially no shooting/grenades/kills;
+compare A->B NPC position/rotation and responsiveness. Agent performed no game
+input/menu/window control. Await user scene-ready and visible result, then read
+bounded private logs; do not infer success from injection, READY, packets or
+counter progress alone. One30-second first-apply slice only, no automatic rearm,
+no combat-state/HP/death authority. If another cost/phase gate stops, preserve
+its exact context and reject that outcome without increasing the budget.

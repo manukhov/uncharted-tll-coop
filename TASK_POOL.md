@@ -23,12 +23,20 @@ body/manager/late/freshness/distance/1ms guardsunchanged. Primarytuple+heap
 publishedCLOSEDpreopen, nativePlayerOnKill/poolclear/HavokCloseENTRYclosesbefore
 stock, independentownedticket. Native rootsetter/PiratePerformprimaryindependent
 with3+statickinds; legacyfalseoldpathpreserved. LatestCOOP_STATUShasquota/details.
-ACTIVE: IDBsaved2126/99/3True+readback; freshE6305EAB...buildpass; A25944/B21400
-injected-EnemyRootSync, nativechannelsREADY, bothwaitingworldEpoch0/noCostStop.
-reports/enemy-world-epoch-20261024204242Z exactDLL/PDB+bootlogs. NOdebugger.
-UserDIRECTSAME LIVE-ENEMYscene (NOempty/menufirst; one30sboundedslice). NeedBvisiblyfollowsA/model
-andbody+responsiveness; AIactions/HP/deathNOTyetinprotocol. LaterVQmaystillstop;
-no budgetraise/latechecksremove/identicalretry. No debuggerforperformanceexam.
+REJECTED: E6305EAB... A25944/B21400 stop SECONDcensusread manager+0@1100F738A0,
+BEFOREroster/match/apply. A3160us/query3157; B4314/query4311; both2reads/2queries.
+ACKInspectOnly alreadyquiescent/no signal. reports/enemy-world-epoch-20261024204242Z
+hasexactDLL/PDB+terminal logs. PrimaryspecialcaseNOTsolecause; donotretryunchanged.
+NEWSTATIC: exact1..2pageQWSEhotcopies,ValidFIRST/!Bad/exactreadableprotection,
+64lexicalpagecache; coldinstallerONLYretainsVQ.1ms50ms/256call/SEH/nativechecks
+unchanged. OSmetadata-onlyprobe: same422105088BmanagerregionVQ3.5..12msvs
+QWSE17..42us; wallcorrelationNOTCPUcausality/hardlatencyguarantee. Reviewpass;
+freshA0BD2551...build/linkPASS/importK32QWSEconfirmed. Launched/injectedA10696/B23744
+withEnemyRootSync; bothnativechannelsinstalled/waitworldEpoch0/costStop0/queries0.
+reports/enemy-page-query-20261024205736Z exactDLL/PDB+bootlogs. UserDIRECTSAME
+LIVE-ENEMYscene BOTH (NOempty/menufirst;one30sboundedslice), visibleoutcomePENDING.
+NeedBvisiblyfollowA/model+body+responsiveness. AIactions/HP/deathNOTinprotocol.
+No budgetraise/latechecksremove/identicalretry/debuggerforperformanceexam.
 
 NEW USER CLARIFICATION: the empty->enemy location change was THROUGH MAIN MENU.
 The old explicit CPLV process-terminal behavior was intentionally unrejoinable.

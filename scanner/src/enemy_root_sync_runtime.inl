@@ -98,6 +98,7 @@ std::atomic<std::uint64_t> sent{}, send_dropped{};
 // OS call/page fault and must never be described as a hard frame-time bound.
 std::atomic_flag work_busy = ATOMIC_FLAG_INIT;
 std::uint64_t qpc_frequency{}, work_window{}, work_spent{}, work_query_ticks{};
+std::uintptr_t system_page_size{}; // initialized before installer reads/worker publication.
 unsigned work_queries{};
 std::atomic<unsigned> cost_stop{}, cost_site{}, peak_queries{};
 std::atomic<std::uint64_t> cost_total_ticks{}, peak_scope_ticks{}, peak_window_ticks{}, query_total{}, work_skips{};
@@ -172,7 +173,7 @@ struct WorkBudget {
         const auto value = static_cast<std::uint64_t>(now.QuadPart), delta = value-last;
         last = value; work_spent += delta;
         if (query_pending) {
-            // Existing pre/post-VirtualQuery QPC samples only: WALL bracket,
+            // Existing pre/post-protection-query QPC samples only: WALL bracket,
             // including scheduling/check/call overhead, NOT pure API CPU time.
             query_ticks += delta; work_query_ticks += delta; last_query_ticks = delta;
             query_pending = false;
@@ -258,8 +259,7 @@ bool start_stop_control() {
 }
 
 struct ReadCache {
-    struct Region { std::uintptr_t begin{}, end{}; };
-    std::array<Region, 64> regions{};
+    std::array<std::uintptr_t, 64> pages{};
     std::size_t count{};
     WorkBudget* budget{};
 };
@@ -300,25 +300,67 @@ bool copy(std::uintptr_t at, void* out, std::size_t size, ReadCache* cache = nul
     if (budget) { budget->read_address = at; budget->read_bytes = size; ++budget->read_calls; }
     if (budget && !budget->check()) return false;
     if (!size || size > 4096 || at < 0x10000 || at > 0x7FFFFFFFFFFFULL-size) return false;
-    for (auto cursor = at; cursor < at+size;) {
-        bool found{};
-        if (cache) for (std::size_t i = 0; i < cache->count; ++i) {
-            if (cache->regions[i].begin <= cursor && cursor < cache->regions[i].end) {
-                cursor = cache->regions[i].end; found = true; break;
+    if (cache) {
+        // Query ONLY the one/two requested native pages, not the remainder of
+        // a potentially enormous same-protection game-heap region. This is
+        // lexical observation, not page residency/protection or identity lease.
+        const auto page_size = system_page_size;
+        if (page_size < 4096 || (page_size & (page_size-1))) return false;
+        const auto mask = page_size-1;
+        const auto first = at & ~mask;
+        const auto last = (at+size-1) & ~mask; // bounded canonical range above.
+        if (last < first || last-first > page_size) return false;
+        std::array<PSAPI_WORKING_SET_EX_INFORMATION, 2> query{};
+        std::size_t missing{};
+        for (auto page = first;; page = last) {
+            bool found{};
+            for (std::size_t i = 0; i < cache->count; ++i) {
+                if (cache->pages[i] == page) { found = true; break; }
             }
+            if (!found) {
+                if (missing == query.size()) return false;
+                query[missing++].VirtualAddress = reinterpret_cast<void*>(page);
+            }
+            if (page == last) break;
         }
-        if (found) continue;
-        MEMORY_BASIC_INFORMATION m{};
-        if (budget && !budget->check(true, cursor)) return false;
-        const auto queried = VirtualQuery(reinterpret_cast<void*>(cursor), &m, sizeof(m));
-        if (budget && !budget->check()) return false;
-        if (queried != sizeof(m) || m.State != MEM_COMMIT ||
-            (m.Protect & (PAGE_GUARD | PAGE_NOACCESS)) || !(m.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY))) return false;
-        const auto end = reinterpret_cast<std::uintptr_t>(m.BaseAddress)+m.RegionSize;
-        if (end <= cursor) return false;
-        if (cache && cache->count < cache->regions.size()) cache->regions[cache->count++] = {reinterpret_cast<std::uintptr_t>(m.BaseAddress), end};
-        cursor = end;
+        if (missing) {
+            if (budget && !budget->check(true, reinterpret_cast<std::uintptr_t>(query[0].VirtualAddress))) return false;
+            const auto queried = QueryWorkingSetEx(GetCurrentProcess(), query.data(),
+                static_cast<DWORD>(missing*sizeof(query[0])));
+            if (budget && !budget->check()) return false;
+            if (!queried) return false;
+            for (std::size_t i = 0; i < missing; ++i) {
+                const auto& attributes = query[i].VirtualAttributes;
+                // With Valid==0, protection/other valid-layout members are
+                // undefined. Reject without touching or faulting in that page.
+                if (!attributes.Valid) return false;
+                if (attributes.Bad) return false;
+                switch (attributes.Win32Protection) {
+                case PAGE_READONLY: case PAGE_READWRITE: case PAGE_WRITECOPY:
+                case PAGE_EXECUTE_READ: case PAGE_EXECUTE_READWRITE: case PAGE_EXECUTE_WRITECOPY:
+                    break;
+                default: return false; // observed GUARD/NOACCESS/modifiers/unknown.
+                }
+            }
+            for (std::size_t i = 0; i < missing && cache->count < cache->pages.size(); ++i)
+                cache->pages[cache->count++] = reinterpret_cast<std::uintptr_t>(query[i].VirtualAddress);
+        }
+    } else {
+        // Cold installer-only reads may target not-yet-resident image pages.
+        // Preserve their original region guard; NEVER fall back here from a
+        // rejected hot page query and never share this admission across calls.
+        for (auto cursor = at; cursor < at+size;) {
+            MEMORY_BASIC_INFORMATION m{};
+            const auto queried = VirtualQuery(reinterpret_cast<void*>(cursor), &m, sizeof(m));
+            if (queried != sizeof(m) || m.State != MEM_COMMIT ||
+                (m.Protect & (PAGE_GUARD | PAGE_NOACCESS)) || !(m.Protect & (PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY))) return false;
+            const auto end = reinterpret_cast<std::uintptr_t>(m.BaseAddress)+m.RegionSize;
+            if (end <= cursor) return false;
+            cursor = end;
+        }
     }
+    // Reject observed guard protection above. A later native protection change
+    // can still fault/consume a guard at memcpy; SEH is not a protection lease.
     bool copied{};
     __try { std::memcpy(out, reinterpret_cast<const void*>(at), size); copied = true; }
     __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION || GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR ||
@@ -384,7 +426,7 @@ bool identity(std::uintptr_t actor, Local& out, ReadCache& cache) noexcept {
     for (std::size_t i = 0; i < value.key.name.size();) {
         // Windows AMD64 base pages are4KiB. Stop at each page boundary so a
         // terminator before an unreadable next page remains valid. copy() still
-        // checks protection/SEH; do not query the same name region twice.
+        // checks protection/SEH; do not query the same name page twice.
         const auto available = std::size_t{0x1000}-((name+i)&0xFFF);
         const auto size = std::min(available, value.key.name.size()-i);
         if (!copy(name+i, value.key.name.data()+i, size, &cache)) return false;
@@ -404,7 +446,7 @@ bool identity(std::uintptr_t actor, Local& out, ReadCache& cache) noexcept {
 }
 bool census(Roster& out, WorkBudget& budget) noexcept {
     // One synchronous read pass, no game callbacks or pointer publication.
-    // Reuse region checks inside this pass, never across ticks/native phases.
+    // Reuse exact-page checks inside this pass, never across ticks/native phases.
     ReadCache cache{}; cache.budget = &budget;
     const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
     Roster value{};
@@ -818,7 +860,7 @@ bool ordinary(std::uintptr_t actor, std::uintptr_t job, std::array<float, 8>& tr
                 // Copy only [body+0x40, body+0xC7), not trailing POD padding.
                 // This may inspect protected gaps/late fields earlier and thus
                 // reject more strictly; it is not an atomic observation/lease
-                // or a guarantee of fewer VirtualQuery calls. Native pointers
+                // or a guarantee of fewer protection queries. Native pointers
                 // are followed only after the original field checks below.
                 BodyImportFields fields;
                 std::uintptr_t world{};
@@ -1014,6 +1056,13 @@ extern "C" std::uintptr_t __fastcall TllEnemyRootPostblend(void* owner, void* jo
     SetLastError(error); return result;
 }
 bool install_enemy_root_sync() {
+    SYSTEM_INFO info{};
+    GetSystemInfo(&info);
+    const auto page_size = static_cast<std::uintptr_t>(info.dwPageSize);
+    if (page_size < 4096 || (page_size & (page_size-1))) {
+        boot_log_line("ENEMY-ROOT installation refused: unsupported native page size"); return false;
+    }
+    enemy_root::system_page_size = page_size;
     constexpr std::array<std::uint8_t, 32> original{
         0x48,0x89,0x5C,0x24,0x08,0x48,0x89,0x74,0x24,0x10,0x57,0x48,0x83,0xEC,0x20,0x48,
         0x8B,0x01,0x48,0x8B,0xF1,0xFF,0x90,0xC0,0x03,0x00,0x00,0x48,0x8B,0x48,0x58,0x48};
@@ -1058,7 +1107,7 @@ bool install_enemy_root_sync() {
     const bool ready = changed && sealed;
     if (!ready) enemy_root::stopped.store(true);
     enemy_root::installed.store(ready, std::memory_order_release);
-    boot_log_line(ready ? "ENEMY-ROOT native Pirate+408 root replication installed (30-second first slice; no HP/AI writes)" :
+    boot_log_line(ready ? "ENEMY-ROOT native Pirate+408 root replication installed (readGuard=QueryWorkingSetEx-page; 30-second first slice; no HP/AI writes)" :
         "ENEMY-ROOT installation refused; stock forwarding only");
     return ready;
 }

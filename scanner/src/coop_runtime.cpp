@@ -5,6 +5,7 @@
 #include <intrin.h>
 #if defined(TLL_ENEMY_ROOT_SYNC)
 #include <bcrypt.h>
+#include <psapi.h>
 #include "enemy_root_sync_protocol.h"
 #endif
 
