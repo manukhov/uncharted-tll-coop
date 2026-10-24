@@ -970,6 +970,21 @@ std::uint64_t g_spawn_flag = 0;
 void* g_spawn_out = nullptr;
 PVOID g_spawn_veh = nullptr;
 
+struct OwnedRemotePlayerIdentity {
+    std::uintptr_t object = 0;
+    std::uintptr_t record = 0;
+    std::uint32_t generation = 0;
+};
+
+// Published after our synchronous spawn, then immutable for this DLL's life.
+// Acquire readiness before reading it. The weak tuple is not a lifetime lease.
+OwnedRemotePlayerIdentity g_owned_remote_player{};
+std::atomic<bool> g_owned_remote_player_ready{false};
+std::atomic<bool> g_remote_player_reset_ready{false};
+std::atomic<bool> g_remote_player_teardown{false};
+std::atomic<bool> g_remote_player_spawn_consumed{false};
+std::atomic<bool> g_remote_player_ownership_refused{false};
+
 struct LookProbeHashes {
     std::uint32_t chloe_base = 0;
     std::uint32_t coop_chloe = 0;
@@ -14814,6 +14829,12 @@ extern volatile int g_drive_slot_index;
 
 void* retained_player_object(int index) {
     if (g_module == 0 || static_cast<unsigned>(index) >= 6) {
+        return nullptr;
+    }
+    if (index == 1 &&
+        g_remote_player_ownership_refused.load(std::memory_order_acquire)) {
+        // A native spawn returned an unverifiable output. Do not let ordinary
+        // mod consumers adopt its slot1 occupant after the spawn helper returns.
         return nullptr;
     }
     // No VirtualQuery/allocator/native resolver here: this is a shared hot path.
@@ -30302,6 +30323,213 @@ bool prepare_plain_callsite_relay(
     return true;
 }
 
+// Owned replica participation in native reset. Never strip Process persistence
+// flags or call KillTree out of order: ResetActors performs body collection,
+// world batch removal, body shutdown, then its normal kill visitor.
+using ActorResetFunction = void(__fastcall*)(int, std::uint8_t);
+using ShouldResetForReasonFunction = bool(__fastcall*)(void*, int);
+using CurrentProcessFunction = void*(__fastcall*)();
+ActorResetFunction g_original_owned_actor_reset = nullptr;
+ShouldResetForReasonFunction g_original_player_should_reset = nullptr;
+DWORD g_owned_reset_fls = FLS_OUT_OF_INDEXES;
+
+struct OwnedRemoteResetScope {
+    OwnedRemotePlayerIdentity identity;
+    bool permit;
+    std::uint8_t seen;
+    std::uint8_t forced;
+};
+
+bool seh_matches_owned_remote_reset_player(
+    void* player, const OwnedRemotePlayerIdentity& identity) {
+    if (reinterpret_cast<std::uintptr_t>(player) != identity.object ||
+        identity.object == 0 || identity.record == 0 || identity.generation == 0) {
+        return false;
+    }
+    // The iterator owns its native object argument; this tuple check is not a
+    // lease for arbitrary callers and never adopts a slot1 occupant on its own.
+    __try {
+        const auto* bytes = static_cast<const std::byte*>(player);
+        return *reinterpret_cast<const volatile std::uintptr_t*>(bytes) ==
+                   g_module + kPlayerVtableRva &&
+               *reinterpret_cast<const volatile std::uintptr_t*>(bytes + 0xA8) ==
+                   identity.record &&
+               *reinterpret_cast<const volatile std::uint32_t*>(bytes + 0xBC) ==
+                   identity.generation &&
+               (*reinterpret_cast<const volatile std::uint8_t*>(bytes + 0x40) &
+                    0x04) == 0 &&
+               *reinterpret_cast<const volatile std::uintptr_t*>(
+                   identity.record + 8) == identity.object;
+    } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ||
+                GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR
+                    ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+        return false;
+    }
+}
+
+__declspec(noinline) bool __fastcall hooked_owned_player_should_reset(
+    void* player, int reason) {
+    const bool stock = g_original_player_should_reset(player, reason);
+    if (reason != 2 ||
+        !g_remote_player_reset_ready.load(std::memory_order_acquire)) return stock;
+    auto* scope = static_cast<OwnedRemoteResetScope*>(FlsGetValue(g_owned_reset_fls));
+    if (scope == nullptr ||
+        !seh_matches_owned_remote_reset_player(player, scope->identity)) return stock;
+
+    const auto caller = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    // Never turn the current-process safety check into an assertion, nor kill
+    // its caller later if native code changed context before this check.
+    if (caller == g_module + kActorResetCurrentPredicateReturnRva) {
+        scope->permit = false;
+        return stock;
+    }
+    if (!scope->permit) return stock;
+    const std::uint8_t stage =
+        caller == g_module + kActorResetCollectPredicateReturnRva ? 1 :
+        caller == g_module + kActorResetShutdownPredicateReturnRva ? 2 :
+        caller == g_module + kActorResetKillPredicateReturnRva ? 4 : 0;
+    if (stage == 0) return stock;
+    scope->seen |= stage;
+    if (!stock) scope->forced |= stage;
+    return true;
+}
+
+void log_owned_remote_reset_result(
+    const OwnedRemoteResetScope& scope, bool restored) {
+    std::ostringstream line;
+    line << "REMOTE-PLAYER-RESET scope=observer-after-primary reason=2 object=0x"
+         << std::hex << scope.identity.object
+         << " record=0x" << scope.identity.record
+         << " generation=0x" << scope.identity.generation
+         << " seen=0x" << static_cast<unsigned>(scope.seen)
+         << " forced=0x" << static_cast<unsigned>(scope.forced)
+         << std::dec << " permit=" << scope.permit
+         << " flsRestored=" << restored
+         << " slot1Live=" << (retained_player_object(1) != nullptr);
+    // seen/forced are native admission, not proof of successful destruction.
+    boot_log_line(line.str().c_str());
+}
+
+void __fastcall hooked_owned_actor_reset(int reason, std::uint8_t flag) {
+    if (reason != 2 ||
+        !g_remote_player_reset_ready.load(std::memory_order_acquire) ||
+        !g_remote_player_spawn_consumed.load(std::memory_order_acquire)) {
+        // Initial loading may reset actors before our first spawn. It has no
+        // mod-owned actor to retire and must not consume the session's latch.
+        g_original_owned_actor_reset(reason, flag);
+        return;
+    }
+    // Terminal for this DLL: old captured context pointers are not safe input
+    // for a new location. Both automatic and manual reissue use this latch.
+    g_remote_player_teardown.store(true, std::memory_order_release);
+    if (!g_owned_remote_player_ready.load(std::memory_order_acquire)) {
+        boot_log_line("REMOTE-PLAYER-RESET no-owned-token; spawn closed");
+        g_original_owned_actor_reset(reason, flag);
+        return;
+    }
+    const auto current_process = reinterpret_cast<CurrentProcessFunction>(
+        g_module + kThreadContextGetCurrentProcessRva)();
+    OwnedRemoteResetScope scope{
+        g_owned_remote_player,
+        reinterpret_cast<std::uintptr_t>(current_process) != g_owned_remote_player.object,
+        0, 0};
+    void* const previous = FlsGetValue(g_owned_reset_fls);
+    if (!FlsSetValue(g_owned_reset_fls, &scope)) {
+        boot_log_line("REMOTE-PLAYER-RESET REFUSED FLS publication; stock reset");
+        g_original_owned_actor_reset(reason, flag);
+        return;
+    }
+    bool restored = false;
+    // Native waits can switch fibers. Own FLS follows that fiber; thread_local
+    // would leak the permit into a different fiber on the same OS thread.
+    __try {
+        g_original_owned_actor_reset(reason, flag);
+    } __finally {
+        restored = FlsSetValue(g_owned_reset_fls, previous) != FALSE;
+        if (!restored) {
+            // Do not let future predicates dereference a stale stack scope.
+            g_remote_player_reset_ready.store(false, std::memory_order_release);
+        }
+    }
+    log_owned_remote_reset_result(scope, restored);
+}
+
+bool install_owned_remote_player_reset() {
+    auto* const predicate_slot = reinterpret_cast<std::uintptr_t*>(
+        g_module + kPlayerShouldResetVtableSlotRva);
+    const auto native_predicate = g_module + kProcessShouldResetForReasonRva;
+    constexpr std::array<std::uint8_t, 5> expected_call{0xE8, 0xFC, 0x2C, 0xFF, 0xFF};
+    if (*predicate_slot != native_predicate ||
+        std::memcmp(reinterpret_cast<void*>(g_module + kTaskObserverActorResetCallsiteRva),
+                    expected_call.data(), expected_call.size()) != 0) {
+        boot_log_line("REMOTE-PLAYER-RESET REFUSED native targets; spawn disabled");
+        return false;
+    }
+    const DWORD fls = FlsAlloc(nullptr);
+    if (fls == FLS_OUT_OF_INDEXES) {
+        boot_log_line("REMOTE-PLAYER-RESET REFUSED FLS allocation; spawn disabled");
+        return false;
+    }
+    std::uint8_t* call = nullptr;
+    std::uint8_t* relay = nullptr;
+    std::int32_t displacement = 0;
+    if (!prepare_plain_callsite_relay(
+            kTaskObserverActorResetCallsiteRva, kActorResetRva,
+            reinterpret_cast<const void*>(&hooked_owned_actor_reset),
+            call, relay, displacement)) {
+        FlsFree(fls);
+        boot_log_line("REMOTE-PLAYER-RESET REFUSED callsite relay; spawn disabled");
+        return false;
+    }
+    SuspendedProcessThreads suspended{};
+    if (!suspend_other_process_threads(suspended)) {
+        VirtualFree(relay, 0, MEM_RELEASE);
+        FlsFree(fls);
+        boot_log_line("REMOTE-PLAYER-RESET REFUSED thread suspension; spawn disabled");
+        return false;
+    }
+    DWORD call_old = 0;
+    DWORD predicate_old = 0;
+    const bool unchanged = *predicate_slot == native_predicate &&
+        std::memcmp(call, expected_call.data(), expected_call.size()) == 0;
+    const bool call_protected = unchanged && VirtualProtect(
+        call, 5, PAGE_EXECUTE_READWRITE, &call_old) != FALSE;
+    const bool predicate_protected = call_protected && VirtualProtect(
+        predicate_slot, sizeof(*predicate_slot), PAGE_READWRITE, &predicate_old) != FALSE;
+    if (!predicate_protected) {
+        DWORD ignored = 0;
+        if (call_protected) VirtualProtect(call, 5, call_old, &ignored);
+        resume_suspended_process_threads(suspended);
+        VirtualFree(relay, 0, MEM_RELEASE);
+        FlsFree(fls);
+        boot_log_line("REMOTE-PLAYER-RESET REFUSED protected transaction; spawn disabled");
+        return false;
+    }
+    g_original_owned_actor_reset = reinterpret_cast<ActorResetFunction>(g_module + kActorResetRva);
+    g_original_player_should_reset = reinterpret_cast<ShouldResetForReasonFunction>(native_predicate);
+    g_owned_reset_fls = fls;
+    *predicate_slot = reinterpret_cast<std::uintptr_t>(&hooked_owned_player_should_reset);
+    std::memcpy(call + 1, &displacement, sizeof(displacement));
+    FlushInstructionCache(GetCurrentProcess(), call, 5);
+    FlushInstructionCache(GetCurrentProcess(), predicate_slot, sizeof(*predicate_slot));
+    DWORD ignored = 0;
+    const bool predicate_restored = VirtualProtect(
+        predicate_slot, sizeof(*predicate_slot), predicate_old, &ignored) != FALSE;
+    const bool call_restored = VirtualProtect(call, 5, call_old, &ignored) != FALSE;
+    const bool readback = *predicate_slot ==
+        reinterpret_cast<std::uintptr_t>(&hooked_owned_player_should_reset) &&
+        std::memcmp(call + 1, &displacement, sizeof(displacement)) == 0;
+    const bool ready = predicate_restored && call_restored && readback;
+    g_remote_player_reset_ready.store(ready, std::memory_order_release);
+    resume_suspended_process_threads(suspended);
+    // Once published, both hooks/relay and FLS remain resident even if readiness
+    // fails: pass-through hooks must never point at released memory.
+    boot_log_line(ready
+        ? "REMOTE-PLAYER-RESET READY build=2026-10-24owned-reset scope=1413C6B1F reason=2 stages=3 nativeKill=1 fls=1"
+        : "REMOTE-PLAYER-RESET REFUSED restore/readback; resident pass-through, spawn disabled");
+    return ready;
+}
+
 bool prepare_six_byte_indirect_callsite_relay(
     std::uintptr_t callsite_rva,
     const std::array<std::uint8_t, 6>& expected_bytes,
@@ -40060,7 +40288,88 @@ void log_joypad_command_slot_state(int slot, const char* phase) {
     log_line(line.str().c_str());
 }
 
+bool seh_capture_owned_remote_player_identity(
+    OwnedRemotePlayerIdentity& captured) {
+    captured = {};
+    if (g_module == 0) return false;
+    const auto slot0 = g_module + kRetainedSlotTableRva;
+    const auto slot1 = slot0 + 0x10;
+    __try {
+        // SpawnPlayerFromRetainedDescriptor's RCX is an OUTPUT weak handle,
+        // despite the historical g_spawn_desc name. Do not adopt slot 1 alone.
+        captured.record = *reinterpret_cast<const volatile std::uintptr_t*>(
+            g_spawn_desc);
+        captured.generation =
+            *reinterpret_cast<const volatile std::uint32_t*>(g_spawn_desc + 8);
+        if (captured.record == 0 || captured.generation == 0) return false;
+        captured.object = *reinterpret_cast<const volatile std::uintptr_t*>(
+            captured.record + 8);
+        if (captured.object == 0 ||
+            *reinterpret_cast<const volatile std::uintptr_t*>(captured.object) !=
+                g_module + kPlayerVtableRva ||
+            *reinterpret_cast<const volatile std::uintptr_t*>(
+                captured.object + 0xA8) != captured.record ||
+            *reinterpret_cast<const volatile std::uint32_t*>(
+                captured.object + 0xBC) != captured.generation ||
+            (*reinterpret_cast<const volatile std::uint8_t*>(
+                captured.object + 0x40) & 0x04) != 0 ||
+            *reinterpret_cast<const volatile std::uintptr_t*>(slot1) !=
+                captured.record ||
+            *reinterpret_cast<const volatile std::uint32_t*>(slot1 + 8) !=
+                captured.generation) return false;
+
+        const auto primary_record =
+            *reinterpret_cast<const volatile std::uintptr_t*>(slot0);
+        const auto primary_generation =
+            *reinterpret_cast<const volatile std::uint32_t*>(slot0 + 8);
+        const auto primary_object = primary_record != 0
+            ? *reinterpret_cast<const volatile std::uintptr_t*>(primary_record + 8)
+            : 0;
+        if (captured.record == primary_record ||
+            captured.object == primary_object) return false;
+
+        // Reject drift between output, retained slot and record/object identity.
+        // Equal observations still do not exclude a later free or ABA.
+        return
+            *reinterpret_cast<const volatile std::uintptr_t*>(g_spawn_desc) ==
+                captured.record &&
+            *reinterpret_cast<const volatile std::uint32_t*>(g_spawn_desc + 8) ==
+                captured.generation &&
+            *reinterpret_cast<const volatile std::uintptr_t*>(slot1) ==
+                captured.record &&
+            *reinterpret_cast<const volatile std::uint32_t*>(slot1 + 8) ==
+                captured.generation &&
+            *reinterpret_cast<const volatile std::uintptr_t*>(
+                captured.record + 8) == captured.object &&
+            *reinterpret_cast<const volatile std::uintptr_t*>(captured.object) ==
+                g_module + kPlayerVtableRva &&
+            *reinterpret_cast<const volatile std::uintptr_t*>(
+                captured.object + 0xA8) == captured.record &&
+            *reinterpret_cast<const volatile std::uint32_t*>(
+                captured.object + 0xBC) == captured.generation &&
+            (*reinterpret_cast<const volatile std::uint8_t*>(
+                captured.object + 0x40) & 0x04) == 0 &&
+            *reinterpret_cast<const volatile std::uintptr_t*>(slot0) ==
+                primary_record &&
+            *reinterpret_cast<const volatile std::uint32_t*>(slot0 + 8) ==
+                primary_generation &&
+            (primary_record == 0 ||
+             *reinterpret_cast<const volatile std::uintptr_t*>(
+                 primary_record + 8) == primary_object);
+    } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ||
+                GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR
+                    ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+        return false;
+    }
+}
+
 void reissue_spawn_for_slot1() {
+    if (!g_remote_player_reset_ready.load(std::memory_order_acquire) ||
+        g_remote_player_teardown.load(std::memory_order_acquire) ||
+        g_remote_player_spawn_consumed.load(std::memory_order_acquire)) {
+        log_line("reissue spawn skipped: reset protection unavailable, teardown, or already owned");
+        return;
+    }
     if (!g_spawn_captured) {
         log_line("reissue spawn skipped: no captured spawn args yet");
         return;
@@ -40072,6 +40381,13 @@ void reissue_spawn_for_slot1() {
         log_line("reissue spawn skipped: slot 1 already occupied (idempotent)");
         return;
     }
+    // One writer owns preparation/output publication, including failed capture.
+    // Neither a manual retry nor another update can create an untracked second
+    // actor; safe new-location rearm is intentionally not implemented here.
+    bool unconsumed = false;
+    if (!g_remote_player_spawn_consumed.compare_exchange_strong(
+            unconsumed, true, std::memory_order_acq_rel,
+            std::memory_order_acquire)) return;
     const auto string_hash =
         reinterpret_cast<StringHashFunction>(g_module + kStringHashRva);
     // Candidate "Chloe look" hashes to find in the spawn args, and the target
@@ -40155,12 +40471,44 @@ void reissue_spawn_for_slot1() {
     }
     log_joypad_command_slot_state(0, "before-spawn");
     log_joypad_command_slot_state(1, "before-spawn");
+    // Preparation can log/walk look data; recheck the permanent teardown latch
+    // immediately before calling native spawn, not just at the common entry.
+    if (!g_remote_player_reset_ready.load(std::memory_order_acquire) ||
+        g_remote_player_teardown.load(std::memory_order_acquire)) {
+        if (appear_swap) g_appearance_swap_active = false;
+        log_line("reissue spawn skipped before call: reset protection unavailable, teardown, or already owned");
+        return;
+    }
+    // Native RCX is output-only: clear just its record/id, not captured inputs.
+    std::memset(g_spawn_desc, 0, sizeof(std::uintptr_t) + sizeof(std::uint32_t));
     spawn(g_spawn_desc, 1, g_spawn_ctx, g_spawn_a4, g_spawn_flag, g_spawn_out);
+    OwnedRemotePlayerIdentity owned{};
+    const bool ownership_captured = seh_capture_owned_remote_player_identity(owned);
+    if (ownership_captured) {
+        g_owned_remote_player = owned;
+        g_owned_remote_player_ready.store(true, std::memory_order_release);
+    } else {
+        // This does NOT retire an unverified actor. The exam is REFUSED, and
+        // further replay/application must stop rather than adopt slot1 blindly.
+        g_remote_player_ownership_refused.store(true, std::memory_order_release);
+        g_remote_player_teardown.store(true, std::memory_order_release);
+        g_puppet_net_apply = false;
+    }
+    {
+        std::ostringstream ownership;
+        ownership << "REMOTE-PLAYER-OWNERSHIP "
+                  << (ownership_captured ? "CAPTURED" : "REFUSED")
+                  << " object=0x" << std::hex << owned.object
+                  << " record=0x" << owned.record
+                  << " generation=0x" << owned.generation;
+        boot_log_line(ownership.str().c_str());
+    }
     if (appear_swap) {
         g_appearance_swap_active = false;
         log_line("APPEARSWAP done (clone spawn returned)");
     }
     g_slot1_visual_override_active = false;
+    if (!ownership_captured) return;
     coop::StatePacket peer_after_spawn{};
     if (copy_last_peer_state_snapshot(peer_after_spawn)) {
         apply_peer_health_to_slot1(peer_after_spawn, true);
@@ -81973,6 +82321,7 @@ DWORD WINAPI install_hook(void*) {
     }
     install_give_weapon_diagnostic();
     install_weapon_interact_world_lifecycle();
+    install_owned_remote_player_reset();
     install_build_fire_args_gate();
     install_projectile_launch_record_direction_relay();
     install_tracer_visual_origin_relay();

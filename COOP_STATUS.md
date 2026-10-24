@@ -11,7 +11,15 @@ null hkReferencedObjectLock1437AC388; Havok TLSGetValue also returned null.
 Fault is a Player post-animation collision probe, not a GPU/export function.
 Enemy root was OFF; exact7FBAD416... DLL/PDB and both watcher logs preserved.
 
-STRONG STATIC CANDIDATE, NOT FIXED: B's fault job belongs to Chloe-identity
+CURRENT IMPLEMENTATION, RUNTIME NOT YET VALIDATED: exact mod-owned secondary
+is captured from synchronous spawn OUTPUT, then admitted ONLY to native reason2
+body/kill passes inside observer-after-primary call1413C6B1F. Original flags,
+primary/reset guards and nativeKillTree unchanged; own FLS binds scope across
+fiber yields. Common spawn is one-shot and terminally closed on this teardown;
+safe level-reload rearm remains unimplemented. Initial resets before our spawn
+remain stock. Build/review/prediction and exam status are in latest entry.
+
+PREVIOUS STRONG STATIC CANDIDATE: B's fault job belongs to Chloe-identity
 Player10E0243800/gen1430 (consistent with remote clone, exact slot unproved),
 killbyte0. Flags008AD7E1 reject menu reset reason2 through1416A5B50, while
 observer1413C6AF0 explicitly kills only the primary before general actor reset.
@@ -43954,9 +43962,9 @@ enemy-sync, baseline stability or performance result yet.
 **User correction / scenario limit:** the user now reports that A/Chloe returns
 to the main menu first, and B crashes when B ALSO returns to the main menu.
 This supersedes the previous untouched-survivor interpretation. The earlier
-1..2second report does NOT prove peer-state1500ms timeout causality. An optional
-question asks whether B's own exit had started before this watched crash; no
-separate answer is required to respect the user's corrected sequence. Do not
+1..2second report does NOT prove peer-state1500ms timeout causality. The user
+subsequently explicitly confirmed B had ALREADY started exiting to main menu
+when the fresh B dump was captured. This now binds that run's scenario. Do not
 repeat the earlier A-menu/B-untouched test as if its exact outcome were proved.
 
 **CONFIRMED fresh terminal context, not last handled probes:** unchanged main
@@ -44106,3 +44114,124 @@ All new labels are native boundary findings; no production behavior change or
 repaired crash is claimed.
 Pre-existing untracked tmp/ remains untouched; only the findings/task notes and
 label script belong to this unit of work. Ignored raw artifacts stay local.
+
+## 2026-10-24 — Admit only the mod-owned replica to native observer reset before Havok close
+
+**Scope / user result:** user explicitly confirms the watched B crash happened
+after initiating B's own return to menu, following A/Chloe's exit. Appearance
+work and enemy root stay parked/OFF while fixing this baseline blocker. No
+timeout, HP0, GPU, null-shape or missing ordinary-frame wait attribution is made.
+
+**STATIC competing repair candidates:**
+
+- Selected: make the exact mod-owned Player participate in the existing native
+  body/kill reset passes, only in observer+8's after-primary call/reason2.
+- REJECTED as equivalent repair: callKillTree directly after primary. Native
+  ResetActors performs two earlier composite-body passes and world batch removal;
+  directKillTree would skip that ordering for the replica.
+- REJECTED broad adaptation: clear all persistence flags or globally force
+  Player+110 forreason2. Direct reason2 callers and reasons6/7/9/10 differ;
+  ResetActors also calls+110 on its own current Process as a safety assertion.
+- REJECTED null-lock masking: skipping Havok addReference would hide lifetime
+  failure and leave inconsistent reference/body state, not retire the Player.
+
+**Evidence quota, independent kinds:**
+
+1. Source assertions + native dataflow: ActorReset_ResetActors1413B9820 is
+   exact void ResetActors(int,bool), reset-actors.cpp:266. ProcessMgr tree
+   visitor141623050 holds its recursive lock, forwards object/userdata, and
+   does not replace current-process/FLS. Collect1413B9740 ->world batch remove
+   1413BA023 ->shutdown1413B97B0 ->kill1413B9500 ->DestroyDead1413BA76F.
+   Native kill at1413B9712 invalidates root/descendants before later freeing.
+2. Exact vtable/callsite identities: Player+110 points to1416A5B50. Visitor
+   predicate returns are1413B975B/1413B97C2/1413B952F. Current-process return
+   1413B9E93 MUST stay stock. Observer call1413C6B1F is E8 FC2CFFFF to1413B9820,
+   ECX=reason/EDX=bool; preceding1413C6B15 already kills primary. Source audit
+   finds no Player OnKill+190 override or globalKillTree hook; the existing
+   weapon-interact kill callsite wrapper forwards unconditionally.
+3. Independent normal-menu ordering and writer: process buckets complete at
+   1401677FB before postrender1401678DE. Postrender waits queued HavokStep at
+   1401667C1 and final owned counter14016680C before quit/reset140166833,
+   graphupdate14016685D, dead cleanup140166884/889, Havok close140166893.
+   MainMenu::ProcessTask14029B640 writes closepending at14029B82C; independently
+   TaskPlayStartMenu140BBCE70 resetsreason2 at140BBD00C BEFORE closepending
+   140BBD0C9. This is the inspected ordinary-menu contract, not a universal
+   observer-wide lease against unrelated producers/callers.
+4. Actual fresh crash object: Chloe Player10E0243800/gen1430 remains unmarked
+   with008AD7E1; native1416A5B50 rejectsreason2. Cached probe reaches missing
+   Havok lock/TLS through the ordinary post-animation callback. Actual failed
+   run writer timing remains unobserved; this evidence supports a falsifiable
+   repair candidate rather than declaring H1 causally CONFIRMED.
+
+**STATIC ownership ABI correction:** SpawnPlayerFromRetainedDescriptor1410F1910
+RCX/a1 is OUTPUT {record,id}, not input descriptor despite g_spawn_desc's old
+name. Success writes16B at1410F2A37/1410F3266; failure zeros at1410F2A71/74;
+fallbackCommitResolved(a1) at1410F1A2B writesrecord/id at1410F17FD/1806.
+After only OUR synchronous slot1 call, capture private output, exact PlayerVT,
+A8/BC, record+8 and retainedslot1 agreement, rejecting OnKill and primary alias,
+with final rereads under bounded SEH. This binds ownership independently of a
+later arbitrary slot occupant; it is still not an ABA/lifetime lease.
+
+**IMPLEMENTED, NOT CONFIRMED repaired:** coop_runtime.cpp now publishes that
+immutable tuple once, guarded by a one-shot CAS BEFORE look preparation/native
+spawn. Exact E8+Player-vtable+110 patches install transactionally under existing
+thread suspension, with stock target checks twice, protection/readback checks
+and resident pass-through resources on published failure. If installation fails,
+mod spawn stays disabled. Onlyobserver1413C6B1F reason2 AFTER a consumed spawn
+opens a stack POD permit through its OWN FlsAlloc index. Scope follows native
+fiber yields and restores nesting through__finally; a restore failure disables
+future permit reads. Initial loading resets before our first spawn stay stock.
+FLS semantics: [Microsoft Fibers](https://learn.microsoft.com/en-us/windows/win32/procthread/fibers),
+[FlsSetValue](https://learn.microsoft.com/en-us/windows/win32/api/fibersapi/nf-fibersapi-flssetvalue).
+
+Predicate always computes stock result first. Only exact owned tuple/reason2
+AND one of the THREE visitor return PCs can change false->true. Current-process
+check stays stock and revokes permission if it sees our owned actor; the wrapper
+also refuses if native currentProcess equals it at entry. Children are not forced.
+The native passes, body batch, event, KillTree, OnKill and deferred free remain
+unaltered. No raw persistence/health/Havok state writes or new native wait/loop.
+
+On this teardown common automatic/manual spawn entry is terminally closed.
+Existing capture/autospawn were already once-per-DLL; no safe new-level rearm
+existed, and none is invented here. A fresh process is required for another
+co-op session after exit; universal load/checkpoint/reason9/10 cleanup is NOT
+claimed. Other direct actor-reset calls remain stock, including1413C71BE.
+
+**Refusal handling / limits:** ownershipREFUSED terminally closes replay, clears
+g_puppet_net_apply, stops immediate post-spawnHP and makes shared slot1 lookup
+return null so caller cannot re-enable/adopt the unverified actor. This does
+NOT safely retire an already spawned unverified native object. Such a run is
+NOT ADMITTED, even if it does not crash; stop the scenario and inspect evidence.
+Do not silently fall back to adopting slot1. A no-owned-token reset after a
+consumed attempt, missing/mismatched tuple, revoked current-process permit,
+missingstage hits or FLS failure also cannot prove the repair worked.
+
+**Verification before exam:** fresh production DLL builds successfully with
+normal MSVC x64 target. Independent source/native reviews fixed initial-load
+closure and refusal/caller application gaps; git diff --check clean. Full final
+DLL/PDB hashes and launch identities are recorded in the actual-run note below.
+No compilation/READY/forced-stage marker is treated as visible crash repair.
+IDB pipeline applied9 new function names and targeted instruction comments,
+corrected the wrong old ResetActors camera comment and output ABI annotation.
+reports/apply_owned_reset_20261024.txt:2075functions/93data/3types,
+save_database returned True; MCP restarted and names/callxref/output ABI read back.
+
+**Falsifiable prediction written BEFORE launch:** normal two-copy LocalPair,
+enemy root OFF. User first loads SAME EMPTY location in both and reports ready;
+require per-PID REMOTE-PLAYER-RESET READY and OWNERSHIP CAPTURED before admitting
+menu scenario. Then user returns A/Chloe to menu FIRST and B/Nadine to menu NEXT,
+leaving both processes open. Each own reset should report seen/forced stage bits
+1|2|4 for its captured replica, restoredFLS=1 and slot1Live=0; both should stay
+running in menu without the old142227B8C crash. Forced bits prove admission only,
+not destruction or causation. Same native crash despite full markers contradicts
+sufficiency of this ownership/reset fix; missing markers or refusal is not an
+admitted exam. A fault at another PC is a separate regression, not success.
+No crash while B merely remains in scene is NOT the requested own-menu result.
+Use existing separate watchers/new dirs/matching DLL+PDB on BOTH,1800s; debugger
+timing means no performance claim. No automatic repeat/rearm or agent input.
+
+Prepared exact exam image: DLL SHA256
+0764C5BF3D06E5A808072A7EF17CC6340B34D747FAFE279A5ACB11052E3B2CE8;
+PDB DFADB8E15198D93EF9346968C577FD0AF4C40DC05D535612CE5241AA03B59540.
+No tll.exe/watcher present at16:26:40+03:00 before launch. Both reviewed source
+and fresh built image include initial-load and terminal-refusal corrections.

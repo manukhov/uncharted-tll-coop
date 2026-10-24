@@ -54,6 +54,17 @@ constexpr std::uintptr_t kNetLogoutSplitScreenRva = 0xC02420;
 constexpr std::uintptr_t kSpawnFromDescriptorRva = 0x10F1910;
 constexpr std::uintptr_t kRetainedSlotTableRva = 0x3EEBE80;   // g_RetainedPlayerSlotTable {ptr,id}[]
 constexpr std::uintptr_t kPlayerVtableRva = 0x2A4BFE8;        // Player class vtable
+// Observer+8 calls ResetActors AFTER killing the primary. Only this exact
+// reason2 scope may admit our owned replica to native body/kill passes.
+constexpr std::uintptr_t kTaskObserverActorResetCallsiteRva = 0x13C6B1F;
+constexpr std::uintptr_t kActorResetRva = 0x13B9820;
+constexpr std::uintptr_t kPlayerShouldResetVtableSlotRva = kPlayerVtableRva + 0x110;
+constexpr std::uintptr_t kProcessShouldResetForReasonRva = 0x16A5B50;
+constexpr std::uintptr_t kThreadContextGetCurrentProcessRva = 0x16A2E80;
+constexpr std::uintptr_t kActorResetCurrentPredicateReturnRva = 0x13B9E93;
+constexpr std::uintptr_t kActorResetCollectPredicateReturnRva = 0x13B975B;
+constexpr std::uintptr_t kActorResetShutdownPredicateReturnRva = 0x13B97C2;
+constexpr std::uintptr_t kActorResetKillPredicateReturnRva = 0x13B952F;
 // Player vtable +0x448. NdGameObject::Init calls this after creating
 // Player+0x1E0 and before PlayerWeaponController/GiveWeapon construction.
 constexpr std::uintptr_t kPlayerSetupAttachSystemVtableSlotRva =

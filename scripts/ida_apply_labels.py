@@ -8,6 +8,70 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-10-24: owned-replica reset phase before menu Havok close ---
+    0x1413B9820: (
+        "ActorReset_ResetActors",
+        "STATIC exact void ResetActors(int,bool), reset-actors.cpp:266. "
+        "CORRECTION replaces unrelated old retained-camera comment. Reason "
+        "is forwarded to3 ProcessMgr visitor passes: body collect1413B9740 "
+        "at1413B9FFC, world batch remove1413BA023, body shutdown1413B97B0 "
+        "at1413BA040, kill1413B9500 at1413BA07D, thenDestroyDead1413BA76F. "
+        "Current-process+110 safety check1413B9E8C must remain stock. "
+        "Observer1413C6B1F invokes after explicit primary kill; not every "
+        "direct reason2 caller has ordinary postrender lifetime context.",
+    ),
+    0x1413B9740: (
+        "ActorReset_CollectCompositeBodiesPass1",
+        "STATIC first ResetActors visitor, native+110 admission at1413B9755 "
+        "returns1413B975B; userdata+0 is reason. Admitted composite actor "
+        "calls virtual+228 for batch body collection. World batch removal "
+        "1413BA023 occurs before pass2, so direct KillTree is not equivalent.",
+    ),
+    0x1413B97B0: (
+        "ActorReset_ShutdownCompositeBodiesPass2",
+        "STATIC second ResetActors visitor, native+110 admission at1413B97BC "
+        "returns1413B97C2, forwarded reasonRDX. Admitted composite actor calls "
+        "virtual+230 after world batch removal and before final kill pass.",
+    ),
+    0x1413B9500: (
+        "ActorReset_KillAdmittedProcess",
+        "STATIC final ResetActors visitor. Native+110 call1413B9529 returns "
+        "1413B952F; admitted root eventually callsProcessKillTree1416A5C20 "
+        "at1413B9712. Root/descendants invalidated before laterDestroyDead; "
+        "do not independently force child predicates. Not the earlier body passes.",
+    ),
+    0x14029B640: (
+        "TaskManagerMainMenu_ProcessTask",
+        "STATIC exact TaskManagerMainMenu::ProcessTask, gamemenu.cpp:224. "
+        "Sets HavokClosePending146B4541E=1 at14029B82C. Main-menu task thus "
+        "directly requests deferred HavokClose(0), independently of peer timeout.",
+    ),
+    0x14029C210: (
+        "TaskManagerMainMenu_EndTask",
+        "STATIC exact TaskManagerMainMenu::EndTask. At14029C2AB clears "
+        "pending-close146B4541E and requests pending-init146B4541D. This is "
+        "native physics reopening, not authority to reuse stale mod spawn args.",
+    ),
+    0x140BBCE70: (
+        "TaskPlayStartMenu",
+        "STATIC exact source TaskPlayStartMenu, task.cpp:90. Calls "
+        "GameTaskGraphMgr_Reset(reason2) at140BBD00C, queues command at "
+        "140BBD0C4, THEN sets HavokClosePending at140BBD0C9. Independent "
+        "reset-before-close route, not proof of failed-run temporal writer.",
+    ),
+    0x141B3F3C0: (
+        "HavokInit",
+        "STATIC exact source HavokInit; requested through pending-init "
+        "146B4541D byHavok_ServicePendingOpenClose141B3F290. Distinct from "
+        "HavokClose141B3FEE0 and does not revive old retained Player identities.",
+    ),
+    0x1415B54C0: (
+        "Ndjob_WaitAndReleaseCounter",
+        "STATIC callsNdjob_WaitForCounter(a1,a2,0) at1415B54CC, then releases "
+        "a1 at1415B54D4. Postrender final owned wait14016680C precedes quit/"
+        "reset140166833, graphupdate14016685D and deferredHavokClose140166893. "
+        "A particular counter is not a universal external-producer fence.",
+    ),
     # --- 2026-10-24: terminal B14900 Havok probe fault and reset admission ---
     0x142227B60: (
         "HavokReferencedObject_AddReference",
@@ -10555,7 +10619,12 @@ FUNCTIONS = {
         "`TrySpawnPlayerAtContinue(): m_pistol=%s, m_longGun=%s, m_rope=%s, "
         "useCheckpointed=%d` branch. Nearby literals tie it directly to "
         "TaskManager::SpawnPlayer / TrySpawnPlayerAtContinue and "
-        "player/camera spawner lookup.",
+        "player/camera spawner lookup. STATIC ABI correction: RCX/a1 is OUTPUT "
+        "weak {record,id}, not the input descriptor. Success copies16B at "
+        "1410F2A37/1410F3266; failure zeros record/id1410F2A71/74. Fallback "
+        "CommitResolvedPlayerSpawn(a1) writes+A8/+BC pair at1410F17FD/1806. "
+        "Mod private g_spawn_desc is therefore an output scratch buffer; it "
+        "can bind ownership immediately after our synchronous slot1 call.",
     ),
     0x140B56090: (
         "HandleNetSpawnCoopBuddy",
@@ -16128,6 +16197,23 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x1413C6B1F: (
+        "STATIC exact E8 FC2CFFFF ->ActorReset_ResetActors1413B9820, "
+        "ECX=reason/EDX=bool, return1413C6B24; AFTER explicit primary kill. "
+        "Owned replica repair scopes ONLY this call/reason2, not all direct resets."
+    ),
+    0x1413B9E8C: (
+        "STATIC current-process safety predicate+110, return1413B9E93. "
+        "Never force this admission: ResetActors asserts if it would kill caller."
+    ),
+    0x14029B82C: (
+        "STATIC main-menu ProcessTask setsHavokClosePending=1. Consumed at "
+        "postrender140166893 after task reset/update and dead-process cleanup."
+    ),
+    0x1401667C1: (
+        "STATIC wait/release queuedHavokStep callback140164F10 counter before "
+        "quit/reset140166833 and HavokClose140166893 on ordinary menu path."
+    ),
     0x142227B7F: (
         "STATIC movRBX,[g_HavokReferencedObjectLock1437AC388]. B14900 fault "
         "RBX=0 therefore identifies null global lock, NOT a null shape pointer."

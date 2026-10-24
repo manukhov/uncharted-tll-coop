@@ -12,6 +12,21 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy Synchronization (2026-10-24)
 
+IMPLEMENTED OWNED-RESET CANDIDATE, NOT YET RUNTIME VALIDATED: mod captures native
+spawn OUTPUT record/id + exactPlayer/slot agreement, immutableone-shot. Only
+observer-after-primary1413C6B1F reason2 opens own FLS scope; Player+110 forces
+ONLY exactowned tuple and3visitorreturn PCs, not currentProcess guard. Native
+body collection/worldbatch/bodyshutdown/KillTree all remain in order. Common
+spawn closes terminally on this teardown; firstloadbeforefirstspawn staysstock.
+OwnershipREFUSED gates sharedslot1 lookup/application/retry, but cannot retire
+an unverified native actor: exam NOTADMITTED. No safe levelreloadrearm added.
+Fresh DLL builds, independent review + IDB labels/readback complete. Latest
+COOP_STATUS entry contains3+evidence kinds, rejections and prelaunchprediction.
+NEXT bounded user scenario: sameEMPTY scene, requirebothOWNERSHIP CAPTURED,
+thenA/Chloemenufirst, B/Nadinemenunext; leavebothopen. Require3stageadmission,
+FLSrestore anduser-visiblebothmenus/no142227B8C. Watchboth,enemyOFF; noinput/
+repeat/rearm/performanceclaim. Run identities/outcome appended afterlaunch.
+
 BASELINE CRASH BOUND2026-10-24: fresh B14900 second-chance dump, AV142227B8C
 (RVA2227B8C), null hkReferencedObjectLock1437AC388 AND null Havok TLS. Native
 Player post-animation collision probe calls addReference; cached nonnull shape
