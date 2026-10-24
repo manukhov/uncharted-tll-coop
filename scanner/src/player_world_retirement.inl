@@ -161,6 +161,17 @@ std::uintptr_t __fastcall hooked_onkill(void* player) {
     const auto stock = reinterpret_cast<OnKillFunction>(g_module + kOnKillRva);
     if (!ready.load(std::memory_order_acquire)) return stock(player);
     const DWORD entry_error = GetLastError();
+    // Primary lifetime closure is independent of the owned-secondary free
+    // witness. Inspect only this CURRENT native OnKill argument, never a
+    // retained-player getter or a cached primary allocation. Both metadata
+    // helpers release ActorIdentityLock before WorldLock/native stock calls.
+    AdmittedPrimaryIdentity primary{};
+    std::uintptr_t primary_heap{};
+    if (copy_admitted_primary_identity(primary) &&
+        seh_match_entered_onkill(player, primary.player, primary_heap) &&
+        primary_heap == primary.heap &&
+        invalidate_admitted_primary_identity(primary))
+        player_world::close_for_reset();
     const Ticket ticket = arm_onkill(player);
     std::uintptr_t result{};
     DWORD native_error = entry_error;
@@ -211,6 +222,14 @@ std::uintptr_t __fastcall hooked_heap_clear(void* heap) {
     const auto stock = reinterpret_cast<HeapClearFunction>(g_module + kHeapClearRva);
     if (!ready.load(std::memory_order_acquire)) return stock(heap);
     const DWORD entry_error = GetLastError();
+    // Pool-wide clear can bypass Player::OnKill. The admitted primary's heap
+    // was captured while its native primary-spawn output was live; no game
+    // pointer is followed here, and this is closure only, not a free witness.
+    AdmittedPrimaryIdentity primary{};
+    if (copy_admitted_primary_identity(primary) &&
+        primary.heap == reinterpret_cast<std::uintptr_t>(heap) &&
+        invalidate_admitted_primary_identity(primary))
+        player_world::close_for_reset();
     invalidate_pending_heap(reinterpret_cast<std::uintptr_t>(heap));
     SetLastError(entry_error);
     return stock(heap);

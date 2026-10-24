@@ -19,6 +19,7 @@ struct Recipe {
     alignas(16) std::uint8_t continue_values[kContinueBytes]{};
     alignas(16) std::uint8_t persistent_values[kPersistentBytes]{};
     OwnedRemotePlayerIdentity primary{};
+    std::uintptr_t primary_heap{};
     player_world::Key key{};
     std::uint64_t reset_serial{}, capture_serial{}, physical_open_serial{}, physical_close_cycle{};
     bool has_persistent{}, has_task_key{}, valid{};
@@ -68,7 +69,8 @@ bool seh_copy_inputs(const void* native_continue, const void* persistent,
     }
 }
 
-bool seh_bind_primary_output(const void* output, OwnedRemotePlayerIdentity& identity) {
+bool seh_bind_primary_output(const void* output, OwnedRemotePlayerIdentity& identity,
+                             std::uintptr_t& heap) {
     __try {
         const auto out = reinterpret_cast<std::uintptr_t>(output);
         const auto slot = g_module + kRetainedSlotTableRva;
@@ -79,10 +81,30 @@ bool seh_bind_primary_output(const void* output, OwnedRemotePlayerIdentity& iden
             *reinterpret_cast<const volatile std::uint32_t*>(slot + 8) != identity.generation) return false;
         identity.object = *reinterpret_cast<const volatile std::uintptr_t*>(identity.record + 8);
         if (!seh_matches_owned_remote_reset_player(reinterpret_cast<void*>(identity.object), identity)) return false;
+        heap = *reinterpret_cast<const volatile std::uintptr_t*>(identity.object + 0xA0);
+        if (!heap) return false;
         return *reinterpret_cast<const volatile std::uintptr_t*>(out) == identity.record &&
             *reinterpret_cast<const volatile std::uint32_t*>(out + 8) == identity.generation &&
             *reinterpret_cast<const volatile std::uintptr_t*>(slot) == identity.record &&
-            *reinterpret_cast<const volatile std::uint32_t*>(slot + 8) == identity.generation;
+            *reinterpret_cast<const volatile std::uint32_t*>(slot + 8) == identity.generation &&
+            seh_matches_owned_remote_reset_player(reinterpret_cast<void*>(identity.object), identity) &&
+            *reinterpret_cast<const volatile std::uintptr_t*>(identity.object + 0xA0) == heap;
+    } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ||
+                GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR
+                    ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+        return false;
+    }
+}
+
+bool seh_primary_heap_matches(void* primary, const OwnedRemotePlayerIdentity& identity,
+                              std::uintptr_t heap) {
+    if (!heap) return false;
+    __try {
+        const auto address = reinterpret_cast<std::uintptr_t>(primary);
+        return seh_matches_owned_remote_reset_player(primary, identity) &&
+            *reinterpret_cast<const volatile std::uintptr_t*>(address + 0xA0) == heap &&
+            seh_matches_owned_remote_reset_player(primary, identity) &&
+            *reinterpret_cast<const volatile std::uintptr_t*>(address + 0xA0) == heap;
     } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ||
                 GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR
                     ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
@@ -138,7 +160,7 @@ void* capture_call(void* output, std::uint32_t route, const void* native_continu
         candidate.reset_serial == reset_serial.load(std::memory_order_acquire) &&
         candidate.physical_open_serial == player_world_open_serial_for_capture() &&
         candidate.physical_close_cycle == player_world_close_cycle_for_capture() &&
-        seh_bind_primary_output(output, candidate.primary)) publish(candidate);
+        seh_bind_primary_output(output, candidate.primary, candidate.primary_heap)) publish(candidate);
     SetLastError(native_error);
     return result;
 }

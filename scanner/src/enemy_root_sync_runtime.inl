@@ -13,6 +13,7 @@ struct Local {
 struct Roster {
     std::uintptr_t player{}, manager{}, array{};
     std::uint32_t player_id{}, count{};
+    std::uint64_t world_epoch{};
     std::array<Local, wire::kActors> rows{};
     bool operator==(const Roster&) const = default;
 };
@@ -35,21 +36,49 @@ bool confirmed{};
 bool census_gap{};
 std::atomic<bool> installed{}, stopped{};
 std::atomic<bool> active_scope{};
-// These readiness flags only transition false->true. Until BOTH are observed,
-// tick must not enter a census, construct a work budget or inspect game memory.
-bool startup_admitted() noexcept {
-    return g_owned_remote_player_ready.load(std::memory_order_acquire) &&
-           g_player_update_hook_ready.load(std::memory_order_acquire);
+// ENR2 remains one bounded encounter per DLL, even though Player menu rejoin
+// can clear readiness/departure flags and publish another world. Never reset
+// this pin or adopt a later epoch. An earlier UNPAIRED world does not bind it.
+std::atomic<std::uint64_t> bound_world_epoch{};
+// Metadata observation only, NOT a native lifetime/relocation lease. The second
+// epoch read rejects a publish racing the admitted check without game pointers.
+bool scope_current() noexcept {
+    if constexpr (!player_world::kEnablePlayerWorldRearm) return true;
+    const auto bound = bound_world_epoch.load(std::memory_order_acquire);
+    return bound && player_world::local_epoch() == bound &&
+           player_world::data_admitted() && player_world::local_epoch() == bound;
 }
-// One-way player lifecycle signals also close the separate enemy channel. This
-// helper is safe in the socket worker: atomics only, no game-pointer traversal,
-// mailbox waits, epoch changes or freshness-based rearming.
+// After admission, any world close/change or departure is terminal for ENR2.
+// Before the first paired world, old menu/departure flags must not poison first
+// admission. Legacy mode retains its original departure behavior. Atomics only:
+// safe in the socket worker, with no mailbox wait or game-pointer traversal.
 bool stop_for_player_lifecycle() noexcept {
-    if (!g_state_net.local_leave_queued.load(std::memory_order_acquire) &&
+    bool world_closed{};
+    if constexpr (player_world::kEnablePlayerWorldRearm) {
+        if (!bound_world_epoch.load(std::memory_order_acquire)) return false;
+        world_closed = !scope_current();
+    }
+    if (!world_closed && !g_state_net.local_leave_queued.load(std::memory_order_acquire) &&
         !g_state_net.peer_left.load(std::memory_order_acquire) &&
         !g_remote_player_teardown.load(std::memory_order_acquire)) return false;
     stopped.store(true, std::memory_order_release);
     active_scope.store(false, std::memory_order_release);
+    return true;
+}
+// Until bootstrap AND a stable ready Player-world pair are observed, tick must
+// not construct a work budget, enter census or inspect game memory. These
+// readiness flags are no longer assumed monotonic across Player menu rejoin.
+bool startup_admitted() noexcept {
+    if (!g_owned_remote_player_ready.load(std::memory_order_acquire) ||
+        !g_player_update_hook_ready.load(std::memory_order_acquire)) return false;
+    if constexpr (player_world::kEnablePlayerWorldRearm) {
+        const auto epoch = player_world::local_epoch();
+        if (!epoch || !player_world::peer_ready() || player_world::local_epoch() != epoch) return false;
+        std::uint64_t empty{};
+        bound_world_epoch.compare_exchange_strong(empty, epoch, std::memory_order_acq_rel,
+                                                 std::memory_order_acquire);
+        if (stop_for_player_lifecycle() || !scope_current()) return false;
+    }
     return true;
 }
 std::atomic_flag ticking = ATOMIC_FLAG_INIT;
@@ -315,6 +344,23 @@ std::uintptr_t current_player(ReadCache& cache) noexcept {
         !read(actor+0x40, kill_flags) || (kill_flags & 0x04)) return 0;
     return actor;
 }
+bool roster_scope_current(const Roster& value, ReadCache& cache,
+                          bool check_player_generation = false) noexcept {
+    if constexpr (player_world::kEnablePlayerWorldRearm) {
+        // Primary was only admission, never input to ordinary() or the setter.
+        // Do not dereference it in this mode. This relies on native lifecycle
+        // close-before-retire wiring, not an atomic-snapshot lifetime lease.
+        return value.world_epoch &&
+               value.world_epoch == bound_world_epoch.load(std::memory_order_acquire) &&
+               scope_current();
+    } else {
+        if (value.player != current_player(cache)) return false;
+        if (!check_player_generation) return true;
+        std::uint32_t generation{};
+        return copy(value.player+0xBC, &generation, sizeof(generation), &cache) &&
+               generation == value.player_id;
+    }
+}
 bool identity(std::uintptr_t actor, Local& out, ReadCache& cache) noexcept {
     // Lexical cache, discarded before any native callback or mailbox handoff.
     // Every actual copy still has memory-fault SEH; this is not a page lease.
@@ -362,9 +408,14 @@ bool census(Roster& out, WorkBudget& budget) noexcept {
     ReadCache cache{}; cache.budget = &budget;
     const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
     Roster value{};
-    value.player = current_player(cache);
-    if (!value.player || !read(value.player+0xBC, value.player_id) || !value.player_id ||
-        !read(g_module+0x3898630, value.manager) || !read(value.manager, value.array)) return false;
+    if constexpr (player_world::kEnablePlayerWorldRearm) {
+        value.world_epoch = bound_world_epoch.load(std::memory_order_acquire);
+        if (!roster_scope_current(value, cache)) return false;
+    } else {
+        value.player = current_player(cache);
+        if (!value.player || !read(value.player+0xBC, value.player_id) || !value.player_id) return false;
+    }
+    if (!read(g_module+0x3898630, value.manager) || !read(value.manager, value.array)) return false;
     std::uint32_t count{};
     if (!read(value.manager+0xC, count) || count > 64 || (count && !value.array)) return false;
     // Owned initial entries, not an atomic roster or a cross-phase lease. Copy
@@ -394,6 +445,9 @@ bool census(Roster& out, WorkBudget& budget) noexcept {
     // CharacterManager order is not identity; swapping player rows must not
     // invalidate a stable encounter. Never use this order to match peers.
     std::sort(value.rows.begin(), value.rows.begin()+value.count, [](const Local& a, const Local& b) { return a.actor < b.actor; });
+    if constexpr (player_world::kEnablePlayerWorldRearm) {
+        if (!roster_scope_current(value, cache)) return false;
+    }
     out = value; return true;
 }
 void reset_locked() {
@@ -454,6 +508,9 @@ void tick() {
     if (ticking.test_and_set()) return;
     const auto now = GetTickCount64();
     if (now-last_tick < 50) { ticking.clear(); return; }
+    if constexpr (player_world::kEnablePlayerWorldRearm) {
+        if (stop_for_player_lifecycle() || !scope_current()) { ticking.clear(); return; }
+    }
     WorkBudget budget(1);
     // No observation was attempted on contention. Do not refresh the existing
     // 150ms lease or last_tick; the next game update can try without waiting.
@@ -506,8 +563,10 @@ void tick() {
         }
     }
     const bool within_budget = budget.check();
-    census_valid_until.store(valid && session && within_budget ? now+150 : 0, std::memory_order_release);
-    active_scope.store(session && confirmed && now-peer_seen <= 1000 && within_budget && !stopped.load(), std::memory_order_release);
+    const bool within_world = !player_world::kEnablePlayerWorldRearm || scope_current();
+    if (!within_world) stopped.store(true, std::memory_order_release);
+    census_valid_until.store(valid && session && within_budget && within_world ? now+150 : 0, std::memory_order_release);
+    active_scope.store(session && confirmed && now-peer_seen <= 1000 && within_budget && within_world && !stopped.load(), std::memory_order_release);
     ReleaseSRWLockExclusive(&lock);
     ticking.clear();
 }
@@ -595,6 +654,7 @@ DWORD WINAPI transport_worker(void*) {
             if (now-last_log >= 2000) {
                 last_log = now; std::ostringstream line;
                 line << "ENEMY-ROOT role=" << (g_net_role_b ? 'B' : 'A') << " actors=" << local_count << " paired=" << paired
+                     << " worldEpoch=" << bound_world_epoch.load(std::memory_order_acquire)
                      << " capture=" << captured.load() << " recv=" << received.load() << " match=" << matched.load()
                      << " apply=" << applied.load() << " reject=" << rejected.load() << " sent=" << sent.load()
                      << " sendDrop=" << send_dropped.load() << " lastGate=" << last_rejection.load() << " stopped=" << stopped.load()
@@ -612,6 +672,7 @@ DWORD WINAPI transport_worker(void*) {
     active_scope.store(false, std::memory_order_release);
     closesocket(transport_socket); WSACleanup();
     std::ostringstream line; line << "ENEMY-ROOT STOPPED apply=" << applied.load() << " match=" << matched.load()
+        << " worldEpoch=" << bound_world_epoch.load(std::memory_order_acquire)
         << " workerGapMs=" << worker_gap_ms.load()
         << " external=" << external_stop.load() << " nativeFault=" << native_apply_fault.load()
         << " costStop=" << cost_stop.load() << " costSite=" << cost_site.load()
@@ -663,6 +724,9 @@ void apply_root_and_release(void* object, const void* transform, WorkBudget* bud
     // Do NOT catch/translate the game's exception or count a partial write as
     // success. Normal return leaves the permit with the enclosing scope.
     __try {
+        if constexpr (player_world::kEnablePlayerWorldRearm) {
+            if (stop_for_player_lifecycle() || !scope_current()) return;
+        }
         reinterpret_cast<SetLocalRoot>(g_module+0x1E7D0D0)(object, transform);
         applied.fetch_add(1, std::memory_order_relaxed);
     } __finally {
@@ -816,6 +880,9 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     }
     ReleaseSRWLockExclusive(&lock);
     if (!preflight_due) return;
+    if constexpr (player_world::kEnablePlayerWorldRearm) {
+        if (stop_for_player_lifecycle() || !scope_current()) return;
+    }
     WorkBudget budget(2);
     if (!budget.check()) return;
     // Metadata-only scheduling first. A roster pointer match is NOT admission:
@@ -863,7 +930,7 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     const auto now = GetTickCount64();
     if (!TryAcquireSRWLockExclusive(&lock)) return; // never wait in an animation job
     if (!session || session != scheduled_session || !active_scope.load(std::memory_order_acquire) || stopped.load() ||
-        now > census_valid_until.load(std::memory_order_acquire) || roster.player != current_player(cache)) {
+        now > census_valid_until.load(std::memory_order_acquire) || !roster_scope_current(roster, cache)) {
         ReleaseSRWLockExclusive(&lock); return;
     }
     std::size_t index = roster.count;
@@ -895,14 +962,14 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     if (!identity(actor, after, cache) || !(after == local) || !ordinary(actor, reinterpret_cast<std::uintptr_t>(native_job), fresh, gate, cache)) return;
     if (!TryAcquireSRWLockExclusive(&lock)) return;
     const auto apply_now = GetTickCount64();
-    std::uintptr_t manager{}; std::uint32_t player_id{};
+    std::uintptr_t manager{};
     const bool still_current = !g_dll_inert && active_scope.load(std::memory_order_acquire) && !stopped.load() &&
         apply_now <= census_valid_until.load(std::memory_order_acquire) &&
         session == local_session && session == packet.receiver && peer == packet.sender &&
         confirmed && apply_now-peer_seen <= 1000 && index < roster.count && roster.rows[index] == local &&
         rows[index].received && apply_now-rows[index].received <= 200 && first_apply && apply_now-first_apply <= 30000 &&
         rows[index].incoming.sequence == packet.sequence &&
-        roster.player == current_player(cache) && read(roster.player+0xBC, player_id) && player_id == roster.player_id &&
+        roster_scope_current(roster, cache, true) &&
         read(g_module+0x3898630, manager) && manager == roster.manager;
     if (!still_current) { ReleaseSRWLockExclusive(&lock); return; }
     double fresh_distance{};
@@ -911,12 +978,17 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     // ordinary() walks animation/physics after identity(). Recheck kill state
     // and generations after that walk, before the final freshness/cost cutoff.
     // These are actual budgeted SEH reads, NOT a lifetime lease across the setter.
-    std::uint8_t actor_kill{}, player_kill{}; std::uint32_t actor_id{};
+    std::uint8_t actor_kill{}; std::uint32_t actor_id{};
     if (!read(actor+0xBC, actor_id) || actor_id != local.generation ||
-        !read(actor+0x40, actor_kill) || (actor_kill & 0x04) ||
-        !read(roster.player+0xBC, player_id) || player_id != roster.player_id ||
-        !read(roster.player+0x40, player_kill) || (player_kill & 0x04)) {
+        !read(actor+0x40, actor_kill) || (actor_kill & 0x04)) {
         ReleaseSRWLockExclusive(&lock); return;
+    }
+    if constexpr (!player_world::kEnablePlayerWorldRearm) {
+        std::uint32_t player_id{}; std::uint8_t player_kill{};
+        if (!read(roster.player+0xBC, player_id) || player_id != roster.player_id ||
+            !read(roster.player+0x40, player_kill) || (player_kill & 0x04)) {
+            ReleaseSRWLockExclusive(&lock); return;
+        }
     }
     // The final memory reads can themselves be delayed. Do not use a timestamp
     // captured before them to authorize a write after the packet/scope expired.

@@ -23,7 +23,7 @@ bool same_weak(const OwnedRemotePlayerIdentity& a, const OwnedRemotePlayerIdenti
 bool current_primary_matches(const player_world_spawn::Recipe& value) {
     void* const primary = retained_player_object(0);
     return primary != nullptr && player_object_stable(primary) &&
-        seh_matches_owned_remote_reset_player(primary, value.primary);
+        player_world_spawn::seh_primary_heap_matches(primary, value.primary, value.primary_heap);
 }
 bool cycle_matches(const player_world_spawn::Recipe& value,
                    const player_world_menu_cycle::Snapshot& cycle) {
@@ -46,6 +46,8 @@ void clear_retired_actor_registry() {
     AcquireSRWLockExclusive(&g_actor_identity_lock);
     g_owned_remote_player_ready.store(false, std::memory_order_release);
     g_owned_remote_player = {};
+    g_admitted_primary_ready = false;
+    g_admitted_primary = {};
     g_stock_nadine_identity = {};
     g_stock_nadine_identity_state.store(0, std::memory_order_release);
     g_companion_spawn_gate_identity = {};
@@ -187,8 +189,16 @@ void service_player_world_postrender_tail() {
         // resource/pointer is held under these short metadata publications.
         clear_player_world_transients();
         clear_retired_actor_registry();
+        // Publish this numeric tuple while transport is still CLOSED. Native
+        // OnKill/heap-clear observers can invalidate it without ever following
+        // a primary pointer from an enemy animation job.
+        stage_admitted_primary_identity(value.primary, value.primary_heap);
         const auto epoch = player_world::publish_local_world(value.key);
         if (!epoch) { wait_for("new world publication refused"); return; }
+        if (!bind_admitted_primary_epoch(value.primary, epoch)) {
+            player_world::close_for_reset();
+            wait_for("primary invalidated during world publication"); return;
+        }
         state.capture = value.capture_serial;
         state.primary = value.primary;
         state.epoch = epoch;

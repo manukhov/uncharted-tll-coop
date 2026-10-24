@@ -5,13 +5,30 @@
 Full campaign co-op between two game copies. Current user-directed order:
 
 - Preserve local Chloe in copy A, local Nadine in copy B and current player sync.
-- Restore mutual Players across empty->enemy location change FIRST, then resume
-  enemy synchronization; appearance/hand repair is PARKED.
+- Work on enemy synchronization now; first-load mutual Player visibility/movement
+  USER-CONFIRMED. Preserve it; appearance/hand repair is PARKED.
 - First prove A->B enemy correspondence and a safe native living-NPC movement
   boundary; keep enemy damage/death/HP writes and AI pause OFF.
 - Complete combat authority and remaining player/appearance work separately.
 
-## P0 CURRENT: MAIN-MENU rejoin before enemies; preserve companion/menu fixes (2026-10-24)
+## P0 CURRENT: Enemy positions after confirmed Player sync (2026-10-24)
+
+USER CONFIRMS both Players visible and movement synchronized in A26552/B22404;
+closed BOTH SELF, no crash (watchersEXIT0). Noepoch2/menu-rejoinclaim. KeepDB884...
+baseline. EnemyOFFrunwasnotNPCtest; returnP0toactualenemypositionsNOW.
+
+NEW SOURCE: ENR2 pinfirstadmittedworldepoch+terminalclose/noautorearm; removeONLY
+explicitPlayerpointeradmission (10census/up to21Bapplycopies), allENEMY/native/
+body/manager/late/freshness/distance/1ms guardsunchanged. Primarytuple+heap
+publishedCLOSEDpreopen, nativePlayerOnKill/poolclear/HavokCloseENTRYclosesbefore
+stock, independentownedticket. Native rootsetter/PiratePerformprimaryindependent
+with3+statickinds; legacyfalseoldpathpreserved. LatestCOOP_STATUShasquota/details.
+ACTIVE: IDBsaved2126/99/3True+readback; freshE6305EAB...buildpass; A25944/B21400
+injected-EnemyRootSync, nativechannelsREADY, bothwaitingworldEpoch0/noCostStop.
+reports/enemy-world-epoch-20261024204242Z exactDLL/PDB+bootlogs. NOdebugger.
+UserDIRECTSAME LIVE-ENEMYscene (NOempty/menufirst; one30sboundedslice). NeedBvisiblyfollowsA/model
+andbody+responsiveness; AIactions/HP/deathNOTyetinprotocol. LaterVQmaystillstop;
+no budgetraise/latechecksremove/identicalretry. No debuggerforperformanceexam.
 
 NEW USER CLARIFICATION: the empty->enemy location change was THROUGH MAIN MENU.
 The old explicit CPLV process-terminal behavior was intentionally unrejoinable.

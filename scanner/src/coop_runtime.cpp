@@ -1009,6 +1009,54 @@ std::atomic<bool> g_companion_spawn_gate_armed{false};
 std::atomic<bool> g_companion_spawn_callsite_ready{false};
 std::atomic<bool> g_companion_spawn_suppressed_logged{false};
 
+struct AdmittedPrimaryIdentity {
+    OwnedRemotePlayerIdentity player{};
+    std::uintptr_t heap{};
+    std::uint64_t epoch{};
+};
+AdmittedPrimaryIdentity g_admitted_primary{}; // g_actor_identity_lock only.
+bool g_admitted_primary_ready = false;
+
+bool copy_admitted_primary_identity(AdmittedPrimaryIdentity& out) {
+    AcquireSRWLockShared(&g_actor_identity_lock);
+    const bool ready = g_admitted_primary_ready;
+    out = ready ? g_admitted_primary : AdmittedPrimaryIdentity{};
+    ReleaseSRWLockShared(&g_actor_identity_lock);
+    return ready;
+}
+
+void stage_admitted_primary_identity(const OwnedRemotePlayerIdentity& primary,
+                                     std::uintptr_t heap) {
+    AcquireSRWLockExclusive(&g_actor_identity_lock);
+    g_admitted_primary = {primary, heap, 0};
+    g_admitted_primary.player.object = 0; // numeric key only, never a cached target.
+    g_admitted_primary_ready = primary.record && primary.generation && heap;
+    ReleaseSRWLockExclusive(&g_actor_identity_lock);
+}
+
+bool bind_admitted_primary_epoch(const OwnedRemotePlayerIdentity& primary, std::uint64_t epoch) {
+    AcquireSRWLockExclusive(&g_actor_identity_lock);
+    const bool current = epoch && g_admitted_primary_ready &&
+        g_admitted_primary.player.record == primary.record &&
+        g_admitted_primary.player.generation == primary.generation;
+    if (current) g_admitted_primary.epoch = epoch;
+    ReleaseSRWLockExclusive(&g_actor_identity_lock);
+    return current;
+}
+
+bool invalidate_admitted_primary_identity(const AdmittedPrimaryIdentity& expected) {
+    AcquireSRWLockExclusive(&g_actor_identity_lock);
+    const bool matched = g_admitted_primary_ready &&
+        g_admitted_primary.player.record == expected.player.record &&
+        g_admitted_primary.player.generation == expected.player.generation &&
+        g_admitted_primary.heap == expected.heap;
+    // Epoch may legitimately bind 0->published while this native OnKill
+    // snapshot is being checked. The SAME actor must still close admission.
+    if (matched) g_admitted_primary_ready = false;
+    ReleaseSRWLockExclusive(&g_actor_identity_lock);
+    return matched;
+}
+
 bool copy_owned_remote_player_identity(OwnedRemotePlayerIdentity& out) {
     AcquireSRWLockShared(&g_actor_identity_lock);
     const bool ready = g_owned_remote_player_ready.load(std::memory_order_relaxed);

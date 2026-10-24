@@ -2,11 +2,19 @@
 
 ## Current user priority / handoff (2026-10-24)
 
-CURRENT USER P0: restore mutual Players after BOTH copies go through MAIN MENU,
-then return to enemy synchronization. User clarified BOTH remote Players were
-absent, not merely unmatched enemies. Ordinary reason2 reset retires the old
-replicas, but the deployed one-shot spawn cannot recreate them. A7788/B22492
-are now absent; user explicitly says he closed BOTH himself, not a crash.
+CURRENT USER P0: enemy synchronization; preserve CONFIRMED FIRST-LOAD Player
+sync. User now confirms A26552/B22404 mutual visible Players and synchronized
+movement, and says he closed BOTH himself. WatchersEXIT0/no second chance agree.
+No repeated-menu/epoch2 result claimed. Appearance remains PARKED.
+
+NEW ENEMY CANDIDATE: replace explicit retained-Player admission queries with
+one pinned admitted Player-world epoch; close on native primary OnKill/heap
+clear/pending HavokClose BEFORE cleanup. ENR2 remains one terminal encounter,
+all enemy identity/body/phase/late gates and1ms limit unchanged. Source static
+quota/reviews complete; labels saved/readback and fresh direct-ENEMY pair
+A25944/B21400 injected E6305EAB...; both channels waiting/unpinned, no stop/cost.
+User DIRECT same live-enemy checkpoint, no empty/menu first. This is
+position/rotation only, NOT combat-state/HP/death authority. Latest entry controls.
 
 NEW BOUNDED CANDIDATE: full-postrender native callback tail, POSITIVE old owned
 OnKill->heap-unlink witness, observed physical menu close/reopen and fresh primary
@@ -15,9 +23,9 @@ Source compiled/reviewed, labels saved/read back, rollout enabled and fresh pair
 A26552/B22404 ran DB88444B... image; both now absent, watchers EXIT0/secondChance0.
 User reports NPC positions/state entirely unsynchronized; both logs explicitly
 ENEMY-ROOT disabled, so this was NOT an active enemy-sync exam. First world
-paired/owned in both; visible Player movement and menu-rejoin outcome still
-unconfirmed, user asked. Only epoch1/capture1, no second-world/free-ticket result.
-No runtime success claimed. The old
+paired/owned in both; visible Player movement now USER-CONFIRMED. Only
+epoch1/capture1; no second-world/free-ticket or menu-rejoin outcome confirmed.
+The old
 TaskManager31D2/graph-lock service was NOT installed; direct-reset exclusion is
 not generalized. Latest entry is authoritative over the earlier staged handoff.
 Enemy stays OFF for this exam; appearance remains PARKED.
@@ -45625,3 +45633,144 @@ This is a SOURCE integration frontier, not a current enabled mutation or a
 reason to raise1ms budget/remove late actor identity checks. Separately resolve
 the first record+8 query-bracket stop before any fresh enemy runtime prediction.
 No code/IDB labels changed, new test harness or repeated game launch this unit.
+
+### 2026-10-24 — Confirm first-load Players; remove ENR2 explicit-primary admission dependency
+
+USER RESULT: both visible Players appeared and moved synchronously. User closed
+BOTH copies himself; not a crash. Watchers A26552/B22404 EXIT0/secondChance0
+already recorded. CONFIRMED bounded FIRST-LOAD Player sync with DB88444B...;
+do NOT promote this to tested epoch2/menu rejoin, full campaign, or NPC sync.
+P0 returns to actual enemy synchronization without more empty-scene/menu exams.
+
+STATIC HYPOTHESIS H1: the retained-primary reads in ENR2 are world admission,
+not inputs to enemy pose capture/native root writing. Replace those explicit
+queries with one nonzero admitted player-world epoch, coupled to native
+close-BEFORE-cleanup, while preserving every enemy/native/body check. This
+removes the exact first old-query path without a budget increase/cross-phase
+memory cache or unsafe native Player getter. It does NOT prove all later VQ
+costs fit1ms or that full NPC state is synchronized.
+
+Independent evidence / quota:
+1. SOURCE DATAFLOW: all old primary uses are Roster.player/player_id admission
+   in census,2postblend checks and final generation/kill reads. identity(),
+   ordinary(), receiver row matching and setter never consume a Player pointer.
+   Removing explicit primary admission removes10copies/census,9/A capture,
+   up to21/B due apply. Generic CharacterManager entries are STILL checked
+   exactly as before and may include a Player; no claim of eliminating every
+   heap query or every incidental roster reference to that class.
+2. NATIVE SETTER DISASSEMBLY:141E7D0D0 takes current NPC ownerRCX and private
+   32BposeRDX, copies+130/+140 then virtual+208. Exact Pirate+208 resolves
+   1401D4E10 RET0. No Player/global lookup; not a physics-teleport API. Preserve
+   receiver+13C lane and the already-proved pre-phase40 root interval.
+3. VTABLE/CALLER GRAPH: Perform141A928F0 resolves its OWN Fg owner, checks dead
+   state, sets CurrentProcess(self)141A92988, calls exact Pirate+408=141DE9910
+   at141A929A1/return929A7, then phase40 at929C1. Current native Pirate is
+   owned by this callback; primary is absent from that native dependency graph.
+4. LIFETIME ORDER/ASSERTIONS: primary kill1410F3E04 and script reset14033D009
+   converge KillTree1416A5C20. Native sets entered04 at5E2A under actor+50,
+   invokes virtual+190 at5E33 BEFORE BC0 at6044/dead-list607D. Exact Player
+   +190=1410D84B0; first cleanup is virtual+28 atD8502, reachedOnKill is set
+   through Character/Base chain before return. Assertions process.cpp1950/51/
+   55/56 establish normal callback sequencing. Deferred HavokClose first writes
+   availability/generations141B3FF70..7F BEFORE world-lockFF87, so closure must
+   be ENTRY, not post-return. Metadata is admission, not a memory lease.
+
+Alternatives eliminated:
+- Native1410F0D10 as pure getter: it writes actor+72; not a drop-in observation.
+- Cross-callback ReadCache: existing cache already reuses lexical regions; a
+  persistent cache weakens protection freshness without native lifetime proof.
+- Merely raise1ms/remove enemy checks/retry terminal sessions: NOT justified by
+  old QPC wall brackets, which include scheduler/page-fault/call overhead.
+- local_epoch() alone: close_for_reset leaves epoch unchanged. Must also require
+  current admitted/open pair and terminally stop on closure, not just change.
+
+IMPLEMENTED, not runtime confirmed:
+- ENR2 binds ONCE to first ready paired nonzero Player-world epoch after owned
+  bootstrap; earlier UNPAIRED menu flags do not poison first admission. After
+  bind, closure/zero admission/epoch mismatch/leave/teardown terminally stops it.
+  Pin is NEVER reset and no enemy rearm was added. Census publication, scheduling,
+  worker/tick/postblend and final immediately-pre-setter gates recheck metadata.
+- TRUE world mode Roster uses world_epoch instead of explicit current_player/
+  BC/kill traversals. Legacyfalse retains exact old branch. Enemy type/record/
+  generation/OnKill/spawner reciprocity/unique authored key, manager/array rereads,
+  BOTH ordinary physics/animation walks, late enemy BC/kill and distance/time/
+  packet freshness gates are unchanged. No VQ bypass for enemy/body pointers.
+- Fresh primary recipe captures heap+A0 while its native output is live; output,
+  slot, record/object/BC/kill and A0 rereads bind it. Existing full-tail service
+  additionally revalidates current primary/heap (NOT enemy callback) before use.
+  Numeric admitted-primary tuple/heap is staged under ActorIdentityLock while
+  transport CLOSED, before publish_local_world; epoch binds afterward. OnKill
+  invalidation ignores the legitimate epoch0->published change for SAME tuple/
+  heap, preventing a false miss; failed bind recloses and creates no owned actor.
+- Existing Player+190 observer INDEPENDENTLY matches current native OnKill arg
+  to admitted PRIMARY tuple/heap and closes metadata BEFORE stock cleanup,
+  regardless of owned-secondary retirement ticket/readiness. Known3heap-clear
+  callers similarly close by numeric captured heap before bulk overwrite, with
+  no old primary pointer walk. Pending HavokClose entry closes before native
+  availability/world writes. Full reset observer and fresh-primary capture
+  already close. No identity/metadata lock spans native calls or pointer reads.
+
+BOUNDED LIMITS: same ordinary campaign encounter, direct first ENEMY scene in
+fresh pair, no intermediate empty-world/menu, no kill/restart/progression while
+writer active. Both old Player worlds can rejoin, but ENR2 is intentionally one
+30-second first-apply slice per DLL and will NOT follow a later world. Normal
+OnKill and observed heap clears covered; raw factory destruction/arbitrary
+unobserved heap rebasing/final shutdown are not declared universally leased.
+Existing native frame/job and enemy late guards remain necessary. No AI pause,
+HP/damage/death writes, combat authority or full animation-state replication.
+
+FALSIFIABLE PRELAUNCH PREDICTION:
+Fresh pair WITH EnemyRootSync explicitly enabled; user loads SAME live-enemy
+checkpoint DIRECTLY in BOTH (Players already confirmed, skip empty/menu).
+Expect pin to admitted epoch1 and census first reads CharacterManager, not
+explicit retained-primary admission; native capture/match then B.apply>0 and
+visible corresponding NPC position/rotation follows A within first<=30s,
+model+game-driven collider not separated. User initially no shooting/grenades/
+enemy kills; can move A to provoke movement and compare B. Need actual visual
+movement + usable responsiveness, not hooks/packets/count-only success. AI
+decisions/attack/damage/death still NOT predicted synchronized.
+If another protection-query/body/phase gate stops, preserve its exact new
+context and reject that specific claim; removing former primary dependency
+does not predict immunity to later cost. Keep1ms/256queries/50ms scope and all
+terminal safety fuses. No debugger for this performance-sensitive enemy check;
+runtime own terminal stop/ACK remains available. No automatic identical retry.
+
+### 2026-10-24 23:42 MSK — Launch enemy channel with primary-independent world admission
+
+Independent source reviews pass for bounded direct-first enemy scene; final
+hardening rereads primary heap+A0 with exact current weak tuple during native
+capture and full-tail service admission only. Not moved into ENR2 hot path.
+Census publication now also rechecks within_world before refreshing150ms scope;
+existing private status includes bound worldEpoch. No new test framework,
+budget/late-guard/cadence/AI/HP change. Normal performance exam has NO debugger.
+
+Sole IDB saved with MCP stopped; reports/apply_enemy_primary_epoch_20261024.txt
+records2126functions/99data/3types, save_database returned True. MCP restarted;
+4 updated native function comments plus Player+190 xref read back. Real
+141A928F0 name resolves AnimManager_PerformBlendAndDispatchPostBlendJob even
+though cached decompiler declaration initially prints sub_; do not rename again.
+Retail image verified1.4.21058.0. Fresh runtime C++ build/link PASS, expected
+Recipe alignment-padding C4324 only.
+
+Exact DLL SHA256E6305EABEDEA628AB2A64538D4BF33810DCEA0D3E7E2AD4E6C4E1896E0F4EE2A;
+PDB258DCA2CBA5C0B78CA4004D7755153A15FFDBB6503FECF48BB803F99029978FE.
+Archived BEFORE launch under reports/enemy-world-epoch-20261024204242Z with
+boot-locomotion_hook.log and both boot-enemy_root_PID.log snapshots.
+
+Agent immediately launched/injected LocalPair2 -EnemyRootSync after prepared
+fresh build. A/Chloe PID25944 creation2026-10-24T23:42:42.6324718+03:00;
+B/Nadine PID21400 creation2026-10-24T23:42:44.6428274+03:00, exact retail paths.
+Both logs show native Pirate+408 root channel installed, nonblocking31340/31341,
+owned-reset/peer-lifecycle/new Player-world package/local-look READY. Each private
+enemy status is actors0/paired0/worldEpoch0/capture0/match0/apply0/stopped0/
+costStop0/queries0 before user load. This is expected unadmitted startup, NOT
+enemy-sync success. No old-game closure needed; user had closed both earlier.
+No game input, live patch, external stop signal or automatic rearm sent.
+
+User scenario explicitly DIRECT same live-enemy checkpoint BOTH, no intermediate
+EMPTY/menu (enemy channel remains one first-admitted world per DLL). First no
+shooting/grenades/kills, compare corresponding NPC movement/rotation within first
+30seconds after first apply. Ask report visible result/responsiveness, not15s
+fixed standstill. Combat-state/attack/HP/death synchronization is NOT claimed.
+Keep both games open for bounded log/terminal inspection; never silently relaunch
+same image or weaken safeguards if later region/phase/budget rejects.

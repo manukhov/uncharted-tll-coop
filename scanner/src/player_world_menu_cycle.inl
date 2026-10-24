@@ -148,6 +148,10 @@ void __fastcall hooked_close(bool full_shutdown) {
     const auto stock = reinterpret_cast<CloseFunction>(g_module + kClose);
     if (!ready()) { stock(full_shutdown); return; }
     const DWORD entry_error = GetLastError();
+    // Close admission BEFORE HavokClose's availability/generation writes and
+    // physics teardown, not merely after observing its returned zero world.
+    // Even a legitimate already-closed native no-op must not reopen admission.
+    player_world::close_for_reset();
     const Transition ticket = begin_transition(true);
     DWORD native_error = entry_error;
     bool normal = false;

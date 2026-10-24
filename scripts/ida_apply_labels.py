@@ -523,7 +523,10 @@ FUNCTIONS = {
         "4022B waits TLS/base quit jobs. World locks alone do not cover "
         "pre-lock lifecycle writes or same-owner recursion. An empty-world "
         "call is not proof of a new close transition; final-shutdown flag "
-        "146917C14 is not a per-Player lifetime lease.",
+        "146917C14 is not a per-Player lifetime lease. Actor-dependent channel "
+        "invalidation must precede stock HavokClose at wrapper ENTRY, not wait "
+        "for the physical transition/return. This orders the normal observed "
+        "close path only, not arbitrary heap/factory bypasses.",
     ),
     0x141B3F290: (
         "Havok_ServicePendingOpenClose",
@@ -635,7 +638,14 @@ FUNCTIONS = {
         "STATIC exact Player142A4BFE8 slot+190. KillTree sets object+40 bit4 "
         "before dispatch, but object+BC remains valid until callback returns. "
         "This callback keeps Player vtable while releasing state/children; "
-        "calls Character_OnKillProcess141E9C750 at1410D8A55.",
+        "calls Character_OnKillProcess141E9C750 at1410D8A55. Exact native "
+        "KillTree holds object+50, sets entered04 at1416A5E2A, invokes+190 at "
+        "5E33 and invalidates BC only6044. First cleanup is player+1E70 "
+        "virtual+28 at1410D8502. A matching admitted-primary numeric record/id "
+        "can therefore close metadata BEFORE stock cleanup, using only the "
+        "CURRENT native argument's VT/A8/BC/record+8/entered04. This covers "
+        "normal exact-Player OnKill dispatch, not arbitrary heap/factory "
+        "invalidation or a lifetime lease on a separately cached Player.",
     ),
     0x141E9C750: (
         "Character_OnKillProcess",
@@ -5099,7 +5109,11 @@ FUNCTIONS = {
         "this helper alone does not publish Pirate physics. ABI: RCX=object, "
         "RDX=pointer to contiguous32byte position/quaternion; no meaningful "
         "success return. Preserve receiver position service lane+13C when "
-        "substituting only xyz. Exact Pirate+208=1401D4E10 (RET0).",
+        "substituting only xyz. Exact Pirate+208=1401D4E10 (RET0), confirmed "
+        "at vtable14294BBD8. Two16B copies consume only caller pose/current "
+        "owner; this exact-Pirate setter has no primary-slot/Player lookup. "
+        "Primary reads in ENR2 are admission policy, not a native setter "
+        "input. Other classes' virtual+208 effects are not established here.",
     ),
     0x141E7D1D0: (
         "ObjectTransform_CopyLocalRotationAndNotify208",
@@ -5331,7 +5345,7 @@ FUNCTIONS = {
         "AnimManager_PerformBlendAndDispatchPostBlendJob",
         "Synchronous animation worker callback: calls PerformAnimBlend at exact "
         "callsite 0x141A92905, then resolves the retained Fg owner and dispatches "
-        "Player vtable+0x408 through exact bytes FF 90 08 04 00 00 at "
+        "owner virtual+0x408 through exact bytes FF 90 08 04 00 00 at "
         "0x141A929A1 in the same enclosing job call. The final Async joint-blend job follows "
         "separately, making these two callsites the exact Perform-to-postblend "
         "handoff for the Mazur authored-pair preservation scope. STATIC value "
@@ -5355,7 +5369,13 @@ FUNCTIONS = {
         "Native job+20 is already initialized before Perform: async allocation "
         "141781E76..EAD uses stride38 and copies1466D0C58 at141781EE3/EEA; "
         "sync copies it at141783173/17A. It remains the same job through "
-        "Perform/JointBlend, not an uninitialized future-only callback field.",
+        "Perform/JointBlend, not an uninitialized future-only callback field. "
+        "STATIC primary-independent native path: resolves THIS Fg owner's "
+        "record+8/BC, checks owner dead bit at141A92983 and sets CurrentProcess "
+        "to that owner141A92988 before+408. Exact Pirate14294BDD8 resolves "
+        "141DE9910; return929A7 precedes phase40 call929C1. No retained "
+        "primary Player is an operand of this writer handoff; current-owner "
+        "identity and world-epoch admission remain separate requirements.",
     ),
     0x1415A9040: (
         "TaggedHeapAllocator_Init",
@@ -16663,6 +16683,35 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x141E7D0D0: (
+        "STATIC primary-independent exact-Pirate root helper: copies two16B "
+        "blocks from RDX to current ownerRCX+130/+140, then tail-dispatches "
+        "virtual+208. Pirate14294BBD8 resolves empty1401D4E10; no primary-slot "
+        "lookup/native physics publication. Preserve receiver service lane+13C "
+        "when replacing xyz; do not generalize another class' virtual+208."
+    ),
+    0x141A92988: (
+        "STATIC CurrentProcess becomes the CURRENT Fg retained owner, following "
+        "record+8/BC and dead-bit checks; not a primary-slot lookup. Next owner "
+        "+408 call929A1 returns929A7 before phase40 at929C1. Exact Pirate's "
+        "root writer may use native self plus explicit world admission without "
+        "dereferencing a separately cached primary. This is not a global lease."
+    ),
+    0x1410D8502: (
+        "STATIC first Player_OnKill cleanup: player+1E70 object virtual+28. "
+        "OnKill entry is AFTER KillTree entered04 write1416A5E2A and BEFORE "
+        "BC invalidation1416A6044. Match admitted primary record/id against "
+        "CURRENT native argument and close metadata BEFORE forwarding stock, "
+        "not after this or later Character cleanup. Normal KillTree coverage "
+        "only; arbitrary direct heap/factory invalidation is not proved."
+    ),
+    0x141B3FF70: (
+        "STATIC HavokClose first live-world invalidation: availability "
+        "146916DF4=0, then generationsFF77/FF7F advance BEFORE world accessFF87. "
+        "Close actor-dependent metadata at the observed close wrapper ENTRY, "
+        "before calling stock. Waiting for world-null/normal return is too late "
+        "for admission; metadata closure itself is not a native memory lease."
+    ),
     0x1401678D7: (
         "STATIC sole native code xref passing GameFramePostRenderUpdate140165B50: "
         "LEA RCX bytes48 8D 0D 72 E2 FF FF. Next CALL1401678DE submits this "
