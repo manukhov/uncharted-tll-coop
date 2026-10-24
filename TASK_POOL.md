@@ -12,6 +12,19 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy Synchronization (2026-10-24)
 
+2026-10-24 COST CONTINUATION: current_player/identity/ordinary now require the
+caller-owned lexical ReadCache; unused eager~1KiB local fallback removed.
+All8 calls already passed it. Build/source/binary review passes: helper frames
+shrink1040..1072bytes; copy/page/SEH/OnKill/final/budget checks unchanged.
+DLL FE640DB9...430289. This removes proven instructions, NOT a measured fix for
+the old2389/2925us first census or the baseline hang.2queries cannot identify
+the dominant delayed call. Enemy OFF;1ms/256queries unchanged; no launch.
+Native accessor/normal update is NOT a retention lease.141D63C50 IDB comment
+corrected: capacity+8, live count+C, returns object with+72 write; saved/readback.
+NEXT distinguish remaining guard latency from removed setup cost before any
+enemy exam. No page-check removal, cross-callback protection cache or guessed
+early-return readiness gate (in-flight publication races need explicit policy).
+
 2026-10-24 IMPLEMENTED: enemy_root current_player/identity now reject
 enteredOnKill(+40 bit0x04) initially/finally; current_player rechecks actor+BC.
 Receiver rechecks enemy/player kill flags and IDs after ordinary/distance,

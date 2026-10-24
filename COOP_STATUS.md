@@ -2,7 +2,16 @@
 
 ## Current user priority / handoff (2026-10-24)
 
-LATEST IMPLEMENTATION: enemy_root current_player/identity now also reject
+LATEST IMPLEMENTATION: enemy guard helpers now REQUIRE the caller-owned
+lexical ReadCache, removing unused~1KiB fallback initialization on every call.
+All8 calls already supplied that cache. Independent source/binary review:
+current_player/identity/ordinary stack frames shrink by1040..1072bytes; copy
+and all page/SEH/OnKill/final/budget checks remain. Fresh DLL FE640DB9...430289.
+This removes proven wasted work, NOT a proved cause of the old2.4..2.9ms stop.
+Enemy stays OFF; no budget increase or new launch. Native manager accessors
+do NOT provide a retention lease;141D63C50 comment corrected/saved/read back.
+
+PREVIOUS IMPLEMENTATION: enemy_root current_player/identity now also reject
 enteredOnKill(+40 &0x04), including final re-reads; current_player rechecks+BC.
 Receiver rechecks both actor/player kill flags and IDs after animation/physics
 validation, before final time/budget admission and setter141E7D0D0. Fresh DLL
@@ -43467,3 +43476,85 @@ justified run reproduces it; last handled exceptions cannot substitute. For
 enemy sync, resolve first-census guard cost without removing lifecycle/page
 checks or moving game-object traversal into the network worker. No visible
 enemy-sync success, stable performance, or corrected hang claimed.
+
+## 2026-10-24 — Remove unused enemy guard caches without weakening admission
+
+**STATIC cost attribution limit:** prior census scopes cost2389/2925us with
+2VirtualQuery attempts, not per-call timings. First miss is the retained-slot
+global at module+3EEBE80. The next is normally record+8, but queried region
+coalescing can move the next miss to a later field. The logs cannot separate
+query delay, page fault, cache initialization, copying, or descheduling.
+Do not assert that either VQ alone cost that entire interval.
+
+**STATIC wasted work corrected in the production channel:** current_player,
+identity and ordinary each constructed a zeroed local ReadCache (~1040bytes)
+BEFORE selecting the supplied shared cache. All8 production helper calls
+already supplied a lexical cache; none used the fallback. PDB/disassembly of
+exact F559F64D... build shows unconditional stack-zeroing, not merely dead
+source. The helpers now require ReadCache& and have no local fallback or
+nullable/default parameter. The two real caches remain owned by census and
+postblend, bind the same WorkBudget, and never publish into roster/mailboxes.
+All actual reads, protection queries, final identity/OnKill checks and SEH
+still use the unchanged copy helper. No field snapshot/cache crosses a native
+call or callback; no worker follows a game pointer. This is not a new cache
+framework or standalone test.1ms/256queries and all timeout/stop gates remain.
+
+Independent source review verifies all8 callers, lambda reference lifetimes,
+unchanged name-chunk copy, budget binding and unlock paths. Production build
+passes. Exact before/after DLL+PDB pairs preserved in ignored
+reports/enemy-cache-required-20261024/before and after.
+New DLL SHA256 FE640DB91AA9767B3A3516C0A00B1DFFA634E30FB787DFE29DD77B5980430289;
+PDB SHA256 FBA212B0824F15EC1665E7DE3D47D624A51B3064F7A74339A093E9E14A0F1BAA.
+Independent PDB/Capstone comparison:
+
+- current_player RVA16E70: size1426->536, stack488->58 hex; initial RAX stack
+  stores before first call136->5 (includes the prior security-cookie store).
+- identity RVA34D00->34980: size2271->1331, stack560->150 hex.
+- ordinary RVA45AD0->453B0: size5238->4310, stack578->148 hex.
+- postblend size5377/stack810 hex unchanged; copy RVA16710/size524 unchanged.
+
+Budgeted-copy call counts remain11->11,19->19,79->79 in those three helpers.
+copy remains139instructions; only relocated VirtualQuery-IAT/memcpy operands
+changed. Its budget calls16756/16811/1683F/16900 and MEM_COMMIT/PAGE_GUARD/
+readable masks match. Helper OnKill tests remain; final receiver tests move
+to48416/48474 without removal. No reduced-check-count shortcut was emitted.
+
+These are eliminated instructions/stack use, NOT measured game-time savings
+or proof that a future census meets its wall-time cutoff.
+
+**STATIC alternatives rejected, no weaker lifetime/page contract:**
+CharacterManager_AddCharacter141D63420, RemoveCharacter141D63640 and
+GetCharacter141D63C50 have no local manager lock. Removal swap-compacts and
+notifies observers; Character_OnKill141E9C763 reaches it before ID invalidation
+1416A6044. GetCharacter only resolves weak record+8/+BC and writes+72=1.
+The hooked141BB8320 transform recomposition is not a global retention fence.
+Normal-frame job completion does not exclude package/unload producers. Existing
+Register/PostInit-before-spawner-publication and partial spawner-lock exclusions
+remain rejected; no reopened experiment is proposed. Native getters therefore
+cannot justify dropping page queries or moving traversal into the network worker.
+Evidence kinds: concrete lock/store/accessor semantics, source assertions and
+independent OnKill/frame ordering, consistent with existing registry entries.
+
+**STATIC label correction, not a new accessor:** fresh MCP of141D63C50 shows
+assert index < m_maxCharacterCount at manager+8, NOT live count(manager+C).
+It returns the resolved OBJECT, not the record, after writing object+72=1.
+Corrected scripts/ida_apply_labels.py and sole ida/tll.i64 comment accordingly.
+Stopped MCP before headless apply; reports/apply_character_accessor_20261024.txt
+records2049functions/87data names/3types and save_database returned True.
+Restarted MCP; corrected comment/name and caller xrefs read back successfully.
+
+**Deferred extra admission, not implemented:** pre-census local/peer readiness
+could avoid work before both copies are active, but does not make the first
+ready query cheaper. Fresh baseline-peer timestamp is not same-scene/session
+proof. A naive early invalidation can race an in-flight tick that republishes
+the old roster; non-atomic census_gap cannot be written without tick ownership.
+An epoch/loss latch or stricter terminal-on-readiness-loss policy is required;
+neither should be silently added as a performance fix. Existing admission and
+default-OFF policy are unchanged.
+
+**No runtime exam admitted:** removing the unused buffers does not establish
+why a single old query scope exceeded1ms, and does not solve the enemy-OFF
+baseline hang. No new launch/injection/input/rearm. NEXT distinguish actual
+remaining guarded-read latency from removed setup cost before admitting another
+enemy-enabled run. Do not increase the budget, retain protection caches across
+callbacks, or label compile/instruction reduction as visible synchronization.

@@ -10010,9 +10010,12 @@ FUNCTIONS = {
     ),
     0x141D63C50: (
         "CharacterManager_GetCharacter",
-        "Index accessor: asserts index<count(manager+8), entry=array[index] "
-        "(index<<4 + manager+0), validates entry.ptr->(+8)->+0xBC==entry.id, "
-        "returns entry.ptr. This is the CharacterManager array accessor itself; "
+        "Index accessor: asserts index<capacity(manager+8), NOT live count(+C); "
+        "source index < m_maxCharacterCount, character-manager.cpp:231. "
+        "Entry=array[index] (index<<4 + manager+0); requires nonzero record/id, "
+        "resolves object=record+8 and validates object+BC==entry.id. Writes "
+        "object+72=1 and returns object, NOT the record. No local manager lock "
+        "or retention lease. This is the CharacterManager array accessor itself; "
         "do not conflate it with the separate local-player resolver owner at "
         "0x143FE1070.",
     ),

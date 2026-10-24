@@ -187,10 +187,10 @@ bool copy(std::uintptr_t at, void* out, std::size_t size, ReadCache* cache = nul
     return (!budget || budget->check()) && copied;
 }
 template<class T> bool read(std::uintptr_t at, T& out) noexcept { return copy(at, &out, sizeof(out)); }
-std::uintptr_t current_player(ReadCache* shared = nullptr) noexcept {
-    ReadCache local_cache{};
-    auto* cache = shared ? shared : &local_cache;
-    const auto read = [cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), cache); };
+// Admission helpers must share their caller's lexical cache. An optional local
+// fallback eagerly zeroed ~1KiB on every call, even when it was never selected.
+std::uintptr_t current_player(ReadCache& cache) noexcept {
+    const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
     std::uintptr_t record{}, actor{}, vt{}, record_after{}, actor_after{};
     std::uint32_t id{}, actor_id{}, id_after{}, actor_id_after{}; std::uint8_t kill_flags{};
     // ProcessKillTree1416A5E2A marks enteredOnKill before virtual+190 cleanup;
@@ -205,12 +205,10 @@ std::uintptr_t current_player(ReadCache* shared = nullptr) noexcept {
         !read(actor+0x40, kill_flags) || (kill_flags & 0x04)) return 0;
     return actor;
 }
-bool identity(std::uintptr_t actor, Local& out, ReadCache* shared = nullptr) noexcept {
+bool identity(std::uintptr_t actor, Local& out, ReadCache& cache) noexcept {
     // Lexical cache, discarded before any native callback or mailbox handoff.
     // Every actual copy still has memory-fault SEH; this is not a page lease.
-    ReadCache local_cache{};
-    auto* cache = shared ? shared : &local_cache;
-    const auto read = [cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), cache); };
+    const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
     Local value{}; value.actor = actor;
     std::uintptr_t vtable{}, bound_actor{}, owner_record{}, name{};
     std::uint32_t bound_id{}; std::uint8_t flags{}, kill_flags{};
@@ -230,7 +228,7 @@ bool identity(std::uintptr_t actor, Local& out, ReadCache* shared = nullptr) noe
         // checks protection/SEH; do not query the same name region twice.
         const auto available = std::size_t{0x1000}-((name+i)&0xFFF);
         const auto size = std::min(available, value.key.name.size()-i);
-        if (!copy(name+i, value.key.name.data()+i, size, cache)) return false;
+        if (!copy(name+i, value.key.name.data()+i, size, &cache)) return false;
         for (std::size_t j = i; j < i+size; ++j) if (!value.key.name[j]) {
             std::fill(value.key.name.begin()+j, value.key.name.end(), '\0'); ended = true; break;
         }
@@ -251,7 +249,7 @@ bool census(Roster& out, WorkBudget& budget) noexcept {
     ReadCache cache{}; cache.budget = &budget;
     const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
     Roster value{};
-    value.player = current_player(&cache);
+    value.player = current_player(cache);
     if (!value.player || !read(value.player+0xBC, value.player_id) || !value.player_id ||
         !read(g_module+0x3898630, value.manager) || !read(value.manager, value.array)) return false;
     std::uint32_t count{};
@@ -264,7 +262,7 @@ bool census(Roster& out, WorkBudget& budget) noexcept {
         if (vt != g_module+kPirate) continue;
         if (value.count == value.rows.size()) return false;
         Local local{};
-        if (!identity(actor, local, &cache) || local.record != entry.record || local.generation != entry.id) return false;
+        if (!identity(actor, local, cache) || local.record != entry.record || local.generation != entry.id) return false;
         for (std::uint32_t previous = 0; previous < value.count; ++previous)
             if (value.rows[previous].key == local.key || value.rows[previous].actor == actor) return false;
         value.rows[value.count++] = local;
@@ -552,10 +550,8 @@ void apply_root_and_release(void* object, const void* transform, WorkBudget* bud
     }
 }
 
-bool ordinary(std::uintptr_t actor, std::uintptr_t job, std::array<float, 8>& transform, unsigned& gate, ReadCache* shared = nullptr) noexcept {
-    ReadCache local_cache{};
-    auto* cache = shared ? shared : &local_cache;
-    const auto read = [cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), cache); };
+bool ordinary(std::uintptr_t actor, std::uintptr_t job, std::array<float, 8>& transform, unsigned& gate, ReadCache& cache) noexcept {
+    const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
     gate = 1;
     std::uintptr_t fg{}, record{}, record_actor{}, owner_record{}, control{}, fg_control{}, owner_control{}, control_fg{};
     std::uintptr_t job_fg{}, custom{}, art{}, active_art{}, cache_art{}, raw{}, art_raw{}, composite{}, composite_owner{}, bodies{};
@@ -681,14 +677,14 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     ReadCache cache{}; cache.budget = &budget;
     const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
     Local local{}; std::array<float, 8> transform{}; unsigned gate{};
-    if (!identity(actor, local, &cache) || !ordinary(actor, reinterpret_cast<std::uintptr_t>(native_job), transform, gate, &cache)) {
+    if (!identity(actor, local, cache) || !ordinary(actor, reinterpret_cast<std::uintptr_t>(native_job), transform, gate, cache)) {
         last_rejection.store(gate, std::memory_order_relaxed);
         rejected.fetch_add(1, std::memory_order_relaxed); return;
     }
     const auto now = GetTickCount64();
     if (!TryAcquireSRWLockExclusive(&lock)) return; // never wait in an animation job
     if (!session || session != scheduled_session || !active_scope.load(std::memory_order_acquire) || stopped.load() ||
-        now > census_valid_until.load(std::memory_order_acquire) || roster.player != current_player(&cache)) {
+        now > census_valid_until.load(std::memory_order_acquire) || roster.player != current_player(cache)) {
         ReleaseSRWLockExclusive(&lock); return;
     }
     std::size_t index = roster.count;
@@ -717,7 +713,7 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     // Refresh identity/eligibility after releasing the mailbox, never dereference
     // an actor obtained from the receive thread. Current native caller owns self.
     Local after{}; std::array<float, 8> fresh{};
-    if (!identity(actor, after, &cache) || !(after == local) || !ordinary(actor, reinterpret_cast<std::uintptr_t>(native_job), fresh, gate, &cache)) return;
+    if (!identity(actor, after, cache) || !(after == local) || !ordinary(actor, reinterpret_cast<std::uintptr_t>(native_job), fresh, gate, cache)) return;
     if (!TryAcquireSRWLockExclusive(&lock)) return;
     const auto apply_now = GetTickCount64();
     std::uintptr_t manager{}; std::uint32_t player_id{};
@@ -727,7 +723,7 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
         confirmed && apply_now-peer_seen <= 1000 && index < roster.count && roster.rows[index] == local &&
         rows[index].received && apply_now-rows[index].received <= 200 && first_apply && apply_now-first_apply <= 30000 &&
         rows[index].incoming.sequence == packet.sequence &&
-        roster.player == current_player(&cache) && read(roster.player+0xBC, player_id) && player_id == roster.player_id &&
+        roster.player == current_player(cache) && read(roster.player+0xBC, player_id) && player_id == roster.player_id &&
         read(g_module+0x3898630, manager) && manager == roster.manager;
     if (!still_current) { ReleaseSRWLockExclusive(&lock); return; }
     double fresh_distance{};
