@@ -2,6 +2,14 @@
 
 ## Current user priority / handoff (2026-10-24)
 
+ACTIVE EXAM (19:34 MSK): A7872/B13516 launched/injected with exactC46A83F1...
+image below, enemyOFF. Both PEER-LIFECYCLE/LOCAL-LOOK/reset READY; no scene
+outcome yet. Watchers14332/14924 both READY(attach breakpoint continued),
+artifacts reports/peer-leave-nadine-20261024-1934. User alone loads sameEMPTY
+and reportsready BEFORE any menu exit. Inspect native companion retirement and
+user-visible NPC/local+remote behavior first; only then A-menu/B-survivor.
+Do not relaunch, rebuild the loaded image, send game input or claim success.
+
 CONFIRMED BOUNDED MENU RESULT: user reports latest run "now all normal".
 A8960/B10816 both capture owned identity and execute seen7/forced7/FLSrestore1,
 slot1Live0. Entry/matched addresses differ from spawn addresses in BOTH, proving
@@ -44650,3 +44658,30 @@ Signal without native retirement, uncleared collision, NPC respawn/fuse/refusal,
 loss on Alt-Tab, appearance/control regression, lag/hang/crash all reject usable
 implementation. No success from build/READY/packets alone; no performance claim
 under watcher or universal campaign/scripting/reconnect claim. No agent input.
+
+### 2026-10-24 19:34 MSK — Launch explicit-leave / stock-companion exam
+
+RUNTIME PENDING, NOT CONFIRMED: launched LocalPair2 with enemy sync OFF after
+the static quota, prediction, fresh build and label save above. Source commit
+52ebd57 is pushed. A/Chloe PID7872 created2026-10-24T19:34:40.430697+03:00;
+B/Nadine PID13516 created2026-10-24T19:34:42.444217+03:00. Exact DLL C46A83F1...
+and PDB EFAF8843... preserved with watcher binary in
+reports/peer-leave-nadine-20261024-1934; boot-locomotion_hook.log copied once.
+Both injection results succeeded and both log PEER-LIFECYCLE READY,
+REMOTE-PLAYER-RESET READY, LOCAL-LOOK READY; requested appearances remain
+visually unverified. No ownership/companion/leave runtime result yet.
+
+Existing PID/image-bound external watchers: A watcher14332, directoryA-PID7872,
+creationFILETIME31286229:2434140192; B watcher14924, directoryB-PID13516,
+creationFILETIME31286229:2454275390. Both events.txt record READY after the
+attach breakpoint was continued, timeout1800s; no performance verdict. Initial
+attempts3656/22256 refused precreated output directories BEFORE attachment;
+those empty directories were preserved, then new paths used. Do not claim
+continuous watcher coverage from process launch.
+
+NEXT user loads sameEMPTY scene in both and reportsready before menu exit.
+Check OWNERSHIP/COMPANION-RETIRE native markers and visible NPC removal while
+both Player avatars, control and presentation survive. Do not count startup
+READY as behavior. Then follow the separate A-menu/B-survivor prediction above.
+No game input, appearance repair, enemy sync, new automatic launch or reconnect
+experiment is authorized by this active exam.
