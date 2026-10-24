@@ -2,6 +2,13 @@
 
 ## Current user priority / handoff (2026-10-24)
 
+ACTIVE NEW EXAM (20:02 MSK): A17736/B14220 launched/injected with D6F9BBF0...
+native-spawner-kill image; both nativeSpawnerKill1/generationBudget1 and local
+look/reset READY, enemyOFF. Watchers23832/22156 both READY. Artifacts under
+reports/native-spawner-kill-20261024-2003 (folder label is not launch time).
+User alone loads sameEMPTY and reportsready; inspect exact reciprocal spawner
+result and visible NPC absence BEFORE any menu test. No new result yet.
+
 NPC EXAM REJECTED: user reports stock Nadine did NOT disappear. A7872/B13516
 each log8 captured distinct weakrecord/generation identities,8 native
 companionFound1/Retired1 results, then respawn-budget REFUSED. Repeating native
@@ -44803,3 +44810,23 @@ No parallel database. Source/current-image runtime result remains pending.
 Independent source/ABI review passed. Post-call spawner flag read is a bounded
 SEH diagnostic, NOT a retained-resource lease; unreadable data refuses success
 and does not retry the NPC kill.
+
+### 2026-10-24 20:02 MSK — Launch native-spawner-kill candidate
+
+RUNTIME PENDING: source bfb63b8 committed/pushed; fresh DLL D6F9BBF0... and PDB
+21E86BA2... preserved with existing watcher binary under
+reports/native-spawner-kill-20261024-2003. Boot log copied once. A/Chloe PID17736
+created2026-10-24T20:02:07.955667+03:00; B/Nadine PID14220
+created2026-10-24T20:02:09.973257+03:00. LocalPair2 injection succeeded, enemyOFF;
+both log PEER-LIFECYCLE READY nativeSpawnerKill1 generationBudget1, reset READY
+and LOCAL-LOOK READY (requested appearances, visually unverified).
+
+Watcher A23832 binds PID17736 / FILETIME31286233:1729520707, B22156 binds
+PID14220 / FILETIME31286233:1749696605; separate new A-PID17736/B-PID14220 dirs.
+Both events.txt show READY(attach breakpoint continued), timeout1800s. No
+startup-to-attach coverage or performance claim. No scene/NPC-removal result.
+User scenario: sameEMPTY in both, reportready, no menu exit yet. Require strict
+own-spawner provenance, nativeCalled1/nativeReturn1/actorDead1/bit04 and NO
+replacement generation; user must see NPC absent and both Players functional.
+Existing explicit peer-leave test remains separately pending. No live rebuild,
+agent game input, automatic repeat/rearm or success claim from startup markers.
