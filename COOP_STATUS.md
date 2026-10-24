@@ -18,14 +18,20 @@ all native eligibility/late checks and manual same-encounter scope remain.
 First-stop attribution uses existing QPC samples, no new observer/test pipeline.
 Fresh build/source review/prediction required before the next enabled exam.
 
-ACTIVE ENEMY EXAM (20:42 MSK): A7788/B22492 fresh4D9AB7EA... image, source
-cde2b72 pushed. EnemyRootSync opt-in ON, dedicated31340/31341 and native hook /
-baseline look/companion gates READY. Pre-scene BOTH queries0/cost0/apply0,
-stopped0; stop-event pairs inspected only, not signaled. No debugger attached
-for performance observation. Exact DLL/PDB and separate boot logs in
-reports/enemy-resume-20261024-2042. User same living-enemy encounter,10..15s
-actual counterpart movement/model+body/smoothness; no shooting/menu yet.
-No visible sync success. Read actual logs/user result next; no auto rearm.
+CURRENT ENEMY EXAM REJECTED: A7788/B22492 exact4D9AB7EA... both terminal cost
+stop at SECOND current_player copy (record+8 protection query), before roster,
+matching or apply. A2930us scope/query2926us; B5013/query5010us, other3us each.
+Query-bracket WALL dominates, not proof of pure VirtualQuery CPU/lock cause.
+Both match/apply0; existing stop ACKs already quiescent (InspectOnly, no signal).
+No unchanged retry/rearm, budget increase or mapping/setter blame justified.
+
+User loaded empty location then enemy location and reports no synchronization.
+Separately, reason2 reset retired owned second Players (seen7/forced7/slot1Live0)
+and permanent teardown/consumed capture prevents new-location rearm; no second
+ownership capture. So Player lifecycle and enemy cost are INDEPENDENT blockers.
+Both games remain open per request; scope of user's missing-sync symptom asked
+(players/enemies/both), answer pending. Evidence in latest outcome entry. Do not
+reset flags/replay old scene ctx pointers or assume a fresh launch solves cost.
 
 CURRENT EXAM REJECTED: user screenshot shows extra NPC in BOTH A17736/B14220.
 Both logs: exact NPC found, correct native getter1401D5C80 returnsNULL,
@@ -45183,3 +45189,59 @@ stop both channels with scripts/stop_enemy_root_channel.ps1 -ProcessIds7788,2249
 no budget increase/rearm/identical relaunch. Agent may close these exact games
 after evidence preservation and executable/creation revalidation if needed.
 No enemy-sync behavioral success or all-campaign authority is claimed yet.
+
+### 2026-10-24 — REJECT first-query admission and diagnose empty->enemy transition
+
+User reports loading an EMPTY location first, then one WITH enemies, and no
+synchronization. Clarification requested whether this means remote Players,
+enemy correspondence or both; do not turn the ambiguous phrase into a more
+specific user-visible claim. Both original PIDs7788/22492 remain alive with
+unchanged creation times. No new launch, rearm, memory write or game input.
+
+CONFIRMED narrow cost containment / REJECTED usable enemy sync: both private
+logs end STOPPED costStop2/site1, workerGap0/external0/nativeFault0, match/apply0.
+A first COST context: scope2930us, queryBracket2926us, other3us, lastQuery2921us,
+readCalls2/scopeQueries2, read/query10E0200ED8,size8,pending0.
+B: scope5013us, queryBracket5010us, other3us, lastQuery5005us,
+readCalls2/scopeQueries2, read/query10E02011A8,size8,pending0.
+Later global peaks2980/5316us include subsequent checks; immutable first context
+above is the correct crossing snapshot, not the larger final peak.
+
+STATIC+runtime localization: census first calls current_player; first copy is
+retained-slot entry, SECOND is entry.record+8. Thus the actual stop happens in
+that second protection-query bracket BEFORE memcpy copies the actor pointer,
+its vtable read, CharacterManager census, body batching, matching or root setter.
+Region-cache ambiguity of old2-query totals is resolved here by readCalls2 and
+the exact address/size/pending context. Bulk roster/body and not-due work was not
+reached; it cannot fix THIS stop. The startup gate did defer work until owned
+bootstrap, but did not make the query bracket fit1ms. No debugger was attached.
+Do NOT label2.9/5ms pure VirtualQuery CPU, a proven VAD lock, page fault, streaming
+or scheduling cause: QPC brackets include all those possible wall intervals.
+Cost may race other terminal signals; this is first COST context, not a captured
+total order of every stop cause. No native mapping/writer test occurred.
+
+InspectOnly of BOTH existing PID/creation-bound request+ACK pairs now returns
+stoppedAndQuiescentTrue, without sending an external stop. This confirms no
+in-flight enemy writer at inspection, not unhooking/zero overhead/crash safety.
+Preserved terminal-enemy_root_7788.log, terminal-enemy_root_22492.log and
+failed-location-transition-locomotion_hook.log under
+reports/enemy-resume-20261024-2042; original boot files and exact DLL/PDB intact.
+
+INDEPENDENT Player lifecycle blocker, not enemy mapping: each PID has exactly
+ONE initial ownership/spawn capture. First subsequent reason2 reset logs native
+seen7/forced7 and slot1Live0 using relocated current owned arguments. Later
+resets contain old same record/gen with entryObject0/seen0/slot1Live0; no second
+spawn/ownership/sync-enable. No PEER-LEAVE marker was needed/observed. Source
+hooked_owned_actor_reset30725 permanently latches teardown after consumed spawn;
+reissue40667 rejects teardown/consumed, auto-reissue/autotest41470/41485 are
+one-shot. spawn_capture_veh81790 copies only first primary descriptor and disarms;
+ctx/a4/out remain OLD raw scene-lifetime pointers. This explains why moving to
+another location cannot recreate the owned remote actor in the current build.
+
+Do not clear latches/adopt arbitrary slot1/replay those pointers. Safe per-level
+rearm needs a fresh native primary-spawn capture, quiescent old-owner retirement,
+new immutable ownership publication, and coordinated per-session/action/enemy
+state reset. This is not implemented. Next priorities must distinguish fixing
+that lifecycle from the separately localized query-bracket cost; simply loading
+directly into enemies in the same rejected image is not an established cure.
+No code/native-label change in this diagnostic unit; existing IDB labels current.

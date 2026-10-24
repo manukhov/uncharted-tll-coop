@@ -12,14 +12,20 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy synchronization; preserve confirmed companion/menu fixes (2026-10-24)
 
-ACTIVE20:42 EXAM: A7788/B22492 exact4D9AB7EA... DLL/PDB09963AC7..., cde2b72
-pushed; EnemyRootSyncON. Both ENR2 own UDP/native408 +baseline gates READY.
-Pre-scene queries/cost/apply0/stopped0; request/ACK pairs InspectOnly verified.
-No debugger for performance run. reports/enemy-resume-20261024-2042 preserves
-exact binaries +separate boot logs. User SAME living-enemy location,10..15s
-movement/smoothness, no shooting/menu. Require real B enemy follows A, body+
-model together/no lag; no visible success yet. Actual logs/user report NEXT.
-If terminalstop, preservecontext and stopboth channels, no rearm/budgetraise.
+CURRENT EXAM REJECTED: A7788/B22492 first census stops on SECOND current_player
+copy/query(record+8), before actor copy/roster/body/matching/setter. A2930us with
+queryBracket2926/other3; B5013/query5010/other3; both reads2/queries2/match0/apply0.
+Query WALL interval identified, not pure API CPU/lock cause. Both stop ACKs
+already quiescent via InspectOnly, no signal. No unchanged retry/budgetraise.
+
+User loaded empty then enemy location, reports no sync (players/enemies/both
+clarification pending). Independent reason2 reset retired secondary Players;
+permanent teardown/consumed/first-capture gates prevent rearm for new location.
+No second spawn; old ctx/a4/out cannot be replayed. Safe rearm needs fresh native
+primary-spawn inputs +quiescent old ownership +new per-location state, not flag
+clearing or arbitrary slot adoption. Query-cost fix remains separate. Both games
+left open; exact outcome files under reports/enemy-resume-20261024-2042, latest
+COOP_STATUS has source/runtime proof. No new code/launch/IDB change this unit.
 
 User accepts stock-Nadine removal in both copies and explicitly resumes enemies.
 A6648/B21908 exactE2697C89... each one native kill + exact matching TaskManager
