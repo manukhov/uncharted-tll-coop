@@ -2,13 +2,19 @@
 
 ## Current user priority / handoff (2026-10-24)
 
-CURRENT EXAM WAITING FOR USER LOAD: new owned-reset DLL0764C5BF... launched/
-injected in A=PID9172 (16:27:06) /B=PID20628 (16:27:08), enemy root OFF in both.
-Both exact reset/LOCAL-LOOK READY; watchers12628/15304 READY,1800second bounds.
-No OWNERSHIP CAPTURED yet at handoff: user alone first loads SAME EMPTY scene,
-waits for counterparts and reports ready. Inspect per-PID ownership before
-asking for A-menu FIRST/B-menu NEXT. No repair/appearance/performance verdict;
-do not rearm/reinject/relaunch automatically. Artifacts reports/owned-reset-20261024-1627.
+LATEST RUNTIME REJECTED: user reports crash again; watcher confirms B20628
+second-chance SAME142227B8C/null Havok lock+TLS. A9172 exits0, no second chance;
+both games/watchers now absent. Both owned tuples were CAPTURED, but BOTH reset
+logs show seen0/forced0/slot1Live1. Replica was NOT retired by this implementation.
+Fresh B dump proves owned record10E0205E08/gen359 at NEW object10E023CF00,
+where capture logged10E118CC80. Immutable raw-address equality rejected this
+same weak identity; this is a concrete defect in the new matcher, not evidence
+that native3pass retirement was executed and insufficient. Native relocation
+1415FDE50 copies object then rebinds record+8; captured raw pointer is not identity.
+NEXT use immutable owned record/gen plus current native-argument validation,
+including current-process guard; do not adopt a later arbitrary slot1. Exact
+failed image/log/dump remain at reports/owned-reset-20261024-1627. No relaunch
+or speculative change to Havok/physics waits. User crash stage clarification pending.
 
 CURRENT BASELINE BLOCKER / USER CORRECTION: A/Chloe returns to menu FIRST;
 B/Nadine crashes when B ALSO returns to menu. This supersedes the earlier
@@ -19,7 +25,7 @@ null hkReferencedObjectLock1437AC388; Havok TLSGetValue also returned null.
 Fault is a Player post-animation collision probe, not a GPU/export function.
 Enemy root was OFF; exact7FBAD416... DLL/PDB and both watcher logs preserved.
 
-CURRENT IMPLEMENTATION, RUNTIME NOT YET VALIDATED: exact mod-owned secondary
+PREVIOUS IMPLEMENTATION (FAILED RAW-ADDRESS MATCHER): exact mod-owned secondary
 is captured from synchronous spawn OUTPUT, then admitted ONLY to native reason2
 body/kill passes inside observer-after-primary call1413C6B1F. Original flags,
 primary/reset guards and nativeKillTree unchanged; own FLS binds scope across
@@ -44263,3 +44269,73 @@ NEXT per-PID ownership CAPTURED/REFUSED before admitting menu scenario; then
 user alone exitsA first/B next, keeping both processes open for inspection.
 READY does not confirm the repair. No automatic repeat/rearm or performance
 claim. Pre-existing untracked tmp/ is untouched; all tracked changes committed.
+
+## 2026-10-24 — Reject raw-address owned reset after fresh B20628 same-PC crash
+
+**REJECTED runtime implementation, not a repaired crash:** user reports
+"again crash". Existing B watcher captured second-chanceC0000005 at
+7FF6E38D7B8C, RVA2227B8C/IDA142227B8C, read0x10/RBX=0 andRAX=0. Native stack
+is the same Player post-animation collision/probe chain, cached shape nonnull
+1038F32980. No new GPU/null-shape or enemy-root attribution. A watcher exited0
+without second-chance context; no claim A crashed or why it was closed. Both
+games/watchers absent; agent did not kill them. Optional user question asks
+whether this occurred at B's own menu exit versus scene/load; answer pending.
+
+Exact image remains0764C5BF3D06E5A808072A7EF17CC6340B34D747FAFE279A5ACB11052E3B2CE8,
+PDBDFADB8E15198D93EF9346968C577FD0AF4C40DC05D535612CE5241AA03B59540.
+Fresh B dump reports/owned-reset-20261024-1627/B-PID20628/second-chance.dmp:
+1628144bytes,16:30:54, SHA256
+409895EAD427040628B08FB6340AA0AA31399A8805F7F7BC0514FDB58A69C5FC.
+New postrun-locomotion_hook.log and B analysis-context-stacks.txt preserve
+terminal logs/context/all-thread/module evidence with matching private PDB.
+First-chance histories are still not fatal PCs.
+
+**CONFIRMED failed admission markers:** both boot reset hooks were READY;
+B ownershipCAPTURED {object10E118CC80,record10E0205E08,id359}; A captured
+{object10E198E900,record10E0201AB0,id5A8}. Both own reason2 wrapper logs have
+seen=0,forced=0,permit=1,flsRestored=1,slot1Live=1. Thus no recorded native body/
+kill admission occurred. This fails the written predicted3stages/slot1Live0;
+READY/ownership alone are NOT success. It does not refute correctly admitted
+native teardown because that intervention never registered.
+
+**CONFIRMED same owned weak identity, changed raw address:** fresh B fault
+Player10E023CF00 has exact PlayerVT142A4BFE8, +A8=10E0205E08 and+BC359, exactly
+the captured OWNED record/id. Chloe+170/+174=3F334972/CDE4B742. Flags+3C=
+008AD7E1 andkill+40=0 still rejectreason2. Collision10E03906C0/embeddedowner
+10E0390CA0 independently repeat that weak pair. Native links+80parent=
+14646D6F8,+88firstchild=10E0205EA8,+90next=14646DB20; D0 is residentnull and
+still not proof of orphaning. Old captured object, record/linked pages,
+retained table and mod globals are MISSING from minidump, not zero.
+
+**CONFIRMED mod rejection defect / STATIC competing explanations:** archived
+DLL helperRVA574E9 compares incomingPlayer against captured object and branches
+false at574EC before record/id checks. A second comparison at5753D..5754B
+requires record+8 equal the SAME captured raw address. Therefore the fresh
+same-identity/new-address Player deterministically fails this matcher if visited;
+removing only the first check is insufficient. Wrapper current-process exclusion
+also compares the captured raw pointer and needs the same identity correction.
+
+Independent emitted-code audit excludes suspected `_ReturnAddress`/scope-layout
+bug: predicate27B9A correctly loads original returnPC from[RSP+28], saves native
+AL, and checks4 intended RVAs; wrapper publishes stackscope27AD9, native reset
+27B02, restores27B12 plus unwind funclet6C370. Scope offsets+18/+19/+1A match
+permit/seen/forced logging. Zero seen alone does NOT prove FLS was absent or
+that native visitors skipped the Player entirely; those are separate candidates.
+
+**STATIC native identity support already consistent with prior findings:**
+native retained resolver1410F0D10 readsCURRENT record+8, validates object+BC,
+never compares an original object address (and writes+72, so do not call it
+as a side-effect-free mod reader). Independent1410F0F60 does the same. New
+relocation writer1415FDE50 calls old object virtual+8 for delta fixup, memmoves
+the entire allocation at1415FDF0D, then rewrites stable record+0/+8 at
+1415FDF1C/1F. Copied object keeps+A8/+BC. The recorded PlayerWeaponController
+relocation callback14109DC40 rebases owner pointers as well. This explains why
+weak record/id can remain unchanged while raw object moves; not corruption.
+The exact temporal relocation call in this run is not captured.
+
+NEXT correct ownership matching to captured record/gen plus exact native current
+Player argument, its+A8/+BC/VT/OnKill and record+8 equality/rereads; retain spawn
+address only as diagnostic metadata. Current-process exclusion must use that
+same relocatable identity. Keep reason2/observer/3returnPC limits, FLS cleanup,
+native3pass ordering, terminal spawn gate, and no arbitrary slot adoption. New
+test needs its own image/prediction; do not repeat0764C5BF... unchanged.

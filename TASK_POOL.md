@@ -12,13 +12,16 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy Synchronization (2026-10-24)
 
-OWNED-RESET EXAM NOW WAITING USER LOAD: A9172/B20628 launched/injected exact
-DLL0764C5BF...; bothreset+LOCAL-LOOK READY, enemyOFF. Existingwatchers12628/
-15304 BOTH READY,1800s. Useralone loadsSAMEEMPTY scene and reportsready BEFORE
-menuexit; requireper-PIDOWNERSHIP CAPTURED then admitA-menufirst/B-menunext.
-No captureyet/no runtimeverdict. Artifacts reports/owned-reset-20261024-1627
-preserveexactDLL/PDB/watcher/bootlog andseparatenewwatcherdirs. DoNOTrelaunch/
-reinject/rearm orclaimsuccessfromREADY. FullidentitiesinlatestCOOP_STATUS.
+OWNED-RESET RUNTIME REJECTED: user reports crash; B20628 fresh secondchance
+SAME142227B8C/nullHavoklock+TLS. A9172 exit0, bothgames/watchersgone. Both
+ownershipCAPTURED butresetseen0/forced0/slot1Live1. FreshBownedweakrecord/id
+10E0205E08/359 isexactlypreserved atNEWPlayer10E023CF00 versuscaptured10E118CC80.
+MatcherhasTWOraw-pointerchecks (DLL574E9/57548) andwrappercurrent-processcheck;
+these rejectrelocatedowner. Native1415FDE50 copiesobject/rebindsrecord+8.
+NEXTmatchownedrecord/gen,currentnativeargumentandcurrentrecord+8,keepVT/OnKill/
+rereads/currentguard andscope. Spawnaddressdiagnosticonly. No arbitraryslot1
+adoption. DoNOTrepeat0764C5BF...unchanged. Exactfailedimage/log/dumpat
+reports/owned-reset-20261024-1627; usercrashstageclarificationpending.
 
 IMPLEMENTED OWNED-RESET CANDIDATE, NOT YET RUNTIME VALIDATED: mod captures native
 spawn OUTPUT record/id + exactPlayer/slot agreement, immutableone-shot. Only
