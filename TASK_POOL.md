@@ -12,6 +12,15 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Explicit Peer Departure; preserve confirmed menu cleanup (2026-10-24)
 
+ACTIVE20:20 EXAM: fresh A6648/B21908 exact E2697C89... DLL injected, enemyOFF;
+taskManagerGate1413C26C5/budget1, look/reset READY. Watchers14712/7144 both
+READY; reports/taskmanager-nadine-gate-20261024-2020 has exact DLL/PDB and boot
+log. User alone sameEMPTY/reportready BEFORE menu exit. Require one native
+retirement + exact owner-tuple SUPPRESSED + visible NPC absence/control intact.
+No outcome/success yet. Old A17736/B14220 closed, both watchers exit0/no second
+chance. User authorizes agent to close test copies in future; AGENTS updated,
+not game-input authority. Latest COOP_STATUS has hashes/PIDs/creations/scenario.
+
 CURRENT EXAM REJECTED: A17736/B14220 user screenshot shows extra NPC in both.
 Both exact getter1401D5C80 returnsNULL; spawner-missing/nativeCalled0/actorDead0/
 companionRetired0. This candidate NEVER called native spawner Kill. Both games/
@@ -22,7 +31,7 @@ bypass owner guards. NEXT trace specific NadineBuddy literal xrefs1413C2604 /
 PSI58null OR authored spawner51bit08 omits publication. No origin proof yet.
 Preserve bootstrap/donor, local+remote Players; no live edits. New source below.
 
-NEW PRECISE CANDIDATE (object compiled, DLL link/runtime pending): native
+PREVIOUS PRE-LINK HANDOFF (superseded by active exam above): native
 TaskManager_MaintainCompanionActors1413C2270, VT+1D8 (NOT+238), owns Nadine pair
 manager168/170. Invalid pair -> exactspawn1413C26C5 ->1413BF090; NULL safely
 skips ONLY Nadine publication. Helper Spawn arg4TRUE deliberately omits actor150

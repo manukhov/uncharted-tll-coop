@@ -2,6 +2,14 @@
 
 ## Current user priority / handoff (2026-10-24)
 
+ACTIVE EXAM (20:20 MSK): A6648/B21908 freshly launched/injected with exact
+E2697C89... DLL, taskManagerGate1413C26C5/generationBudget1 and local look/reset
+READY, enemyOFF. Watchers14712/7144 both READY. Artifacts under
+reports/taskmanager-nadine-gate-20261024-2020. User alone loads sameEMPTY and
+reportsready BEFORE menu exit; require one retirement + exact owner-tuple
+SUPPRESSED marker + visible NPC absence and both Players functional. No result
+yet. No live rebuild, agent game input, automatic repeat or success claim.
+
 CURRENT EXAM REJECTED: user screenshot shows extra NPC in BOTH A17736/B14220.
 Both logs: exact NPC found, correct native getter1401D5C80 returnsNULL,
 status=spawner-missing, nativeCalled0, actorDead0, companionRetired0. Native
@@ -10,9 +18,9 @@ of suppression success is justified. Both games/watchers remain live at this
 inspection; explicit peer leave still untested. Outcome/screenshot preserved in
 reports/native-spawner-kill-20261024-2003. Next STATIC trace dynamic/omitted
 spawner provenance audit has now identified the specific TaskManager owner.
-Exact1413C26C5 gate written and C++ object compiled/reviewed; no NEW DLL yet.
-Linking/retest waits for user to close old A17736/B14220. Do not inject current
-scanner/build DLL: it is still the rejected D6F9BBF0... image until final link.
+Previous handoff had only the compiled/reviewed object. User has now closed old
+A17736/B14220; final link and new exam are complete as described above. Both
+old watchers record exit0/second_chance0; no old-spawner success is claimed.
 
 NPC EXAM REJECTED: user reports stock Nadine did NOT disappear. A7872/B13516
 each log8 captured distinct weakrecord/generation identities,8 native
@@ -44960,3 +44968,42 @@ reports/apply_companion_owner_gate_20261024.txt records2109functions/97data/
 names and1413C31D2 caller read back. No parallel IDB. Current old watchers still
 READY/live at last inspection; no second-chance/exit classification yet. No
 enemy/appearance work, new framework, raw spawner lookup or live game edits.
+
+### 2026-10-24 20:20 MSK — Link and launch exact TaskManager owner gate
+
+RUNTIME PENDING: user confirms old copies closed and explicitly requests that
+the agent close test copies itself in future, without asking for manual closure.
+AGENTS.md now records that authority with PID/image/creation revalidation and
+evidence preservation; it does NOT authorize game input/menu operation or make
+a forced close a native-menu outcome. No persistent memory files were changed.
+Old A17736/B14220 both watchers EXIT code0/second_chance0, agreeing with user
+closure; no second-chance context/crash-PC claim. user-closed log preserved once
+under reports/native-spawner-kill-20261024-2003.
+
+Final normal MSVC x64 link succeeds from source c444f5a. Fresh DLL SHA256
+E2697C89698C286CD54A8A3C8E33B60A75D5F264FE042BADD38C6AC15440970D;
+PDB8D099C5F6B2B05B7D52C8C0F53756A2547ED963389576082486301A2E9D0EF2A.
+Exact files and existing watcher binary preserved under
+reports/taskmanager-nadine-gate-20261024-2020, hashes read back, boot log copied
+once. This supersedes the prior link-deferred/old-D6F9 image handoff.
+
+Launched/injected LocalPair2 immediately after successful prepared build,
+enemyOFF. A/Chloe PID6648 created2026-10-24T20:20:40.435776+03:00;
+B/Nadine PID21908 created2026-10-24T20:20:42.454523+03:00. Both startup logs
+show taskManagerGate1413C26C5/generationBudget1, reset READY and LOCAL-LOOK
+READY (requested appearances, visually unverified). No scene outcome yet.
+
+Separate existing1800s watchers: A14712 binds PID6648 / creationFILETIME
+31286235:4264387208, B7144 binds PID21908 /31286235:4284574678. New output dirs
+A-PID6648/B-PID21908; both READY after attach breakpoint continued. No coverage
+from process birth to attachment and no performance verdict is claimed.
+
+NEXT user loads sameEMPTY in both and reportsready BEFORE menu exit. Inspect
+one companionRetired1/spawnGateArmed1 per copy and COMPANION-SPAWN SUPPRESSED
+matching exact captured record/gen in the native live manager, then require
+visible NPC absence/collision removed while both Players remain functional.
+No marker-only success. New-generation refusal or surviving NPC rejects the
+candidate; trace the precise alternate owner/admission instead of repeated kill.
+Explicit peer-leave visibility/collision and AltTab preservation remain separate
+user-controlled checks. Sole IDB prior2109/97 saveTrue/readback remains valid;
+no new native labels/source changes in this launch turn. No agent game input.

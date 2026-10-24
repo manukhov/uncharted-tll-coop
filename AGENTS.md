@@ -46,6 +46,13 @@ on the user's behalf. The user performs all game actions. The agent only provide
 a short, precise scenario beforehand, reads logs/process state, and analyzes the
 visual result reported by the user.
 
+The user explicitly authorizes the agent to close and restart these test copies
+when needed; do not ask the user to close them manually. Preserve current test
+evidence first, then stop only the exact test PIDs after revalidating executable
+path and creation time. Do not use a blanket process-name kill. Closing a
+process does not authorize game input or menu operation, and a forced close
+does not count as a native quit-to-main-menu result.
+
 ---
 
 ## Hypothesis lifecycle (mandatory)
