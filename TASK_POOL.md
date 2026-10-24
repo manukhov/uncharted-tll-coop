@@ -12,12 +12,13 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Explicit Peer Departure; preserve confirmed menu cleanup (2026-10-24)
 
-ACTIVE19:34EXAM: A7872/B13516 exactC46A83F1... injected, enemyOFF; bothlifecycle/
-look/resetREADY, no sceneoutcome. Watchers14332/14924 READY(attachbreakpoint
-continued),1800s; artifacts reports/peer-leave-nadine-20261024-1934. Useralone
-loadssameEMPTY/reportready BEFOREexit. Inspectcompanionnative-retiredmarkers+
-visibleNPCabsence/local+remotecontrols first, THEN A-menu/B-survivor. No restart,
-live-rebuild,agentinput orsuccessclaim. Fullprediction/latestCOOP_STATUSentry.
+NPCREMOVAL REJECTED byuser: A7872/B13516 each8distinctweakidentitycaptures/
+8nativecompanionFound1Retired1 thenfuseREFUSED; NPCstillvisible. Bothgames/
+watcherslive;0leave. Outcome npc-removal-rejected-locomotion_hook.log under
+reports/peer-leave-nadine-20261024-1934. DoNOTraisefuse/repeatkill/relaunchsame.
+NEXTstatic1404A0F40creator/maintainedowner audit vs survivingdrawable/wrongNPC
+alternatives; trace suppress/removecontract. Peer-leavecollisionuntested.
+No live-rebuild,agentinput orsuccessclaim; latestCOOP_STATUSentry hasdetails.
 
 CONFIRMED r2MENU RESULT: userreportsnowallnormal. A8960/B10816 bothownedcapture,
 entry/matchedrelocatedaddresses,seen7forced7,FLS1,slot1Live0. Bothnowabsent;

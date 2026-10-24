@@ -2,13 +2,15 @@
 
 ## Current user priority / handoff (2026-10-24)
 
-ACTIVE EXAM (19:34 MSK): A7872/B13516 launched/injected with exactC46A83F1...
-image below, enemyOFF. Both PEER-LIFECYCLE/LOCAL-LOOK/reset READY; no scene
-outcome yet. Watchers14332/14924 both READY(attach breakpoint continued),
-artifacts reports/peer-leave-nadine-20261024-1934. User alone loads sameEMPTY
-and reportsready BEFORE any menu exit. Inspect native companion retirement and
-user-visible NPC/local+remote behavior first; only then A-menu/B-survivor.
-Do not relaunch, rebuild the loaded image, send game input or claim success.
+NPC EXAM REJECTED: user reports stock Nadine did NOT disappear. A7872/B13516
+each log8 captured distinct weakrecord/generation identities,8 native
+companionFound1/Retired1 results, then respawn-budget REFUSED. Repeating native
+KillTree does NOT maintain absence. Exact recreation owner remains to trace;
+do not raise the fuse or equate dead markers with user-visible completion.
+Both games/watchers still live at inspection; no leave markers yet. Preserve
+reports/peer-leave-nadine-20261024-1934/npc-removal-rejected-locomotion_hook.log.
+Peer-leave visibility/collision remains untested. Static creator/owner audit
+next; no relaunch, live rebuild, agent input or success claim.
 
 CONFIRMED BOUNDED MENU RESULT: user reports latest run "now all normal".
 A8960/B10816 both capture owned identity and execute seen7/forced7/FLSrestore1,
@@ -44685,3 +44687,26 @@ both Player avatars, control and presentation survive. Do not count startup
 READY as behavior. Then follow the separate A-menu/B-survivor prediction above.
 No game input, appearance repair, enemy sync, new automatic launch or reconnect
 experiment is authorized by this active exam.
+
+### 2026-10-24 — REJECT stock-Nadine repeated retirement after A7872/B13516 result
+
+REJECTED user-visible implementation: user reports "NPC-Nadine did not get
+removed". Exact C46A83F1... image; both original games and READY watchers remain
+alive at inspection. Outcome snapshot preserved once as
+reports/peer-leave-nadine-20261024-1934/npc-removal-rejected-locomotion_hook.log.
+For EACH PID:8 COMPANION-RETIRE CAPTURED,8 postrender companionFound1/
+companionRetired1,1 respawn-budget REFUSED,0 PEER-LEAVE. Captures use distinct
+record/generation tuples, even when allocator reuses the same raw address.
+This is not a missing-capture/phase-gate case. Native kill-marker completion
+does not establish persistent visible removal; respawn/rebind ownership and
+any drawable-lifetime alternative must be distinguished statically.
+
+HYPOTHESIS H1: campaign companion owner recreates a dead NadineBuddy through
+NadineBuddy_Create1404A0F40 after its weak handle becomes invalid. H2: independent
+visual object survives cleanup; H3: wrong instance/type selected. Existing exact
+VT142949638/name/weakidentity and deadBC0/+40bit1 results weaken H3, but only
+static caller/owner tracing plus visible validation can settle the cause.
+NEXT trace factory callers, maintained companion handle, and native removal/
+suppression contract. Do NOT raise the8-generation cap, poll-kill forever or
+launch the same image again. Do not claim explicit peer-leave/collision is
+tested: no departure happened in this observation. June29/menu fixes unchanged.
