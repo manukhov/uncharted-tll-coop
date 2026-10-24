@@ -12,6 +12,20 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy Synchronization (2026-10-24)
 
+2026-10-24 BATCH IMPLEMENTED: current_player initial/final slot pairs now use
+16B guarded reads; identity initial actor+A8..E0 and spawner+20..52 use56/50B
+owned reads AFTER scalar exact-type/OnKill rejection. All final native rereads,
+page/SEH checks and1ms/256-query budget remain. Copy sites11->9 and19->12;
+independent source/PDB review passes, DLL7FBAD416...8620999 built. Enemy OFF,
+no launch or runtime timing claim. Broader initial reads can reject/query earlier
+on invalid candidates; owned buffers are not atomic snapshots/lifetime leases.
+Naive cross-frame census slicing REJECTED: mixed rosters, oldest-row expiry,
+150ms lease and unchanged shared50ms budget need explicit proof/state handling.
+NEXT: distinguish remaining query-bracketed wall cost from other scope work
+using existing QPC endpoints and immutable pre-stop publication if instrumented;
+old2query count cannot identify the delayed call. No new test/observer framework,
+budget increase, cross-frame protection cache or blind runtime repeat.
+
 2026-10-24 COST CONTINUATION: current_player/identity/ordinary now require the
 caller-owned lexical ReadCache; unused eager~1KiB local fallback removed.
 All8 calls already passed it. Build/source/binary review passes: helper frames

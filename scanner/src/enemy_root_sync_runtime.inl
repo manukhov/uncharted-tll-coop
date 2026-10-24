@@ -157,6 +157,38 @@ struct ReadCache {
     std::size_t count{};
     WorkBudget* budget{};
 };
+// Owned initial observations, not atomic snapshots or native lifetime leases.
+// Keep exact type/OnKill gates before copying wider actor fields. Final native
+// identity reads below remain separate, after name/eligibility processing.
+struct RetainedEntry { std::uintptr_t record; std::uint32_t id, pad; };
+static_assert(sizeof(RetainedEntry) == 0x10 && offsetof(RetainedEntry, id) == 8);
+struct ActorIdentityFields {
+    std::uintptr_t record;                         // actor+A8
+    std::byte to_generation[0xBC-0xB0];
+    std::uint32_t generation;                     // actor+BC
+    std::byte to_desired[0xD8-0xC0];
+    std::uint32_t desired_id, variant_id;          // actor+D8/DC
+};
+static_assert(sizeof(ActorIdentityFields) == 0x38);
+static_assert(offsetof(ActorIdentityFields, generation) == 0x14);
+static_assert(offsetof(ActorIdentityFields, desired_id) == 0x30 &&
+              offsetof(ActorIdentityFields, variant_id) == 0x34);
+struct SpawnerIdentityFields {
+    std::uintptr_t name;                           // spawner+20
+    std::uint32_t spawner_id;                      // spawner+28
+    std::byte to_record[4];
+    std::uintptr_t record;                         // spawner+30
+    std::uint32_t generation;                     // spawner+38
+    std::byte to_flags[0x51-0x3C];
+    std::uint8_t flags;                            // spawner+51
+};
+static_assert(offsetof(SpawnerIdentityFields, spawner_id) == 8);
+static_assert(offsetof(SpawnerIdentityFields, record) == 0x10 &&
+              offsetof(SpawnerIdentityFields, generation) == 0x18);
+static_assert(offsetof(SpawnerIdentityFields, flags) == 0x31);
+// Do not read the C++ structure's trailing alignment padding past spawner+51.
+constexpr std::size_t kSpawnerIdentitySpan = offsetof(SpawnerIdentityFields, flags)+1;
+static_assert(kSpawnerIdentitySpan == 0x32 && kSpawnerIdentitySpan <= sizeof(SpawnerIdentityFields));
 bool copy(std::uintptr_t at, void* out, std::size_t size, ReadCache* cache = nullptr) noexcept {
     auto* budget = cache ? cache->budget : nullptr;
     if (budget && !budget->check()) return false;
@@ -191,17 +223,17 @@ template<class T> bool read(std::uintptr_t at, T& out) noexcept { return copy(at
 // fallback eagerly zeroed ~1KiB on every call, even when it was never selected.
 std::uintptr_t current_player(ReadCache& cache) noexcept {
     const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
-    std::uintptr_t record{}, actor{}, vt{}, record_after{}, actor_after{};
-    std::uint32_t id{}, actor_id{}, id_after{}, actor_id_after{}; std::uint8_t kill_flags{};
+    RetainedEntry entry, after;
+    std::uintptr_t actor{}, vt{}, actor_after{};
+    std::uint32_t actor_id{}, actor_id_after{}; std::uint8_t kill_flags{};
     // ProcessKillTree1416A5E2A marks enteredOnKill before virtual+190 cleanup;
     // generation+BC remains valid until1416A6044. Identity alone is not live admission.
-    if (!read(g_module+kRetainedSlotTableRva, record) || !read(g_module+kRetainedSlotTableRva+8, id) || !id ||
-        !read(record+8, actor) || !read(actor, vt) || vt != g_module+kPlayerVtableRva ||
-        !read(actor+0x40, kill_flags) || (kill_flags & 0x04) || !read(actor+0xBC, actor_id) || actor_id != id ||
-        !read(g_module+kRetainedSlotTableRva, record_after) || record_after != record ||
-        !read(g_module+kRetainedSlotTableRva+8, id_after) || id_after != id ||
-        !read(record+8, actor_after) || actor_after != actor ||
-        !read(actor+0xBC, actor_id_after) || actor_id_after != id ||
+    if (!read(g_module+kRetainedSlotTableRva, entry) || !entry.record || !entry.id ||
+        !read(entry.record+8, actor) || !read(actor, vt) || vt != g_module+kPlayerVtableRva ||
+        !read(actor+0x40, kill_flags) || (kill_flags & 0x04) || !read(actor+0xBC, actor_id) || actor_id != entry.id ||
+        !read(g_module+kRetainedSlotTableRva, after) || after.record != entry.record || after.id != entry.id ||
+        !read(entry.record+8, actor_after) || actor_after != actor ||
+        !read(actor+0xBC, actor_id_after) || actor_id_after != entry.id ||
         !read(actor+0x40, kill_flags) || (kill_flags & 0x04)) return 0;
     return actor;
 }
@@ -210,17 +242,20 @@ bool identity(std::uintptr_t actor, Local& out, ReadCache& cache) noexcept {
     // Every actual copy still has memory-fault SEH; this is not a page lease.
     const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
     Local value{}; value.actor = actor;
-    std::uintptr_t vtable{}, bound_actor{}, owner_record{}, name{};
-    std::uint32_t bound_id{}; std::uint8_t flags{}, kill_flags{};
+    std::uintptr_t vtable{}, bound_actor{}; std::uint8_t kill_flags{};
     if (!read(actor, vtable) || vtable != g_module+kPirate ||
-        !read(actor+0x40, kill_flags) || (kill_flags & 0x04) || !read(actor+0xA8, value.record) ||
-        !read(actor+0xBC, value.generation) || !value.generation || !read(actor+0x150, value.spawner) || !value.spawner ||
-        !read(value.record+8, bound_actor) || bound_actor != actor ||
-        !read(value.spawner+0x30, owner_record) || owner_record != value.record ||
-        !read(value.spawner+0x38, bound_id) || bound_id != value.generation ||
-        !read(value.spawner+0x51, flags) || (flags & 0x18) || !read(value.spawner+0x20, name) ||
-        !read(value.spawner+0x28, value.key.spawner_id) || !read(actor+0xD8, value.key.desired_id) ||
-        !read(actor+0xDC, value.key.variant_id)) return false;
+        !read(actor+0x40, kill_flags) || (kill_flags & 0x04)) return false;
+    ActorIdentityFields actor_fields; SpawnerIdentityFields spawner_fields;
+    if (!read(actor+0xA8, actor_fields) || !actor_fields.record || !actor_fields.generation ||
+        !read(actor+0x150, value.spawner) || !value.spawner ||
+        !read(actor_fields.record+8, bound_actor) || bound_actor != actor ||
+        !copy(value.spawner+0x20, &spawner_fields, kSpawnerIdentitySpan, &cache) ||
+        spawner_fields.record != actor_fields.record || spawner_fields.generation != actor_fields.generation ||
+        (spawner_fields.flags & 0x18)) return false;
+    value.record = actor_fields.record; value.generation = actor_fields.generation;
+    value.key.desired_id = actor_fields.desired_id; value.key.variant_id = actor_fields.variant_id;
+    value.key.spawner_id = spawner_fields.spawner_id;
+    const auto name = spawner_fields.name;
     bool ended{};
     for (std::size_t i = 0; i < value.key.name.size();) {
         // Windows AMD64 base pages are4KiB. Stop at each page boundary so a

@@ -2,7 +2,15 @@
 
 ## Current user priority / handoff (2026-10-24)
 
-LATEST IMPLEMENTATION: enemy guard helpers now REQUIRE the caller-owned
+LATEST IMPLEMENTATION: same-path enemy admission batches initial neighboring
+fields through unchanged guarded copy: current_player11->9 copy call sites,
+identity19->12. Scalar exact-vtable/OnKill gates still precede wider reads;
+all final actual identity/kill rereads remain. DLL7FBAD416...8620999 built;
+independent source/emitted review passed. Enemy stays OFF;1ms/256queries and
+page/SEH checks unchanged. No game run/timing success claimed. Simple census
+slicing is not a drop-in fix: mixed roster/oldest-row freshness need proof.
+
+PREVIOUS IMPLEMENTATION: enemy guard helpers now REQUIRE the caller-owned
 lexical ReadCache, removing unused~1KiB fallback initialization on every call.
 All8 calls already supplied that cache. Independent source/binary review:
 current_player/identity/ordinary stack frames shrink by1040..1072bytes; copy
@@ -43558,3 +43566,84 @@ baseline hang. No new launch/injection/input/rearm. NEXT distinguish actual
 remaining guarded-read latency from removed setup cost before admitting another
 enemy-enabled run. Do not increase the budget, retain protection caches across
 callbacks, or label compile/instruction reduction as visible synchronization.
+
+## 2026-10-24 — Batch initial enemy admission reads; reject naive census slicing
+
+**REJECTED as a drop-in performance fix:** splitting census into more scopes
+inside one50ms window does not add to its shared1ms/256-query allowance.
+Spreading one batch per50ms exceeds the150ms roster lease for enough batches.
+Publishing completion+150ms would incorrectly rejuvenate early rows; oldest-row
+expiry can instead prevent publication. A stable manager/array/count tuple
+does not detect remove+add/swap-compaction restoring the count between slices.
+An incomplete census cannot be called successful or refresh the lease, and
+after an apply the existing gap policy is terminal. Cross-frame ReadCache
+reuse remains forbidden. Correct slicing needs pending-state/expiry/mutation
+certification or a full fresh recertification, not a small loop rewrite.
+It cannot preempt a single slow query/copy/scheduling delay in any case.
+
+**STATIC production optimization implemented instead:** admission now batches
+neighboring INITIAL fields into caller-owned values through the same copy/SEH/
+page/budget path. Scalar exact-Pirate-vtable and actor+40 enteredOnKill checks
+still run FIRST. Actor+A8..E0 is one56byte read for record, generation and
+desired/variant IDs; actor+150 remains separate, avoiding an otherwise unused
+actor+100..13F cache line. Spawner+20..52 is one50byte read for name, spawner ID,
+owner record/generation and flags. Layout assertions cover each consumed field;
+the trailing6 C++ alignment bytes are NOT copied, read or compared. Buffers are
+not eagerly zeroed; failed/partial copy short-circuits before any field use.
+
+Initial/final retained-slot record/id pairs each use one16byte RetainedEntry
+copy with asserted layout. Table RVA3EEBE80 is16aligned; copied padding adds
+no page crossing beyond the old record/id reads. Final record->actor, object+BC
+and+40 checks remain actual independent reads. Likewise all5 final identity
+name/spawner/record/object-ID/kill checks remain after name processing, and
+receiver's late actor/Player checks remain after animation/physics eligibility.
+No snapshot is atomic, immutable native state, or a lifetime/ABA lease.
+
+**Safety and tradeoffs:** for valid candidates, the small actor/spawner ranges
+span at most2base pages already containing endpoint fields checked previously.
+Wider copying still checks its FULL range, including holes; it does not accept
+an unreadable/guarded page by relying on field-only checks. It can query pages
+EARLIER before an invalid intermediate generation/owner is discovered, so this
+is not identical rejection-cost/read-order behavior. Desired/variant initial
+sampling moves earlier; existing final ownership checks and limitations remain.
+No ReadCache, native pointer or owned observation survives its callback or is
+published to the worker as permission.1ms/256-query/50ms accounting,150ms lease,
+timeouts, exact native seam/setter, protocol and default-OFF policy unchanged.
+Coarser initial copies reduce timer checkpoints; their complete elapsed time
+is still charged by the same pre/post-copy budget checks.
+
+Native field provenance remains the already-recorded141D22874/7F/89 reciprocal
+spawn publication and NdGameObject initialization141BB4A04/0E desired/variant
+stores. Fresh MCP re-read EntitySpawner_Spawn141D22420 and existing labels.
+No new native field/function was discovered, no IDB writer needed; prior sole-
+IDB save/readback remains current. No native-getter-as-lease shortcut reopened.
+
+**Build and independent verification:** main tll_coop_runtime builds.
+DLL SHA2567FBAD416AB0E36720D1BF7E40CB00F9B3D7568ADACC4920C425A5AB508620999;
+PDB SHA256D03ACD29C27D1F77277CF6264B521C048769F82AD3ADE104F2DB5D361BED9CE7.
+Exact before/after DLL/PDBs preserved under reports/enemy-admission-batch-20261024.
+Two independent source reviews pass. PDB/Capstone comparison FE640->7FBAD416:
+
+- current_player RVA16E70: copy sites11->9, code536->447bytes, stack58->48hex;
+  initial/final kill tests16F52/17011 remain.
+- identity RVA34980->34920: copy sites19->12, code1331->1113bytes; owned prefix
+  storage grows stack150->1C0hex. Do NOT describe this as a stack reduction.
+- Actor/spawner block calls34A02/34A93 use38/32hex bytes exactly. Final native
+  rereads34BFF/34C2C/34C5E/34C8B/34CB7 remain separate; kill test34CC4 remains.
+- ordinary stays79copy sites/4310bytes. copy16710 stays139instructions/524bytes;
+  only relocated memcpy-call operand changed. QPC/VQ/protection masks/SEH match.
+- postblend remains5377bytes; final enemy/Player kill tests482D6/48334 remain.
+
+These show fewer guarded-copy/check invocations, NOT fewer VQ calls in every
+case, measured frame-time improvement, usable enemy sync, or a fixed hang.
+No standalone tests/framework, game launch, injection, input or rearm occurred.
+
+**Remaining discriminator before another exam:** old2query aggregate cannot
+attribute the2389/2925us scope to query versus other work/descheduling. If
+per-query cost attribution is added, reuse the EXISTING QPC endpoints, call it
+a query-bracketed WALL interval (not pure API CPU), and call the remainder
+non-query work (not memcpy). Freeze context BEFORE publishing terminal costStop,
+or the worker's final log can race missing/overwritten metadata. This is a
+same-path measurement design, not an implemented/new observer framework.
+Do not raise the limit or admit an unchanged runtime exam from copy-count
+reduction alone; the single delayed-call and enemy-OFF baseline hang remain open.
