@@ -12,6 +12,15 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy synchronization; preserve confirmed companion/menu fixes (2026-10-24)
 
+ACTIVE20:42 EXAM: A7788/B22492 exact4D9AB7EA... DLL/PDB09963AC7..., cde2b72
+pushed; EnemyRootSyncON. Both ENR2 own UDP/native408 +baseline gates READY.
+Pre-scene queries/cost/apply0/stopped0; request/ACK pairs InspectOnly verified.
+No debugger for performance run. reports/enemy-resume-20261024-2042 preserves
+exact binaries +separate boot logs. User SAME living-enemy location,10..15s
+movement/smoothness, no shooting/menu. Require real B enemy follows A, body+
+model together/no lag; no visible success yet. Actual logs/user report NEXT.
+If terminalstop, preservecontext and stopboth channels, no rearm/budgetraise.
+
 User accepts stock-Nadine removal in both copies and explicitly resumes enemies.
 A6648/B21908 exactE2697C89... each one native kill + exact matching TaskManager
 SUPPRESSED tuple; visible absence accepted. Preserve this implementation.
@@ -34,7 +43,8 @@ checks and BOTH ordinary passes preserved. Metadata not-due preflight precedes
 WorkBudget; due path rechecks/reserves afterward. No budget/lease relaxation.
 First cost-stop context freezes existing QPC query-bracket vs other wall time
 BEFORE reason publication; no new observer/test framework. Independent reviews
-pass; build/hash/runtime pending. Native seam/setter unchanged, labels current.
+pass; production build/hash complete and active exam above. Native seam/setter
+unchanged, labels current.
 Latest COOP_STATUS has quota, competing costs, limitations and prelaunch exam:
 same living-enemy encounter,10..15s actual B follows A/model+body together/no lag;
 no external debugger for this performance observation, no count-only success.

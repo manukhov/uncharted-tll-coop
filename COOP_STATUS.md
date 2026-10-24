@@ -18,6 +18,15 @@ all native eligibility/late checks and manual same-encounter scope remain.
 First-stop attribution uses existing QPC samples, no new observer/test pipeline.
 Fresh build/source review/prediction required before the next enabled exam.
 
+ACTIVE ENEMY EXAM (20:42 MSK): A7788/B22492 fresh4D9AB7EA... image, source
+cde2b72 pushed. EnemyRootSync opt-in ON, dedicated31340/31341 and native hook /
+baseline look/companion gates READY. Pre-scene BOTH queries0/cost0/apply0,
+stopped0; stop-event pairs inspected only, not signaled. No debugger attached
+for performance observation. Exact DLL/PDB and separate boot logs in
+reports/enemy-resume-20261024-2042. User same living-enemy encounter,10..15s
+actual counterpart movement/model+body/smoothness; no shooting/menu yet.
+No visible sync success. Read actual logs/user result next; no auto rearm.
+
 CURRENT EXAM REJECTED: user screenshot shows extra NPC in BOTH A17736/B14220.
 Both logs: exact NPC found, correct native getter1401D5C80 returnsNULL,
 status=spawner-missing, nativeCalled0, actorDead0, companionRetired0. Native
@@ -45144,3 +45153,33 @@ PDB09963AC7E9F7B85502D995C92B1D8574AE8AFE4DF22B6FD5485E92651EAF6453.
 No component-test or observer pipeline was added/run. These checks establish
 compiled implementation, NOT smoothness, successful pairing/apply or a cure
 for an individual delayed query. Ready for the prepared bounded exam above.
+
+### 2026-10-24 20:42 MSK — Launch reduced-work ENR2 enemy synchronization exam
+
+RUNTIME PENDING: source cde2b72 committed/pushed. Exact4D9AB7EA... DLL and
+09963AC7... PDB copied before launch under reports/enemy-resume-20261024-2042;
+hashes read back. Separate boot-locomotion_hook.log and boot-enemy_root_PID.log
+snapshots preserved once; ongoing private logs are reports/enemy_root_7788.log
+and enemy_root_22492.log. No debugger/watch attached to distort first-chance
+and guard timing; a future crash without fresh context cannot be attributed.
+
+scripts/launch_coop.ps1 -Count2 -LocalPair -EnemyRootSync launched/injected:
+A/Chloe PID7788 created2026-10-24T20:42:20.430381+03:00;
+B/Nadine PID22492 created2026-10-24T20:42:22.449346+03:00. Both log own ENR2
+nonblockingUDP31340/31341, native Pirate+408 root channel installed, accepted
+TaskManager companion gate and LOCAL-LOOK READY (visual appearance unverified).
+Both pre-scene private logs show actor/paired/capture/receive/match/apply0,
+costStop/queries/peakScope0,stopped0. This verifies no startup census work at
+that inspection, NOT an in-scene performance result. Both existing PID/creation-
+bound stop request+ACK pairs opened with InspectOnly; stoppedAndQuiescentFalse.
+No stop signal, input, live patch, rearm or unprepared native call was sent.
+
+User alone loads SAME authored living-enemy encounter in both, first10..15s
+without shooting/reload/menu. Require actual corresponding B enemy following
+A, model+body together/no severe lag, accepted Player/companion behavior intact.
+Next inspect matching/apply plus USER visible report; counts alone insufficient.
+If any terminal cost/worker/roster stop happens, preserve immutable context and
+stop both channels with scripts/stop_enemy_root_channel.ps1 -ProcessIds7788,22492;
+no budget increase/rearm/identical relaunch. Agent may close these exact games
+after evidence preservation and executable/creation revalidation if needed.
+No enemy-sync behavioral success or all-campaign authority is claimed yet.
