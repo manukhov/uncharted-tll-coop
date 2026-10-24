@@ -12,6 +12,14 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy Synchronization (2026-10-24)
 
+PREPARED SURVIVOR-CAPTURE EXAM: unchanged7FBAD416... main DLL, enemy OFF,
+two local roles, existing crash watchers on BOTH before loading. User alone
+loads SAME EMPTY scene then A/Chloe menu ONCE, B/Nadine untouched. Watcher
+readiness is not repair/success; terminal B stack is the desired discriminator.
+Fresh main/watcher build check passes. No new collector/writer/protocol change.
+Full hypotheses/quota/falsifiable prediction in latest COOP_STATUS. No performance
+claim under debugger, no automatic retry/rearm. Run identities recorded next.
+
 IMMEDIATE BASELINE BLOCKER: user confirms LAST pair, SAME EMPTY scene: A/Chloe
 PID4872 returns main menu; B/Nadine PID10876 remains and crashes1..2s later.
 Both enemy channels were already stopped/quiescent, apply0. Both now absent;

@@ -2,6 +2,12 @@
 
 ## Current user priority / handoff (2026-10-24)
 
+CURRENT EXAM PREPARED: capture the established A-menu/B-survivor crash with
+unchanged7FBAD416... DLL, enemy root OFF, existing second-chance watchers on
+BOTH roles before user scene load. Written hypotheses/prediction at final entry.
+This is fault capture, not a repair or performance exam. No new diagnostic
+framework/packet/timeout writer; preserve June29 suspension safeguards.
+
 CURRENT BLOCKER: user confirms LAST pair loaded SAME EMPTY location; A/Chloe
 PID4872 returned to main menu, B/Nadine PID10876 stayed in scene and CRASHED
 1..2seconds later. Investigate the SURVIVOR's peer-loss path, not merely local
@@ -43857,3 +43863,55 @@ reports/apply_peer_death_recipient_20261024.txt records2049functions/87data
 names/3types and save_database returned True for sole ida/tll.i64. MCP restarted;
 comment/name/slot readback verified before handoff. No production DLL rebuild
 or runtime behavior change from these annotations.
+
+## 2026-10-24 — Prepare bounded capture of A-menu/B-survivor crash
+
+**Scope:** continue the user's exact latest reproduction, not another enemy-cost
+exam or a guessed fix. Both old targets are absent. Use unchanged main DLL
+7FBAD416AB0E36720D1BF7E40CB00F9B3D7568ADACC4920C425A5AB508620999 and PDB
+D03ACD29C27D1F77277CF6264B521C048769F82AD3ADE104F2DB5D361BED9CE7, normal
+-Count2 -LocalPair WITHOUT -EnemyRootSync. Fresh production/watcher build command
+passed (ninja no work to do). Existing tll_crash_watch is source-reviewed and
+available; no new collector or state writer is added. No games/old watchers live.
+
+**Competing hypotheses, no repair winner:** H1 B enters a failing replica-input/
+physics/retained-state continuation after peer A stops sending; H2 a final A
+state/event (including possible HP0) changes B before/around that boundary;
+H3 the reported direction/timing does not reproduce and the fault belongs to
+A's own teardown or another native path. HP0/NaN/first-timeout execution was
+not recorded in the old logs and cannot be presumed.
+
+**Static quota already established, independent kinds:**
+
+1. Source call/data flow: copy_peer_state_snapshot2183 rejects after1500ms;
+   drive_remote_slot1_actions37547 neutralizes branch/spin, reapplies last HP,
+   then native update proceeds; last-state/transform fallback is intentional.
+2. Native disassembly/field semantics: FrameState_PerSlotInputApply140289150
+   gates at1402891C3/14028938B select Input_ScaleCopyVirtual1402893B4, not free.
+   This predicts a continuation path, not a timeout-generated destruction call.
+3. Exact Player vtable slots+BE8/BF0/BF8/C00 identify the four native death
+   entries; owner weak recipient+21C8 dispatches+D0 (BE8 at140D79E53), not direct
+   primary/menu reset. A matching fault stack is distinguishable from A teardown.
+4. Independent historical runtime structure: June29 alt-tab failure/confirmed
+   protection and user's latest A->menu/B-fault1..2s agree on the peer-loss frontier.
+   They do not establish a specific fatal instruction.
+
+**Falsifiable prediction, written BEFORE this launch:** user alone loads the
+same EMPTY encounter in both, waits only until both replicas exist, then returns
+A/Chloe to main menu ONCE while leaving B/Nadine untouched in the scene. If the
+survivor-path hypothesis reproduces, A remains running in menu and B faults;
+the B watcher should capture a fresh second-chance context/dump. A timeout/input/
+physics/replica-write stack versus native death/event recipient stack selects
+the next code boundary to trace; the stack alone does not prove last HP0 or exact
+timeout execution. Only A faulting contradicts the expected survivor direction.
+Both remaining alive is an unreproduced/inconclusive run, NOT a fixed crash.
+An exit without second-chance context remains unattributed; last handled probes
+or exit status cannot be substituted as the crash PC.
+
+Attach existing watchers to BOTH exact new PID/image/creation identities while
+user remains at main menu; use separate new absolute output directories and
+1800second bounds, confirm READY only after attach breakpoint continued. Native
+game actions remain user-only. Debugger changes timing: no performance verdict,
+and disappearance of the crash under it does not exonerate a path. If a crash
+occurs leave the other copy open for inspection. No automatic repeat/rearm or
+speculative timeout/OnKill/health change. Enemy root stays OFF throughout.
