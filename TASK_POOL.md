@@ -12,6 +12,17 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy Synchronization (2026-10-24)
 
+USER-REQUESTED RUNTIME PENDING: fresh7FBAD416... DLL launched/injected in
+A=PID4872/B=PID10876 with -LocalPair -EnemyRootSync. Both ready; enemy UDP
+31340/31341 and PID/creation-bound stop events verified. Pre-scene enemy work0,
+stopped0/costStop0. User alone loads SAME living-enemy encounter, no shooting,
+watches10..15seconds movement/smoothness and leaves both open. No debugger
+(not a menu-crash reproduction), no agent game input, no rearm/budget change.
+NEXT user result plus reports/enemy_root_4872.log and enemy_root_10876.log.
+Artifact root reports/enemy-batch-run-20261024-1423. Stop if needed using
+scripts/stop_enemy_root_channel.ps1 -ProcessIds4872,10876; do not blindly repeat.
+Latest COOP_STATUS contains current identities, prediction and limitations.
+
 2026-10-24 BATCH IMPLEMENTED: current_player initial/final slot pairs now use
 16B guarded reads; identity initial actor+A8..E0 and spawner+20..52 use56/50B
 owned reads AFTER scalar exact-type/OnKill rejection. All final native rereads,

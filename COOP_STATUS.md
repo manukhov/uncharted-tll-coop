@@ -2,6 +2,15 @@
 
 ## Current user priority / handoff (2026-10-24)
 
+RUNTIME PENDING USER RESULT: user explicitly requested launch/check. Fresh
+7FBAD416...8620999 DLL launched/injected with enemy opt-in in A=PID4872 and
+B=PID10876; both LOCAL-LOOK READY and Pirate+408 installation banners verified.
+Enemy UDP31340/31341, stop-control events available; stopped=0/costStop0 and
+capture/match/apply0 at pre-scene check. User alone loads same living-enemy
+encounter; asks10..15seconds movement/smoothness, no shooting/menu return yet.
+No debugger attached to avoid timing distortion; this is NOT menu-crash
+reproduction or a crash-fix claim. Exact run identities/prediction below.
+
 LATEST IMPLEMENTATION: same-path enemy admission batches initial neighboring
 fields through unchanged guarded copy: current_player11->9 copy call sites,
 identity19->12. Scalar exact-vtable/OnKill gates still precede wider reads;
@@ -43647,3 +43656,50 @@ or the worker's final log can race missing/overwritten metadata. This is a
 same-path measurement design, not an implemented/new observer framework.
 Do not raise the limit or admit an unchanged runtime exam from copy-count
 reduction alone; the single delayed-call and enemy-OFF baseline hang remain open.
+
+## 2026-10-24 — Launch user-requested batched-admission enemy check
+
+**Explicit user direction:** "ну запусти проверим". This authorizes the runtime
+check despite unresolved first-census timing; it does not confirm an improvement
+or relax admission. Before launch verified HEAD1b60da5, existing DLL/PDB hashes
+7FBAD416...8620999 / D03ACD29...ED9CE7, and no running tll.exe. No rebuild,
+native-code/flag change, old-image reuse or new test/observer framework.
+
+**Scenario/prediction before scene load:** user alone loads the SAME authored
+living-enemy encounter in both copies, initially no shooting/reload, watches
+movement and smoothness10..15seconds, then leaves both open. With the established
+Pirate+408 return141A929A7 and root setter141E7D0D0, a successful first slice
+requires A capture plus B match/apply and the uniquely matched B enemy visibly
+following A, without severe lag/model-body separation/rubber-banding. Counts
+alone do not prove that. Competing timing explanations remain aggregate scalar-
+guard overhead versus a single delayed query/copy/scheduler interval. Batching
+removes some former overhead, not the latter. If1ms cumulative/256-query limit
+is reached, terminal stop must prevent continued admitted work/apply; that
+rejects usable sync, proving at most containment. No automatic rearm/repeat or
+budget increase. Damage/death/HP writes and AI authority remain OFF.
+
+**Actual launch:** scripts/launch_coop.ps1 -Count2 -LocalPair -EnemyRootSync.
+Successful LoadLibrary reports for both. A=PID4872, creation
+2026-10-24T14:23:12.1816061+03:00; B=PID10876, creation
+2026-10-24T14:23:14.2017812+03:00. Boot logs confirm requested Chloe A/Nadine B
+(rendered appearance unverified), player UDP31338/31339, dedicated enemy
+UDP31340/31341, exact Pirate+408 hook installed and LOCAL-LOOK READY.
+Pre-scene private logs report actors/paired/capture/receive/match/apply0,
+stopped0/costStop0/costSite0/queries0. Existing stop tool -InspectOnly opened
+both PID/creation-bound request+ACK pairs; stoppedAndQuiescent=False in both.
+No stop signal, rearm, input or live patch was sent.
+
+No external debugger/watch attach: this run checks enemy behavior/smoothness,
+not a repeat of the menu-exit crash reproduction. User told not to return to
+menu yet and to report severe lag/hang immediately. This avoids a debugger's
+first-chance overhead in the performance observation but does NOT repair the
+old baseline hang or guarantee a fresh terminal crash stack if it recurs.
+Do not classify absent crash context as exoneration. The30second first-apply
+window and all terminal stops remain in effect.
+
+Exact DLL/PDB and boot log preserved in
+reports/enemy-batch-run-20261024-1423; ongoing logs are enemy_root_4872.log and
+enemy_root_10876.log. NEXT read user visual/smoothness report and both logs;
+do not mistake ready/zero counters for synchronization. Emergency stop:
+scripts/stop_enemy_root_channel.ps1 -ProcessIds4872,10876. Do not terminate
+either game unless requested or required by an immediate safety issue.
