@@ -45044,3 +45044,103 @@ identity fields was insufficient. Two query attempts do not identify which
 query/copy/scheduler interval dominated. Native phase/setter, authored-key
 matching, exact Pirate/normal-body/HP38 admission and ENR2 own socket remain.
 No HP/death/damage/AI pause or old CONE/root writer is re-enabled.
+
+### 2026-10-24 — Resume ENR2 enemy root channel with bounded production work
+
+HYPOTHESIS H1: unnecessary startup/not-due/scalar-read work consumes the shared
+admission allowance before useful synchronization. H2: a single delayed query,
+page fault or scheduler interval can still exceed1ms even after work reduction.
+Previous2-query aggregate cannot distinguish them. H3 (wrong writer phase) is
+not the next candidate: the existing native path was rechecked independently.
+
+STATIC native quota unchanged/reverified: exact PirateVT14294B9D0+408 points
+141DE9910; Perform141A928F0 keeps jobRSI, calls owner+408 at141A929A1 and returns
+141A929A7 before phase40 at141A929C1. Primary+238 physics import141BBDE8D and
+ragdoll import141E9C465 finish before that return. Phase40 then copies root to
+Fg+1C0, ordinary mode2/group0 JointBlend runs141A92E78, body-forward+410 follows.
+Setter141E7D0D0 ABI ownerRCX/32BposeRDX stores+130/+140 then virtual+208; exact
+Pirate notify is empty. Independent native callers141DEDA11/1408BF18F/1E9 and
+source/vtable/field dataflow supply different evidence kinds. Do not move to
+pre+408, late+2B8 or optional RigidBody_SetTransformAndMarkDirty/+698 path.
+No new game address or IDB label required; prior2109/97 saved/readback remains.
+
+IMPLEMENTED in the existing production inl, not new test/observer infrastructure:
+
+- Monotonic owned-Player and Player-update-hook atomics must both be true BEFORE
+  tick timing/work permit/census/game-memory reads. Source net_tick39962 precedes
+  initial clone capture40790; old code could census during bootstrap. These
+  flags have no true->false/rearm path after cold installation. This proves
+  no startup census before co-op readiness, NOT warm VQ/pages or same-level proof.
+- New Statev18 local-leave/peer-left/remote-teardown atomics permanently stop
+  the enemy channel from tick, postblend and its own worker. Worker still never
+  follows game pointers. No mutable peer-freshness gate/epoch/rearm was added.
+  Existing active_scope publication can transiently race true after a stop;
+  monotonic stopped and all native-effect fences still reject. Do not claim
+  the raw scope bit itself is a lifetime/monotonic authorization.
+- Census copies count<=64 retained entries as ONE guarded <=1024B block, into
+  uninitialized trivial POD. Successful dynamic array copies N->1 forN>0;
+  not a static callsite reduction or guaranteed VQ reduction. All per-row weak
+  identity/type/name/reciprocal-owner/duplicate and final manager/array/count
+  checks remain. Earlier whole-span/gap sampling can reject more strictly;
+  snapshot is neither atomic nor an ABA/lifetime lease.
+- Postblend metadata-only due preflight leaves without WorkBudget/QPC or native
+  reads when no snapshot is needed. It releases the mailbox BEFORE the work
+  permit; due work re-locks/rechecks before any next_capture/sequence reservation.
+  Metadata scanning/try-lock still has cost OUTSIDE that budget. Both complete
+  identity/ordinary passes and all late OnKill/generation/session fences remain.
+- Existing body scalar fields40/68/9C/A0/C4/C6 are copied once per body as a
+  guarded135B span[40,C7), with offsetof/span/trivial-layout assertions and no
+  trailing alignment padding. Primary6 body-field copies->1, disabled-ragdoll
+  5->1; following native-world/motion reads remain separate. Mode/flags/owner/
+  blend/source/joint/root-count checks unchanged; ragdoll still ignores blend.
+  Full unused gaps/late fields can be queried earlier, so invalid-case read cost
+  and rejection order are not identical. No cross-callback cache or lease.
+
+FIRST-COST-STOP attribution now reuses the SAME pre/post-VirtualQuery QPC sample
+points. Query-pending interval is query-bracketed WALL time (check/call overhead
+and descheduling included), not API CPU. OtherUs is all budgeted non-query work,
+NOT pure memcpy and NOT preflight. Record attempted copy count/range, last query
+address, scope/window totals and query totals. If clocks fail, unfinished query
+remains pending rather than inventing duration. A single immutable context is
+written by work-permit owner BEFORE cost_stop.release; worker reads only after
+nonzero acquire. Later stops cannot overwrite it. It is first COST context,
+not necessarily first overall stop if external/lifecycle stop races the scope.
+
+Limits remain1ms cumulative/50ms,256queries,150ms roster,1shello/200mspacket,
+10m initial matching and30s first-apply slice. Readability/guard-page rejection,
+SEH, all native/identity/health38/body checks and terminal gap/roster policy stay.
+Raw-address relocation still conservatively stops the slice; no silent rebind.
+Same manually loaded authored encounter remains required; no world epoch claim.
+
+Independent source/ABI/publication/lifecycle and body-layout reviews pass;
+git diff --check clean. Production build/hash pending below. No component tests,
+new framework, AI pause or budget increase. No guaranteed perf fix from static
+instruction/read reduction; H2 remains possible and the new terminal context
+must distinguish it rather than another blind rearm.
+
+Falsifiable prediction BEFORE launch: fresh LocalPair2 with EnemyRootSync, user
+loads SAME location with living Pirate enemies in both, initially no shooting/
+reload or menu exit. For10..15s watch ONE identifiable counterpart: A captures,
+B receives/matches/applies and that actual B enemy follows A's position, with
+body/model together, no rubber-banding or severe lag. Counts alone do not pass.
+Before owned bootstrap, no census query work; not-due callbacks must not consume
+the guarded native walk. Both accepted Player/Nadine-companion fixes must hold.
+If cost stop repeats, new immutable query-bracket/residual/read-range context
+distinguishes H2 vs repeated non-query work; terminal stop/ACK must contain it,
+but that is NOT usable sync. Do not raise limits or rearm terminal sessions.
+
+Performance exam uses no external debugger (first-chance overhead would alter
+timing), as in the prior performance run. Preserve exact DLL/PDB/native logs;
+without a fresh exception context do not attribute a future crash PC or exonerate
+hooks. Existing exact-PID stop request/ACK is ready; if lag/freeze occurs, stop
+both enemy channels, and close only identity-verified test games if necessary.
+User alone performs all game actions. No runtime success is claimed yet.
+
+Production build/independent verification complete before exam: normal MSVC x64
+tll_coop_runtime compiles and links, body-layout assertions pass, source reviews
+find no material blocker, diff check clean. DLL SHA256
+4D9AB7EA964A34BBD1C3330AACF1E9C0C6156BF4C30EF7853CFE9D2F8FD6D598;
+PDB09963AC7E9F7B85502D995C92B1D8574AE8AFE4DF22B6FD5485E92651EAF6453.
+No component-test or observer pipeline was added/run. These checks establish
+compiled implementation, NOT smoothness, successful pairing/apply or a cure
+for an individual delayed query. Ready for the prepared bounded exam above.

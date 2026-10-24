@@ -35,6 +35,23 @@ bool confirmed{};
 bool census_gap{};
 std::atomic<bool> installed{}, stopped{};
 std::atomic<bool> active_scope{};
+// These readiness flags only transition false->true. Until BOTH are observed,
+// tick must not enter a census, construct a work budget or inspect game memory.
+bool startup_admitted() noexcept {
+    return g_owned_remote_player_ready.load(std::memory_order_acquire) &&
+           g_player_update_hook_ready.load(std::memory_order_acquire);
+}
+// One-way player lifecycle signals also close the separate enemy channel. This
+// helper is safe in the socket worker: atomics only, no game-pointer traversal,
+// mailbox waits, epoch changes or freshness-based rearming.
+bool stop_for_player_lifecycle() noexcept {
+    if (!g_state_net.local_leave_queued.load(std::memory_order_acquire) &&
+        !g_state_net.peer_left.load(std::memory_order_acquire) &&
+        !g_remote_player_teardown.load(std::memory_order_acquire)) return false;
+    stopped.store(true, std::memory_order_release);
+    active_scope.store(false, std::memory_order_release);
+    return true;
+}
 std::atomic_flag ticking = ATOMIC_FLAG_INIT;
 std::atomic<std::uint64_t> captured{}, received{}, matched{}, applied{}, rejected{};
 std::atomic<unsigned> last_rejection{};
@@ -51,7 +68,7 @@ std::atomic<std::uint64_t> sent{}, send_dropped{};
 // A QPC wall-time cutoff contains repeated work; it cannot preempt one blocked
 // OS call/page fault and must never be described as a hard frame-time bound.
 std::atomic_flag work_busy = ATOMIC_FLAG_INIT;
-std::uint64_t qpc_frequency{}, work_window{}, work_spent{};
+std::uint64_t qpc_frequency{}, work_window{}, work_spent{}, work_query_ticks{};
 unsigned work_queries{};
 std::atomic<unsigned> cost_stop{}, cost_site{}, peak_queries{};
 std::atomic<std::uint64_t> cost_total_ticks{}, peak_scope_ticks{}, peak_window_ticks{}, query_total{}, work_skips{};
@@ -59,9 +76,22 @@ HANDLE stop_request{}, stop_ack{}; // retained for the pinned process lifetime
 std::atomic<bool> external_stop{};
 std::atomic<bool> native_apply_fault{};
 enum : unsigned { kCostClock = 1, kCostTime = 2, kCostQueries = 3 };
-void stop_cost(unsigned reason, unsigned site) noexcept {
-    unsigned expected{};
-    if (cost_stop.compare_exchange_strong(expected, reason)) cost_site.store(site);
+struct CostStopContext {
+    unsigned site{}, scope_queries{}, window_queries{}, read_calls{};
+    std::uintptr_t read_address{}, query_address{};
+    std::size_t read_bytes{};
+    std::uint64_t scope_ticks{}, window_ticks{}, scope_query_ticks{}, window_query_ticks{}, last_query_ticks{};
+    bool query_pending{};
+};
+// Only the work-permit owner writes this, once, BEFORE cost_stop release.
+// The worker reads it only after acquiring a nonzero reason; it is immutable.
+CostStopContext cost_stop_context{};
+void stop_cost(unsigned reason, const CostStopContext& context) noexcept {
+    if (!cost_stop.load(std::memory_order_relaxed)) {
+        cost_stop_context = context;
+        cost_site.store(context.site, std::memory_order_relaxed);
+        cost_stop.store(reason, std::memory_order_release);
+    }
     stopped.store(true, std::memory_order_release);
     active_scope.store(false, std::memory_order_release);
 }
@@ -73,35 +103,59 @@ struct WorkBudget {
     bool owned{};
     unsigned site{};
     std::uint64_t begin{}, last{};
+    std::uint64_t query_ticks{}, last_query_ticks{};
+    std::uintptr_t read_address{}, query_address{};
+    std::size_t read_bytes{};
+    unsigned read_calls{}, scope_queries{};
+    bool query_pending{};
+    void stop(unsigned reason) noexcept {
+        CostStopContext context{};
+        context.site = site; context.scope_queries = scope_queries;
+        context.window_queries = work_queries; context.read_calls = read_calls;
+        context.read_address = read_address; context.query_address = query_address;
+        context.read_bytes = read_bytes;
+        context.scope_ticks = last >= begin ? last-begin : 0;
+        context.window_ticks = work_spent; context.scope_query_ticks = query_ticks;
+        context.window_query_ticks = work_query_ticks; context.last_query_ticks = last_query_ticks;
+        context.query_pending = query_pending;
+        stop_cost(reason, context);
+    }
     explicit WorkBudget(unsigned where) noexcept : site(where) {
         owned = !work_busy.test_and_set(std::memory_order_acquire);
         if (!owned) { work_skips.fetch_add(1, std::memory_order_relaxed); return; }
         LARGE_INTEGER now{};
         if (!qpc_frequency || !QueryPerformanceCounter(&now) || now.QuadPart <= 0 ||
-            static_cast<std::uint64_t>(now.QuadPart) < work_window) { stop_cost(kCostClock, site); return; }
+            static_cast<std::uint64_t>(now.QuadPart) < work_window) { stop(kCostClock); return; }
         begin = last = static_cast<std::uint64_t>(now.QuadPart);
         // Never reset a window mid-scope: a stalled scope stays fully charged.
         if (!work_window || begin-work_window >= qpc_frequency/20) {
-            work_window = begin; work_spent = 0; work_queries = 0;
+            work_window = begin; work_spent = 0; work_queries = 0; work_query_ticks = 0;
         }
     }
     WorkBudget(const WorkBudget&) = delete;
     WorkBudget& operator=(const WorkBudget&) = delete;
-    bool check(bool query = false) noexcept {
+    bool check(bool query = false, std::uintptr_t query_at = 0) noexcept {
         if (!owned || !last) return false;
         LARGE_INTEGER now{};
         if (!QueryPerformanceCounter(&now) || now.QuadPart < 0 || static_cast<std::uint64_t>(now.QuadPart) < last) {
-            stop_cost(kCostClock, site); return false;
+            stop(kCostClock); return false;
         }
         const auto value = static_cast<std::uint64_t>(now.QuadPart), delta = value-last;
         last = value; work_spent += delta;
+        if (query_pending) {
+            // Existing pre/post-VirtualQuery QPC samples only: WALL bracket,
+            // including scheduling/check/call overhead, NOT pure API CPU time.
+            query_ticks += delta; work_query_ticks += delta; last_query_ticks = delta;
+            query_pending = false;
+        }
         cost_total_ticks.fetch_add(delta, std::memory_order_relaxed);
         set_peak(peak_scope_ticks, value-begin); set_peak(peak_window_ticks, work_spent);
-        if (work_spent >= qpc_frequency/1000) { stop_cost(kCostTime, site); return false; }
+        if (work_spent >= qpc_frequency/1000) { stop(kCostTime); return false; }
         if (stopped.load(std::memory_order_acquire)) return false;
         if (query) {
-            if (work_queries == 256) { stop_cost(kCostQueries, site); return false; }
+            if (work_queries == 256) { stop(kCostQueries); return false; }
             ++work_queries; query_total.fetch_add(1, std::memory_order_relaxed); set_peak(peak_queries, work_queries);
+            ++scope_queries; query_address = query_at; query_pending = true;
         }
         return true;
     }
@@ -110,6 +164,29 @@ struct WorkBudget {
     }
     ~WorkBudget() noexcept { finish(); }
 };
+
+void append_cost_stop_context(std::ostringstream& line) {
+    const auto reason = cost_stop.load(std::memory_order_acquire);
+    if (!reason) return;
+    const auto context = cost_stop_context;
+    const auto micros = [](std::uint64_t ticks) { return ticks*1000000/qpc_frequency; };
+    const auto other = context.scope_ticks >= context.scope_query_ticks
+        ? context.scope_ticks-context.scope_query_ticks : 0;
+    line << " terminalCostStop=" << reason << " terminalSite=" << context.site
+         << " terminalScopeUs=" << micros(context.scope_ticks)
+         << " terminalWindowUs=" << micros(context.window_ticks)
+         << " terminalQueryBracketUs=" << micros(context.scope_query_ticks)
+         << " terminalOtherUs=" << micros(other)
+         << " terminalWindowQueryBracketUs=" << micros(context.window_query_ticks)
+         << " terminalLastQueryBracketUs=" << micros(context.last_query_ticks)
+         << " terminalScopeQueries=" << context.scope_queries
+         << " terminalWindowQueries=" << context.window_queries
+         << " terminalReadCalls=" << context.read_calls
+         << std::hex << " terminalRead=0x" << context.read_address
+         << " terminalQuery=0x" << context.query_address << std::dec
+         << " terminalReadBytes=" << context.read_bytes
+         << " terminalQueryPending=" << context.query_pending;
+}
 
 DWORD WINAPI stop_waiter(void*) {
     // No logging, sockets, RNG or game pointers on this emergency path.
@@ -191,6 +268,7 @@ constexpr std::size_t kSpawnerIdentitySpan = offsetof(SpawnerIdentityFields, fla
 static_assert(kSpawnerIdentitySpan == 0x32 && kSpawnerIdentitySpan <= sizeof(SpawnerIdentityFields));
 bool copy(std::uintptr_t at, void* out, std::size_t size, ReadCache* cache = nullptr) noexcept {
     auto* budget = cache ? cache->budget : nullptr;
+    if (budget) { budget->read_address = at; budget->read_bytes = size; ++budget->read_calls; }
     if (budget && !budget->check()) return false;
     if (!size || size > 4096 || at < 0x10000 || at > 0x7FFFFFFFFFFFULL-size) return false;
     for (auto cursor = at; cursor < at+size;) {
@@ -202,7 +280,7 @@ bool copy(std::uintptr_t at, void* out, std::size_t size, ReadCache* cache = nul
         }
         if (found) continue;
         MEMORY_BASIC_INFORMATION m{};
-        if (budget && !budget->check(true)) return false;
+        if (budget && !budget->check(true, cursor)) return false;
         const auto queried = VirtualQuery(reinterpret_cast<void*>(cursor), &m, sizeof(m));
         if (budget && !budget->check()) return false;
         if (queried != sizeof(m) || m.State != MEM_COMMIT ||
@@ -289,11 +367,19 @@ bool census(Roster& out, WorkBudget& budget) noexcept {
         !read(g_module+0x3898630, value.manager) || !read(value.manager, value.array)) return false;
     std::uint32_t count{};
     if (!read(value.manager+0xC, count) || count > 64 || (count && !value.array)) return false;
+    // Owned initial entries, not an atomic roster or a cross-phase lease. Copy
+    // the complete bounded range through the same protection/SEH/budget path;
+    // every entry's object/identity and the final manager tuple still follow.
+    // No value-initialization: unused entries must not add another 1KiB clear.
+    std::array<RetainedEntry, 64> entries;
+    static_assert(std::is_trivial_v<RetainedEntry> &&
+                  std::is_trivially_copyable_v<RetainedEntry>);
+    if (count && !copy(value.array, entries.data(),
+                       static_cast<std::size_t>(count)*sizeof(RetainedEntry), &cache)) return false;
     for (std::uint32_t index = 0; index < count; ++index) {
-        struct Entry { std::uintptr_t record; std::uint32_t id, pad; } entry{};
+        const auto& entry = entries[index];
         std::uintptr_t actor{}, vt{}; std::uint32_t id{};
-        const auto at = value.array+16*index;
-        if (!read(at, entry) || !entry.record || !read(entry.record+8, actor) || !read(actor, vt) || !read(actor+0xBC, id) || id != entry.id) return false;
+        if (!entry.record || !read(entry.record+8, actor) || !read(actor, vt) || !read(actor+0xBC, id) || id != entry.id) return false;
         if (vt != g_module+kPirate) continue;
         if (value.count == value.rows.size()) return false;
         Local local{};
@@ -358,11 +444,13 @@ void receive(const void* bytes, int size, const sockaddr_in& source, int source_
     ReleaseSRWLockExclusive(&lock);
 }
 void tick() {
+    if (stop_for_player_lifecycle()) return;
     if (!installed.load(std::memory_order_acquire) || !g_state_net.enabled || !g_state_net.peer_set) return;
     if (stopped.load()) {
         active_scope.store(false, std::memory_order_release);
         return;
     }
+    if (!startup_admitted()) return;
     if (ticking.test_and_set()) return;
     const auto now = GetTickCount64();
     if (now-last_tick < 50) { ticking.clear(); return; }
@@ -438,6 +526,7 @@ DWORD WINAPI transport_worker(void*) {
     struct Pending { wire::Packet packet; ULONGLONG captured; };
     ULONGLONG last_send{}, last_log{}, last_poll{};
     while (!stopped.load(std::memory_order_acquire) && g_state_net.running.load()) {
+        if (stop_for_player_lifecycle()) break;
         if (!next_session.load(std::memory_order_acquire)) {
             std::uint64_t nonce{};
             if (BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(&nonce), sizeof(nonce), BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0 || !nonce) {
@@ -513,6 +602,7 @@ DWORD WINAPI transport_worker(void*) {
                      << " peakScopeUs=" << peak_scope_ticks.load()*1000000/qpc_frequency
                      << " peakWindowUs=" << peak_window_ticks.load()*1000000/qpc_frequency
                      << " queries=" << query_total.load() << " peakQueries=" << peak_queries.load() << " workSkips=" << work_skips.load();
+                append_cost_stop_context(line);
                 write_status(line.str());
             }
         }
@@ -529,6 +619,7 @@ DWORD WINAPI transport_worker(void*) {
         << " peakWindowUs=" << peak_window_ticks.load()*1000000/qpc_frequency
         << " queries=" << query_total.load() << " peakQueries=" << peak_queries.load()
         << "; native AI/root resumes; no automatic rearm";
+    append_cost_stop_context(line);
     write_status(line.str());
     if (log != INVALID_HANDLE_VALUE) CloseHandle(log);
     return 0;
@@ -584,6 +675,25 @@ void apply_root_and_release(void* object, const void* transform, WorkBudget* bud
         }
     }
 }
+
+struct BodyImportFields {
+    std::uintptr_t native;
+    std::uint8_t gap08[0x20];
+    std::uintptr_t owner;
+    std::uint8_t gap30[0x2C];
+    float blend;
+    std::uint32_t flags;
+    std::uint8_t gap64[0x20];
+    std::int16_t joint;
+    std::uint8_t source;
+};
+static_assert(std::is_trivial_v<BodyImportFields> && std::is_standard_layout_v<BodyImportFields> &&
+              std::is_trivially_copyable_v<BodyImportFields>);
+static_assert(offsetof(BodyImportFields, native) == 0x00 && offsetof(BodyImportFields, owner) == 0x28 &&
+              offsetof(BodyImportFields, blend) == 0x5C && offsetof(BodyImportFields, flags) == 0x60 &&
+              offsetof(BodyImportFields, joint) == 0x84 && offsetof(BodyImportFields, source) == 0x86);
+constexpr std::size_t kBodyImportSpan = offsetof(BodyImportFields, source) + sizeof(BodyImportFields::source);
+static_assert(kBodyImportSpan == 0x87 && kBodyImportSpan <= sizeof(BodyImportFields));
 
 bool ordinary(std::uintptr_t actor, std::uintptr_t job, std::array<float, 8>& transform, unsigned& gate, ReadCache& cache) noexcept {
     const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
@@ -641,12 +751,17 @@ bool ordinary(std::uintptr_t actor, std::uintptr_t job, std::array<float, 8>& tr
                 !read(penetrator+0x3E, penetration) || penetration) return false;
             for (std::uint32_t i = 0; i < ragdoll_count; ++i) {
                 const auto body = ragdoll_bodies+0x110*i;
-                std::uintptr_t owner{}, native{}, world{}; std::uint32_t body_flags{}; std::uint8_t source{}; std::int16_t joint{};
-                if (!read(body+0x68, owner) || owner != actor || !read(body+0xA0, body_flags) ||
-                    ((body_flags >> 13) & 3) != 0 || (body_flags & 0x400) || !read(body+0x40, native) ||
-                    (native && (!read(native+0x10, world) || world)) ||
-                    !read(body+0xC6, source) || !read(body+0xC4, joint) ||
-                    (source != 1 && ((source != 2 && source != 3) || joint < 0 || joint >= 90))) return false;
+                // Copy only [body+0x40, body+0xC7), not trailing POD padding.
+                // This may inspect protected gaps/late fields earlier and thus
+                // reject more strictly; it is not an atomic observation/lease
+                // or a guarantee of fewer VirtualQuery calls. Native pointers
+                // are followed only after the original field checks below.
+                BodyImportFields fields;
+                std::uintptr_t world{};
+                if (!copy(body+0x40, &fields, kBodyImportSpan, &cache) || fields.owner != actor ||
+                    ((fields.flags >> 13) & 3) != 0 || (fields.flags & 0x400) ||
+                    (fields.native && (!read(fields.native+0x10, world) || world)) ||
+                    (fields.source != 1 && ((fields.source != 2 && fields.source != 3) || fields.joint < 0 || fields.joint >= 90))) return false;
             }
         }
     }
@@ -659,13 +774,16 @@ bool ordinary(std::uintptr_t actor, std::uintptr_t job, std::array<float, 8>& tr
     gate = 6;
     for (std::uint32_t i = 0; i < body_count; ++i) {
         const auto body = bodies+0x110*i;
-        std::uintptr_t owner{}, native{}, body_world{}; std::uint32_t body_flags{}; std::uint8_t source{}, motion{}; std::int16_t joint{}; float blend{};
-        if (!read(body+0x68, owner) || owner != actor || !read(body+0x40, native) || !native || !read(body+0xA0, body_flags) ||
-            ((body_flags >> 13) & 3) != 2 || (body_flags & 1) || !read(body+0x9C, blend) || !std::isfinite(blend) || blend > 0 ||
-            !read(body+0xC6, source) || !read(body+0xC4, joint) || !read(native+0x160, motion) || motion != 4 ||
-            !read(native+0x10, body_world) || !body_world) return false;
-        if (source == 1) ++root_count;
-        else if (source != 3 || joint < 0 || joint >= 90) return false;
+        // Same guarded full span as the disabled ragdoll, including its stricter
+        // gap/read-order behavior; blend remains irrelevant in that loop.
+        BodyImportFields fields;
+        std::uintptr_t body_world{}; std::uint8_t motion{};
+        if (!copy(body+0x40, &fields, kBodyImportSpan, &cache) || fields.owner != actor || !fields.native ||
+            ((fields.flags >> 13) & 3) != 2 || (fields.flags & 1) || !std::isfinite(fields.blend) || fields.blend > 0 ||
+            !read(fields.native+0x160, motion) || motion != 4 ||
+            !read(fields.native+0x10, body_world) || !body_world) return false;
+        if (fields.source == 1) ++root_count;
+        else if (fields.source != 3 || fields.joint < 0 || fields.joint >= 90) return false;
     }
     // No health mutation. A live exact Pirate must still have positive raw HP.
     std::uintptr_t health{}, health_vt{}; std::int32_t hp{};
@@ -675,19 +793,45 @@ bool ordinary(std::uintptr_t actor, std::uintptr_t job, std::array<float, 8>& tr
     return root_count == 1;
 }
 void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
-    if (pc != g_module+0x1A929A7 || !installed.load(std::memory_order_acquire) || !active_scope.load(std::memory_order_acquire) ||
+    if (stop_for_player_lifecycle() || pc != g_module+0x1A929A7 || !installed.load(std::memory_order_acquire) || !active_scope.load(std::memory_order_acquire) ||
         stopped.load(std::memory_order_relaxed) || g_dll_inert) return;
+    const auto actor = reinterpret_cast<std::uintptr_t>(object);
+    // Metadata-only preflight rejects no-work callbacks before charging the
+    // shared work window. Never dereference actor or reserve a row here, and
+    // release this lock BEFORE attempting the work permit (no lock inversion).
+    const auto preflight_now = GetTickCount64();
+    if (preflight_now > census_valid_until.load(std::memory_order_acquire)) return;
+    if (!TryAcquireSRWLockExclusive(&lock)) return;
+    bool preflight_due{};
+    if (session && confirmed && active_scope.load(std::memory_order_acquire) &&
+        preflight_now-peer_seen <= 1000 && !stopped.load(std::memory_order_acquire)) {
+        for (std::size_t i = 0; i < roster.count; ++i) if (roster.rows[i].actor == actor) {
+            const auto& row = rows[i];
+            preflight_due = !g_net_role_b ? preflight_now >= row.next_capture :
+                row.received && preflight_now-row.received <= 200 &&
+                row.incoming.sender == peer && row.incoming.receiver == session &&
+                row.incoming.sequence != row.attempted_sequence;
+            break;
+        }
+    }
+    ReleaseSRWLockExclusive(&lock);
+    if (!preflight_due) return;
     WorkBudget budget(2);
     if (!budget.check()) return;
-    const auto actor = reinterpret_cast<std::uintptr_t>(object);
     // Metadata-only scheduling first. A roster pointer match is NOT admission:
-    // all identity/ordinary/final generation checks below remain mandatory.
+    // recheck after obtaining the permit before reserving the exact sequence.
+    // All identity/ordinary/final generation checks below remain mandatory.
     const auto schedule_now = GetTickCount64();
-    if (schedule_now > census_valid_until.load(std::memory_order_acquire)) return;
+    if (!installed.load(std::memory_order_acquire) ||
+        !active_scope.load(std::memory_order_acquire) ||
+        stopped.load(std::memory_order_acquire) || g_dll_inert ||
+        schedule_now > census_valid_until.load(std::memory_order_acquire)) return;
     if (!TryAcquireSRWLockExclusive(&lock)) return;
     bool due{};
     wire::Packet scheduled_packet{}; const auto scheduled_session = session;
-    if (session && confirmed && schedule_now-peer_seen <= 1000 && !stopped.load()) {
+    if (session && confirmed && active_scope.load(std::memory_order_acquire) &&
+        schedule_now <= census_valid_until.load(std::memory_order_acquire) &&
+        schedule_now-peer_seen <= 1000 && !stopped.load(std::memory_order_acquire) && !g_dll_inert) {
         for (std::size_t i = 0; i < roster.count; ++i) if (roster.rows[i].actor == actor) {
             auto& row = rows[i];
             if (!g_net_role_b) {

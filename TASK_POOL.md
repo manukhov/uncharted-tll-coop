@@ -27,6 +27,18 @@ pointers, old CONE/HP/AI writer or new test framework. Raw-address relocation
 still conservatively stops this bounded first slice; not silently rebinding.
 Require fresh source/build review and explicit visible movement/smoothness exam.
 
+CURRENT ENR2 IMPLEMENTATION: startup waits for monotonic ownedPlayer/update-hook
+readiness; explicit Statev18 leave/teardown terminally closes channel. Census
+entry copies N->1 (<=1024B); body fields guarded135B batch per body, all original
+checks and BOTH ordinary passes preserved. Metadata not-due preflight precedes
+WorkBudget; due path rechecks/reserves afterward. No budget/lease relaxation.
+First cost-stop context freezes existing QPC query-bracket vs other wall time
+BEFORE reason publication; no new observer/test framework. Independent reviews
+pass; build/hash/runtime pending. Native seam/setter unchanged, labels current.
+Latest COOP_STATUS has quota, competing costs, limitations and prelaunch exam:
+same living-enemy encounter,10..15s actual B follows A/model+body together/no lag;
+no external debugger for this performance observation, no count-only success.
+
 PREVIOUS20:20 EXAM snapshot (result accepted above): A6648/B21908 E2697C89...;
 taskManagerGate1413C26C5/budget1, look/reset READY. Watchers14712/7144 both
 READY; reports/taskmanager-nadine-gate-20261024-2020 has exact DLL/PDB and boot
