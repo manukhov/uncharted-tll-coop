@@ -8,6 +8,99 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-10-24: bounded native frame completion and dead-owner witnesses ---
+    0x1416A50D0: (
+        "Process_ExecuteProcesses",
+        "STATIC source void Process::ExecuteProcesses(ProcessBucket,Process**,"
+        "uint,Process**,uint,void(*)(void)), process.cpp:1404/1419/1510. "
+        "Runs one ProcessBucket, stages worker1416A4DB0/1416A4DC0 with its own "
+        "counter1416A527A and submits1416A52BB. Bucket5 waits/releases at52E2/"
+        "52EA; other buckets drain their worker counter5578/5580 before return. "
+        "State update1416A5690 dispatches state+20 or process+88; its pending "
+        "state path enters1416A3FB0. Normal Process work completion, not exclusion "
+        "of arbitrary external producers or future jobs.",
+    ),
+    0x1416A3FB0: (
+        "Process_SwitchToNewState",
+        "STATIC exact source void Process::SwitchToNewState(void), "
+        "process.cpp:899/929. "
+        "Sole direct caller1416A572D in process state update. Sets process+3D "
+        "bit20 during transition; constructs pending state1416A40E5, publishes "
+        "state+8=live Process at40EC, clears pending bit02 at4112, invokes "
+        "new state virtual+10 at411C, then clears transition bit20 at4193. "
+        "TaskManagerOnline LoadLevels/Resetting direct actor-reset callers are "
+        "such state entry callbacks, not separately launched reset jobs. "
+        "This local state ordering is not a global actor lifetime lease.",
+    ),
+    0x14161B870: (
+        "ScriptManager_KickUpdate",
+        "STATIC exact source ScriptManager::KickUpdate, script-manager.cpp:3842. "
+        "Stages UpdateJob14161ABF0 with data146C91938; optional RCX counter-out "
+        "receives its counter at14161B93A, createdB931, submitB957. Postrender "
+        "140166801 passes frame-local+40 then waits/releases that exact counter "
+        "at14016680C. This drains that update job, not the later synchronous "
+        "listener VM14161BF08 reached from1401668A2 or all external producers.",
+    ),
+    0x1416A62B0: (
+        "Process_DestroyProcess",
+        "STATIC source Process::DestroyProcess, process.cpp:2028/2034/2046. "
+        "Dispatches deleting destructor virtual0 at1416A65B9, then marks "
+        "record+24=1 at65C2, process+3C bit04 at65C5 and clears process vtable "
+        "at65C9. The later heap-record unlink/zero is separate; destructor "
+        "completion is not permission to reuse its old Process pointer.",
+    ),
+    0x1416A6720: (
+        "Process_CleanupDeadList",
+        "STATIC source Process::CleanupDeadList, process.cpp:2153/2183. "
+        "Drains eligible dead Process subtrees through1416A6620 and deleting "
+        "destructor1416A62B0. Record freeing1416A66C0 is a later, distinct "
+        "stage; dead-list traversal does not lease unrelated retained records.",
+    ),
+    0x1416A6620: (
+        "Process_DestroyEligibleDeadSubtree",
+        "STATIC recursive eligible-dead Process subtree destruction, reached "
+        "by Process_CleanupDeadList1416A6720. Calls Process_DestroyProcess "
+        "1416A62B0 for native-admitted dead nodes; does not itself establish "
+        "that an arbitrary mod-cached weak record belongs to this traversal.",
+    ),
+    0x1416A66C0: (
+        "Process_FreeDeadSubtreeRecords",
+        "STATIC later recursive dead-subtree record-free stage reached through "
+        "141622A60. Calls relocatable-heap unlink1415FC9F0 after the deleting "
+        "destructor stage. Record+20 DWORD/+0 QWORD/+8 QWORD become zero at "
+        "1415FCAD2/AD5/AD8 before "
+        "that helper unlocks; capture identity while the native argument is "
+        "still authoritative, not by later dereference of a freed record.",
+    ),
+    0x1415FC1D0: (
+        "RelocatableHeap_Init",
+        "STATIC source RelocatableHeap::Init, relocatable-heap.cpp:89. "
+        "Initializes the heap/record pool and calls record-pool clear1415FC6A0 "
+        "at1415FC30C. Pool reset is a broader invalidation route than one "
+        "Process's normal unlink; not an individual owner-retirement witness.",
+    ),
+    0x1415FC6A0: (
+        "RelocatableHeap_ClearRecordPool",
+        "STATIC native record-pool clearing helper. Called by heap Init at "
+        "1415FC30C, locked clear wrapper1415FC650 at1415FC67E and independent "
+        "heap path1421FCC5E. Clears a pool, not one leased Process identity; "
+        "do not confuse this with per-record unlink1415FC9F0.",
+    ),
+    0x1415FC650: (
+        "RelocatableHeap_ClearRecordPoolUnderLock",
+        "STATIC native lock-bracketed wrapper around record-pool clear "
+        "1415FC6A0 at1415FC67E. This pool-wide reset is distinct from the "
+        "normal dead Process record-release path and must not be counted as "
+        "an exact mod-owned tuple's retirement without provenance.",
+    ),
+    0x1415FCEC0: (
+        "RelocatableHeap_ValidateInternal",
+        "STATIC exact source RelocatableHeap::ValidateInternal, "
+        "relocatable-heap.cpp:429/435/447/451. Common validation call "
+        "1415FCADF follows per-record zeroing but precedes native unlockCAE5; RCX=heap "
+        "from RSI, while the just-unlinked record was RDI. A targeted numeric "
+        "post-zero witness must not dereference the old record after this call.",
+    ),
     # --- 2026-10-24: own fresh per-primary spawn inputs, not borrowed stacks ---
     0x1413C07E0: (
         "PlayerPersistentState_CopyCheckpointFieldsThroughE10",
@@ -356,7 +449,13 @@ FUNCTIONS = {
         "HavokInit",
         "STATIC exact source HavokInit; requested through pending-init "
         "146B4541D byHavok_ServicePendingOpenClose141B3F290. Distinct from "
-        "HavokClose141B3FEE0 and does not revive old retained Player identities.",
+        "HavokClose141B3FEE0 and does not revive old retained Player identities. "
+        "Source ABI is void HavokInit(void); decompiler XMM arguments/return "
+        "are artifacts. Pending call141B3F2B9 (E802010000) precedes flag-clear "
+        "2BE; body only initializes when !finalShutdown && !world atF41A, "
+        "publishes worldF761/F7AF and waits internal jobFB6C. A normal call "
+        "may be a no-op: require an observed null-to-live physical transition "
+        "and the containing frame's completion for a bounded reopen witness.",
     ),
     0x1415B54C0: (
         "Ndjob_WaitAndReleaseCounter",
@@ -417,7 +516,14 @@ FUNCTIONS = {
         "STATIC exact source HavokClose; closes Havok worlds/callbacks then "
         "HavokAllocClose141B446E0 at141B4022B. Nonfinal0 caller141B3F29F "
         "is deferred close; GameClose14014EAB0 passes1 at14014F98D. "
-        "Final-shutdown flag146917C14 is not a per-Player lifetime lease.",
+        "Source ABI is void HavokClose(bool): pending site xorECX at29D, "
+        "CALL29F bytesE83C0C0000, flag-clear2A4 only after return. Closes "
+        "availability byte146916DF4 and bumps generationsFF70..7F BEFORE "
+        "world accessFF87; world becomes null401AF..B8, allocator teardown "
+        "4022B waits TLS/base quit jobs. World locks alone do not cover "
+        "pre-lock lifecycle writes or same-owner recursion. An empty-world "
+        "call is not proof of a new close transition; final-shutdown flag "
+        "146917C14 is not a per-Player lifetime lease.",
     ),
     0x141B3F290: (
         "Havok_ServicePendingOpenClose",
@@ -690,11 +796,17 @@ FUNCTIONS = {
     ),
     0x1415B5210: (
         "Ndjob_SubmitSingleJobAndWait",
-        "STATIC: constructs one callback/data record, allocates a one-job "
+        "STATIC exact six-slot ABI: RCX=void callback(uintptr_t), RDX=data, "
+        "R8=job flags/affinity, R9=const char* sourceFile, stackarg5=u32 line, "
+        "stackarg6=const char* sourceFunction; decompiler int a4 is not a "
+        "32-bit file pointer. Constructs one callback/data record, allocates a one-job "
         "counter at0x1415B52A9, copies/submits at52C2/52CA, waits at52D7 "
         "and releases at52E4. GameLoopUpdate passes UpdateProcesses "
         "0x14015F020 at0x1401677FB; return0x140167800 is completion of "
-        "that submitted callback. Counter waiting can switch worker fibers; "
+        "that submitted callback. Exact postrender site1401678DE submits "
+        "140165B50 with data0/flags65/source line5830; return1401678E3 "
+        "follows full callback completion, not just its script counter. "
+        "Counter waiting can switch worker fibers; "
         "no producer exclusion or global installer-quiescence gate is proven.",
     ),
     0x14015F020: (
@@ -4890,11 +5002,19 @@ FUNCTIONS = {
     ),
     0x140165B50: (
         "GameFramePostRenderUpdate",
-        "STATIC source-identified frame stage. Builds callback140164F10 at1401666AF "
+        "STATIC source void GameFramePostRenderUpdate(unsigned __int64), "
+        "native job callback with one RCX data argument (0 at1401678DE); "
+        "retail body does not consume it, worker ignores RAX. Builds callback140164F10 at1401666AF "
         "and submits via1415B5140 at1401666FC (common-game-loop.cpp:5058). Callback "
         "calls HavokStep141D800C0 at1401653A7. Outer1401676D0 waits normal "
         "process/animation buckets before submitting this stage at1401678DE; "
-        "not the Player network tick or a global mutation gate.",
+        "all displayed local child counters are joined by14016680C. Later "
+        "graph update85D, destroy884, record free889, compaction88E, physics "
+        "open/close893 and listener VM8A2 still execute before return166AA7. "
+        "Wrapping THIS callback after its original return retains native "
+        "worker FLS/TLS while the outer frame still waits. Bounded ordinary "
+        "frame completion, not the Player tick or arbitrary-producer/global "
+        "quiescence; tail log/SDK asynchronous work is separate.",
     ),
     0x1403D1460: (
         "GameCharacter_PostAlignControllerUpdates",
@@ -8580,8 +8700,11 @@ FUNCTIONS = {
         "and clears node fields. Also used directly inside 0x1417C3790, "
         "which pins both helpers as internal bookkeeping for the returned "
         "materialized object family. STATIC cleanup141622A60->1416A66C0 reaches "
-        "node+8=0 at1415FCAD8; this is LATER than KillTree object+BC=0 and "
-        "deleting-destructor dispatch. A nonnull node+8 is not live identity.",
+        "record+20 DWORD/+0 QWORD/+8 QWORD zero at1415FCAD2/AD5/AD8, before native unlockCAE5; "
+        "common postzero call1415FCADF->ValidateInternal1415FCEC0 has RCX=heap "
+        "(RSI), RDI=just-unlinked record. This is LATER than KillTree object+BC=0 "
+        "and deleting-destructor dispatch. Do not dereference a freed record "
+        "after the postzero call. A nonnull node+8 is not live identity.",
     ),
     0x1416A3330: (
         "ConstructBaseRuntimeObjectWithNullHandleAndFreshObjectId",
@@ -12537,7 +12660,11 @@ FUNCTIONS = {
         "Ndjob_ExecuteWorkerRecordAndFinalize",
         "Generic worker execution from 0x1415D1AD4/0x1415D1AF2. At "
         "0x1415D11B3 loads RCX=record+8 and at 0x1415D11B7 calls "
-        "record+0 directly; result ignored. Completion handling reads "
+        "record+0 directly as void callback(uintptr_t); RAX result ignored. "
+        "Before dispatch publishes the native execution owner to FLS QWORD+8 "
+        "at1415D1108 and worker context to FLS+10/+18 at11AB/11AF. A wrapper "
+        "inside one callback retains that job context until it returns. "
+        "Completion handling reads "
         "record+0x10 at 0x1415D135F when continuation field +0xA8 is zero. "
         "Animation third-category records "
         "carry AsyncObjectUpdateJointBlendJob and its 0x38-byte data. "
@@ -16536,6 +16663,69 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x1401678D7: (
+        "STATIC sole native code xref passing GameFramePostRenderUpdate140165B50: "
+        "LEA RCX bytes48 8D 0D 72 E2 FF FF. Next CALL1401678DE submits this "
+        "callback and waits for its completion; replacing only this callback "
+        "argument preserves its job/FLS context without detouring the global "
+        "worker dispatcher."
+    ),
+    0x1401678DE: (
+        "STATIC E82DD94401 ->Ndjob_SubmitSingleJobAndWait1415B5210, RA1401678E3. "
+        "RCX=GameFramePostRenderUpdate140165B50, RDX=data0, R8D=65, R9=source "
+        "common-game-loop.cpp; stackarg5=5830 at1401678C2, arg6=source function "
+        "string from RDI at1401678BD. The submitted callback has ABI void(uintptr_t); "
+        "worker ignores its return. An original-then-service CALLBACK retains native "
+        "job FLS/TLS and delays this counter completion; service after the outer wait "
+        "would instead run in the caller's context. No arbitrary-producer fence."
+    ),
+    0x14016680C: (
+        "STATIC waits/releases frame-local+40 counter published by "
+        "ScriptManager_KickUpdate14161B870 at140166801. This joins its UpdateJob, "
+        "not the later graph reset/update, DestroyDead140166884, Havok open/close893 "
+        "or listener ScriptVm call14161BF08 from1401668A2. Do not use this interior "
+        "point as completion of the whole postrender callback."
+    ),
+    0x1401668A2: (
+        "STATIC synchronous script-listener service14161BDD0; pending listener "
+        "bytecode is executed inline at14161BF08 and may invoke native reset/actor "
+        "operations before returning. This occurs AFTER pending Havok service893; "
+        "full original postrender return is later166AA7."
+    ),
+    0x141B3F29F: (
+        "STATIC E83C0C0000 ->HavokClose141B3FEE0. XORECX at29D passes false inCL "
+        "to source void HavokClose(bool). Pending-close flag clears at2A4 ONLY after "
+        "return; a wrapper must preserve native call/LastError semantics and bind "
+        "a real world-live to world-null transition, not count empty-world no-ops."
+    ),
+    0x141B3F2B9: (
+        "STATIC E802010000 ->HavokInit141B3F3C0, source void HavokInit(void); no "
+        "register arguments despite decompiler XMM artifacts. Pending-init flag "
+        "clears at2BE AFTER return. Require null-to-live world transition and full "
+        "native frame completion; function-called alone is not successful reopen."
+    ),
+    0x1415FCADF: (
+        "STATIC E8DC030000 ->RelocatableHeap_ValidateInternal1415FCEC0. RCX=heap "
+        "from RSI, RDI=just-unlinked record. CAD2 zeroed record+20 DWORD, CAD5 "
+        "record+0 QWORD, CAD8 record+8 QWORD; native heap unlock is LATER atCAE5. "
+        "An exact numeric postzero witness is distinct from destructor or "
+        "OnKill admission. Do not retain/dereference that free record afterward."
+    ),
+    0x1415FC30C: (
+        "STATIC RelocatableHeap_Init1415FC1D0 calls record-pool clear1415FC6A0. "
+        "This is pool-wide initialization/invalidation, not the normal exact "
+        "Process unlink postzero1415FCADF; do not infer one owned tuple retired."
+    ),
+    0x1415FC67E: (
+        "STATIC lock-bracketed pool clear wrapper1415FC650 calls1415FC6A0. "
+        "Pool-wide record invalidation is a separate route from per-record "
+        "unlink1415FC9F0; scope a retirement witness by exact tuple/provenance."
+    ),
+    0x1421FCC5E: (
+        "STATIC independent caller of RelocatableHeap_ClearRecordPool1415FC6A0. "
+        "Do not treat observing the ordinary Process record-unlink seam as "
+        "exhaustive coverage of this broader pool-reset invalidation route."
+    ),
     0x1413C076A: (
         "STATIC E8A111D3FF ->1410F1910, primary routeEDX=0. RCX=local16B "
         "output; R8=Continue held inR13; R14=live TaskManager; sixth argument "

@@ -3,11 +3,11 @@
 // Included inside coop_runtime.cpp's private namespace, after the Windows and
 // standard-library headers. This interface owns scalar network state only.
 namespace player_world {
-// Staged production code only: enable after native retirement, fresh-input
-// service and transient-cache invalidation have all been integrated/reviewed.
-// False preserves the deployed unwrapped transport and snapshot behavior; this
-// is not a second live protocol, runtime toggle, or permission to rearm a game.
-inline constexpr bool kEnablePlayerWorldRearm = false;
+// Bounded native main-menu rejoin candidate. The exact full-postrender consumer,
+// positive retirement, physical cycle and fresh-input package are mandatory.
+// This is not a runtime toggle or general seamless/script-reset permission.
+// Both peers must use this same build; false retains the old unwrapped protocol.
+inline constexpr bool kEnablePlayerWorldRearm = true;
 struct Key {
     std::uint32_t task_id{}, level_key{}, continue_id04{}, continue_id08{};
     std::uint32_t continue_id1c{}, wanted_actor_id{}, wanted_level_id{}, spawn_state_id{};
@@ -26,8 +26,15 @@ void pump_control();
 bool receive_control(const char*, int, const sockaddr_in&, int) noexcept;
 int send_datagram(SOCKET, const char*, int, int, const sockaddr*, int,
                   std::uint64_t origin = UINT64_MAX) noexcept;
+// Metadata-only, short WorldLock: save the last paired departure token before
+// latching leave. No socket/game/log calls and no token for an unpaired world.
+void queue_local_leave() noexcept;
+bool copy_leave_request(Token&, std::uint64_t& request) noexcept;
+int send_leave_datagram(SOCKET, const char*, int, int, const sockaddr*, int,
+                        Token, std::uint64_t request) noexcept;
 // Called only after close_for_reset() and ingress_quiescent(). Process identity
-// and explicit departure tombstones deliberately survive this reset.
+// and departure metadata survive this reset. ONLY publish_local_world() after
+// fresh-primary/retirement proof clears old-world departure tombstones.
 void reset_peer_snapshot_for_world() noexcept;
 
 class IngressGuard {

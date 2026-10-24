@@ -11,7 +11,28 @@ Full campaign co-op between two game copies. Current user-directed order:
   boundary; keep enemy damage/death/HP writes and AI pause OFF.
 - Complete combat authority and remaining player/appearance work separately.
 
-## P0 CURRENT: Player level rearm before enemies; preserve companion/menu fixes (2026-10-24)
+## P0 CURRENT: MAIN-MENU rejoin before enemies; preserve companion/menu fixes (2026-10-24)
+
+NEW USER CLARIFICATION: the empty->enemy location change was THROUGH MAIN MENU.
+The old explicit CPLV process-terminal behavior was intentionally unrejoinable.
+Latest COOP_STATUS records new bounded consumer/3+evidence/prediction; earlier
+staged-only/TaskManager31D2 proposal below is superseded, not runtime-validated.
+
+NEW CANDIDATE: native full-postrender callback140165B50 wrapped through exact
+submit/wait1401678DE; same job/FLS, all normal process/script/animation work joined.
+Observe actual HavokClose29F and Init2B9 physical cycles, never return1/request.
+Old owner must have exact OnKill + common heap postzero1415FCADF witness BEFORE
+registry reset. Fresh inputs own Continue88/PersistentE20 and close/reset serials.
+All world/leave packets target exact peer-world, CPLV repeats retain OLD token;
+only authorized fresh-world publication clears old leave flags. Both worlds must
+advance. Short actor tuple locks, pending queues clear and key consumer caches
+epoch-guarded; old raw VEH replay disabled when enabled. EnemyOFF/appearancePARKED.
+ACTIVE EXAM: labelsave2126/99/3True+readback done; enabledDB88444B...buildpass,
+A26552/B22404 injected, bothnativepackageREADY; watchers24112/13504 READY.
+reports/menu-rejoin-20261024201532Z exactDLL/PDB+bootlog. UserFIRSTsameEMPTY,
+reportmutualpresence BEFOREmenu ->bothmainmenus ->sameenemycheckpoint. Requiremutualvisible
+Players inBOTHloads, nooldHP/actions/stockNPC, bothlocalcontrol+menusintact.
+No success from build/READY. Unknownfree/cycle/foreignslot FAILCLOSED, no retry.
 
 User clarified BOTH remote Players are absent after changing locations, as if
 not connected; not only enemy mismatch. A7788/B22492 are closed by USER, not a

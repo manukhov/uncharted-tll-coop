@@ -2,20 +2,22 @@
 
 ## Current user priority / handoff (2026-10-24)
 
-CURRENT USER P0: restore mutual Players after empty->enemy location change,
+CURRENT USER P0: restore mutual Players after BOTH copies go through MAIN MENU,
 then return to enemy synchronization. User clarified BOTH remote Players were
 absent, not merely unmatched enemies. Ordinary reason2 reset retires the old
 replicas, but the deployed one-shot spawn cannot recreate them. A7788/B22492
 are now absent; user explicitly says he closed BOTH himself, not a crash.
 
-STAGED ONLY: player_world_runtime.h/transport.inl and spawn_capture.inl contain
-owned fresh-input capture and per-location transport admission; rollout constant
-kEnablePlayerWorldRearm=false. No new protocol/hooks/rearm are active and no new
-game was launched. Next native consumer/lifetime exclusion is NOT established:
-graph lock covers GraphMgr Reset, not all direct ActorReset callers or same-token
-recursive resets. Do not enable the constant, clear one-shot flags or replay old
-raw pointers. Latest entry has exact static findings, review and next steps.
-Enemy channel stays OFF while this P0 is repaired; appearance remains PARKED.
+NEW BOUNDED CANDIDATE: full-postrender native callback tail, POSITIVE old owned
+OnKill->heap-unlink witness, observed physical menu close/reopen and fresh primary
+recipe. Per-world leave envelopes prevent an old menu packet closing a new pair.
+Source compiled/reviewed, labels saved/read back, rollout enabled and fresh pair
+A26552/B22404 now injected with DB88444B... image; both native packages READY.
+Watchers24112/13504 READY. User first checks SAME EMPTY scene BEFORE menu exit.
+No runtime success claimed. The old
+TaskManager31D2/graph-lock service was NOT installed; direct-reset exclusion is
+not generalized. Latest entry is authoritative over the earlier staged handoff.
+Enemy stays OFF for this exam; appearance remains PARKED.
 
 Stock-Nadine removal
 CONFIRMED BOUNDED: user accepts result; A6648/B21908 each retire exactly one
@@ -45404,3 +45406,181 @@ reports/apply_player_world_inputs_20261024.txt records2115functions/99data/3type
 save_database returned True. MCP restarted;8 new/renamed functions and both spawn
 xrefs read back correctly. No parallel IDB, enemy rearm, appearance edit or
 process input/kill. ROADMAP.md is absent in this checkout, not recreated.
+
+### 2026-10-24 — STATIC bounded MAIN-MENU rejoin; implement native full-tail consumer
+
+USER CORRECTION: the EMPTY->enemy transition was THROUGH MAIN MENU, not an
+ordinary seamless level change. Both missing mutual Players were reported.
+REJECTED for this workflow: the previous staged per-level design deliberately
+left CPLV process-terminal and could never rejoin after menu. It was not enabled
+or runtime-tested. Merely clearing that tombstone would admit delayed old leave/
+HP/actions; old raw ctx/a4/out and one-shot flags remain invalid repair shortcuts.
+
+HYPOTHESIS: native full-postrender joined phase + positive old-owned free + real
+Havok close/reopen + fresh native primary recipe provide a bounded authority to
+prepare a NEW paired world after BOTH copies manually go through menu. This is
+not universal arbitrary-script/online/DMENU reset exclusion or campaign progression.
+Three-plus INDEPENDENT evidence kinds establish this exact exam's static case:
+
+1. SCHEDULER CALL GRAPH / JOINS: TaskManager Active Update1413C4880->owner+1E0
+   ->ProcessTask31B0->defaultPolicy141DA2B60->maintain2270->primary248/04A0.
+   This runs from Process state+20 via1416A5690, workers1416A4DC0 or serial
+   ExecuteProcesses1416A50D0. Its own counter527A is submitted52BB and joined/
+   released52E2/52EA (bucket5),5578/5580 (others). Outer GameLoop submits/waits
+   all UpdateProcessBuckets14015F020 at1401677FB BEFORE postrender1401678DE.
+   Postrender140165B50 additionally drains global+local counters, physics,
+   animation and ScriptManager14161B870->14161ABF0: Kick166801, Wait16680C.
+   GraphUpdate166860, DestroyDead884, free/compact889/88E, pending Havok893 and
+   listenerScriptVM8A2 all return synchronously before FULL callback return.
+   No direct native game-job submission after80C found. Optional late NetLog,
+   Steam/Nvidia callbacks inspected contain no actor pointers/mutation path.
+
+2. NATIVE JOB/FLS ABI: exact1401678DE E82DD94401 calls1415B5210 with
+   callback140165B50 (LEA8D7), data0, route65, filepointerR9, line5830, function
+   pointerRDI. Worker1415D0F20 sets FLS+8 native execution token at1415D1108 and
+   invokes void(__fastcall*)(uintptr_t) record+0 with data+8 at1415D11B7; RAX
+   ignored. Submit helper copies one128B record, submits52CA, waits52D7, releases
+   counter52E4. Wrapping the CALLBACK (original once, then service) retains native
+   job/FLS and holds outer game-frame wait until service returns. It is NOT a
+   service on an arbitrary socket thread or on the outer wait's different context.
+
+3. PHYSICAL MENU DATA FLOW: menu request1409BCA80 returns1 unconditionally even
+   when141CDA800 queues a PreResetter, so return1 is NOT completion. Exact
+   141B3F29F E83C0C0000 invokes source-void HavokClose(false)141B3FEE0; after
+   world clear141B401AF/B8 it joins allocator/system quit work before return.
+   EndTask14029C210 sets pendingInit146B4541D atC2B2. Exact141B3F2B9
+   E802010000 invokes source-void HavokInit()141B3F3C0; only observed world
+   nonzero->0 and0->nonzero produce close/open cycles. Legitimate no-op close/
+   init preserves existing cycle without inventing one; contradictions/overlap/
+   unwind/read faults fail closed. Initial init can precede injection: serial0
+   is allowed only for FIRST world before any close, with fresh primary/full-tail
+   and live world/TLS gates. It is not mislabeled an observed initialization.
+
+4. POSITIVE RETIREMENT / STRUCTURE: ProcessKillTree sets enteredOnKill before
+   Player+1901410D84B0 while A8/BC still bind owner. Exact OnKill wrapper records
+   CURRENT native argument's owned record/gen/heap+A0, then requires normal return.
+   DestroyProcess1416A62B0 calls virtual0 at65B9; BC is already cleared before
+   allocator free, so do NOT reread generation there. Common RelocatableHeap
+   unlink1415FC9F0 zeros record+20 DWORD atCAD2,+0 QWORD atCAD5,+8 QWORD atCAD8,
+   then calls ValidateInternal1415FCEC0 at1415FCADF BEFORE heap+D0 unlockCAE5.
+   Context relay supplies RDIrecord to this original1arg validator; AL1 normal
+   return publishes numeric Retired for the exact armed ticket, with no reads
+   of freed record/object/heap. ALL unlink callers pass this common seam.
+   All3 heap-clear-core1415FC6A0 callers(FC30C/FC67E/21FCC5E) invalidate matching
+   UNCONFIRMED pending tickets before reset/reuse; alreadyRetired remains fact.
+   Pool is40B free-list cells reserved by Init1415FC1D0, reusable/rebasable with
+   no record-local generation. Slot-null/read-fault/seen7 alone is NOT proof.
+
+COMPETING EXCLUSION PROPOSALS REJECTED with specific reasons:
+- Graph146A51570 owner0 + observer-count0 is not global. Script reset14033D000
+  kills primary atD009 BEFORE ResetActors D013/world locks; same-token recursion
+  is allowed. DMENU1402F3B10 and TaskManagerOnline load/reset also bypass observer.
+- World/body scopes alone are too late: primary kill and Havok state/generation
+  invalidation precede their acquisition. No speculative forced lock/counter writes.
+- ProcessMgr recursive lock is released1416208C8 BEFORE ExecuteProcesses08F5;
+  TaskManager31D2 has no inherited manager lock lease. Checkpoint mutex146A8C860
+  is likewise released before native primary Spawn. Neither was installed.
+- Full postrender tail is supported only for normal joined-frame/manual-menu
+  scenario; indirect external producers/ScriptVM arbitrary commands and whole
+  allocator-pool relocation are not declared universally excluded.
+
+IMPLEMENTED (runtime NOT yet confirmed):
+- Single rollout guard controls fresh native capture, retirement/heap-clear
+  observers, physical-cycle/full-callback collector and actual consumer. No raw
+  legacy VEH spawn when enabled; manual/legacy clone experiments refuse admission.
+- Fresh Recipe owns Continue88/optional PersistentE20, reset serial and physical
+  close/open binding. A primary completing post-close/pre-init can bind to that
+  SAME close generation; service still waits for its matching real open, fresh
+  current slot0 tuple and joined callback. Later rearm requires a strictly NEW
+  manual-menu cycle, not just a new raw primary address/one-shot reset.
+- Initial world prepares without peer State/donor, publishes native-ready key,
+  returns; socket worker performs sameKey/mutual-new-epoch handshake. Later full
+  callback waits peer + cached NPC donor/visual values, then exactly one route1
+  native Spawn using OWNED local values + private16B output. Bind output/retained
+  slot1/A8/BC/VT before post-context checks; drift consumes attempt and closes
+  channel, does not adopt slot1/retry. Native appearance roleA=Nadine/roleB=Chloe
+  policy retained; local Players and parked appearance experiments unchanged.
+- Before each new world, old registry clear requires exact positive old free
+  and cycle.closed_owned agreement. Six short tuple snapshot/publication helpers
+  plus locked clear prevent mixed tuples; never hold those locks across native,
+  pointer validation, FLS, logging or waits. Companion budget resets ONCE per
+  verified world; asset-owned donor48B/visual scalars persist. Native menu3passes
+  and June29 pause/last-health safety stay intact.
+- Closed ingress is drained before pending action/fire/pickup/give/world/grenade/
+  breakable metadata reset; heads/send/high-water counters/session pin persist.
+  Slot-mirror/give/held/holster/snapshot/cloth/sender-pose+velocity/action-edge/
+  aim-ramp caches are epoch-guarded at their actual consumers, including same
+  address reuse. State and deferred FIRE preserve CAPTURE epoch through send.
+- Enabled CPLV is now world-enveloped, CAPTURED old pair token+request and new
+  bounded10-send budget per departure. Send after close allowed ONLY for that
+  exact old pair; raw leave rejected. Ingress accepts only exact current target/
+  lastpaired source/bound endpoint, so delayed old leave cannot close new world.
+  CPWC control remains available through old leave; ONLY authorized fresh-world
+  publication clears old tombstones/snapshots. Process pin/send_seq monotonic.
+  Lock order peer_state->WorldLock->pose audited; no reverse edge/native/socket
+  under metadata locks. Both worlds must advance; single-peer join into an
+  untouched old world and killed/restarted process reconnect remain OUT OF SCOPE.
+
+Verification so far: disabled-rollout C++ build/link passes; independent ABI,
+retirement/service/transport/cache/lock-order reviews found no remaining concrete
+blocker for this BOUNDED scenario. No new test framework. Native SpawnProcess
+1417C3790 has no update-bucket/KillAllowed read; it sets CurrentProcess(new) before
+concrete Init and uses native mgr locks. Exam still requires liveWorld/TLS/root
+and KillAllowed!=0 because failed Init can KillTree43B5. Inspected exact writers
+set KillAllowed1; no full-tail clear found. Do not force it or infer arbitrary
+indirect-write exclusion. New labels must be applied/read back before launch.
+
+FALSIFIABLE PRELAUNCH PREDICTION, not a success claim:
+Fresh pair, ENR2 OFF. User ONLY loads SAME EMPTY checkpoint in both and confirms
+mutual visible actors/local controls/NPC absence. Then A first and B second go to
+MAIN MENU, and user loads SAME enemy checkpoint in BOTH. Expect old exact-owned
+free witness +close/open generation, NEW fresh-primary and NEW mutual world pair,
+exactly one NEW owned capture per copy and BOTH mutual visible moving Players;
+not just UDP/READY, no raw stale replay, no stock-Nadine extra NPC, no old held
+HP/actions/grenade/pickup replay, no142227B8C/menu crash. This distinguishes native
+rejoin from raising enemy-query budget (enemy remains OFF) or merely clearing
+teardown/leave flags. Unknown/missing cycle/free/donor/foreign slot must log WAIT/
+REFUSED and create nothing, not bypass guard. On failure preserve exact image/
+PIDs/logs/watchers; no automatic repeat or weaker relaunch. Watchers validate
+fresh crashes/menu behavior only, not performance. User alone controls all input.
+
+### 2026-10-24 23:15 MSK — Launch bounded main-menu-rejoin exam
+
+All listed source reviews complete. Additional common-unlink fast filter compares
+atomic watched record/heap before LastError/SRW; unrelated frees call original
+validator directly once. No new per-frame census/protection queries or native
+budget increase. Capture also records close-cycle before/after original native
+spawn; service requires exact cycle, and later capture cannot rearm without a
+strictly newer manual-menu physical cycle (even if prior prepared world had no
+peer). Pending-primary post-close/pre-init remains bound to that same cycle.
+
+Sole IDB labels applied with MCP stopped; log
+reports/apply_menu_rejoin_native_20261024.txt:2126functions/99data/3types,
+save_database returned True. MCP restarted,11 new functions and exact postzero/
+fullcallback xrefs read back. Retail image version verified1.4.21058.0. Single
+rollout constant is nowTRUE; no runtime toggle/raw fallback/TaskManager service.
+Fresh ENABLED C++ build+link pass (only existing Recipe alignment-padding C4324).
+
+Exact image DLL SHA256
+DB88444BFCA7430FC54498AB77335FE34634E7A2279584A1FA072BD02AEC25F5;
+PDB9A121FBE0BA81E59B2966C1F121982EA3A81BBD57F6417A319991431D914E231.
+Archived before launch under reports/menu-rejoin-20261024201532Z, together with
+boot-locomotion_hook.log. Native watcher image hash
+CEF3F9462C666684ACA35C831A48BAC80E77BCE7F1FB414493EE7E57C9E29857.
+
+Agent launched/injected LocalPair2 immediately after prepared fresh build:
+A/Chloe PID26552 creation2026-10-24T23:15:33.2606896+03:00;
+B/Nadine PID22404 creation2026-10-24T23:15:35.2706505+03:00.
+Exact PID/image/creation revalidated. Both logs: REMOTE-PLAYER-RESET READY,
+PEER-LIFECYCLE READY, requested local role correct and PLAYER-WORLD package
+READY fresh1/retirement1/menuCycle1/full-postrender-tail. Both currently WAIT
+fresh campaign recipe/physical cycle (normal before user loads). ENR2 launch
+environment0 in both; appearance policy unchanged. No agent input/menu actions.
+
+Separate watchers A24112/B13504 attach to exact games, new directories
+A-PID26552/B-PID22404 below runroot; both events.txt READY, second-chance-only,
+1800s. They change timing; no performance verdict from this exam. No current
+process exit/crash outcome observed. First user stage requested SAME EMPTY in
+BOTH, report mutual visible Players/localcontrols/NPC absence BEFORE menu exit.
+Only then A-menufirst/B-menunext ->sameenemycheckpoint BOTH as prediction above.
+No automatic repeat/closure/rebuild or claimed behavioral success from READY.

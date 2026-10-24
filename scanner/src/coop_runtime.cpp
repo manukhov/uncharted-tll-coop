@@ -979,8 +979,11 @@ struct OwnedRemotePlayerIdentity {
     std::uint32_t generation = 0;
 };
 
-// Published after our synchronous spawn, then immutable for this DLL's life.
-// Acquire readiness before reading it. The weak tuple is not a lifetime lease.
+// Numeric tuples use one short publication/snapshot lock. Readiness alone does
+// not protect a reader that already passed its acquire when a future verified
+// world transition replaces the tuple. This lock is NEVER a native lifetime
+// lease and must never span a game call, pointer walk, wait or log operation.
+SRWLOCK g_actor_identity_lock = SRWLOCK_INIT;
 OwnedRemotePlayerIdentity g_owned_remote_player{};
 std::atomic<bool> g_owned_remote_player_ready{false};
 std::atomic<bool> g_remote_player_reset_ready{false};
@@ -1005,6 +1008,66 @@ OwnedRemotePlayerIdentity g_companion_spawn_gate_identity{};
 std::atomic<bool> g_companion_spawn_gate_armed{false};
 std::atomic<bool> g_companion_spawn_callsite_ready{false};
 std::atomic<bool> g_companion_spawn_suppressed_logged{false};
+
+bool copy_owned_remote_player_identity(OwnedRemotePlayerIdentity& out) {
+    AcquireSRWLockShared(&g_actor_identity_lock);
+    const bool ready = g_owned_remote_player_ready.load(std::memory_order_relaxed);
+    out = ready ? g_owned_remote_player : OwnedRemotePlayerIdentity{};
+    ReleaseSRWLockShared(&g_actor_identity_lock);
+    return ready;
+}
+
+bool publish_owned_remote_player_identity(const OwnedRemotePlayerIdentity& identity) {
+    AcquireSRWLockExclusive(&g_actor_identity_lock);
+    // Publication is still one-shot. Only the future proved retirement service
+    // may clear the registry for a new world; never silently replace a live owner.
+    const bool permitted = !g_owned_remote_player_ready.load(std::memory_order_relaxed) ||
+        (g_owned_remote_player.record == identity.record &&
+         g_owned_remote_player.generation == identity.generation);
+    if (permitted) {
+        g_owned_remote_player = identity;
+        g_owned_remote_player_ready.store(true, std::memory_order_release);
+    }
+    ReleaseSRWLockExclusive(&g_actor_identity_lock);
+    return permitted;
+}
+
+bool copy_stock_nadine_identity(OwnedRemotePlayerIdentity& out) {
+    AcquireSRWLockShared(&g_actor_identity_lock);
+    const bool ready = g_stock_nadine_identity_state.load(std::memory_order_relaxed) == 2;
+    out = ready ? g_stock_nadine_identity : OwnedRemotePlayerIdentity{};
+    ReleaseSRWLockShared(&g_actor_identity_lock);
+    return ready;
+}
+
+void publish_stock_nadine_identity(const OwnedRemotePlayerIdentity& identity) {
+    AcquireSRWLockExclusive(&g_actor_identity_lock);
+    g_stock_nadine_identity = identity;
+    g_stock_nadine_identity_state.store(2, std::memory_order_release);
+    ReleaseSRWLockExclusive(&g_actor_identity_lock);
+}
+
+bool copy_companion_spawn_gate_identity(OwnedRemotePlayerIdentity& out) {
+    AcquireSRWLockShared(&g_actor_identity_lock);
+    const bool armed = g_companion_spawn_gate_armed.load(std::memory_order_relaxed);
+    out = armed ? g_companion_spawn_gate_identity : OwnedRemotePlayerIdentity{};
+    ReleaseSRWLockShared(&g_actor_identity_lock);
+    return armed;
+}
+
+bool arm_companion_spawn_gate_identity(const OwnedRemotePlayerIdentity& identity) {
+    AcquireSRWLockExclusive(&g_actor_identity_lock);
+    const bool armed = g_companion_spawn_gate_armed.load(std::memory_order_relaxed);
+    const bool permitted = !armed ||
+        (g_companion_spawn_gate_identity.record == identity.record &&
+         g_companion_spawn_gate_identity.generation == identity.generation);
+    if (permitted && !armed) {
+        g_companion_spawn_gate_identity = identity;
+        g_companion_spawn_gate_armed.store(true, std::memory_order_release);
+    }
+    ReleaseSRWLockExclusive(&g_actor_identity_lock);
+    return permitted;
+}
 
 struct LookProbeHashes {
     std::uint32_t chloe_base = 0;
@@ -2062,14 +2125,17 @@ std::ptrdiff_t g_player_fire_controller_offset = -1;
 constexpr std::size_t kPlayerFireControllerOwnerOffset = 0x108;
 constexpr std::size_t kPlayerActiveWeaponVtableOffset = 0x8C0;
 
-// The exact native menu request hook only publishes this atomic request. The
-// existing socket worker performs bounded sends even after game updates stop.
+// The exact native menu request hook only publishes scalar departure metadata.
+// Enabled rejoin captures the last paired token under a short lock; the existing
+// socket worker sends even after game updates stop. No game pointers/input.
 void queue_local_peer_leave() {
-    g_state_net.local_leave_queued.store(true, std::memory_order_release);
+    player_world::queue_local_leave();
 }
 
 struct LocalPeerLeaveSendState {
     coop::PeerLeavePacket packet{};
+    player_world::Token world{};
+    std::uint64_t request = 0;
     unsigned attempts = 0;
     ULONGLONG last_attempt_ms = 0;
     bool initialized = false;
@@ -2079,8 +2145,20 @@ void pump_local_peer_leave(LocalPeerLeaveSendState& send_state) {
     constexpr unsigned kMaximumAttempts = 10;
     constexpr ULONGLONG kAttemptIntervalMs = 50;
     if (!g_state_net.local_leave_queued.load(std::memory_order_acquire) ||
-        !g_state_net.peer_set || g_state_net.recv_socket == INVALID_SOCKET ||
-        send_state.attempts >= kMaximumAttempts) return;
+        !g_state_net.peer_set || g_state_net.recv_socket == INVALID_SOCKET) return;
+    if constexpr (player_world::kEnablePlayerWorldRearm) {
+        player_world::Token token{};
+        std::uint64_t request{};
+        if (!player_world::copy_leave_request(token, request)) return;
+        if (request != send_state.request || token.local != send_state.world.local ||
+            token.peer != send_state.world.peer) {
+            // Renew the bounded retransmission budget for a NEW captured menu
+            // request, not on every worker iteration or repeated native call.
+            send_state = {};
+            send_state.world = token; send_state.request = request;
+        }
+    }
+    if (send_state.attempts >= kMaximumAttempts) return;
     const ULONGLONG now = GetTickCount64();
     if (send_state.attempts != 0 &&
         now - send_state.last_attempt_ms < kAttemptIntervalMs) return;
@@ -2097,18 +2175,26 @@ void pump_local_peer_leave(LocalPeerLeaveSendState& send_state) {
     }
     send_state.last_attempt_ms = now;
     ++send_state.attempts;
-    const int sent = sendto(
-        g_state_net.recv_socket,
-        reinterpret_cast<const char*>(&send_state.packet),
-        sizeof(send_state.packet), 0,
-        reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
-        sizeof(g_state_net.peer_addr));
+    const int sent = player_world::kEnablePlayerWorldRearm
+        ? player_world::send_leave_datagram(
+            g_state_net.recv_socket, reinterpret_cast<const char*>(&send_state.packet),
+            sizeof(send_state.packet), 0,
+            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr), sizeof(g_state_net.peer_addr),
+            send_state.world, send_state.request)
+        : sendto(
+            g_state_net.recv_socket, reinterpret_cast<const char*>(&send_state.packet),
+            sizeof(send_state.packet), 0,
+            reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr), sizeof(g_state_net.peer_addr));
     if (send_state.attempts == 1 || send_state.attempts == kMaximumAttempts) {
         std::ostringstream line;
         line << "PEER-LEAVE-SEND session=0x" << std::hex
              << send_state.packet.session_id << std::dec
              << " seq=" << send_state.packet.sequence
              << " attempt=" << send_state.attempts << " bytes=" << sent;
+        if constexpr (player_world::kEnablePlayerWorldRearm) {
+            line << " world=" << send_state.world.local << " target=" << send_state.world.peer
+                 << " request=" << send_state.request;
+        }
         boot_log_line(line.str().c_str());
     }
 }
@@ -12497,6 +12583,13 @@ void force_peer_puppet_aim_blend_state(void* controller) {
     static void* ramp_controller = nullptr;
     static ULONGLONG ramp_started_ms = 0;
     static ULONGLONG last_force_ms = 0;
+    static std::uint64_t ramp_world = 0;
+    const auto current_ramp_world = player_world::local_epoch();
+    if (ramp_world != current_ramp_world) {
+        ramp_world = current_ramp_world;
+        ramp_controller = nullptr;
+        ramp_started_ms = last_force_ms = 0;
+    }
     if (ramp_controller != controller || ramp_started_ms == 0 ||
         now - last_force_ms > kNewAimGapMs) {
         ramp_controller = controller;
@@ -15801,6 +15894,7 @@ DWORD WINAPI state_recv_thread(void*) {
         if (player_world::receive_control(buf, received, source_addr, source_addr_size)) continue;
         if (magic == coop::kPeerLeavePacketMagic &&
             received == static_cast<int>(sizeof(coop::PeerLeavePacket))) {
+            if constexpr (player_world::kEnablePlayerWorldRearm) continue; // no raw leave fallback
             coop::PeerLeavePacket leave{};
             std::memcpy(&leave, buf, sizeof(leave));
             // Unlike ordinary state's ephemeral sender socket, lifecycle
@@ -15818,13 +15912,27 @@ DWORD WINAPI state_recv_thread(void*) {
         }
         // Explicit leave is a terminal tombstone, not a receive-age timeout.
         // The worker never touches Player/native physics or frees anything.
-        if (g_state_net.peer_left.load(std::memory_order_acquire) ||
-            g_state_net.local_leave_queued.load(std::memory_order_acquire)) {
+        if (!player_world::kEnablePlayerWorldRearm &&
+            (g_state_net.peer_left.load(std::memory_order_acquire) ||
+             g_state_net.local_leave_queued.load(std::memory_order_acquire))) {
             continue;
         }
         player_world::IngressGuard world_ingress(buf, received, source_addr, source_addr_size);
         if (!world_ingress) continue;
         std::memcpy(&magic, buf, sizeof(magic));
+        if (magic == coop::kPeerLeavePacketMagic &&
+            received == static_cast<int>(sizeof(coop::PeerLeavePacket))) {
+            coop::PeerLeavePacket leave{};
+            std::memcpy(&leave, buf, sizeof(leave));
+            if (configured_peer_ip && source_addr.sin_port == g_state_net.peer_addr.sin_port &&
+                publish_peer_leave_snapshot(leave)) {
+                std::ostringstream line;
+                line << "PEER-LEAVE-RECV session=0x" << std::hex << leave.session_id << std::dec
+                     << " seq=" << leave.sequence << " reason=main-menu world=" << player_world::local_epoch();
+                boot_log_line(line.str().c_str());
+            }
+            continue;
+        }
         if (magic == coop::kStatePacketMagic &&
             received == static_cast<int>(sizeof(coop::StatePacket))) {
             coop::StatePacket packet{};
@@ -17568,6 +17676,12 @@ bool local_player_cover_enter_command_edge(void* player, bool* rising_edge) {
     static const std::uint32_t kCoverEnterHash =
         string_hash("cover-enter", 11, 0);
     static bool prev_cover_enter = false;
+    static std::uint64_t cover_world = 0;
+    const auto current_cover_world = player_world::local_epoch();
+    if (cover_world != current_cover_world) {
+        cover_world = current_cover_world;
+        prev_cover_enter = false;
+    }
     const bool enter_now =
         player_cover_command_active(player, kCoverEnterHash);
     const bool rose = enter_now && !prev_cover_enter;
@@ -18070,6 +18184,14 @@ bool safe_give_weapon_art_to_puppet(
     static void* cache_puppet = nullptr;
     static std::uint32_t cache_art = 0;
     static bool cache_ok = false;
+    static std::uint64_t cache_world = 0;
+    const auto give_world = player_world::local_epoch();
+    if (cache_world != give_world) {
+        cache_world = give_world;
+        cache_puppet = nullptr;
+        cache_art = 0;
+        cache_ok = false;
+    }
     if (puppet == cache_puppet && cache_art == art_id && cache_ok) {
         if (puppet_has_weapon_art_id(puppet, art_id)) {
             return true;
@@ -18082,6 +18204,11 @@ bool safe_give_weapon_art_to_puppet(
         ULONGLONG last_seen_ms;
     };
     static GiveSuccess success_memo[8]{};
+    static std::uint64_t success_world = 0;
+    if (success_world != give_world) {
+        success_world = give_world;
+        std::memset(success_memo, 0, sizeof(success_memo));
+    }
     const ULONGLONG give_now = GetTickCount64();
     for (GiveSuccess& memo : success_memo) {
         if (memo.puppet == puppet && memo.art == art_id) {
@@ -18116,6 +18243,11 @@ bool safe_give_weapon_art_to_puppet(
         ULONGLONG until_ms;
     };
     static GiveFail fail_memo[8]{};
+    static std::uint64_t fail_world = 0;
+    if (fail_world != give_world) {
+        fail_world = give_world;
+        std::memset(fail_memo, 0, sizeof(fail_memo));
+    }
     for (const GiveFail& memo : fail_memo) {
         if (memo.puppet == puppet && memo.art == art_id &&
             give_now < memo.until_ms) {
@@ -18152,6 +18284,12 @@ bool safe_give_weapon_art_to_puppet(
         };
         static GivenOnce given_once[16]{};
         static std::size_t given_once_next = 0;
+        static std::uint64_t given_once_world = 0;
+        if (given_once_world != give_world) {
+            given_once_world = give_world;
+            given_once_next = 0;
+            std::memset(given_once, 0, sizeof(given_once));
+        }
         for (const GivenOnce& g : given_once) {
             if (g.puppet == puppet && g.art == art_id) {
                 return false;  // already attempted once; do not re-give
@@ -18290,6 +18428,16 @@ void ensure_puppet_has_peer_weapons(void* puppet, const coop::StatePacket& peer)
         ULONGLONG since_ms = 0;
     };
     static SlotStability stability[4]{};
+    static std::uint64_t memo_world_epoch = 0;
+    const auto current_world_epoch = player_world::local_epoch();
+    if (memo_world_epoch != current_world_epoch) {
+        // Raw Player addresses may be reused by the next world. Clear only
+        // owned memo values; never inspect or act on the cached old pointers.
+        for (auto& entry : memo) entry = {};
+        for (auto& entry : ungivable_memo) entry = {};
+        for (auto& entry : stability) entry = {};
+        memo_world_epoch = current_world_epoch;
+    }
     const ULONGLONG now = GetTickCount64();
     if (g_relay_pickup_wait_mirror.load(std::memory_order_acquire)) {
         const ULONGLONG since = g_relay_pickup_wait_since_ms.load(
@@ -20917,6 +21065,7 @@ void apply_peer_held_weapon_state() {
     coop::StatePacket peer{};
     void* puppet = nullptr;
     if (!latest_peer_state(peer, puppet)) return;
+    const auto held_world = player_world::local_epoch();
     // Role A can only discover the retained remote legacy-Nadine Player after a
     // peer exists. Role B services its local Player independently from the
     // native NadineBuddy update above.
@@ -20963,13 +21112,15 @@ void apply_peer_held_weapon_state() {
         // the peer state, with a small bounded retry, then stop for good.
         {
             static void* hp = nullptr;
+            static std::uint64_t hp_world = 0;
             static bool prev_holstered = false;
             static int attempts_left = 0;
             static ULONGLONG last_try_ms = 0;
             const bool holstered_now = (peer.flags & 0x80) == 0;
             const ULONGLONG hnow = GetTickCount64();
-            if (puppet != hp) {
+            if (puppet != hp || hp_world != held_world) {
                 hp = puppet;
+                hp_world = held_world;
                 prev_holstered = false;
                 attempts_left = 0;
             }
@@ -21014,6 +21165,17 @@ void apply_peer_held_weapon_state() {
     static ULONGLONG last_switch_fail_ms = 0;
     static std::uint32_t last_switch_art = 0;
     static bool last_switch_ok = false;
+    static std::uint64_t last_held_world = 0;
+    if (last_held_world != held_world) {
+        last_held_world = held_world;
+        last_puppet = nullptr;
+        last_art_id = 0;
+        last_mode = 0xFF;
+        last_peer_gun = -1;
+        last_switch_ms = last_switch_fail_ms = 0;
+        last_switch_art = 0;
+        last_switch_ok = false;
+    }
 
     const bool art_changed =
         puppet != last_puppet || effective_art != last_art_id;
@@ -21170,9 +21332,11 @@ void apply_peer_held_weapon_state() {
             // anim is not restarted while it is already playing.
             static void* last_holster_puppet = nullptr;
             static ULONGLONG last_holster_req_ms = 0;
-            if (puppet != last_holster_puppet ||
+            static std::uint64_t last_holster_world = 0;
+            if (last_holster_world != held_world || puppet != last_holster_puppet ||
                 now - last_holster_req_ms > 800) {
                 last_holster_puppet = puppet;
+                last_holster_world = held_world;
                 last_holster_req_ms = now;
                 safe_request_gun_state(puppet, 0);
                 if (readable_bytes(static_cast<std::byte*>(puppet) + 0x1D90) >=
@@ -21196,6 +21360,12 @@ void apply_peer_held_weapon_state() {
     // draw toggles the old behavior.
     static void* last_gun_req_puppet = nullptr;
     static ULONGLONG last_gun_req_ms = 0;
+    static std::uint64_t last_gun_req_world = 0;
+    if (last_gun_req_world != held_world) {
+        last_gun_req_world = held_world;
+        last_gun_req_puppet = nullptr;
+        last_gun_req_ms = 0;
+    }
     const bool gun_req_cooldown =
         puppet == last_gun_req_puppet && now - last_gun_req_ms < 300;
     const bool can_draw =
@@ -21236,6 +21406,7 @@ void apply_peer_held_weapon_state() {
 }
 
 void send_local_player_state() {
+    const auto sender_world_epoch = player_world::local_epoch();
     if (g_state_net.local_leave_queued.load(std::memory_order_acquire)) return;
     apply_pending_peer_grenade_event();
     apply_pending_peer_breakable_event();
@@ -21311,6 +21482,11 @@ void send_local_player_state() {
         }
     }
     static bool last_grenade_arc_active = false;
+    static std::uint64_t grenade_arc_world_epoch = 0;
+    if (grenade_arc_world_epoch != sender_world_epoch) {
+        last_grenade_arc_active = false;
+        grenade_arc_world_epoch = sender_world_epoch;
+    }
     if (last_grenade_arc_active != grenade_arc_active) {
         last_grenade_arc_active = grenade_arc_active;
         std::ostringstream line;
@@ -21347,6 +21523,12 @@ void send_local_player_state() {
         static float pvx = 0, pvy = 0, pvz = 0;
         static float cvx = 0, cvy = 0, cvz = 0;
         static ULONGLONG pvt = 0;
+        static std::uint64_t velocity_world_epoch = 0;
+        if (velocity_world_epoch != sender_world_epoch) {
+            pvx = pvy = pvz = cvx = cvy = cvz = 0.0F;
+            pvt = 0;
+            velocity_world_epoch = sender_world_epoch;
+        }
         const ULONGLONG vnow = GetTickCount64();
         bool stale_discontinuity = false;
         float discontinuity_sq = 0.0F;
@@ -21524,6 +21706,13 @@ void send_local_player_state() {
     static std::uint8_t grenade_pose_seed_cache[32]{};
     static bool have_grenade_pose_seed = false;
     static ULONGLONG grenade_pose_publish_until_ms = 0;
+    static std::uint64_t grenade_pose_world_epoch = 0;
+    if (grenade_pose_world_epoch != sender_world_epoch) {
+        std::memset(grenade_pose_seed_cache, 0, sizeof(grenade_pose_seed_cache));
+        have_grenade_pose_seed = false;
+        grenade_pose_publish_until_ms = 0;
+        grenade_pose_world_epoch = sender_world_epoch;
+    }
     const ULONGLONG grenade_pose_now = GetTickCount64();
     if (grenade_arc_active) {
         std::uint8_t active_seed[32]{};
@@ -21550,6 +21739,11 @@ void send_local_player_state() {
     }
     {
         static bool previous_strict_aim = false;
+        static std::uint64_t strict_aim_world_epoch = 0;
+        if (strict_aim_world_epoch != sender_world_epoch) {
+            previous_strict_aim = false;
+            strict_aim_world_epoch = sender_world_epoch;
+        }
         if (strict_aim != previous_strict_aim) {
             force_log_line(strict_aim ? "STRICT-AIM-SEND ON (foreground RMB)"
                                       : "STRICT-AIM-SEND OFF");
@@ -21716,6 +21910,13 @@ void send_local_player_state() {
     static ULONGLONG last_weapon_capture = 0;
     static std::uint8_t cached_weapon_snapshot[coop::kWeaponSnapshotBytes]{};
     static bool have_weapon_snapshot = false;
+    static std::uint64_t weapon_snapshot_world_epoch = 0;
+    if (weapon_snapshot_world_epoch != sender_world_epoch) {
+        last_weapon_capture = 0;
+        std::memset(cached_weapon_snapshot, 0, sizeof(cached_weapon_snapshot));
+        have_weapon_snapshot = false;
+        weapon_snapshot_world_epoch = sender_world_epoch;
+    }
     const ULONGLONG weapon_now = GetTickCount64();
     // FillWeaponState throws on the retained-table proxy; capture from the live
     // resolver player instead (same object FillWeaponState expects: +0x1D88 controller).
@@ -21879,7 +22080,7 @@ void send_local_player_state() {
     const int sent = player_world::send_datagram(
         g_state_net.send_socket, reinterpret_cast<const char*>(&pkt), sizeof(pkt), 0,
         reinterpret_cast<const sockaddr*>(&g_state_net.peer_addr),
-        sizeof(g_state_net.peer_addr));
+        sizeof(g_state_net.peer_addr), sender_world_epoch);
     static std::atomic<bool> first_state_send_logged{false};
     if (!first_state_send_logged.exchange(true, std::memory_order_relaxed)) {
         std::ostringstream line;
@@ -22141,8 +22342,11 @@ int give_authored_weapons_to_controller(
     static void* cache_puppet = nullptr;
     static std::uint32_t cached_ids[64]{};
     static int cached_count = 0;
-    if (puppet != cache_puppet) {
+    static std::uint64_t cached_world = 0;
+    const auto authored_world = player_world::local_epoch();
+    if (puppet != cache_puppet || cached_world != authored_world) {
         cache_puppet = puppet;
+        cached_world = authored_world;
         cached_count = 0;
     }
     auto already_given = [&](std::uint32_t id) -> bool {
@@ -22183,6 +22387,13 @@ void apply_peer_weapon_state() {
     static std::uint8_t last[coop::kWeaponSnapshotBytes]{};
     static void* last_puppet = nullptr;
     static bool have_last = false;
+    static std::uint64_t snapshot_world = 0;
+    const auto current_snapshot_world = player_world::local_epoch();
+    if (snapshot_world != current_snapshot_world) {
+        snapshot_world = current_snapshot_world;
+        have_last = false;
+        last_puppet = nullptr;
+    }
     if (have_last && puppet == last_puppet &&
         std::memcmp(last, peer.weapon_snapshot, sizeof(last)) == 0) {
         return;
@@ -30711,6 +30922,8 @@ __declspec(noinline) bool __fastcall hooked_owned_player_should_reset(
     return true;
 }
 
+#include "player_world_retirement.inl"
+
 void log_owned_remote_reset_result(
     const OwnedRemoteResetScope& scope, bool restored) {
     std::ostringstream line;
@@ -30741,7 +30954,8 @@ void __fastcall hooked_owned_actor_reset(int reason, std::uint8_t flag) {
     // Terminal for this DLL: old captured context pointers are not safe input
     // for a new location. Both automatic and manual reissue use this latch.
     g_remote_player_teardown.store(true, std::memory_order_release);
-    if (!g_owned_remote_player_ready.load(std::memory_order_acquire)) {
+    OwnedRemotePlayerIdentity owned{};
+    if (!copy_owned_remote_player_identity(owned)) {
         boot_log_line("REMOTE-PLAYER-RESET no-owned-token; spawn closed");
         g_original_owned_actor_reset(reason, flag);
         return;
@@ -30749,9 +30963,9 @@ void __fastcall hooked_owned_actor_reset(int reason, std::uint8_t flag) {
     const auto current_process = reinterpret_cast<CurrentProcessFunction>(
         g_module + kThreadContextGetCurrentProcessRva)();
     OwnedRemoteResetScope scope{
-        g_owned_remote_player,
-        !seh_matches_owned_remote_reset_player(current_process, g_owned_remote_player),
-        0, 0, seh_observe_owned_remote_reset_address(g_owned_remote_player), 0};
+        owned,
+        !seh_matches_owned_remote_reset_player(current_process, owned),
+        0, 0, seh_observe_owned_remote_reset_address(owned), 0};
     void* const previous = FlsGetValue(g_owned_reset_fls);
     if (!FlsSetValue(g_owned_reset_fls, &scope)) {
         boot_log_line("REMOTE-PLAYER-RESET REFUSED FLS publication; stock reset");
@@ -38195,6 +38409,12 @@ void drive_remote_slot1_actions_tick() {
     // 0xCB17D6 (hooked_pose_seed_resolver) + joypad 0x200 relay is the safe path.
     g_puppet_aim_override_frame = false;
     static bool prev_puppet_should_aim = false;
+    static std::uint64_t aim_edge_world_epoch = 0;
+    const auto action_world_epoch = player_world::local_epoch();
+    if (aim_edge_world_epoch != action_world_epoch) {
+        prev_puppet_should_aim = false;
+        aim_edge_world_epoch = action_world_epoch;
+    }
     if (puppet_should_aim && !prev_puppet_should_aim) {
         materialize_screen1_camera_once();
     }
@@ -38273,6 +38493,12 @@ void drive_remote_slot1_actions_tick() {
     {
         static bool prev_peer_effective_in_cover = false;
         static int peer_not_in_cover_streak = 0;
+        static std::uint64_t cover_edge_world_epoch = 0;
+        if (cover_edge_world_epoch != action_world_epoch) {
+            prev_peer_effective_in_cover = false;
+            peer_not_in_cover_streak = 0;
+            cover_edge_world_epoch = action_world_epoch;
+        }
         const bool peer_in_cover =
             (peer.flags & coop::kStateFlagPeerInCover) != 0;
         const bool peer_enter_pulse =
@@ -40613,18 +40839,19 @@ void log_joypad_command_slot_state(int slot, const char* phase) {
 }
 
 bool seh_capture_owned_remote_player_identity(
-    OwnedRemotePlayerIdentity& captured) {
+    OwnedRemotePlayerIdentity& captured, const void* native_output = g_spawn_desc) {
     captured = {};
-    if (g_module == 0) return false;
+    if (g_module == 0 || native_output == nullptr) return false;
+    const auto output_address = reinterpret_cast<std::uintptr_t>(native_output);
     const auto slot0 = g_module + kRetainedSlotTableRva;
     const auto slot1 = slot0 + 0x10;
     __try {
         // SpawnPlayerFromRetainedDescriptor's RCX is an OUTPUT weak handle,
         // despite the historical g_spawn_desc name. Do not adopt slot 1 alone.
         captured.record = *reinterpret_cast<const volatile std::uintptr_t*>(
-            g_spawn_desc);
+            output_address);
         captured.generation =
-            *reinterpret_cast<const volatile std::uint32_t*>(g_spawn_desc + 8);
+            *reinterpret_cast<const volatile std::uint32_t*>(output_address + 8);
         if (captured.record == 0 || captured.generation == 0) return false;
         captured.object = *reinterpret_cast<const volatile std::uintptr_t*>(
             captured.record + 8);
@@ -40655,9 +40882,9 @@ bool seh_capture_owned_remote_player_identity(
         // Reject drift between output, retained slot and record/object identity.
         // Equal observations still do not exclude a later free or ABA.
         return
-            *reinterpret_cast<const volatile std::uintptr_t*>(g_spawn_desc) ==
+            *reinterpret_cast<const volatile std::uintptr_t*>(output_address) ==
                 captured.record &&
-            *reinterpret_cast<const volatile std::uint32_t*>(g_spawn_desc + 8) ==
+            *reinterpret_cast<const volatile std::uint32_t*>(output_address + 8) ==
                 captured.generation &&
             *reinterpret_cast<const volatile std::uintptr_t*>(slot1) ==
                 captured.record &&
@@ -40687,6 +40914,8 @@ bool seh_capture_owned_remote_player_identity(
     }
 }
 
+std::uint64_t player_world_open_serial_for_capture();
+std::uint64_t player_world_close_cycle_for_capture();
 #include "player_world_spawn_capture.inl"
 
 void reissue_spawn_for_slot1() {
@@ -40816,11 +41045,9 @@ void reissue_spawn_for_slot1() {
     std::memset(g_spawn_desc, 0, sizeof(std::uintptr_t) + sizeof(std::uint32_t));
     spawn(g_spawn_desc, 1, g_spawn_ctx, g_spawn_a4, g_spawn_flag, g_spawn_out);
     OwnedRemotePlayerIdentity owned{};
-    const bool ownership_captured = seh_capture_owned_remote_player_identity(owned);
-    if (ownership_captured) {
-        g_owned_remote_player = owned;
-        g_owned_remote_player_ready.store(true, std::memory_order_release);
-    } else {
+    const bool ownership_captured = seh_capture_owned_remote_player_identity(owned) &&
+        publish_owned_remote_player_identity(owned);
+    if (!ownership_captured) {
         // This does NOT retire an unverified actor. The exam is REFUSED, and
         // further replay/application must stop rather than adopt slot1 blindly.
         g_remote_player_ownership_refused.store(true, std::memory_order_release);
@@ -41276,6 +41503,14 @@ void maybe_queue_remote_cloth_rebuild() {
     static std::uintptr_t healthy_draw = 0;
     static ULONGLONG draw_stable_since_ms = 0;
     static bool repair_attempted_since_healthy = false;
+    static std::uint64_t cloth_world_epoch = 0;
+    const auto current_world_epoch = player_world::local_epoch();
+    if (cloth_world_epoch != current_world_epoch) {
+        tracked_player = tracked_draw = healthy_player = healthy_draw = 0;
+        draw_stable_since_ms = 0;
+        repair_attempted_since_healthy = false;
+        cloth_world_epoch = current_world_epoch;
+    }
 
     const auto player_value = reinterpret_cast<std::uintptr_t>(puppet);
     const auto draw_value = reinterpret_cast<std::uintptr_t>(current_draw);
@@ -41407,8 +41642,7 @@ void maybe_capture_stock_nadine_for_retirement(void* actor) {
         g_stock_nadine_identity_state.store(previous, std::memory_order_release);
         return;
     }
-    g_stock_nadine_identity = captured;
-    g_stock_nadine_identity_state.store(2, std::memory_order_release);
+    publish_stock_nadine_identity(captured);
     std::ostringstream line;
     line << "COMPANION-RETIRE CAPTURED object=0x" << std::hex << captured.object
          << " record=0x" << captured.record << " generation=0x" << captured.generation
@@ -41971,16 +42205,18 @@ void* __fastcall hooked_lifecycle_companion_spawn(
         g_companion_spawn_callsite_ready.load(std::memory_order_acquire) &&
         g_companion_spawn_gate_armed.load(std::memory_order_acquire)) {
         CompanionOwnerSpawnSnapshot snapshot{};
-        if (seh_matches_companion_owner_spawn(live_manager, type_hash, name,
-                g_companion_spawn_gate_identity, snapshot)) {
+        OwnedRemotePlayerIdentity gate{};
+        if (copy_companion_spawn_gate_identity(gate) &&
+            seh_matches_companion_owner_spawn(live_manager, type_hash, name,
+                gate, snapshot)) {
             if (!g_companion_spawn_suppressed_logged.exchange(true, std::memory_order_relaxed)) {
                 std::ostringstream line;
                 line << "COMPANION-SPAWN SUPPRESSED manager=0x" << std::hex << snapshot.manager
                      << " managerVT=0x" << snapshot.vtable << " record=0x" << snapshot.record
                      << " generation=0x" << snapshot.generation << " descriptor=0x" << descriptor_id
                      << " typeHash=0x" << type_hash << " name=nadine-buddy capturedRecord=0x"
-                     << g_companion_spawn_gate_identity.record << " capturedGeneration=0x"
-                     << g_companion_spawn_gate_identity.generation << " returnPC=0x" << return_pc;
+                     << gate.record << " capturedGeneration=0x"
+                     << gate.generation << " returnPC=0x" << return_pc;
                 boot_log_line(line.str().c_str());
             }
             // Native26CA/CD leaves its stale pair untouched on NULL, then
@@ -42044,11 +42280,7 @@ std::uint8_t __fastcall visit_peer_lifecycle_actor(void* actor, void* opaque) {
         // This immutable tuple is published BEFORE the one native kill. The
         // later owner-call wrapper must independently bind its live manager's
         // stored pair to it; no manager/spawner pointer is cached across phases.
-        if (!g_companion_spawn_gate_armed.load(std::memory_order_acquire)) {
-            g_companion_spawn_gate_identity = work.companion;
-            g_companion_spawn_gate_armed.store(true, std::memory_order_release);
-        } else if (g_companion_spawn_gate_identity.record != work.companion.record ||
-                   g_companion_spawn_gate_identity.generation != work.companion.generation) {
+        if (!arm_companion_spawn_gate_identity(work.companion)) {
             work.companion_status = "armed-identity-refused";
             return work.want_peer && !work.peer_found ? 1 : 0;
         }
@@ -42090,20 +42322,23 @@ void service_peer_lifecycle_postrender(void* manager) {
         manager != reinterpret_cast<void*>(g_module + kProcessMgrRva) ||
         !g_owned_remote_player_ready.load(std::memory_order_acquire) ||
         g_state_net.local_leave_queued.load(std::memory_order_acquire)) return;
+    OwnedRemotePlayerIdentity owned{};
+    if (!copy_owned_remote_player_identity(owned)) return;
     const bool left = g_state_net.peer_left.load(std::memory_order_acquire);
     if (g_remote_player_teardown.load(std::memory_order_acquire) && !left) return;
     const bool want_peer = left && !g_peer_retirement_walk_done;
+    OwnedRemotePlayerIdentity companion{};
     const bool companion_pending =
         g_player_update_hook_ready.load(std::memory_order_acquire) &&
         g_nadine_companion_donor_cached.load(std::memory_order_acquire) &&
-        g_stock_nadine_identity_state.load(std::memory_order_acquire) == 2;
+        copy_stock_nadine_identity(companion);
     const bool want_companion = companion_pending &&
-        seh_observe_companion_quiescent(g_stock_nadine_identity);
+        seh_observe_companion_quiescent(companion);
     if (companion_pending && !want_companion &&
-        (g_companion_deferred_record != g_stock_nadine_identity.record ||
-         g_companion_deferred_generation != g_stock_nadine_identity.generation)) {
-        g_companion_deferred_record = g_stock_nadine_identity.record;
-        g_companion_deferred_generation = g_stock_nadine_identity.generation;
+        (g_companion_deferred_record != companion.record ||
+         g_companion_deferred_generation != companion.generation)) {
+        g_companion_deferred_record = companion.record;
+        g_companion_deferred_generation = companion.generation;
         boot_log_line("COMPANION-RETIRE DEFERRED unresolved identity or navigation counter; no kill/wait");
     }
     if (!want_peer && !want_companion) return;
@@ -42117,8 +42352,8 @@ void service_peer_lifecycle_postrender(void* manager) {
     }
     bool idle = false;
     if (!g_peer_lifecycle_busy.compare_exchange_strong(idle, true, std::memory_order_acq_rel)) return;
-    PeerLifecycleVisit work{g_owned_remote_player, {}, want_peer, want_companion};
-    if (want_companion) work.companion = g_stock_nadine_identity;
+    PeerLifecycleVisit work{owned, {}, want_peer, want_companion};
+    if (want_companion) work.companion = companion;
     bool world_scope = false;
     bool world_bodies = false;
     bool visited = false;
@@ -42175,7 +42410,7 @@ char __fastcall hooked_lifecycle_enter_menu(
     if (g_peer_lifecycle_ready.load(std::memory_order_acquire) &&
         result != 0 && g_owned_remote_player_ready.load(std::memory_order_acquire) &&
         g_state_net.running.load(std::memory_order_acquire)) {
-        queue_local_peer_leave(); // atomic publication ONLY; socket worker sends
+        queue_local_peer_leave(); // metadata only (short lock when enabled); socket worker sends
     }
     return result;
 }
@@ -42267,6 +42502,17 @@ bool install_peer_lifecycle() {
         : "PEER-LIFECYCLE REFUSED phase/menu/companion callsite; native pass-through retained");
     return ready;
 }
+
+#include "player_world_menu_cycle.inl"
+std::uint64_t player_world_open_serial_for_capture() {
+    return player_world_menu_cycle::current_open_serial();
+}
+std::uint64_t player_world_close_cycle_for_capture() {
+    player_world_menu_cycle::Snapshot cycle{};
+    return player_world_menu_cycle::copy_snapshot(cycle) ? cycle.close_cycle : UINT64_MAX;
+}
+#include "player_world_transients.inl"
+#include "player_world_service.inl"
 
 char __fastcall hooked_player_input_state_update(void* player) {
     const bool is_local = player != nullptr && player == retained_player_object(0);
@@ -83620,9 +83866,12 @@ DWORD WINAPI install_hook(void*) {
     install_xinput_hook();
     g_velprobe_enabled = false;
     if constexpr (player_world::kEnablePlayerWorldRearm) {
-        boot_log_line(player_world_spawn::install()
-            ? "PLAYER-WORLD fresh native capture installed; deferred spawn remains closed"
-            : "PLAYER-WORLD fresh native capture REFUSED; no legacy-pointer fallback");
+        const bool fresh = player_world_spawn::install();
+        const bool retired = fresh && player_world_retirement::install();
+        const bool cycle = retired && player_world_menu_cycle::install();
+        boot_log_line(fresh && retired && cycle
+            ? "PLAYER-WORLD native package READY fresh=1 retirement=1 menuCycle=1 consumer=full-postrender-tail"
+            : "PLAYER-WORLD native package REFUSED; no legacy-pointer fallback");
     } else {
         // Preserve the deployed one-shot baseline while the per-world native
         // service/retirement boundary is still under static investigation.

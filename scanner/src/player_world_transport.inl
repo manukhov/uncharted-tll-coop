@@ -1,7 +1,7 @@
 // Shared scene admission for all legacy player/world datagram families. A key
 // is the native Task/Level/continue/spawn identity, not a raw object address.
 // Matching keys still require the users to choose the same authored checkpoint;
-// this does not create story progression or reconnect after explicit departure.
+// this does not create story progression or reconnect a different process.
 namespace player_world {
 namespace {
 constexpr std::uint32_t kEnvelopeMagic = 0x45575043; // CPWE
@@ -31,6 +31,8 @@ std::atomic<unsigned> ingress{};
 Key local_key{}, peer_key{};
 std::uint64_t serial{}, peer_process{}, peer_epoch{}, peer_echo{};
 std::uint64_t sent_local{}, sent_echo{}, last_paired_local{}, last_paired_peer{};
+Token departure_token{};
+std::uint64_t departure_request{};
 std::uint32_t control_sequence{}, peer_sequence{};
 bool native_ready{}, peer_native_ready{};
 
@@ -48,7 +50,7 @@ bool pin_process(std::uint64_t process) noexcept {
     // Never acquire peer_state_lock while world_lock is held. Control pins the
     // process before native Player state exists; the same identity binds CPLV.
     AcquireSRWLockExclusive(&g_state_net.peer_state_lock);
-    const bool valid = process && !departed() &&
+    const bool valid = process &&
         (!g_state_net.peer_state_session_id || g_state_net.peer_state_session_id == process);
     if (valid) g_state_net.peer_state_session_id = process;
     ReleaseSRWLockExclusive(&g_state_net.peer_state_lock);
@@ -85,7 +87,7 @@ bool known_inner(std::uint32_t magic) noexcept {
     case coop::kWeaponGiveMagic: case coop::kFirePacketMagic:
     case coop::kGrenadeEventMagic: case coop::kGrenadeKinematicsMagic:
     case coop::kBreakableExplosionMagic: case coop::kBreakableProjectileMagic:
-    case coop::kBreakableSyncMagic: return true;
+    case coop::kBreakableSyncMagic: case coop::kPeerLeavePacketMagic: return true;
     default: return false;
     }
 }
@@ -115,13 +117,47 @@ std::uint64_t capture_epoch() noexcept {
     return data_admitted() ? local_epoch() : 0;
 }
 
+namespace {
+// Caller holds peer_state_lock and has drained all admitted legacy dispatches.
+// Keep process/session sequence high-water marks; only old-world values vanish.
+void clear_peer_snapshot_locked() noexcept {
+    g_state_net.peer_state = {};
+    g_state_net.peer_state_world_epoch = 0;
+    g_state_net.peer_state_received_ms.store(0, std::memory_order_release);
+    g_state_net.has_peer_state.store(false, std::memory_order_release);
+    AcquireSRWLockExclusive(&g_state_net.peer_idle_arm_pose_lock);
+    g_state_net.peer_idle_arm_pose = {};
+    g_state_net.peer_idle_arm_pose_assembly = {};
+    g_state_net.peer_idle_arm_pose_received_ms.store(0, std::memory_order_release);
+    g_state_net.has_peer_idle_arm_pose.store(false, std::memory_order_release);
+    ReleaseSRWLockExclusive(&g_state_net.peer_idle_arm_pose_lock);
+}
+int emit_envelope(SOCKET socket, const char* bytes, int size, int flags,
+                  const sockaddr* target, int target_size, const Envelope& envelope) noexcept {
+    alignas(8) std::array<char, sizeof(Envelope)+kMaximumInnerBytes> wire;
+    std::memcpy(wire.data(), &envelope, sizeof(envelope));
+    std::memcpy(wire.data()+sizeof(envelope), bytes, static_cast<std::size_t>(size));
+    const int sent = sendto(socket, wire.data(), static_cast<int>(sizeof(envelope))+size, flags, target, target_size);
+    return sent == static_cast<int>(sizeof(envelope))+size ? size : SOCKET_ERROR;
+}
+} // namespace
+
 std::uint64_t publish_local_world(const Key& key) noexcept {
     if constexpr (!kEnablePlayerWorldRearm) return 0;
-    if (!closed.load(std::memory_order_acquire) || !ingress_quiescent() || departed()) return 0;
+    if (!closed.load(std::memory_order_acquire) || !ingress_quiescent()) return 0;
+    // This is the ONLY authority to clear old-world leave flags. The native
+    // caller must prove fresh primary + old retirement/menu completion first.
+    // Lock order is peer_state -> WorldLock, never the inverse. Closing guards
+    // cannot be admitted, so clear and new epoch publication form one boundary.
+    AcquireSRWLockExclusive(&g_state_net.peer_state_lock);
     AcquireSRWLockExclusive(&world_lock);
     std::uint64_t published{};
-    if (closed.load(std::memory_order_acquire) && ingress_quiescent() && !departed() && serial != UINT64_MAX) {
+    if (closed.load(std::memory_order_acquire) && ingress_quiescent() && serial != UINT64_MAX) {
         published = ++serial;
+        clear_peer_snapshot_locked();
+        g_state_net.local_leave_queued.store(false, std::memory_order_release);
+        g_state_net.peer_left.store(false, std::memory_order_release);
+        departure_token = {};
         local_key = key; native_ready = true;
         sent_local = 0; sent_echo = 0;
         paired.store(false, std::memory_order_release);
@@ -130,6 +166,7 @@ std::uint64_t publish_local_world(const Key& key) noexcept {
         update_pair_locked();
     }
     ReleaseSRWLockExclusive(&world_lock);
+    ReleaseSRWLockExclusive(&g_state_net.peer_state_lock);
     if (published) {
         char line[256]{};
         std::snprintf(line, sizeof(line),
@@ -145,7 +182,7 @@ std::uint64_t publish_local_world(const Key& key) noexcept {
 void pump_control() {
     if constexpr (!kEnablePlayerWorldRearm) return;
     static ULONGLONG last_send{}; // existing receive worker only
-    if (!g_state_net.enabled || !g_state_net.peer_set || departed() ||
+    if (!g_state_net.enabled || !g_state_net.peer_set ||
         g_state_net.recv_socket == INVALID_SOCKET || !g_state_net.idle_arm_pose_session_id) return;
     const auto now = GetTickCount64();
     if (now-last_send < 50) return;
@@ -155,7 +192,8 @@ void pump_control() {
     packet.local = epoch.load(std::memory_order_relaxed);
     packet.echo = peer_epoch; packet.key = local_key;
     packet.role_b = g_net_role_b ? 1 : 0;
-    packet.flags = closed.load(std::memory_order_acquire) ? 2 : (native_ready ? 1 : 0);
+    packet.flags = closed.load(std::memory_order_acquire) ||
+        g_state_net.local_leave_queued.load(std::memory_order_acquire) ? 2 : (native_ready ? 1 : 0);
     packet.sequence = ++control_sequence;
     if (!packet.sequence) packet.sequence = ++control_sequence;
     ReleaseSRWLockExclusive(&world_lock);
@@ -213,7 +251,7 @@ int send_datagram(SOCKET socket, const char* bytes, int size, int flags,
         WSASetLastError(WSAEMSGSIZE); return SOCKET_ERROR;
     }
     std::uint32_t magic{}; std::memcpy(&magic, bytes, sizeof(magic));
-    if (!known_inner(magic)) { WSASetLastError(WSAEINVAL); return SOCKET_ERROR; }
+    if (!known_inner(magic) || magic == coop::kPeerLeavePacketMagic) { WSASetLastError(WSAEINVAL); return SOCKET_ERROR; }
     Envelope envelope{};
     AcquireSRWLockShared(&world_lock);
     const bool valid = data_admitted() &&
@@ -225,12 +263,66 @@ int send_datagram(SOCKET socket, const char* bytes, int size, int flags,
     }
     ReleaseSRWLockShared(&world_lock);
     if (!valid) { WSASetLastError(WSAEWOULDBLOCK); return SOCKET_ERROR; }
-    alignas(8) std::array<char, sizeof(Envelope)+kMaximumInnerBytes> wire;
-    std::memcpy(wire.data(), &envelope, sizeof(envelope));
-    std::memcpy(wire.data()+sizeof(envelope), bytes, static_cast<std::size_t>(size));
-    const int sent = sendto(socket, wire.data(), static_cast<int>(sizeof(envelope))+size, flags, target, target_size);
     // Preserve legacy exact-size success checks and diagnostic payload lengths.
-    return sent == static_cast<int>(sizeof(envelope))+size ? size : SOCKET_ERROR;
+    return emit_envelope(socket, bytes, size, flags, target, target_size, envelope);
+}
+
+void queue_local_leave() noexcept {
+    if constexpr (!kEnablePlayerWorldRearm) {
+        g_state_net.local_leave_queued.store(true, std::memory_order_release);
+        return;
+    }
+    AcquireSRWLockExclusive(&world_lock);
+    const auto current = epoch.load(std::memory_order_relaxed);
+    const Token token = current && current == last_paired_local && last_paired_peer
+        ? Token{last_paired_local, last_paired_peer} : Token{};
+    const bool repeated = g_state_net.local_leave_queued.load(std::memory_order_relaxed) &&
+        departure_token.local == token.local && departure_token.peer == token.peer;
+    if (!repeated) {
+        departure_token = token;
+        if (!++departure_request) ++departure_request;
+    }
+    // Even an unpaired world's menu request closes continuous state. A zero
+    // token is never sent and must not be filled in with a later world's ID.
+    g_state_net.local_leave_queued.store(true, std::memory_order_release);
+    ReleaseSRWLockExclusive(&world_lock);
+}
+
+bool copy_leave_request(Token& token, std::uint64_t& request) noexcept {
+    if constexpr (!kEnablePlayerWorldRearm) return false;
+    AcquireSRWLockShared(&world_lock);
+    token = departure_token; request = departure_request;
+    const bool valid = g_state_net.local_leave_queued.load(std::memory_order_acquire) &&
+        request && token.local && token.peer && token.local == epoch.load(std::memory_order_relaxed) &&
+        token.local == last_paired_local && token.peer == last_paired_peer;
+    ReleaseSRWLockShared(&world_lock);
+    return valid;
+}
+
+int send_leave_datagram(SOCKET socket, const char* bytes, int size, int flags,
+                        const sockaddr* target, int target_size, Token token, std::uint64_t request) noexcept {
+    if constexpr (!kEnablePlayerWorldRearm) return sendto(socket, bytes, size, flags, target, target_size);
+    if (!bytes || size != static_cast<int>(sizeof(coop::PeerLeavePacket))) {
+        WSASetLastError(WSAEINVAL); return SOCKET_ERROR;
+    }
+    std::uint32_t magic{}; std::memcpy(&magic, bytes, sizeof(magic));
+    if (magic != coop::kPeerLeavePacketMagic) { WSASetLastError(WSAEINVAL); return SOCKET_ERROR; }
+    Envelope envelope{};
+    AcquireSRWLockShared(&world_lock);
+    // Departure is allowed AFTER close, but never with a newer origin/target.
+    const bool valid = g_state_net.local_leave_queued.load(std::memory_order_acquire) &&
+        request && request == departure_request && token.local && token.peer &&
+        token.local == epoch.load(std::memory_order_relaxed) &&
+        token.local == last_paired_local && token.peer == last_paired_peer &&
+        token.local == departure_token.local && token.peer == departure_token.peer;
+    if (valid) {
+        envelope.process_session = g_state_net.idle_arm_pose_session_id;
+        envelope.local = token.local; envelope.target = token.peer;
+        envelope.inner_bytes = static_cast<std::uint32_t>(size);
+    }
+    ReleaseSRWLockShared(&world_lock);
+    if (!valid) { WSASetLastError(WSAEWOULDBLOCK); return SOCKET_ERROR; }
+    return emit_envelope(socket, bytes, size, flags, target, target_size, envelope);
 }
 
 IngressGuard::IngressGuard(char* bytes, int& size, const sockaddr_in& source, int source_size) noexcept {
@@ -244,16 +336,25 @@ IngressGuard::IngressGuard(char* bytes, int& size, const sockaddr_in& source, in
         size != static_cast<int>(sizeof(envelope)+envelope.inner_bytes)) return;
     std::uint32_t magic{}; std::memcpy(&magic, bytes+sizeof(envelope), sizeof(magic));
     if (!known_inner(magic)) return;
+    const bool departure = magic == coop::kPeerLeavePacketMagic;
     ingress.fetch_add(1, std::memory_order_acq_rel); counted_ = true;
-    if (!data_admitted()) return;
+    if (departure ? closed.load(std::memory_order_acquire) : !data_admitted()) return;
     AcquireSRWLockShared(&g_state_net.peer_state_lock);
-    const bool process_valid = !departed() && envelope.process_session &&
+    const bool process_valid = (departure || !departed()) && envelope.process_session &&
         envelope.process_session == g_state_net.peer_state_session_id;
     ReleaseSRWLockShared(&g_state_net.peer_state_lock);
     if (!process_valid) return;
     AcquireSRWLockShared(&world_lock);
-    admitted_ = data_admitted() && envelope.process_session == peer_process &&
-        envelope.local == peer_epoch && envelope.target == epoch.load(std::memory_order_relaxed);
+    if (departure) {
+        const auto local = epoch.load(std::memory_order_relaxed);
+        admitted_ = !closed.load(std::memory_order_acquire) &&
+            source.sin_port == g_state_net.peer_addr.sin_port && envelope.process_session == peer_process &&
+            local && local == last_paired_local && envelope.target == local &&
+            envelope.local == last_paired_peer;
+    } else {
+        admitted_ = data_admitted() && envelope.process_session == peer_process &&
+            envelope.local == peer_epoch && envelope.target == epoch.load(std::memory_order_relaxed);
+    }
     ReleaseSRWLockShared(&world_lock);
     if (!admitted_) return;
     std::memmove(bytes, bytes+sizeof(envelope), envelope.inner_bytes);
@@ -267,16 +368,7 @@ void reset_peer_snapshot_for_world() noexcept {
     if constexpr (!kEnablePlayerWorldRearm) return;
     if (!closed.load(std::memory_order_acquire) || !ingress_quiescent()) return;
     AcquireSRWLockExclusive(&g_state_net.peer_state_lock);
-    g_state_net.peer_state = {};
-    g_state_net.peer_state_world_epoch = 0;
-    g_state_net.peer_state_received_ms.store(0, std::memory_order_release);
-    g_state_net.has_peer_state.store(false, std::memory_order_release);
-    AcquireSRWLockExclusive(&g_state_net.peer_idle_arm_pose_lock);
-    g_state_net.peer_idle_arm_pose = {};
-    g_state_net.peer_idle_arm_pose_assembly = {};
-    g_state_net.peer_idle_arm_pose_received_ms.store(0, std::memory_order_release);
-    g_state_net.has_peer_idle_arm_pose.store(false, std::memory_order_release);
-    ReleaseSRWLockExclusive(&g_state_net.peer_idle_arm_pose_lock);
+    clear_peer_snapshot_locked();
     ReleaseSRWLockExclusive(&g_state_net.peer_state_lock);
 }
 } // namespace player_world

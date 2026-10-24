@@ -20,7 +20,7 @@ struct Recipe {
     alignas(16) std::uint8_t persistent_values[kPersistentBytes]{};
     OwnedRemotePlayerIdentity primary{};
     player_world::Key key{};
-    std::uint64_t reset_serial{}, capture_serial{};
+    std::uint64_t reset_serial{}, capture_serial{}, physical_open_serial{}, physical_close_cycle{};
     bool has_persistent{}, has_task_key{}, valid{};
 };
 static_assert(kPersistentBytes == 3616);
@@ -98,6 +98,7 @@ void publish(Recipe& value) {
         value.reset_serial == reset_serial.load(std::memory_order_acquire)) {
         // A duplicate native retry must not invent another location epoch.
         if (!recipe.valid || recipe.reset_serial != value.reset_serial ||
+            recipe.physical_close_cycle != value.physical_close_cycle ||
             recipe.primary.record != value.primary.record ||
             recipe.primary.generation != value.primary.generation) {
             value.capture_serial = capture_serial.fetch_add(1, std::memory_order_relaxed) + 1;
@@ -107,7 +108,12 @@ void publish(Recipe& value) {
         }
     }
     ReleaseSRWLockExclusive(&recipe_lock);
-    if (published) boot_log_line("PLAYER-WORLD fresh PRIMARY recipe owned: Continue88/PersistentE20; no replay authorized");
+    if (published) {
+        // A fresh primary is not interchangeable with the previous scene's
+        // snapshots, including a script path that bypassed the reset observer.
+        player_world::close_for_reset();
+        boot_log_line("PLAYER-WORLD fresh PRIMARY recipe owned: Continue88/PersistentE20; no replay authorized");
+    }
 }
 
 // The TaskManager seam transfers its live R14 into the unused native R9.
@@ -119,7 +125,10 @@ void* capture_call(void* output, std::uint32_t route, const void* native_continu
     const DWORD entry_error = GetLastError();
     Recipe candidate{};
     candidate.reset_serial = reset_serial.load(std::memory_order_acquire);
-    const bool copied = route == 0 && capture_ready.load(std::memory_order_acquire) &&
+    candidate.physical_open_serial = player_world_open_serial_for_capture();
+    candidate.physical_close_cycle = player_world_close_cycle_for_capture();
+    const bool copied = route == 0 && candidate.physical_close_cycle != UINT64_MAX &&
+        capture_ready.load(std::memory_order_acquire) &&
         seh_copy_inputs(native_continue, persistent, task_manager_call ? arg4 : nullptr, candidate);
     SetLastError(entry_error);
     void* const result = reinterpret_cast<SpawnFunction>(g_module + kSpawnFromDescriptorRva)(
@@ -127,6 +136,8 @@ void* capture_call(void* output, std::uint32_t route, const void* native_continu
     const DWORD native_error = GetLastError();
     if (copied && result == output &&
         candidate.reset_serial == reset_serial.load(std::memory_order_acquire) &&
+        candidate.physical_open_serial == player_world_open_serial_for_capture() &&
+        candidate.physical_close_cycle == player_world_close_cycle_for_capture() &&
         seh_bind_primary_output(output, candidate.primary)) publish(candidate);
     SetLastError(native_error);
     return result;
