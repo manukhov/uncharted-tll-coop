@@ -12,8 +12,11 @@ NEW BOUNDED CANDIDATE: full-postrender native callback tail, POSITIVE old owned
 OnKill->heap-unlink witness, observed physical menu close/reopen and fresh primary
 recipe. Per-world leave envelopes prevent an old menu packet closing a new pair.
 Source compiled/reviewed, labels saved/read back, rollout enabled and fresh pair
-A26552/B22404 now injected with DB88444B... image; both native packages READY.
-Watchers24112/13504 READY. User first checks SAME EMPTY scene BEFORE menu exit.
+A26552/B22404 ran DB88444B... image; both now absent, watchers EXIT0/secondChance0.
+User reports NPC positions/state entirely unsynchronized; both logs explicitly
+ENEMY-ROOT disabled, so this was NOT an active enemy-sync exam. First world
+paired/owned in both; visible Player movement and menu-rejoin outcome still
+unconfirmed, user asked. Only epoch1/capture1, no second-world/free-ticket result.
 No runtime success claimed. The old
 TaskManager31D2/graph-lock service was NOT installed; direct-reset exclusion is
 not generalized. Latest entry is authoritative over the earlier staged handoff.
@@ -45584,3 +45587,41 @@ process exit/crash outcome observed. First user stage requested SAME EMPTY in
 BOTH, report mutual visible Players/localcontrols/NPC absence BEFORE menu exit.
 Only then A-menufirst/B-menunext ->sameenemycheckpoint BOTH as prediction above.
 No automatic repeat/closure/rebuild or claimed behavioral success from READY.
+
+### 2026-10-24 — Classify NPC-unsynchronized feedback in the enemy-OFF rejoin run
+
+User reports enemies' positions AND state are entirely unsynchronized. CONFIRMED
+configuration, NOT an active-NPC-test rejection: exact A26552/B22404 DB88444B...
+logs each say ENEMY-ROOT disabled by default after rejected lagging run; launch
+passed TLL_ENEMY_ROOT_SYNC=0. Do not present this run as an attempted/working NPC
+synchronizer or infer a native mapping/setter failure from intentionally OFF.
+Enemy AI/HP/damage/state authority is not implemented by the root-only prototype.
+The older enabled current_player/query-budget failure remains unresolved.
+
+NARROW runtime observations for FIRST world only (not visual confirmation):
+both prepare epoch1/capture1/reset1/close1/opened1/openSerial1, same authored
+task4CAE9B7E/Continue6967A7F4,0,1D6A4C10 and mutually pair1/1. A owns
+record10E02111E0/gen2497, B10E0210718/gen1977; both sync1. Each retires exactly
+one captured stock Nadine and logs same-tuple TaskManager suppression. No epoch2,
+capture2, new-positive-old-free witness, owned menu-reset or CPLV result recorded
+in the saved feedback log. Do NOT confirm repeated menu rejoin/NPC absence/
+visible Player movement merely from those markers. User asked about Player
+visibility/movement separately from enemy mismatch.
+
+Both original games now absent. Watcher events each record EXIT code0x0 and
+second_chance0. Later first-chance history/NO_SECOND_CHANCE_CONTEXT is NOT a new
+crash PC and must not be attributed to142227B8C or the new service. User asked
+whether he closed both or saw a crash; intent/report still pending. Agent did
+not kill/relaunch/toggle/inject anything this feedback turn. Exact feedback log
+preserved as reports/menu-rejoin-20261024201532Z/
+npc-unsynced-feedback-locomotion_hook.log; exact DLL/PDB/boot/watchers unchanged.
+
+Next enemy work must fix actual admission cost/lifecycle before enabling: the
+old ENR2 startup/leave comments assume immutable ownedReady/terminal leave, but
+new Player rejoin can replace/reset those values. A bounded enemy session needs
+an explicit pinned native player-world epoch and terminal stop on epoch change,
+not a silent enemy rearm or sampling a leave flag that a later world clears.
+This is a SOURCE integration frontier, not a current enabled mutation or a
+reason to raise1ms budget/remove late actor identity checks. Separately resolve
+the first record+8 query-bracket stop before any fresh enemy runtime prediction.
+No code/IDB labels changed, new test harness or repeated game launch this unit.

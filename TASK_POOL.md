@@ -27,7 +27,12 @@ All world/leave packets target exact peer-world, CPLV repeats retain OLD token;
 only authorized fresh-world publication clears old leave flags. Both worlds must
 advance. Short actor tuple locks, pending queues clear and key consumer caches
 epoch-guarded; old raw VEH replay disabled when enabled. EnemyOFF/appearancePARKED.
-ACTIVE EXAM: labelsave2126/99/3True+readback done; enabledDB88444B...buildpass,
+FEEDBACK: A26552/B22404 nowabsent, bothwatchersEXIT0/secondchance0; userclose
+intentasked. UserreportsNPCpositions/stateNOTsynced; channelexplicitlyOFF in
+BOTHlogs, NOTactiveenemytest. Firstepoch1/1paired+owned+stockNPCretiredmarkers,
+butvisualPlayerbehavior/secondmenu-loadnotconfirmed; userasked. Noepoch2/free
+ticketresult. Preserve DB88444B...+feedbacklog; noautomaticrelaunch/toggle.
+Priorstart: labelsave2126/99/3True+readback done; enabledDB88444B...buildpass,
 A26552/B22404 injected, bothnativepackageREADY; watchers24112/13504 READY.
 reports/menu-rejoin-20261024201532Z exactDLL/PDB+bootlog. UserFIRSTsameEMPTY,
 reportmutualpresence BEFOREmenu ->bothmainmenus ->sameenemycheckpoint. Requiremutualvisible
