@@ -12,6 +12,17 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy Synchronization (2026-10-24)
 
+RELOCATION CORRECTION BUILT, RUNTIME PENDING: matcher/currentProcessveto now
+useexactcapturedrecord/gen +currentnativeargA8/BC/VT/OnKill/currentrecord+8
+rereads. Spawnaddresslogonly; entryObject/matchedObjectwillbindtiming. Native
+mover1415FDE50 copiesobject/rebindsrecord+8, nowlabeled/saved/readback. DLL
+D6AC5B3F... freshbuild/source/native reviewpass. No loosecurrent-slotadoption,
+newwait/framework/persistencepatch. LatestCOOP_STATUShas3kindsevidence,H1/H2/H3
+andprelaunchprediction. NEXT freshpair,enemyOFF,sameEMPTY,bothownershipCAPTURED,
+thenA-menufirst/B-menunext,requireseen7/nativeargmatch/slot1Live0anduseroutcome.
+OldsamePCmaypersistifrelocationhappenedafterresetorvisitorsneverreachedowner;
+doNOTdeclarecausalityfixedbeforeexam. Noautorepeat/rearm/input/perfclaim.
+
 OWNED-RESET RUNTIME REJECTED: user reports crash; B20628 fresh secondchance
 SAME142227B8C/nullHavoklock+TLS. A9172 exit0, bothgames/watchersgone. Both
 ownershipCAPTURED butresetseen0/forced0/slot1Live1. FreshBownedweakrecord/id

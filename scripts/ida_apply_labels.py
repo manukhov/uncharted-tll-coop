@@ -8,6 +8,18 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-10-24: Process weak identity survives heap object relocation ---
+    0x1415FDE50: (
+        "RelocatableHeap_MoveBlockAndRebindRecord",
+        "STATIC RelocatableHeap142ABBD68 compaction family. Computes new-old "
+        "delta; object virtual+8 fixup at1415FDF01, full allocation memmove at "
+        "1415FDF0D, record+0=newBase at1415FDF1C and record+8=newObject at1F. "
+        "SpawnProcess1417C3CC5 assertsProcess==record->m_pMem, publishes+A8 "
+        "backlink at1417C3CFB. A8/BC move with object; weak record/gen survives. "
+        "Native retained resolver followsCURRENT record+8, not an original raw "
+        "address. Fresh B20628 owner has same record/id at a different address; "
+        "actual move timing relative to reset was not captured.",
+    ),
     # --- 2026-10-24: owned-replica reset phase before menu Havok close ---
     0x1413B9820: (
         "ActorReset_ResetActors",
@@ -16197,6 +16209,12 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x1415FDF1F: (
+        "STATIC rebind stable allocation record+8 to moved object AFTER memmove. "
+        "For Process, +A8 record/+BC generation are copied unchanged. Ownership "
+        "must follow record/gen and validateCURRENT native argument, not pin "
+        "the captured spawn address (failed B20628 mod matcher)."
+    ),
     0x1413C6B1F: (
         "STATIC exact E8 FC2CFFFF ->ActorReset_ResetActors1413B9820, "
         "ECX=reason/EDX=bool, return1413C6B24; AFTER explicit primary kill. "

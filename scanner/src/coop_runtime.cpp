@@ -971,6 +971,8 @@ void* g_spawn_out = nullptr;
 PVOID g_spawn_veh = nullptr;
 
 struct OwnedRemotePlayerIdentity {
+    // Spawn-time diagnostic only. RelocatableHeap can move the allocation;
+    // ownership is the immutable record/generation, NOT this address.
     std::uintptr_t object = 0;
     std::uintptr_t record = 0;
     std::uint32_t generation = 0;
@@ -30338,16 +30340,19 @@ struct OwnedRemoteResetScope {
     bool permit;
     std::uint8_t seen;
     std::uint8_t forced;
+    std::uintptr_t entry_object;
+    std::uintptr_t matched_object;
 };
 
 bool seh_matches_owned_remote_reset_player(
     void* player, const OwnedRemotePlayerIdentity& identity) {
-    if (reinterpret_cast<std::uintptr_t>(player) != identity.object ||
-        identity.object == 0 || identity.record == 0 || identity.generation == 0) {
+    if (player == nullptr || identity.record == 0 || identity.generation == 0) {
         return false;
     }
     // The iterator owns its native object argument; this tuple check is not a
     // lease for arbitrary callers and never adopts a slot1 occupant on its own.
+    // Native relocation preserves record/gen and rebinds record+8. Require that
+    // CURRENT pointer to be this native argument, never the spawn-time address.
     __try {
         const auto* bytes = static_cast<const std::byte*>(player);
         return *reinterpret_cast<const volatile std::uintptr_t*>(bytes) ==
@@ -30359,11 +30364,36 @@ bool seh_matches_owned_remote_reset_player(
                (*reinterpret_cast<const volatile std::uint8_t*>(bytes + 0x40) &
                     0x04) == 0 &&
                *reinterpret_cast<const volatile std::uintptr_t*>(
-                   identity.record + 8) == identity.object;
+                   identity.record + 8) == reinterpret_cast<std::uintptr_t>(player) &&
+               *reinterpret_cast<const volatile std::uintptr_t*>(bytes + 0xA8) ==
+                   identity.record &&
+               *reinterpret_cast<const volatile std::uint32_t*>(bytes + 0xBC) ==
+                   identity.generation &&
+               (*reinterpret_cast<const volatile std::uint8_t*>(bytes + 0x40) &
+                    0x04) == 0 &&
+               *reinterpret_cast<const volatile std::uintptr_t*>(
+                   identity.record + 8) == reinterpret_cast<std::uintptr_t>(player);
     } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ||
                 GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR
                     ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
         return false;
+    }
+}
+
+std::uintptr_t seh_observe_owned_remote_reset_address(
+    const OwnedRemotePlayerIdentity& identity) {
+    // Diagnostic snapshot at scope entry ONLY: never used as a cached effect
+    // target. The native iterator's current argument supplies that authority.
+    if (identity.record == 0 || identity.generation == 0) return 0;
+    __try {
+        const auto candidate = *reinterpret_cast<const volatile std::uintptr_t*>(
+            identity.record + 8);
+        return seh_matches_owned_remote_reset_player(
+                   reinterpret_cast<void*>(candidate), identity) ? candidate : 0;
+    } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ||
+                GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR
+                    ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+        return 0;
     }
 }
 
@@ -30389,6 +30419,7 @@ __declspec(noinline) bool __fastcall hooked_owned_player_should_reset(
         caller == g_module + kActorResetShutdownPredicateReturnRva ? 2 :
         caller == g_module + kActorResetKillPredicateReturnRva ? 4 : 0;
     if (stage == 0) return stock;
+    scope->matched_object = reinterpret_cast<std::uintptr_t>(player);
     scope->seen |= stage;
     if (!stock) scope->forced |= stage;
     return true;
@@ -30401,6 +30432,8 @@ void log_owned_remote_reset_result(
          << std::hex << scope.identity.object
          << " record=0x" << scope.identity.record
          << " generation=0x" << scope.identity.generation
+         << " entryObject=0x" << scope.entry_object
+         << " matchedObject=0x" << scope.matched_object
          << " seen=0x" << static_cast<unsigned>(scope.seen)
          << " forced=0x" << static_cast<unsigned>(scope.forced)
          << std::dec << " permit=" << scope.permit
@@ -30431,8 +30464,8 @@ void __fastcall hooked_owned_actor_reset(int reason, std::uint8_t flag) {
         g_module + kThreadContextGetCurrentProcessRva)();
     OwnedRemoteResetScope scope{
         g_owned_remote_player,
-        reinterpret_cast<std::uintptr_t>(current_process) != g_owned_remote_player.object,
-        0, 0};
+        !seh_matches_owned_remote_reset_player(current_process, g_owned_remote_player),
+        0, 0, seh_observe_owned_remote_reset_address(g_owned_remote_player), 0};
     void* const previous = FlsGetValue(g_owned_reset_fls);
     if (!FlsSetValue(g_owned_reset_fls, &scope)) {
         boot_log_line("REMOTE-PLAYER-RESET REFUSED FLS publication; stock reset");
@@ -30525,7 +30558,7 @@ bool install_owned_remote_player_reset() {
     // Once published, both hooks/relay and FLS remain resident even if readiness
     // fails: pass-through hooks must never point at released memory.
     boot_log_line(ready
-        ? "REMOTE-PLAYER-RESET READY build=2026-10-24owned-reset scope=1413C6B1F reason=2 stages=3 nativeKill=1 fls=1"
+        ? "REMOTE-PLAYER-RESET READY build=2026-10-24owned-reset-r2 scope=1413C6B1F reason=2 stages=3 nativeKill=1 fls=1 identity=record-generation"
         : "REMOTE-PLAYER-RESET REFUSED restore/readback; resident pass-through, spawn disabled");
     return ready;
 }

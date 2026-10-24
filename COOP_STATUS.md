@@ -7,8 +7,9 @@ second-chance SAME142227B8C/null Havok lock+TLS. A9172 exits0, no second chance;
 both games/watchers now absent. Both owned tuples were CAPTURED, but BOTH reset
 logs show seen0/forced0/slot1Live1. Replica was NOT retired by this implementation.
 Fresh B dump proves owned record10E0205E08/gen359 at NEW object10E023CF00,
-where capture logged10E118CC80. Immutable raw-address equality rejected this
-same weak identity; this is a concrete defect in the new matcher, not evidence
+where capture logged10E118CC80. Immutable raw-address equality rejects this
+same weak identity at a changed address; this is a concrete matcher defect,
+but the move's timing relative to reset was not captured. This is not evidence
 that native3pass retirement was executed and insufficient. Native relocation
 1415FDE50 copies object then rebinds record+8; captured raw pointer is not identity.
 NEXT use immutable owned record/gen plus current native-argument validation,
@@ -44339,3 +44340,66 @@ address only as diagnostic metadata. Current-process exclusion must use that
 same relocatable identity. Keep reason2/observer/3returnPC limits, FLS cleanup,
 native3pass ordering, terminal spawn gate, and no arbitrary slot adoption. New
 test needs its own image/prediction; do not repeat0764C5BF... unchanged.
+
+## 2026-10-24 — Correct owned reset to follow immutable weak identity across relocation
+
+**IMPLEMENTED, not a runtime-confirmed crash fix:** removed BOTH spawn-address
+constraints from the matcher. Immutable authority is ONLY our captured
+{record,generation}. For the engine's current visitor argument, require exact
+PlayerVT, +A8record/+BCgeneration, not enteredOnKill, and CURRENT record+8 equal
+that argument, with final rereads. Wrapper current-process veto uses this same
+identity rule, not the obsolete spawn pointer. No new slot1 adoption/resolver
+native call, persistence write, directKillTree or broad reset scope was added.
+Captured address is diagnostic only. New entryObject is a checked record+8
+snapshot BEFORE native reset; matchedObject records actual admitted native
+visitor argument. Neither address is a cached effect target or lifetime lease.
+
+**Competing explanations / quota before new exam:**
+
+1. CONFIRMED runtime identity evidence: new dump's exact owned record/gen
+   10E0205E08/359 occurs at10E023CF00, not captured10E118CC80; collision owner
+   independently agrees. Old binary574E9 and57548 reject changed addresses.
+   This proves the matcher defect; it does NOT by itself prove the move happened
+   before zero-stage reset. entryObject/matchedObject now distinguish that timing.
+2. STATIC concrete writer: RelocatableHeap_MoveBlockAndRebindRecord1415FDE50
+   invokes virtual+8 fixup at1415FDF01, memmove1415FDF0D, writes record+0/newbase
+   at1415FDF1C and record+8/newobject at1415FDF1F. Full object copy preserves
+   Process+A8/+BC. RelocatableHeap RTTI/vtable142ABBD68 independently binds the
+   subsystem; compaction driver1415FC340 reaches mover via1415FD700/1415FD820.
+3. Independent spawn/resolver contract: SpawnProcess1417C3CC5 asserts
+   pProcess==(Process*)pBlock->m_pMem, publishes record+8=Process at1417C3CF7 and
+   Process+A8=record at1417C3CFB. Retained resolvers1410F0D10/1410F0F60 follow
+   current record+8 and comparegeneration, never original raw address. Reset
+   iterator also resolves its tree links through record+8. Prior relocation
+   callback14109DC40 and October18 findings are structurally consistent.
+
+H1: raw-address pinning prevented admission after a PRE-reset relocation; now
+owned visitor argument should match and all3passes should execute. H2: relocation
+was only AFTER reset and another tree/FLS/eligibility condition prevented visits;
+corrected markers can still show seen0, disproving sufficiency of this correction.
+H3: native teardown is admitted but a later fault still occurs; seen7/forced7
+with same142227B8C would require a new lifecycle mechanism, not more address loosening.
+No proof of FLS loss, orphaning or unvisited tree is claimed from oldseen0.
+
+**Verification:** source/native reviewers found no material blocker. Build
+2026-10-24owned-reset-r2 succeeds. DLL SHA256
+D6AC5B3F435ADBF846CE78E787869A9A1623D009C5CE90E37422A7FFF86F9324;
+PDB FDBF98F7A587D58F3B774DF418E8B42FC914045ABDFEDD6BEB66DDBC2ED1E7B1.
+No game/watcher alive before new exam. Saved soleida/tll.i64 via label script:
+reports/apply_owned_reset_relocation_20261024.txt records2076functions/93data/
+3types, save_database returned True. MCP restarted; mover name/comment/copies
+and rebind stores read back. No new database or standalone observer framework.
+
+**Revised falsifiable prediction BEFORE launch:** fresh normal LocalPair2,
+enemyOFF, existing separate1800s crash watchers and exact DLL/PDB preservation.
+User first loads SAME EMPTY scene and reportsready BEFORE menu exit. Require
+bothOWNERSHIP CAPTURED. Then A/Chloe exitsmenu first and B/Nadine exitsmenu next,
+leave both open. If H1 is sufficient, owned record/id remain constant even if
+entryObject/matchedObject differ from capturedobject; logseen=7 (andforced7 if
+stock persistence still rejects), flsRestored1, slot1Live0, and both copies stay
+in menu without142227B8C. Markers alone do not prove rendered stability.
+seen0/matchedObject0 or a valid entryObject without native hits keeps H2 open;
+same crash after full admission supports H3. Ownership refusal/no stage or
+different crash are not success. No automatic repeat/rearm, agent game input,
+safe level-reload rearm or performance claim. User clarification of the last
+run's exact crash stage remains pending; wrapper logs prove bothreason2 resets ran.
