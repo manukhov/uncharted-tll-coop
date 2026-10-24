@@ -2,12 +2,14 @@
 
 ## Current user priority / handoff (2026-10-24)
 
-ACTIVE NEW EXAM (20:02 MSK): A17736/B14220 launched/injected with D6F9BBF0...
-native-spawner-kill image; both nativeSpawnerKill1/generationBudget1 and local
-look/reset READY, enemyOFF. Watchers23832/22156 both READY. Artifacts under
-reports/native-spawner-kill-20261024-2003 (folder label is not launch time).
-User alone loads sameEMPTY and reportsready; inspect exact reciprocal spawner
-result and visible NPC absence BEFORE any menu test. No new result yet.
+CURRENT EXAM REJECTED: user screenshot shows extra NPC in BOTH A17736/B14220.
+Both logs: exact NPC found, correct native getter1401D5C80 returnsNULL,
+status=spawner-missing, nativeCalled0, actorDead0, companionRetired0. Native
+spawner Kill was NEVER called. No further repeated kill, hook bypass or claim
+of suppression success is justified. Both games/watchers remain live at this
+inspection; explicit peer leave still untested. Outcome/screenshot preserved in
+reports/native-spawner-kill-20261024-2003. Next STATIC trace dynamic/omitted
+spawner provenance and specific companion creator, not another identical launch.
 
 NPC EXAM REJECTED: user reports stock Nadine did NOT disappear. A7872/B13516
 each log8 captured distinct weakrecord/generation identities,8 native
@@ -44830,3 +44832,32 @@ own-spawner provenance, nativeCalled1/nativeReturn1/actorDead1/bit04 and NO
 replacement generation; user must see NPC absent and both Players functional.
 Existing explicit peer-leave test remains separately pending. No live rebuild,
 agent game input, automatic repeat/rearm or success claim from startup markers.
+
+### 2026-10-24 — REJECT current-spawner retirement: both native getters return null
+
+REJECTED usable removal: user reports NPC stands in BOTH copies and supplies a
+side-by-side screenshot showing an extra blue-shirt character in each scene,
+in addition to local and remote Players. Exact D6F9BBF0... image, original PIDs
+A17736/B14220. Preserved spawner-missing-rejected-locomotion_hook.log and
+user-npc-present-both.png under reports/native-spawner-kill-20261024-2003.
+
+A: captured NPC record10E020ABB0/gen4D4, observed object10E0D00300.
+B: record10E020AB60/gen4D1, object10E0DAEF00. BOTH log companionFound1,
+statusspawner-missing, getter7FF6E1885C80 (module+1D5C80), spawner0,
+nativeCalled0/nativeReturn0/actorDead0/companionRetired0, slot1Live1.
+This is a pre-effect provenance refusal, NOT evidence EntitySpawner_Kill ran
+but failed to inhibit respawn. No other kill or live patch was attempted.
+Watchers still READY/live at inspection, no exit/crash classification yet.
+
+Competing origins remain HYPOTHESIS: H1 direct scripted creation with PSI+58null;
+H2 authored EntitySpawner but +51bit08 prevents publishing actor+150 despite
+own-spawner+30/+38 reciprocity; H3 earlier link reset/other maintained owner.
+Null actor+150 ALONE does not distinguish H1/H2. Existing initialization
+141E7C9F2 explicitly makes that store conditional. Do not invent an authored
+owner from desired id/name or treat raw pointer rereads as a lifetime lease.
+
+NEXT static targets: class-literal NadineBuddy142949620 xrefs1413C2604 /
+14061BD34/14061BEDF, plus reverse own-spawner tuple lookup contract. Generic
+pre-allocation class filter remains an alternative, not a proven active birth
+caller. Preserve donor/bootstrap and local/remote Player paths. No widening to
+all NPCs, factory-null guess, fuse increase, identical relaunch or agent input.

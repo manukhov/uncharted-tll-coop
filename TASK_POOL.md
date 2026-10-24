@@ -12,12 +12,15 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Explicit Peer Departure; preserve confirmed menu cleanup (2026-10-24)
 
-ACTIVE NEW EXAM: A17736/B14220, D6F9BBF0... DLL, nativeSpawnerKill1/budget1 and
-local look/reset READY, enemyOFF. Watchers23832/22156 READY, separate artifacts
-reports/native-spawner-kill-20261024-2003. Actual launch20:02MSK. User loads
-sameEMPTY/reportsready BEFORE menu exit. Verify reciprocal native-spawner kill
-and visible NPC absence/local+remote control. No outcome/success yet; no restart,
-live rebuild or agent input. Latest COOP_STATUS has exact PIDs/creations/evidence.
+CURRENT EXAM REJECTED: A17736/B14220 user screenshot shows extra NPC in both.
+Both exact getter1401D5C80 returnsNULL; spawner-missing/nativeCalled0/actorDead0/
+companionRetired0. This candidate NEVER called native spawner Kill. Both games/
+watchers live at inspection; no explicit-leave result. Exact log + screenshot
+under reports/native-spawner-kill-20261024-2003. Do not repeat same image or
+bypass owner guards. NEXT trace specific NadineBuddy literal xrefs1413C2604 /
+14061BD34/BEDF and native reverse own-spawner lookup: +150null can mean direct
+PSI58null OR authored spawner51bit08 omits publication. No origin proof yet.
+Preserve bootstrap/donor, local+remote Players; static analysis only for now.
 
 NPCREMOVAL REJECTED byuser: A7872/B13516 each8distinctweakidentitycaptures/
 8nativecompanionFound1Retired1 thenfuseREFUSED; NPCstillvisible. Bothgames/
