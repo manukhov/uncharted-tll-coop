@@ -10,13 +10,21 @@ Full campaign co-op between two game copies. Current user-directed order:
   boundary; keep enemy damage/death/HP writes and AI pause OFF.
 - Complete combat authority and remaining player/appearance work separately.
 
-## P0 CURRENT: Enemy Synchronization (2026-10-24)
+## P0 CURRENT: Explicit Peer Departure; preserve confirmed menu cleanup (2026-10-24)
 
-CURRENT R2 EXAM WAITING USER LOAD: A8960/B10816 injectedD6AC5B3F...; bothreset-r2/
-LOCAL-LOOK READY,enemyOFF; watchers8568/17456 BOTH READY1800s. Newrunartifacts
-reports/owned-reset-r2-20261024-1640. Noownershipyetatcheck; useronlyloadsSAMEEMPTY
-sceneandreportsready BEFOREmenuexit. Verifybothcapturedidentitiesthenadmit
-A-menufirst/B-menunext. Noautolaunch/rearm/repeat,gameinputorperformanceclaim.
+CONFIRMED r2MENU RESULT: userreportsnowallnormal. A8960/B10816 bothownedcapture,
+entry/matchedrelocatedaddresses,seen7forced7,FLS1,slot1Live0. Bothnowabsent;
+watchersDETACHEDtimeout/stop—notwatchedexit0. Artifacts/postrunlogpreserved at
+reports/owned-reset-r2-20261024-1640. Boundedmenu-crashrepairconfirmed, notall
+campaign/reset/reconnect/performance. PreserveD6AC5B3F...baseline andnative3passes.
+
+NEW USER SUBTASK: whenAexitsmenu,B'sownedAavatarshoulddisappear,andviceversa.
+NeedsEXPLICITsession-boundleave,not1500mstimeout(Alt-Tabprotectionsremain).
+Networkworkerpublishonly; gameeffectsownedrecord/gen +provedphase. Visualnative
+DontRenderThisFrame routefound; isolatedphysicalcleanupnotyetproved. Pending
+userchoicevisual-onlyvsalso-collision. Transportcanproceedindependently:
+Statev18sessionID+smallleavepacket,endpoint/epoch/sequencechecks,tombstone,
+boundedretransmitinexistingrecvworker withcheckedtimeout. No newgame yet.
 
 RELOCATION CORRECTION BUILT, RUNTIME PENDING: matcher/currentProcessveto now
 useexactcapturedrecord/gen +currentnativeargA8/BC/VT/OnKill/currentrecord+8

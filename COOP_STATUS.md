@@ -2,12 +2,22 @@
 
 ## Current user priority / handoff (2026-10-24)
 
-CURRENT RELOCATION-CORRECTED EXAM WAITING USER LOAD: D6AC5B3F... injected into
-A8960/B10816 (16:39:43/45). Both owned-reset-r2/LOCAL-LOOK READY, enemyOFF.
-Watchers8568/17456 bothREADY,1800s. No newownershipcapture at check; useralone
-loads SAME EMPTY scene and reportsready BEFORE anymenu exit. Then verifyboth
-capturedtuples before admittingA-menuFIRST/B-menuNEXT. Artifact root
-reports/owned-reset-r2-20261024-1640. No success claim or automatic repeat/rearm.
+CONFIRMED BOUNDED MENU RESULT: user reports latest run "now all normal".
+A8960/B10816 both capture owned identity and execute seen7/forced7/FLSrestore1,
+slot1Live0. Entry/matched addresses differ from spawn addresses in BOTH, proving
+pre-reset relocation was handled. No crash reported in this menu scenario.
+Existing watchers later DETACHED(timeout_or_stop), so do not invent watched
+normal process exits; both games are now absent. ExactD6AC5B3F... artifacts at
+reports/owned-reset-r2-20261024-1640, postrun log preserved. This is not universal
+campaign/reset/reconnect or performance validation.
+
+NEW USER REQUEST: replica should disappear in the surviving copy when the other
+player exits to menu, symmetrically. Implement explicit session-bound leave,
+NOT the1500ms snapshot timeout: June29 alt-tab lastHP/root/death protection stays.
+Network thread only publishes departure; native/visual action needs owned identity
+and proved game phase. Existing visibility hook can suppress body/weapon through
+native DontRenderThisFrame; safe isolated physical removal is not yet established.
+Question pending: visual-only versus full collision removal. No new game launch.
 
 LATEST RUNTIME REJECTED: user reports crash again; watcher confirms B20628
 second-chance SAME142227B8C/null Havok lock+TLS. A9172 exits0, no second chance;
@@ -44429,3 +44439,52 @@ exit yet. NEXT inspect both OWNERSHIP CAPTURED then admit the written scenario.
 Do not mistake READY or absence of crash while loading for a repaired menu exit.
 No automatic repeat/rearm or performance verdict; tracked work committed/pushed,
 pre-existing untracked tmp/ untouched.
+
+## 2026-10-24 — Confirm relocation-aware local menu cleanup; start explicit peer departure
+
+**CONFIRMED bounded runtime result:** user states latest r2 run is now normal,
+then requests symmetric disappearance of a remote replica when either real
+player leaves. ExactDLLD6AC5B3F.../PDBFDBF98F7... from the preceding entry.
+Both roles' log predictions were reached:
+
+- A8960 captured {record10E020D748,id21E0,object10E0E1E100}; own reason2 reset
+  entryObject=matchedObject10E0E1B380, seen7,forced7,permit1,FLSrestore1,slot1Live0.
+- B10816 captured {record10E020AF48,id1FC1,object10E0EA2B00}; own reason2 reset
+  entryObject=matchedObject10E0DE4500, seen7,forced7,permit1,FLSrestore1,slot1Live0.
+
+This independently demonstrates relocated owned identities admitted to all
+native body/kill visitor predicates, with invalid slot1 resolution afterward;
+user-visible no-crash result supports this specific menu-return repair. Markers
+alone still do not certify every destructor/physics path, general campaign
+stability, other reset reasons or reconnect. No change to localChloeA/NadineB.
+
+Both games/watchers are now absent. Watcher events show DETACHED=1 with
+timeout_or_stop=1 and only3handled thread-name events, NOT normal exit records
+or continuous second-chance coverage through closing. Thus no invented exit0
+or stronger crash-watch verdict. Newpostrun-locomotion_hook.log preserved in
+reports/owned-reset-r2-20261024-1640; no prior artifact overwritten. No relaunch.
+
+**NEW requested behavior / HYPOTHESIS:** explicit local menu exit should send
+a session-bound departure signal; the opposite copy consumes it and removes or
+hides only its owned replica, independently in A->B and B->A directions.
+Mere silence/Alt-Tab is not departure. Preserve June29 confirmed cachedHP/root/
+death safeguards; never synthesizeHP0 or clear last state from a timeout.
+
+Transport audit: StatePacketv17 has no session ID; normal state sender uses an
+unbound/ephemeral send socket and receiver lacks endpoint checks. Existing
+bound recv_socket control-channel precedent has exact configured IP+port checks
+and a per-process session ID. Proposed session-bearingStatev18 + explicit small
+leave message, bounded worker retransmission and terminal epoch tombstone avoids
+late StatePacket resurrection. Existing state_recv_thread currently blocks
+indefinitely; any reuse must check a receive timeout and pump BEFORE every recv,
+not only on quiet periods. Network worker must not call native physics/free.
+
+Visual audit: existing140C990A0 hook forces remotePlayer+1618=1 each frame;
+explicit departure can instead select nativeDontRenderThisFrame before stock.
+Do not assume a one-time DrawControl mask/mesh hide survives existing show
+restoration. Complete per-actor body cleanup/physical retirement while another
+world remains live is not proved; fullResetActors is global and not an isolated
+despawn, and the prior directKillTree equivalence remains REJECTED. An exact
+unconditional postrender consumer call140166884 ->1416229C0 exists, but phase
+alone does not validate an unproved cleanup primitive. User clarification about
+collision removal is pending; transport work is independent and may proceed.
