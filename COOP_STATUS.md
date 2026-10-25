@@ -2,6 +2,22 @@
 
 ## Current user priority / handoff (2026-10-25)
 
+LATEST OVERRIDE: user reports severe shot/death/position divergence, including
+A/Chloe kills remaining alive on B/Nadine. Root-only is NOT combat sync. The
+5CCBD7F4 A19756/B25328 run is REJECTED AS AN ADMITTED EXAM: A's mandatory
+PEER-LIFECYCLE installer REFUSED, A never published/prepared a world and B waited
+for a matching peer. BOTH enemy channels stayed worldEpoch0/queries0/apply0.
+Old aggregate PLAYER-WORLD/LOCAL-LOOK READY markers omitted this dependency;
+the agent missed the refusal. Exact failing installer stage is UNKNOWN. Both
+processes later absent; closure/crash is NOT classified without fresh evidence.
+Source now fails launch readiness closed on every required native dependency
+through PID+creation-bound kernel events, with staged lifecycle diagnostics.
+Actual new slice in review: stable initial enemy lives, native committed Dead
+witness and reliable A->B death request in B's CURRENT HumanActive update. It
+is default OFF, not yet built/run, not full shots/B damage authority. Preserve
+Player sync, menu lifetime safeguards and stock-Nadine removal; appearance stays
+PARKED. No more position-only retry in lieu of the requested combat behavior.
+
 CURRENT USER P0: enemy synchronization; preserve CONFIRMED FIRST-LOAD Player
 sync. User now confirms A26552/B22404 mutual visible Players and synchronized
 movement, and says he closed BOTH himself. WatchersEXIT0/no second chance agree.
@@ -46623,11 +46639,99 @@ launch stdout/stderr, boot-locomotion_hook.log and both private boot logs.
 A19756 creation2026-10-25T11:16:35.7162302+03:00;
 B25328 creation2026-10-25T11:16:37.7328063+03:00; exact retail paths, both alive.
 
-Both show budget=defer-time-query-census/ordinary=POD and native baseline
-package READY. Initial actors0/paired0/worldEpoch0/capture0/match0/apply0/
+Both show budget=defer-time-query-census/ordinary=POD and the OLD incomplete
+native-package READY marker (NOT proof all dependencies installed). Initial actors0/paired0/worldEpoch0/capture0/match0/apply0/
 stopped0/costStop0/censusStop0/budgetPauses0, refreshRequired1/certifiedWindow0:
 expected BEFORE user load, NOT visible-sync success. No stop event signaled.
 User scenario unchanged: SAME enemy checkpoint, start B load~2s after A starts,
 initially NO shooting/aggro/kills. Need visible catch-up +continuing NPC tracking
 and repeated fresh certified windows; combat/death still outside this slice.
-Both copies remain waiting. Runtime/visible outcome PENDING; no unchanged retry.
+Subsequent audit below REJECTS admission; do not retry unchanged.
+
+### 2026-10-25 — Reject 5CCBD7F4 no-admission; require complete bootstrap readiness
+
+REJECTED as an active enemy-sync exam, NOT a movement/packet-latency measurement.
+Fresh boot range in reports/enemy-quota-census-20261025081635Z/
+final-locomotion_hook.log: A19756 PEER-LIFECYCLE REFUSED at line113742; old
+PLAYER-WORLD READY at113757 checks only fresh/retirement/cycle; actual native
+package WAIT at113760. B25328 prepared/published epoch1 at113839..113840 but
+waited for matching peer at113843. A captured fresh primary recipe at113860
+but never PUBLISHED/PREPARED/OWNED. Both final-enemy_root_<PID>.log have
+worldEpoch0, queries/capture/match/apply/pauses0. Therefore there was NO enemy
+admission and no A->B combat writer. The reported visible failure is real;
+diagnosing it as quota/roster failure in this particular run would be false.
+Booted image hashes and exact creations remain in the prior entry. Agent did
+not close this pair; both later absent, exit cause unclassified. Current-vs-prior
+run question pending, not a blocker to fixing the independently proved refusal.
+
+STATIC source correction: native package readiness now requires lifecycle,
+owned reset and Player update as well as fresh recipe/retirement/menu cycle.
+End-of-install COOP-BOOT emits one retained manual-reset READY or REFUSED event
+named by PID and raw process creation FILETIME. Full dependency mask includes
+requested enemy root/combat hooks and !g_dll_inert. Launcher checks REFUSED first,
+waits for exact-process readiness after each injection, and rechecks all copies
+before DONE. Missing installer events/timeouts are refusal, not LoadLibrary
+success. On failure, archive logs and close ONLY original launch Process objects
+with revalidated path/creation; no automatic retry and no game input. PowerShell
+AST and isolated own-process event contract smoke pass; C++ build pending the
+coordinated combat source review. Readiness certifies installers ONLY, not world
+pairing, visible Players or NPC behavior. Staged lifecycle logging preserves
+native checks/return behavior and logs only outside suspended-thread intervals.
+It will distinguish bytes/relay/helper/suspend/protect/restore/readback failure;
+the old failure's exact stage is unknown. No cross-process suspension theory:
+helper enumerator filters its own PID.
+
+### 2026-10-25 — Trace native Human Dead commit and current Active application phase
+
+STATIC (not runtime-confirmed). Competing candidates: AiHitDie's animation
+request/return, raw HP0 or OnKill/absence, cleanup D08, pending FSM request E70,
+and installed Human::Dead entry. Only the last proves this gameplay state was
+installed and its entry completed normally; none proves settled corpse parity.
+
+1. Exact Pirate vtable14294B9D0+D08=14049E670 tailcalls shared
+14042B400 CharacterDeathCleanupAndPublishFriendDied. This is NOT Player-only:
+NpcActive14042D120 calls it from HP-dead paths at14042D278/14042D5CD
+(return PCs14042D27E/14042D5D3), then E70. Shared cleanup publishes npc-death
+at14042B63F and ai-enemy-death at14042CDA7; its return alone is not Dead commit.
+2. Exact E70=1404A0B20 Human_RequestDeadProcessState writes pending descriptor
+143D46460 after predicate+198. 14004D890 registers Human/Dead, factory1404A09D0.
+Process_SwitchToNewState1416A3FB0 constructs pending state at1416A40E5,
+publishes FSM.current at1416A40E9, sets state.owner+8
+at1416A40EC, clears pending at1416A4112, calls entry+10 at1416A411C.
+Exact HumanDeadVT142949590+10=1404A0780 initializes Dead and owner+558=1;
+it MAY KillTree(owner) at1404A0920. Thus hook captures ONLY qualified numeric
+world/record/generation BEFORE stock, publishes witness AFTER normal return,
+and NEVER rereads owner/state afterwards. Dead update1404A0950 delegates
+14042EA20, including delayed body/ragdoll fallback141E9DCA0 at14042F4A0.
+140432610 is weapon/drop cleanup, NOT a universal ProcessRagdoll constructor.
+3. Exact HumanActiveVT142949558+20=1404A0660 (slot142949578); native dispatch
+1416A574A passes RCX=current state only. HumanActive calls owner+4F8 at1404A0670
+then tailjumps base NpcActive14042D120 at1404A067E. BOTH worker1416A4DC0
+(CurrentProcess set1416A4F0E/update1416A4F16) and synchronous executor
+(set1416A53C0/update1416A53D6) establish current owner. Independent native
+npc-die's third bool at1405420DF can skip AiHitDie while still taking full
+health operation at14054228C; later ordinary Active consumes HP-dead. Exact
+Pirate+D00=141DEE1D0 ABI(npc,int32 damage,uint8 overrideMode,int32 minimumHp,
+bool policy), native script args(maxHP,0,0,false). No arbitrary postrender Die,
+raw HP write, damage-policy bypass or manual FSM mutation is justified.
+
+These are independent vtable/RTTI, field/control-flow, caller/dispatch and
+native script/string provenance kinds. Source hypothesis: after initial unique
+fullKey lives bind in both copies, A native Dead commit sends a reliable keyed
+event. B's CURRENT ordinary HumanActive callback validates same live weak tuple,
+state/FSM/native CurrentProcess and supported HealthSystem, invokes the exact
+full native health operation ONCE, then its original update ONCE. ONLY B's
+normal HumanDead entry can acknowledge death. Native health return is NOT ACK.
+Unsupported native states/policies and prebind deaths refuse; no respawn or
+B-local combat prediction correction claimed. Root reconciliation keeps fixed
+initial life rows and quarantines only positive native retirement witnesses,
+not inferred disappearance/HP0. A real failed read remains terminal even if a
+concurrent cleanup witness later arrives; this conservative race can stop the
+slice and is NOT a guaranteed survivors-continuity proof.
+
+Sole IDB labels persisted via scripts/ida_apply_labels.py, MCP stopped first.
+reports/apply_enemy_dead_state_20261025.txt: apply_labels OK2138 functions,
+101 data names/3types, save_database returned True. MCP restarted PID13644;
+HumanDead_OnEnter1404A0780 and HumanActive_Update1404A0660 readback and exact
+vtable xrefs1429495A0/142949578 PASS; g_HumanDeadStateDescriptor143D46460 PASS.
+No newly confirmed runtime claim and no game launch for these findings yet.

@@ -8266,9 +8266,92 @@ FUNCTIONS = {
     ),
     0x14042B400: (
         "CharacterDeathCleanupAndPublishFriendDied",
-        "Shared death cleanup. If character+0x57C bit 1 is set, publishes "
-        "`player-friend-died` to retained player 0. This is a consequence of "
-        "an authored Player death, not the original death trigger.",
+        "STATIC shared gameplay-death consequences, NOT Player-only and NOT "
+        "the original trigger or completed corpse witness. Exact Pirate+D08 "
+        "uses thunk14049E670. Emits npc-death at14042B63F, my-npc-died and "
+        "ai-enemy-death at14042CDA7 plus death-reason. Character+57C bit1 "
+        "also publishes player-friend-died to retained Player0. Native NPC "
+        "Active calls D08 BEFORE requesting Human::Dead via+E70; do not "
+        "conflate consequence publication with Dead-state entry completion.",
+    ),
+    0x14049E670: (
+        "Character_DeathCleanupAndPublishFriendDied_Thunk",
+        "STATIC5B thunk to14042B400; exact Pirate14294B9D0 virtual+D08 "
+        "(data14294C6D8). NpcActive_AnimPhaseOwnerUpdate calls it on native "
+        "health-dead branches14042D278/5CD, before Human Dead request. "
+        "This observes death consequences, not settled ragdoll creation.",
+    ),
+    0x14042D120: (
+        "NpcActive_AnimPhaseOwnerUpdate",
+        "STATIC native Npc::Active update base, owner=[currentState+8]. "
+        "HumanActive_Update1404A0660 tail-jumps here, so a patch only of "
+        "Npc::Active vtable misses that derived direct-base call. HP-dead "
+        "test+860 leads to owner+D08 at14042D278/5CD then+E70 at284/5D9. "
+        "Normal dispatcher1416A574A supplies RCX=currentState only; extra "
+        "decompiler register parameters are not a four-argument ABI proof. "
+        "Native executor routes establish CurrentProcess(owner). Not an "
+        "arbitrary postrender call or universal special-state death API.",
+    ),
+    0x1404A0660: (
+        "HumanActive_Update",
+        "STATIC exact Human::Active VT142949558 virtual+20 (142949578). "
+        "RCX=current state, owner=state+8; calls owner+4F8 at1404A0670 "
+        "then tail-jumps NpcActive_AnimPhaseOwnerUpdate at67E. Native "
+        "Process state dispatch1416A574A passes only RCX. A possible narrow "
+        "current-NPC health-operation phase must also prove exact live "
+        "state/FSM/weak world/FLS and supported HealthSystem policy. No "
+        "authority follows merely from locating this callback.",
+    ),
+    0x1404A0B20: (
+        "Human_RequestDeadProcessState",
+        "STATIC exact Pirate virtual+E70. When native transition predicate "
+        "+198 accepts, queues Human/Dead descriptor143D46460 in process+C0 "
+        "FSM pending+8 and sets process+3D bit02/+3E bit08. A request, "
+        "not proof that the state entered or corpse exists.",
+    ),
+    0x1404A09D0: (
+        "HumanDead_CreateState",
+        "STATIC Human/Dead descriptor143D46460 factory. Allocates190h, "
+        "constructs Npc::Dead14042F5D0, installs Human::Dead VT142949590, "
+        "stores constructor context at state+10. Process switch later "
+        "publishes FSM.current and state+8 owner before virtual+10 entry.",
+    ),
+    0x1404A0780: (
+        "HumanDead_OnEnter",
+        "STATIC exact Human::Dead VT142949590 virtual+10. Native "
+        "Process_SwitchToNewState1416A3FB0 publishes current state/owner "
+        "at40E9/40EC before call411C. Initializes Dead state and owner+558=1; "
+        "disposable policy can ProcessKillTree(owner) at1404A0920. Capture "
+        "admitted numeric identity BEFORE stock and publish only after "
+        "normal return; NEVER reread owner afterward. This is gameplay "
+        "Dead-state commitment, not completed/settled ragdoll physics.",
+    ),
+    0x1404A0950: (
+        "HumanDead_Update",
+        "STATIC Human::Dead virtual+20. Updates owner auxiliary state then "
+        "invokes NpcDead_Update14042EA20. Current native state context, "
+        "not an arbitrary network-thread replay function.",
+    ),
+    0x14042EA20: (
+        "NpcDead_Update",
+        "STATIC Npc::Dead virtual+20, also called by HumanDead_Update. "
+        "Processes native death animation/physics policy including own "
+        "ragdoll fallback141E9DCA0 at14042F4A0 and delayed body paths. "
+        "No universal immediate ProcessRagdoll factory linkage proved; "
+        "140432610 is weapon/drop cleanup, not corpse construction.",
+    ),
+    0x14042F5D0: (
+        "NpcDead_Construct",
+        "STATIC initializes Npc::Dead vtable/native state storage; used by "
+        "Npc::Dead and derived Human::Dead factories. Construction is not "
+        "state entry or a gameplay death acknowledgment.",
+    ),
+    0x14004D890: (
+        "HumanDead_RegisterStateDescriptor",
+        "STATIC initializer: stores Human string at143D46460, Dead at+8, "
+        "factory1404A09D0 at+10, native token at+18 and kind2 at+1C. "
+        "Identifies the exact descriptor requested by Human+E70; do not "
+        "call this registration function on runtime network input.",
     ),
     0x141839FB0: (
         "AddOrUpdateJoypadDisabledCommands",
@@ -16126,6 +16209,12 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x143D46460: (
+        "g_HumanDeadStateDescriptor",
+        "STATIC descriptor initialized14004D890: Human/Dead strings, "
+        "factory1404A09D0, token+18/kind2+1C. Requested by Human+E70; "
+        "only actual HumanDead_OnEnter normal completion witnesses commit.",
+    ),
     0x143898630: (
         "g_CharacterManager",
         "STATIC CharacterManager singleton: Init141D62F30 checks null then "

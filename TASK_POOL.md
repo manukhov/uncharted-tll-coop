@@ -7,11 +7,37 @@ Full campaign co-op between two game copies. Current user-directed order:
 - Preserve local Chloe in copy A, local Nadine in copy B and current player sync.
 - Work on enemy synchronization now; first-load mutual Player visibility/movement
   USER-CONFIRMED. Preserve it; appearance/hand repair is PARKED.
-- First prove A->B enemy correspondence and a safe native living-NPC movement
-  boundary; keep enemy damage/death/HP writes and AI pause OFF.
+- Implement real A->B NPC death result plus stable surviving-life movement;
+  full shots/B damage authority remains separate. No rawHP/AI-pause fallback.
 - Complete combat authority and remaining player/appearance work separately.
 
 ## P0 CURRENT: Enemy positions after confirmed Player sync (2026-10-24)
+
+AUTHORITATIVE2026-10-25 OVERRIDE: user reports A/Chloe kills remain alive on B
+and major shot/position divergence. Do NOT substitute another root-only test.
+5CCBD7F4 A19756/B25328 NEVER admitted enemy sync: A PEER-LIFECYCLE REFUSED,
+A no world publication, B waiting peer, both enemy worldEpoch0/queries0/apply0.
+Old aggregate READY omitted mandatory lifecycle/reset/update checks; fixed
+source now requires exact PID+creation-bound COOP-BOOT event incl requested
+root/combat hooks+!inert. Staged native installer diagnostics, fail-closed pair
+launch/precise cleanup implemented, not yet built. Exact old failure stage
+UNKNOWN; both games absent, agent did not close, exit cause unclassified.
+Final logs archived reports/enemy-quota-census-20261025081635Z/final-*.
+NEW actual defaultOFF slice being independently reviewed: stable initial
+fullKey/life binding, PirateD08 retirement witness ONLY exact native Active
+callers, HumanDead entry1404A0780 after-normal-return death commit with NO
+post-owner read; reliable A->B keyed death events; B consumes native health op
+141DEE1D0 ONCE from current HumanActive_Update1404A0660, then stock once.
+ACK requires native Dead witness, not HP/native-damage return/absence. Fixed
+per-life rows preserve known live survivors, actual read failures terminal.
+Review blockers before build/launch: final actor revalidation AFTER health walk;
+first native health/Dead effect starts shared30s clock even if no root write;
+Applied attribution requires actual native return +positive Dead (reserved-but-
+aborted must not count). Native ordinary HS/flags proof in progress. No respawn,
+prebind death, B combat prediction or shot/AI authority claim. Labels applied
+soleIDB2138/101/3 saveTrue, MCP restarted/readback+vslotxrefsPASS. Detailed static
+alternatives/evidence in latest COOP_STATUS. Preserve first-load Player sync,
+menu safeguards and confirmed stock-Nadine removal. Appearance PARKED.
 
 LATEST2026-10-25: explicitbudgettime/window/queryquotapause +NEWfullcensuscertificate
 perworkticket IMPLEMENTEDsource; NOTresetstopped. Clock/native/world/read/
