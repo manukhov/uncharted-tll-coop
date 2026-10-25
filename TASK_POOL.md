@@ -39,7 +39,16 @@ after KillTree invalidates generation, so +05 guard kept. Full D00/HS callee
 closure excludes synchronous owner/state destruction before stock Active.
 Earliest-only shared30s clock now covers both roles/worker and every effect;
 finite per-control bind/death deadlines never refreshed by duplicates. All
-source released/reviewed, build/exam next. User confirms failure was NEWESTpair.
+source released/reviewed; final eb0433b build/linkPASS (fixed local ABI alias
+include order after compiler refusal, no failed-build launch). Fresh A270CA7F...
+DLL/PDB archived reports/enemy-native-death-20261025091031Z; A16076/B8844 now
+launched/injected Root+Combat. Complete PID/creation COOP-BOOT READY missing000
+in BOTH, all lifecycle stagescomplete. Initial worldEpoch0/livesReady0/apply0/
+death0 expected BEFOREload, NOT behavior success. User DIRECTsameLIVEcheckpoint,
+when mutualPlayers appear promptly kill ONEordinaryNPC onA/Chloe; Bno shooting;
+within30s effect slice require visible sameBdeath +nativeDead/ACK +survivorroots.
+Visible result PENDING; no full shots/B authority claim. User confirms old
+failure was NEWEST5CCpair, not the prior3430pair.
 No respawn,
 prebind death, B combat prediction or shot/AI authority claim. Labels applied
 soleIDB2143/101/3 saveTrue, MCP restarted/readback+vslotxrefsPASS. Detailed static

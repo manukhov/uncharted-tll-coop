@@ -14,7 +14,9 @@ Source now fails launch readiness closed on every required native dependency
 through PID+creation-bound kernel events, with staged lifecycle diagnostics.
 Actual new slice reviewed: stable initial enemy lives, native committed Dead
 witness and reliable A->B death request in B's CURRENT HumanActive update. It
-is default OFF, source/IDB ready for build/exam below, not full shots/B damage authority. Preserve
+is default OFF ordinarily; fresh A270CA7F... image NOW enabled/launched A16076/
+B8844 with complete bootstrap READY in BOTH. World load/visible death PENDING,
+not full shots/B damage authority. Preserve
 Player sync, menu lifetime safeguards and stock-Nadine removal; appearance stays
 PARKED. No more position-only retry in lieu of the requested combat behavior.
 
@@ -46816,3 +46818,31 @@ state, native policy, concurrent failed read or deadline refusal remains a real
 limitation and must be recorded, not loosened live. No full shot/AI-state sync,
 B-origin kills, prebind death, respawn, second world or full corpse pose parity
 claim. No debugger, menu/input automation or unchanged root-only retry.
+
+### 2026-10-25 12:10 MSK — Launch initial-life native death exam A16076/B8844
+
+Reviewed source d4ee1f9, include-order CurrentOwnerFunction ABI declaration fix
+eb0433b after compiler C2061 (NO game launched on failed build). Final normal
+build/link PASS, expected existing Recipe C4324 only. Immediately launched
+LocalPair2+EnemyRootSync+EnemyCombatSync, no debugger/input/menu automation.
+Prelaunch prediction above. Exact image archived BEFORE launch at
+reports/enemy-native-death-20261025091031Z with launch.log and boot logs.
+DLL A270CA7F2411C7C0D2D659B0C62E7C2D30CB63C477749F5BD652BEC7A9ABBEB4;
+PDB 6F90EB35EF8A082BC9C9FB9DBCF33A65F5708B0ADDDBF9A2364E3849E0737EB3.
+A16076 creation rawFILETIME134373930316047544 /01DD6460AF8FA4B8;
+B8844 rawFILETIME134373930336164256 /01DD6460B0C299A0. Both exact retail path,
+alive on handoff, launcher exit0/DONE16076,8844.
+
+Each required lifecycle callsite stage=complete/restored1/readback1; cleanup/
+menu/companion summary all1. Full PLAYER-WORLD package fresh/retirement/cycle/
+reset/lifecycle/update all1. ENEMY-COMBAT READY; COOP-BOOT READY missing000,
+event1/error0, exactcreation kernel events independently accepted by launcher.
+This verifies complete cold installation ONLY, not the old run's failure cause,
+paired world, movement, NPC death or performance. Initial BOTH enemy logs:
+combat1/livesReady0/boundLives0/worldEpoch0/queries0/capture0/apply0/death0/
+costStop0/censusStop0/budgetPauses0. Expected before user load, NOT sync success.
+User scenario: DIRECT same live-enemy checkpoint BOTH; once mutual Players
+visible promptly kill ONE ordinary enemy on A/Chloe, B does not shoot; report
+whether SAME enemy dies on B and surviving NPCs continue following. 30s bounded
+slice starts on first real sync effect, not menu startup. Visible outcome and
+positive death result PENDING. No repeated unmodified launch/rearm/toggle.
