@@ -31,11 +31,23 @@ NEWSTATIC: exact1..2pageQWSEhotcopies,ValidFIRST/!Bad/exactreadableprotection,
 64lexicalpagecache; coldinstallerONLYretainsVQ.1ms50ms/256call/SEH/nativechecks
 unchanged. OSmetadata-onlyprobe: same422105088BmanagerregionVQ3.5..12msvs
 QWSE17..42us; wallcorrelationNOTCPUcausality/hardlatencyguarantee. Reviewpass;
-freshA0BD2551...build/linkPASS/importK32QWSEconfirmed. Launched/injectedA10696/B23744
-withEnemyRootSync; bothnativechannelsinstalled/waitworldEpoch0/costStop0/queries0.
-reports/enemy-page-query-20261024205736Z exactDLL/PDB+bootlogs. UserDIRECTSAME
-LIVE-ENEMYscene BOTH (NOempty/menufirst;one30sboundedslice), visibleoutcomePENDING.
-NeedBvisiblyfollowA/model+body+responsiveness. AIactions/HP/deathNOTinprotocol.
+freshA0BD2551...build/linkPASS/importK32QWSEconfirmed. A10696/B23744 NOWREJECTED:
+userB/NadinekillnotmirroredtoA/secondspositiondivergence. Acapture144 thencost2site1
+scope1895/query32/other1863us; Bmatch23/apply12 thencumulativewindow1000us,
+site2lastscope14/query10us/132windowqueries. BothACKInspectOnlyquiescent/no signal;
+gameslaterabsent/exitintentasked, noagentclose/crashclassification. reports/enemy-page-query-20261024205736Z
+exactDLL/PDB+terminal logs. QWSEmadeprogressNOTsustainedsync; no2sUDPlatencyproof.
+P0NEXT: workloadadmission/fairphasing+same-passPODbatch staticproof, unchanged
+hard1ms/50ms/256calls/latechecks.50->100msaloneNOTpeakfix/norstallguarantee.
+Deathneedsstableencounter/per-rowretirement+logicalincarnation/worldKey/deathACK;
+currentlysingledeathinvalidateswholeroster/session. HP0/OnKillabsenceNOTdeath.
+Olddamage/corpsehelperNOTsafe: HP-deadearlyreturnskipsnative14054228C/22F5;
+provenanceNOTthreadphase/lifetime/committeddeath. Native deathcommittracePENDING.
+AiHitDieRET/request-activeNOTdeathcommit; newlynamed140504FF0 isdeathANIMATION
+request, notProcessdeath. Nexttrace140660260 current-ownerpostdamage+B8calls
+140660C27/140661538 andBhealthsuppression/presentation, thenworld/lifeeventservice.
+IDBsaved2127/99/3True/restartname+xrefreadbackPASS. AIactions/HP/deathNOTinprotocol.
+NOnewruntimecandidateprepared; nogamebuild/launch orofflineframeworkadded.
 No budgetraise/latechecksremove/identicalretry/debuggerforperformanceexam.
 
 NEW USER CLARIFICATION: the empty->enemy location change was THROUGH MAIN MENU.

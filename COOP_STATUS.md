@@ -1,6 +1,6 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
-## Current user priority / handoff (2026-10-24)
+## Current user priority / handoff (2026-10-25)
 
 CURRENT USER P0: enemy synchronization; preserve CONFIRMED FIRST-LOAD Player
 sync. User now confirms A26552/B22404 mutual visible Players and synchronized
@@ -20,9 +20,18 @@ image-byte checks alone retain VirtualQuery for nonresident code. Exact old
 manager region422105088B: external VQ3.5..12ms vs page query17..42us; this is
 wall-time correlation, NOT pureCPU cause or latency guarantee. Source reviewed,
 fresh A0BD2551... build launched/injected A10696/B23744, both native channels
-installed and waiting worldEpoch0 with no cost stop. User loads same LIVE-ENEMY
-checkpoint directly in both. Runtime/visible result PENDING; latest entry below.
+initially installed/waiting; NOW REJECTED as stable enemy sync. User reports a
+kill in one copy does not kill the peer NPC and positions diverge by seconds.
+B applied12/matched23 then stopped at cumulative1ms/50ms (site2); A captured144
+then stopped census1895us/query32us/other1863us (site1). Both epoch1, no native
+fault/worker gap/external stop; stop ACKs already quiescent. Exact terminal logs
+preserved; both games later absent, exit intent asked (not classified). Page queries made real progress but did NOT
+solve total cost/sustained movement. No actual2-second network delay established.
 Position/rotation only; AI/combat-state/HP/death authority is NOT implemented.
+STATIC: a single NPC death/retirement also changes the whole-roster session and
+can stop all other NPCs. Need per-life row retirement/stable encounter plus
+reliable world-keyed death events, not old scalar damage/rawHP/AI-disable paths.
+Native npc-die provenance is NOT yet a safe replication phase/lifetime proof.
 
 NEW BOUNDED CANDIDATE: full-postrender native callback tail, POSITIVE old owned
 OnKill->heap-unlink witness, observed physical menu close/reopen and fresh primary
@@ -45944,3 +45953,169 @@ bounded private logs; do not infer success from injection, READY, packets or
 counter progress alone. One30-second first-apply slice only, no automatic rearm,
 no combat-state/HP/death authority. If another cost/phase gate stops, preserve
 its exact context and reject that outcome without increasing the budget.
+
+## 2026-10-25 — Reject short-lived root sync; separate load, roster and death blockers
+
+User-visible outcome: killed one NPC in B/Nadine (explicitly clarified),
+corresponding NPC did NOT die in A; positions already diverged by a couple of
+seconds. This is B-local death, NOT an A death failing to mirror to B. Both exact prior
+test processes remain alive with their original creation times and retail path:
+A10696/2026-10-24T23:57:36.7137419+03:00;
+B23744/2026-10-24T23:57:38.7340672+03:00. No crash/normal exit claim.
+
+REJECTED as STABLE movement synchronization: exact A0BD2551... DLL /7376B924...
+PDB pair from the preceding entry. Preserve terminal-enemy_root_10696.log,
+terminal-enemy_root_23744.log and position-and-death-user-rejected-locomotion_hook.log
+under reports/enemy-page-query-20261024205736Z. Both current channel stop/ACKs
+are already stoppedAndQuiescent=True via InspectOnly, NO stop signal or patch.
+No new launch, injection, rebuild, game input or automatic rearm in this audit.
+
+CONFIRMED BOUNDED progression, NOT usable synchronization: A captured144 roots;
+B matched23 and actual native setter returned12 times. This distinguishes the
+new exact-page guard from previous E630... manager-region stop BEFORE matching.
+A recv/match/apply0 is NORMAL for A-authoritative root protocol, not missing A
+network ingress. Its capture144 requires an earlier active/confirmed handshake;
+final paired0 is not evidence that pairing never happened. Cumulative counters
+do not establish when the user's kill occurred relative to the stops.
+
+CONFIRMED terminal WALL timings; no CPU-time or scheduler-cause inference:
+
+| Copy | Stop site | Scope us | Window us | Scope query us | Other scope us |
+| --- | --- | ---: | ---: | ---: | ---: |
+| A10696 | census1 | 1895 | 1895 | 32 | 1863 |
+| B23744 | native guard2 | 14 | 1000 | 10 | 4 |
+
+A context: cost2/time, peakScope1902/peakWindow1902, scope/window24queries,
+161read calls, lastRead7FF795CB8630/module+3898630 (8B), lastQuery10E134F000,
+lastQueryBracket0/pending0; total20559queries/peak250/workSkips92. The current
+read address is set BEFORE copy's entry budget.check(), so it does NOT prove
+the last module-pointer memcpy itself consumed1863us. The bracket can include
+earlier copies/check/bookkeeping/loop work, paging or scheduling. This is not
+the previous >3ms manager protection query: all terminal query brackets sum32us.
+
+B context: cost2/time, peakScope722/peakWindow1000, scope5queries/20reads,
+window132queries/windowQueryBracket171us; total624queries/peak151. LastRead
+10E11B0B3C (4B), lastQuery1118B14000, lastQueryBracket0/pending0. Its LAST scope
+alone is14us, not a1ms single OS call: the cumulative shared50ms work window
+hit1ms. Both worldEpoch1, workerGapMs0/external0/nativeFault0; reason is TIME,
+not the256-query fuse. Work includes guarded copies/checks plus intervening
+native setter/metadata overhead; it is not a total game-frame cost measure.
+
+STATIC workload audit: tick>=50ms runs a FULL census (about24 page calls in
+this terminal pass). A next_capture>=50ms per actor can schedule up to200
+capture-guard scopes/sec for10 NPCs; B processes each latest unseen sequence
+with TWO full identity/ordinary passes plus final BC/OnKill/world/freshness
+checks. Each callback intentionally starts its own lexical cache. Repeated B
+passes reuse SAME callback pages but still reread values/check time. The132
+window queries combine census with multiple callbacks, not receive-worker
+pointer traversal. Lower average cadence alone can still bunch all actors into
+one window; a100ms census leaves only50ms margin under the unchanged150ms lease.
+Do not silently increase budget/lease, reuse cross-callback pages, delete second
+ordinary/final checks, or interpret reduced API cost as solved total cost.
+
+HYPOTHESIS for next root work: reduce admitted DUE workload BEFORE packet/capture
+reservation, fairly distribute actors across windows, and batch adjacent native
+fields independently in EACH ordinary pass. Preserve all pointer-follow order,
+late checks, SEH and terminal1ms/256-call fuses; no worst-case wall guarantee is
+possible from these observations. Competing causes remain normal guard work
+versus unpreemptible paging/scheduling. No new runtime prediction is earned by
+merely changing50 to100ms or adding soft headroom; keep investigation STATIC.
+
+STATIC independent death/protocol blocker, not a regression in a death feature:
+ENR2 v1 has ONLY hello/root, no HP/death/ACK/incarnation/source sample timestamp.
+ordinary() requires raw signed HP+38>0; census identity does NOT inspect HP.
+Thus HP0 can leave the roster unchanged while root processing silently refuses
+that actor. OnKill/weak-handle invalidation fails the ENTIRE census. Removal,
+array reallocation or actor-pointer relocation changes default Roster equality.
+After B applied>0, tick terminally stops on any such gap/change. A normally
+applied==0 and instead resets/re-nonces; B rejects changed sender after
+first_apply!=0. So one death/retirement cannot coexist with sustained root sync
+under the present contract. Absence/query failure/HP0 must NOT be converted into
+a death event. The user's seconds of divergence cannot establish UDP latency
+because native AI continues independently after terminal stops.
+
+Additional STATIC contracts to fix during the redesign: first_apply is set
+BEFORE second ordinary/final guards/actual setter and is not cleared by
+reset_locked; it is a first candidate, not proof of successful application.
+attempted_sequence is reserved BEFORE effect, intentionally lossy for roots;
+it is NOT an applied-death acknowledgment. Existing local weak record/generation
+must not be equated across copies or reused as a logical respawn incarnation.
+
+Death implementation prerequisites, not a request for more offline test code:
+stable admitted encounter session with per-row retirement/tombstones; explicit
+logical life identity tied to full authored Key/world (never adopt a new local
+generation merely because key matches); bounded reliable/deduplicated death
+event and applied ACK; late roots blocked for that incarnation. Maintain A
+authority consistently. Existing replayed Fire/grenade produces REAL native
+attacks, so enabling old scalar damage relay can double-count. B-side kill
+policy and native suppression/presentation still need proof. Worker remains
+metadata-only; native death must use current local owner at a proved game/FLS
+phase, not living-NPC postblend or cached receive-thread pointers.
+
+STATIC recheck of native paths: Attack publisher14027A270 -> target EventHandler
+140410C50 -> attack handler14040E7C0 -> Pirate+1170/140409F70 is the campaign
+damage/reaction chain, NOT permission to replay partial AttackInfo. Direct
+controller replay, lethal base AttackInfo, ProcessKillTree combat deletion,
+RequestDisableAi and legacy raw transform/HP writes remain REJECTED/OFF.
+Old CurrentHpOffset3C is HISTORY; native effective health reads raw+38.
+
+The user's B-side kill reinforces the missing A-authority/B-presentation split:
+mirrored B actions already launch real native A projectiles, so adding the
+old B->A scalar relay is not an independent fix. Need identify the B native
+health/death suppression boundary while preserving hit presentation, or choose
+an explicitly deduplicated alternative authority model. Do not suppress local
+input/projectile presentation or blindly relay raw AttackInfo damage totals.
+
+Native ScriptNpcDieHandler140541EF0 checks Pirate+860/1402F8B40 at14054218A,
+but the HP-dead branch STILL reaches full max-health damage at14054228C and
+conditional AiHitController+B8/140500C20 call1405422F5 unless script v22
+suppresses Die. The disabled apply_scripted_npc_death helper's immediate
+IsDead=>true return can skip corpse transition; it is NOT a faithful general
+native command mirror. Native clean HitDescription70 provenance is strong,
+but does not prove a replication-safe phase, controller lifetime, completed
+corpse transition or idempotence. Three existing IDB annotation overclaims are
+now narrowed; source hooks/writers remain disabled, no fresh runtime admitted.
+
+STATIC deeper distinction: AiHitControllerDie140500C20 return is NOT a death
+commit witness. Missing definition140500F78 or invalid selected index1405010EC
+can return without a selected death animation; special paths1405063D0/6AB0/6E20
+also exist. Its bool a3 is tested on the NO-selection fallback140501413: true
+skips that fallback ragdoll activation; it does NOT universally mean true=death
+and false=knockdown. Do not reopen the rejected direct replay with a bool flip.
+
+Strong STATIC helper now named140504FF0:
+AiHitController_RequestSelectedDeathAnimationState. Independent quota:
+(1) normal Die1405013E8, controller helper1405015C7 and selected-response caller
+140508DAF converge, and callee1418B0580 reaches confirmed
+AnimStateLayer_RequestDirectFade14189CC80;
+(2) exact native strings s_death-vehicle-state140505140,
+s_death-w-gesture-state1405051D6, s_death-state14050525B;
+(3) concrete dataflow owner=controller+8, owner+1A0 animation control, request
+kind2 then binder call1405053C9. This refines an already REJECTED replay helper
+from the archive; the new name is NOT promotion to a safe high-level entry.
+
+1418B0580 initializes request/output and examines enabled32B animation-control
+records(+28 count/+30 array), requires selected node type2, and ONLY on match
+sets request active+0, route+8, owner generation+10 and calls direct fade at
+1418B06AF. Missing/wrong selector can do nothing. Activation proves animation
+admission, NOT Process death, corpse creation/fade completion or idempotence.
+This is animation state, not Process_SwitchToNewState. Do not use the helper's
+return or request-active flag as an ACK that combat death completed.
+
+HYPOTHESIS next precise native trace: the post-damage path140660260 tests HS dead
+and reaches current controller+B8 at140660C27/140661538 while continuing native
+attack handling. Trace its current-owner/authority/argument lifetime and later
+true death transition, then native B health suppression with hit presentation.
+It is NOT yet a proved pending-death consumer or universal completion witness.
+
+IDB handoff: MCP stopped before headless scripts/ida_apply_labels.py on the ONLY
+ida/tll.i64. reports/apply_enemy_death_contract_20261025.txt records2127functions,
+99data,3types and save_database returned True; MCP restarted for readback.
+Readback PASS:140504FF0 resolves its new name and exact code xrefs5013E8,
+5015C7,508DAF; all three narrowed existing names resolve. AST parse/relative
+key audit passes: one unique helper added, no new duplicate keys (20 unrelated
+pre-existing duplicate entries are unchanged). No unrelated label cleanup.
+No game build/writer/hook/transport change or fresh runtime candidate in this
+unit. First-stop evidence and authority/lifetime gaps are the next work, not
+new offline test scaffolding. Games became absent later in this audit; agent
+did NOT close them. User exit intent requested, no crash classification yet.

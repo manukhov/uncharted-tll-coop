@@ -8282,11 +8282,16 @@ FUNCTIONS = {
     ),
     0x140541EF0: (
         "ScriptNpcDieHandler",
-        "Campaign npc-die command handler. Performs a native forced death: "
-        "checks Pirate death state, applies maximum health damage through "
-        "Pirate vtable +0xD00, resolves AiHitController through npc+0x15C8 "
-        "and virtual +0x78, builds a clean 0x70-byte HitDescription, then calls "
-        "AiHitController vtable +0xB8. This is the safe replicated-death model.",
+        "STATIC campaign npc-die command provenance. The HealthSystem-backed "
+        "Pirate+860 check at14054218A is NOT a blanket already-dead early "
+        "return: later control flow reaches maximum-health damage through "
+        "Pirate+D00 at14054228C and conditional AiHitController+B8 Die at "
+        "1405422F5, retaining native v22 suppression. Resolves the controller "
+        "through npc+15C8 and virtual+78; builds a clean70h HitDescription. "
+        "This establishes a native command sequence, NOT a safe replicated-"
+        "death phase/lifetime contract or proof that HP0 already produced a "
+        "corpse. Current actor ownership, scheduler context, authority and "
+        "per-life idempotence still require independent evidence.",
     ),
     0x14055DF80: (
         "ScriptNpcKillHandler",
@@ -8305,8 +8310,12 @@ FUNCTIONS = {
     ),
     0x1402F8B40: (
         "PirateIsDeadViaHealthSystem",
-        "Pirate virtual +0x860. Resolves the HealthSystem at npc+0x4A8 and "
-        "returns its virtual +0x30 dead test; used by ScriptNpcDieHandler.",
+        "STATIC Pirate virtual+860. Resolves HealthSystem at npc+4A8 and "
+        "returns its virtual+30 property (effective current HP<=0). This is "
+        "NOT a corpse/ragdoll, completed gameplay-death or Process OnKill "
+        "predicate. ScriptNpcDieHandler checks it at14054218A but can still "
+        "continue to damage14054228C/conditional Die1405422F5; do not infer "
+        "a blanket early return, idempotence or native mutation authority.",
     ),
     0x141DEE1D0: (
         "PirateApplyDirectHealthDamage",
@@ -8316,10 +8325,29 @@ FUNCTIONS = {
     ),
     0x140500C20: (
         "AiHitControllerDie",
-        "AiHitController virtual +0xB8. Runs the authored NPC death transition "
-        "from a HitDescription. ScriptNpcDieHandler calls it with a zeroed "
-        "0x70-byte description, direction (0,0,1,0), +0x48=-1 and "
-        "+0x64=maxHealth.",
+        "STATIC AiHitController virtual+B8 native death-handling entry from "
+        "a HitDescription. ScriptNpcDieHandler call1405422F5 supplies a zeroed "
+        "70h description, direction(0,0,1,0), +48=-1 and +64=maxHealth, after "
+        "its health-property check/damage and subject to native v22 suppression. "
+        "Command provenance is NOT proof of an arbitrary replication phase, "
+        "current-actor lifetime, completed corpse transition or duplicate-event "
+        "safety. No definition500F78/invalid selection5010EC can return without "
+        "a death animation; normal selection calls140504FF0 at1405013E8. "
+        "a3 is tested on no-selection fallback501413: true skips that ragdoll "
+        "fallback, NOT a universal true=death/false=knockdown distinction.",
+    ),
+    0x140504FF0: (
+        "AiHitController_RequestSelectedDeathAnimationState",
+        "STATIC selected death-animation request helper, NOT combat-death "
+        "commitment or a safe replay entry. Callers1405013E8 (Die),1405015C7 "
+        "and140508DAF converge. Resolves controller+8 owner and its+1A0 "
+        "animation control, selects s_death-vehicle-state at140505140, "
+        "s_death-w-gesture-state at1405051D6 or s_death-state at14050525B, "
+        "builds request kind2 and calls1418B0580 at1405053C9. That binder can "
+        "refuse a missing/disabled/wrong-type selector; its matched branch "
+        "requests AnimStateLayer_RequestDirectFade14189CC80. A normal return "
+        "or activated animation request proves neither completed corpse nor "
+        "health/death authority, idempotence or native actor lifetime.",
     ),
     0x141FCB210: (
         "HealthSystemApplyDamage",
