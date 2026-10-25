@@ -54,8 +54,8 @@ would require a NEW complete same-roster/world/session census before writes,
 typed refusal precedence and unchanged historical lease expiry. NOT implemented,
 NOT a reset of stopped and NOT an earned fresh runtime candidate yet.
 
-LATEST SOURCE: explicit time/window BudgetPaused + per-window complete-census
-certificate implemented; query256/clock/native/lifecycle stops remain absorbing.
+LATEST SOURCE: explicit time/window/query-quota BudgetPaused + complete-census
+certificate implemented; clock/native/read/lifecycle stops remain absorbing.
 No stopped reset or old-job/cache reuse. Negative API/protection/SEH evidence
 outranks coincident time exhaustion; history150ms expires on BOTH roles. Only
 new full same-roster/world/session census can reopen writes in a later window.
@@ -63,7 +63,12 @@ First-effect clock now commits only after normal native setter return. Source
 review PASS; fresh343037A5...build/linkPASS, A24324/B24136 launched/injected.
 Both native channels waiting worldEpoch0/costStop0/censusStop0/budgetPauses0;
 refreshRequired1/certifiedWindow0 is expected before user load. Delayed-load
-root-only scenario given; visible result PENDING. Latest entry below controls.
+root-only scenario given; NOW A recovered from timepause then hit query257
+terminal, B applied46/matched54 then changed-roster stop. User CONFIRMS combat/
+kills, so B is expected bounded living-roster refusal, not a no-combat failure.
+New one-line policy makes query-quota exhaustion use the SAME closed-window/
+fresh-census deferral, still never issues257th API; actual read/clock/lifecycle
+failures remain absorbing. Fresh revised build/no-combat exam pending below.
 
 NEW BOUNDED CANDIDATE: full-postrender native callback tail, POSITIVE old owned
 OnKill->heap-unlink witness, observed physical menu close/reopen and fresh primary
@@ -46541,3 +46546,62 @@ Need visible first current-pose catch-up within10m and continuing NPC updates
 through new certified windows, plus usable responsiveness. Ask ready after both
 load. B30s effect slice and all real-failure stops remain; AI/health/armor/death
 NOT synchronized. Both currently waiting, visible/runtime outcome PENDING.
+
+### 2026-10-25 — Classify recovered time pause, query quota and combat roster retirement
+
+Exact343037A5... A24324/B24136 run is NOT confirmed usable full NPC sync.
+Observed A budgetPauses1 (reason2/time, readRefused0), followed by certifiedWindow15,
+then a DIFFERENT terminal reason3/query quota. Thus the new time-response path
+did continue through fresh certification; it did not reset stopped. A terminal
+scope26us/window519us, query scope17us/window274us, scope11queries/51reads,
+window256queries, total1996, peakScope692/peakWindow1029. The257th API was not
+issued; this numeric resource limit is not observed native-memory corruption.
+
+B reached46 native applications/54 matches, then censusStop2/changed roster,
+costStop0, budgetPauses0, peakScope220/window450us, total5565/peak208queries.
+User explicitly says combat/kills already happened. This supersedes a possible
+no-combat attribution: death/retirement changes the limited living-roster
+contract, which remains absorbing after effects. Exact changed field was NOT
+logged; do not claim array-only change or completed death replication.
+Both final records worldEpoch1/workerGap0/external0/nativeFault0.
+
+Terminal private logs and quota-and-combat-terminal-locomotion_hook.log saved
+under reports/enemy-window-census-20261025080541Z. Test processes later absent;
+agent did NOT close them; user now confirms he closed BOTH himself, no crash
+reported (not a watched normal-exit/menu validation). InspectOnly attempted AFTER
+closure failed identity checks (one PID then non-tll/reused, other absent),
+correctly sent NO stop signal/fallback and killed nothing. Do not claim a stop
+ACK observation for this run; old terminal files are the retained evidence.
+
+STATIC revised resource policy: replace ONLY the pre-query256 stop with the
+already reviewed defer(kCostQueries). Counter is checked BEFORE increment and
+BEFORE QWSE: no257th call, no rest-of-window field work. New window still needs
+a NEW complete same-roster/world/session native census, old150ms expiry and all
+final native guard/certificate/window checks. Sticky API/protection/SEH/identity
+refusals are NOT quota exhaustion; no negative evidence becomes deferrable.
+No cap increase, sequence restoration, lease extension or stopped reset. Two
+independent reviews pass this exact extension. Liveness/fairness and oversized
+census fit remain unproven; combat/respawn remains outside the living-root slice.
+
+Falsifiable revised exam BEFORE build: same previously written delayed-B-load
+scenario, initially NO shooting/aggro/kills. Pure time OR quota pauses may grow,
+but subsequent fresh certified windows and applications should continue while
+costStop0/censusStop0; user-visible catch-up/tracking required through the30s
+slice, not mere recovered counter progress. Actual fault/negative roster/expiry
+remains absorbing. Any stop/context or visual failure rejects usable-sync claim;
+do not raise numeric bounds or retry an unchanged image.
+
+REJECTED routine-array-growth explanation: do NOT ignore array in Roster equality.
+Static CharacterManager_InitSingleton141D62F30 identifies source Init(unsigned int)
+and s_pSingleton==NULL, allocates48B manager, sets capacity32 and count0 at+8/+C,
+allocates512B of16B records at141D63071, stores manager+0 at141D630A5, publishes
+143898630 at141D630F4. Existing Add141D63420 asserts count<capacity and writes
+that fixed array; Remove141D63640 swap-compacts it. No evidence of ordinary
+Add/Remove reallocating it. Source/assert strings, allocation/store dataflow
+and independent Add/Remove/Get structural consistency meet3 static kinds.
+New name/global applied through sole-IDB pipeline; no function ABI declaration
+or permission to call Init on live network data. Current array comparison kept.
+reports/apply_character_manager_init_20261025.txt confirms2129functions/100data/
+3types, save_database returned True. MCP restarted; Init new name and singleton
+xrefs read back. Both query-deferral delta reviews pass; fresh build/launch
+ready using the revised no-combat prediction. Prior copies closed by USER.

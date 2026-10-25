@@ -13,8 +13,8 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy positions after confirmed Player sync (2026-10-24)
 
-LATEST2026-10-25: explicitbudgettime/windowpause +NEWfullnativecensuscertificate
-perworkticket IMPLEMENTEDsource; NOTresetstopped. Query257/clock/native/world/
+LATEST2026-10-25: explicitbudgettime/window/queryquotapause +NEWfullcensuscertificate
+perworkticket IMPLEMENTEDsource; NOTresetstopped. Clock/native/world/read/
 semanticidentity failuresstillterminal. Stickyreadrefusalbeatscoincidenttimeout.
 Originalhistorical150msexpiryonBOTHroles andphysical50mswindow checked; nooldptr/
 packetstampreuse. first_applycommitsonlyafteractualnormalsetterreturn. Reviews
@@ -23,7 +23,11 @@ found/fixedexpiry-before-tickrace andunappliedcandidate/peerfalse-stop. Fresh
 window-census-final/defer-fresh-census READY,worldEpoch0/costStop0/censusStop0/
 budgetPauses0, refreshRequired1/certifiedWindow0 expectedpreload. ExactDLL/PDB/
 bootlogs reports/enemy-window-census-20261025080541Z. UserstartsAloadthenB~2s
-later(sameLIVE-ENEMYcheckpoint,noinitialshoot/aggro/kills). VISIBLEoutcomePENDING.
+later(sameLIVE-ENEMYcheckpoint,noinitialshoot/aggro/kills). NOWAquery257stopped
+AFTERtimepause1+recertWindow15; Bapply46/match54 thenchangedRoster2, USERCONFIRMS
+combat/kills. No claimno-combatfailureonB. NEWqueryquota->samefreshcensusdefer,
+cap256unchanged/no257thAPI/readrefusalprioritykept. Twoexact-deltareviewsPASS;
+revisedbuild/testPENDING. OldgamesUSERclosedhimself,nocrashreported/noagentclose.
 Delayed-B-loadpositionpredictioninCOOP_STATUS; Initial<=10m
 catchup alreadyexists; capNOTwidened (keyframedvelocity/contact path). NoAI/
 combat/deathwriter, noofflineframework. No fairness/hardlatencyguarantee.

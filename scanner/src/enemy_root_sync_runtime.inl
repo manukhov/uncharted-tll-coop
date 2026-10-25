@@ -256,9 +256,10 @@ struct WorkBudget {
         }
         cost_total_ticks.fetch_add(delta, std::memory_order_relaxed);
         set_peak(peak_scope_ticks, value-begin); set_peak(peak_window_ticks, work_spent);
-        // Query/clock failures remain absorbing; pure wall-time exhaustion is
-        // a closed window, never permission to retry an old observation.
-        if (query && work_queries == 256) { stop(kCostQueries); return false; }
+        // Clock/observed read failures remain distinct from resource limits.
+        // The 257th query is NOT issued: close this window and require a whole
+        // new census, exactly as for time exhaustion. Never retry old fields.
+        if (query && work_queries == 256) { defer(kCostQueries); return false; }
         if (work_spent >= qpc_frequency/1000) { defer(kCostTime); return false; }
         if (value-window_begin >= qpc_frequency/20) { defer(kCostWindow); return false; }
         if (stopped.load(std::memory_order_acquire)) return false;
@@ -865,7 +866,7 @@ DWORD WINAPI transport_worker(void*) {
         << " peakScopeUs=" << peak_scope_ticks.load()*1000000/qpc_frequency
         << " peakWindowUs=" << peak_window_ticks.load()*1000000/qpc_frequency
         << " queries=" << query_total.load() << " peakQueries=" << peak_queries.load()
-        << "; native AI/root resumes; no automatic rearm";
+        << "; corrections closed; native AI continues; terminal latch retained";
     append_cost_stop_context(line);
     append_budget_pause(line);
     write_status(line.str());
@@ -1310,7 +1311,7 @@ bool install_enemy_root_sync() {
     const bool ready = changed && sealed;
     if (!ready) enemy_root::stopped.store(true);
     enemy_root::installed.store(ready, std::memory_order_release);
-    boot_log_line(ready ? "ENEMY-ROOT native Pirate+408 root replication installed (readGuard=QueryWorkingSetEx-page; admission=window-census-final; budget=defer-fresh-census; ordinary=POD; 30-second first slice; no HP/AI writes)" :
+    boot_log_line(ready ? "ENEMY-ROOT native Pirate+408 root replication installed (readGuard=QueryWorkingSetEx-page; admission=window-census-final; budget=defer-time-query-census; ordinary=POD; 30-second first slice; no HP/AI writes)" :
         "ENEMY-ROOT installation refused; stock forwarding only");
     return ready;
 }

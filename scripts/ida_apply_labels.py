@@ -10681,6 +10681,18 @@ FUNCTIONS = {
         "state-record apply side effect). So NadineBuddy already exposes this "
         "control-apply ingress that reaches 0x141DE9E60.",
     ),
+    0x141D62F30: (
+        "CharacterManager_InitSingleton",
+        "STATIC source CharacterManager::Init(unsigned int), character-"
+        "manager.cpp:27/29 and s_pSingleton==NULL assertion. Optimized body "
+        "allocates30h manager at141D62FE2, writes capacity32/count0 at+8/+C, "
+        "allocates16*capacity=512B entries at141D63071, initializes record/id "
+        "slots then stores array at manager+0/141D630A5; singleton publication "
+        "is143898630 at141D630F4. No function-type/argument ABI claim. Existing "
+        "Add141D63420 asserts count<capacity and Remove141D63640 compacts "
+        "THIS storage, not ordinary growth/reallocation. Do not discard an "
+        "array change as harmless without independent lifetime evidence.",
+    ),
     0x141D63420: (
         "CharacterManager_AddCharacter",
         "CharacterManager::AddCharacter(rcx=manager=*(0x143898630), rdx=character). "
@@ -16114,6 +16126,13 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x143898630: (
+        "g_CharacterManager",
+        "STATIC CharacterManager singleton: Init141D62F30 checks null then "
+        "publishes at141D630F4; existing Add/Remove/Get use manager+0 array, "
+        "+8 capacity,+C count. Observing pointer equality is NOT a retention "
+        "lease or proof of harmless same-address reinitialization.",
+    ),
     0x146A51570: (
         "g_GameTaskGraphRecursiveLockOwnerToken",
         "STATIC QWORD singleton146A51370+200; GameTaskGraphMgr_Reset and "
