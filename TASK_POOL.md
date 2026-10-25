@@ -55,7 +55,11 @@ FINALfreshidentity+ordinary beforewrite; removeONLYearlyreadonlydiscoverygraph.
 Allfinalweak/key/body/HP/world/manager/BC/OnKill/freshness/distance/QPC retained.
 PODgate1copies22->13. NOcadence/limit/lease/cachelifechange. TWOreviewsPASS;
 staticquota+boundedpositionpredictioninlatestCOOP_STATUS. Freshbuild/runtime
-PENDING; immediatepairafterbuild. A1895usnonqueryOSstallNOTguaranteedfixed.
+NOW: fresh5834844D...build/linkPASS; A12360/B25932 launched/injectedEnemyRootSync,
+nativeadmission=metadata-then-final/ordinary=POD READY, worldEpoch0/costStop0/
+queries0 beforeuserload. reports/enemy-final-admission-20261025073340Z exactDLL/
+PDB+bootlogs. UserDIRECTsameLIVE-ENEMYsceneBOTH,noempty/menu,noinitialshoot/kills.
+VISIBLEPOSITIONRESULTPENDING. A1895usnonqueryOSstallNOTguaranteedfixed.
 IDBsaved2128/99/3True/readbackPASS. NoHP/death/AI-stateclaim.
 CombatSTATIC: narrowAA3Dwrite-skipdoesNOTpreservearmordetachment (old/newHP
 ratio thresholds). New141FCB3F0 isHS+28predicateNOTmutator. Needauthoritative

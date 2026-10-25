@@ -40,7 +40,10 @@ identity/ordinary pass immediately before final write checks. B's redundant
 earlier discovery pass removed; FINAL ordinary/body/health/weak/OnKill/time gates
 retained. Adjacent gate1 POD spans reduce22->13 guarded copies per pass. No
 cadence/limit/lease/cache-lifetime/rearm expansion. Two independent reviews pass;
-bounded position-only prediction written below. Fresh build/runtime pending.
+bounded position-only prediction written below. Fresh5834844D... build/linkPASS;
+A12360/B25932 launched/injected, native channels installed and waiting epoch0/
+costStop0/queries0. User DIRECT same LIVE-ENEMY checkpoint BOTH, initially no
+shooting/kills. Position result PENDING; latest handoff entry below controls.
 A1895us non-query stall remains a competing cause, not guaranteed fixed.
 
 NEW BOUNDED CANDIDATE: full-postrender native callback tail, POSITIVE old owned
@@ -46249,3 +46252,35 @@ IDB saved PASS: reports/apply_enemy_damage_frontier_20261025.txt records
 resolves141FCB3F0 to HealthSystem_WouldDamageDepleteHealth and vtable xref.
 Retail tll.exe remains1.4.21058.0; no game currently running. Source/reviews/
 prediction are ready for immediate fresh build then two-copy root-only exam.
+
+### 2026-10-25 10:33 MSK — Launch metadata-then-final position exam
+
+Source commit901469d, two independent source reviews, native label save/readback
+and written prediction complete BEFORE build. Fresh tll_coop_runtime build/link
+PASS; only expected Recipe C4324 alignment-padding warning. Immediately launched
+LocalPair2 -EnemyRootSync and injected both, no separate confirmation or debugger.
+Build changes ordinary guarded-copy batching and metadata-first/final admission,
+NOT cadence, budgets, leases, body writer, combat or Player-world lifecycle.
+
+Exact DLL SHA256
+5834844D92F137E33950E46EA50C5C3D9E6ECD5F0F3C42AF2757349006D1861D;
+PDB3A3498DF8336180B35D265B3D65B399D650BCA980E30C19B3B3492B418DB8011.
+Archived BEFORE launch under reports/enemy-final-admission-20261025073340Z;
+boot-locomotion_hook.log and boot-enemy_root_12360.log/25932.log preserved.
+Hidden launch helper stdout/stderr are local diagnostic artifacts there; helper
+exited0 and both injector messages confirmed loading. No game-input automation.
+
+A/role1 PID12360 creation2026-10-25T10:33:40.9388794+03:00;
+B/role2 PID25932 creation2026-10-25T10:33:42.9513769+03:00; exact retail path.
+Both channels show readGuard=QueryWorkingSetEx-page; admission=metadata-then-final;
+ordinary=POD; native Player-world/owned-reset/peer-lifecycle/local-look package
+READY. Initial private actors0/paired0/worldEpoch0/capture0/match0/apply0/
+stopped0/costStop0/queries0. This is EXPECTED pre-user-load, not enemy-sync proof.
+
+User told DIRECT same live-enemy checkpoint BOTH, no intermediate empty/menu,
+initially no shooting/kills, report ready after both load. Need visible A->B
+NPC tracking/responsiveness and bounded logs, not READY/count-only validation.
+Root slice remains<=30s from first qualified candidate and terminal/no rearm;
+death, HP, armor and AI state are explicitly NOT synchronized in this exam.
+Both processes remain open awaiting user. No old-game termination needed because
+user had already closed prior pair. No stop signal/live patch/agent game input.
