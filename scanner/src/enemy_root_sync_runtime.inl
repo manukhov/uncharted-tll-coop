@@ -137,6 +137,27 @@ struct CombatRow {
 std::array<CombatRow, wire::kActors> combat_rows{}; // existing mailbox lock
 bool encounter_sealed{};
 std::uint64_t next_death_event{};
+enum class CensusReject : unsigned { none, header, unknown_weak, changed_key, duplicate, missing, revision_overflow };
+struct CensusLocalSummary {
+    std::uintptr_t actor, record, spawner;
+    std::uint32_t generation, spawner_id, desired_id, variant_id;
+    std::array<char,wire::kNameBytes> name;
+};
+struct CensusRejectContext {
+    std::uint32_t stable_count, current_count, old_index, new_index;
+    unsigned header_mask, local_mask, witness_bits, name_first_diff;
+    std::array<std::uintptr_t,3> old_header, new_header; // manager,array,player
+    std::uint64_t old_world, new_world;
+    std::uint32_t old_player_id, new_player_id;
+    CensusLocalSummary old_local, new_local;
+};
+static_assert(std::is_trivial_v<CensusRejectContext> && std::is_standard_layout_v<CensusRejectContext> &&
+              std::is_trivially_copyable_v<CensusRejectContext>);
+// One tick writer, published ONCE. Only copied census values, never pointers to
+// be followed later. The private socket worker reads after reason.acquire.
+CensusRejectContext census_reject_context{};
+std::atomic<CensusReject> first_census_reject{};
+std::atomic<std::uint64_t> combat_relocation_refreshes{};
 struct NativeBinding {
     wire::Key key{};
     std::uint64_t world{}, session{}, peer{}, life{};
@@ -156,7 +177,7 @@ enum : unsigned { kNativeRetiring=1, kNativeDead=2, kNativeReturned=4, kNativeRe
 std::atomic<std::uint64_t> combat_death_events{}, combat_death_results{}, combat_native_refusals{};
 std::atomic<std::uint64_t> combat_death_received{}, combat_native_attempts{}, combat_native_commits{};
 std::atomic<std::uint64_t> combat_retiring_observed{}, combat_prebind_refused{}, combat_b_prediction{};
-namespace combat_native { bool install(); bool ready(); }
+namespace combat_native { bool install(); bool ready(); void append_observer_status(std::ostringstream&); }
 bool effect_slice_current(ULONGLONG now) noexcept {
     const auto start=first_apply.load(std::memory_order_acquire);
     // Another callback may publish the first clock after this timestamp was
@@ -455,7 +476,31 @@ void append_combat_status(std::ostringstream& line) {
          << " nativeAttempts=" << combat_native_attempts.load() << " nativeCommits=" << combat_native_commits.load()
          << " deathResults=" << combat_death_results.load() << " nativeRefused=" << combat_native_refusals.load()
          << " retiring=" << combat_retiring_observed.load() << " prebindRefused=" << combat_prebind_refused.load()
-         << " unsupportedBPrediction=" << combat_b_prediction.load();
+         << " unsupportedBPrediction=" << combat_b_prediction.load()
+         << " relocationRefreshes=" << combat_relocation_refreshes.load();
+    combat_native::append_observer_status(line);
+    const auto reason=first_census_reject.load(std::memory_order_acquire);
+    if (reason==CensusReject::none) return;
+    const auto context=census_reject_context;
+    line << " censusReject=" << static_cast<unsigned>(reason)
+         << " censusStableLives=" << context.stable_count << " censusCurrentLives=" << context.current_count
+         << " censusOldIndex=" << context.old_index << " censusNewIndex=" << context.new_index
+         << " censusHeaderMask=" << context.header_mask << " censusLocalMask=" << context.local_mask
+         << " censusWitness=" << context.witness_bits
+         << " censusNameFirstDiff=" << context.name_first_diff;
+    if (context.name_first_diff<wire::kNameBytes)
+        line << " censusOldNameByte=" << static_cast<unsigned>(static_cast<unsigned char>(context.old_local.name[context.name_first_diff]))
+             << " censusNewNameByte=" << static_cast<unsigned>(static_cast<unsigned char>(context.new_local.name[context.name_first_diff]));
+    line << std::hex
+         << " censusOldHeader=" << context.old_header[0] << ',' << context.old_header[1] << ',' << context.old_header[2]
+         << " censusNewHeader=" << context.new_header[0] << ',' << context.new_header[1] << ',' << context.new_header[2]
+         << " censusOldWorld=" << context.old_world << " censusNewWorld=" << context.new_world
+         << " censusOldPlayerId=" << context.old_player_id << " censusNewPlayerId=" << context.new_player_id
+         << " censusOldLocal=" << context.old_local.actor << ',' << context.old_local.record << ',' << context.old_local.generation
+         << ',' << context.old_local.spawner << ',' << context.old_local.spawner_id << ',' << context.old_local.desired_id << ',' << context.old_local.variant_id
+         << " censusNewLocal=" << context.new_local.actor << ',' << context.new_local.record << ',' << context.new_local.generation
+         << ',' << context.new_local.spawner << ',' << context.new_local.spawner_id << ',' << context.new_local.desired_id << ',' << context.new_local.variant_id
+         << std::dec;
 }
 
 void append_cost_stop_context(std::ostringstream& line) {
@@ -592,18 +637,88 @@ void finish_native_death_attempt(const NativeDeathAttempt& attempt,NativeAttempt
     }
 }
 
+bool reject_combat_census_locked(CensusReject reason,const Roster& current,std::size_t old_index,
+                                 std::size_t new_index,unsigned header_mask=0) noexcept {
+    if (first_census_reject.load(std::memory_order_relaxed)!=CensusReject::none) return false;
+    CensusRejectContext context{};
+    context.stable_count=roster.count; context.current_count=current.count;
+    context.old_index=static_cast<std::uint32_t>(old_index); context.new_index=static_cast<std::uint32_t>(new_index);
+    context.header_mask=header_mask;
+    context.old_header={roster.manager,roster.array,roster.player};
+    context.new_header={current.manager,current.array,current.player};
+    context.old_world=roster.world_epoch; context.new_world=current.world_epoch;
+    context.old_player_id=roster.player_id; context.new_player_id=current.player_id;
+    const auto summarize=[](const Local& local) noexcept {
+        return CensusLocalSummary{local.actor,local.record,local.spawner,local.generation,
+            local.key.spawner_id,local.key.desired_id,local.key.variant_id,local.key.name};
+    };
+    if (old_index<roster.count) {
+        context.old_local=summarize(roster.rows[old_index]);
+        context.witness_bits=native_life_bits[old_index].load(std::memory_order_acquire);
+    }
+    if (new_index<current.count) context.new_local=summarize(current.rows[new_index]);
+    const auto& old=context.old_local; const auto& fresh=context.new_local;
+    // Local mask: actor,record,generation,spawner,spawnerId,D8,DC,name.
+    context.local_mask=(old.actor!=fresh.actor ? 1u : 0u)|(old.record!=fresh.record ? 2u : 0u)|
+        (old.generation!=fresh.generation ? 4u : 0u)|(old.spawner!=fresh.spawner ? 8u : 0u)|
+        (old.spawner_id!=fresh.spawner_id ? 16u : 0u)|(old.desired_id!=fresh.desired_id ? 32u : 0u)|
+        (old.variant_id!=fresh.variant_id ? 64u : 0u)|(old.name!=fresh.name ? 128u : 0u);
+    context.name_first_diff=static_cast<unsigned>(wire::kNameBytes);
+    for (std::size_t i=0; i<wire::kNameBytes; ++i) if (old.name[i]!=fresh.name[i]) {
+        context.name_first_diff=static_cast<unsigned>(i); break;
+    }
+    census_reject_context=context;
+    first_census_reject.store(reason,std::memory_order_release);
+    return false;
+}
 bool reconcile_combat_census_locked(const Roster& current) noexcept {
-    if (current.manager!=roster.manager || current.array!=roster.array || current.world_epoch!=roster.world_epoch ||
-        current.player!=roster.player || current.player_id!=roster.player_id) return false;
+    // Header mask: manager,array,world,player,player generation. A normal
+    // CharacterManager add/remove does NOT reallocate its fixed entry array.
+    const unsigned header_mask=(current.manager!=roster.manager ? 1u : 0u)|
+        (current.array!=roster.array ? 2u : 0u)|(current.world_epoch!=roster.world_epoch ? 4u : 0u)|
+        (current.player!=roster.player ? 8u : 0u)|(current.player_id!=roster.player_id ? 16u : 0u);
+    if (header_mask) return reject_combat_census_locked(CensusReject::header,current,wire::kActors,wire::kActors,header_mask);
     std::array<bool,wire::kActors> seen{};
+    std::array<std::size_t,wire::kActors> mapping{};
     for (std::size_t i=0; i<current.count; ++i) {
+        const auto& fresh=current.rows[i];
         std::size_t index=roster.count;
-        for (std::size_t j=0; j<roster.count; ++j) if (current.rows[i]==roster.rows[j]) { index=j; break; }
-        if (index==roster.count || seen[index]) return false; // unknown birth/respawn is not adopted.
-        seen[index]=true;
+        for (std::size_t j=0; j<roster.count; ++j)
+            if (fresh.record==roster.rows[j].record && fresh.generation==roster.rows[j].generation) { index=j; break; }
+        if (index==roster.count) {
+            // Diagnostic candidate ONLY: never admit a new generation or use
+            // key/address similarity to adopt an unknown weak identity.
+            std::size_t candidate=wire::kActors;
+            for (std::size_t j=0; j<roster.count; ++j) if (fresh.record==roster.rows[j].record) { candidate=j; break; }
+            if (candidate==wire::kActors) for (std::size_t j=0; j<roster.count; ++j)
+                if (fresh.key==roster.rows[j].key) { candidate=j; break; }
+            return reject_combat_census_locked(CensusReject::unknown_weak,current,candidate,i);
+        }
+        if (fresh.key!=roster.rows[index].key)
+            return reject_combat_census_locked(CensusReject::changed_key,current,index,i);
+        if (seen[index]) return reject_combat_census_locked(CensusReject::duplicate,current,index,i);
+        const auto& old=roster.rows[index];
+        if ((fresh.actor!=old.actor || fresh.spawner!=old.spawner) && combat_rows[index].revision==~std::uint64_t{})
+            return reject_combat_census_locked(CensusReject::revision_overflow,current,index,i);
+        seen[index]=true; mapping[i]=index;
     }
     for (std::size_t i=0; i<roster.count; ++i)
-        if (!seen[i] && !combat_known_retiring(roster.rows[i].record,roster.rows[i].generation)) return false;
+        if (!seen[i] && !combat_known_retiring(roster.rows[i].record,roster.rows[i].generation))
+            return reject_combat_census_locked(CensusReject::missing,current,i,wire::kActors);
+    // Only AFTER every complete-census row and missing-life check succeeds.
+    // RelocatableHeap1415FDF01/0D/1F preserves Process A8/BC and rebinds record+8;
+    // Pirate+08=1404A9490 fixes its owned pointers. The fresh identity pass has
+    // already validated CURRENT actor/backlink/gen/type/OnKill and reciprocal
+    // spawner/fullKey. This is between-pass metadata refresh, NOT a lifetime
+    // lease. No life/session/sequence/stamp or immutable binding is rewritten.
+    for (std::size_t i=0; i<current.count; ++i) {
+        const auto index=mapping[i]; auto& old=roster.rows[index]; const auto& fresh=current.rows[i];
+        if (fresh.actor!=old.actor || fresh.spawner!=old.spawner) {
+            old.actor=fresh.actor; old.spawner=fresh.spawner;
+            ++combat_rows[index].revision;
+            combat_relocation_refreshes.fetch_add(1,std::memory_order_relaxed);
+        }
+    }
     return true; // only positive native retiring/dead witnesses may disappear.
 }
 

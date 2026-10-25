@@ -46911,4 +46911,73 @@ New weak/gen/key/missing-without-positive-witness still refuse. This is NOT a
 concurrent-relocation lifetime lease. Add first mismatch POD from ALREADY copied
 rosters before reset, and bounded native D08/Dead entry+gate counters BEFORE
 current_world; existing private worker only, no extra native reads/framework.
-No earned runtime retry until source review/quota/new prediction are complete.
+At this stage no earned runtime retry until source review/quota/new prediction
+are complete; the completed candidate/prediction follows.
+
+### 2026-10-25 — Preserve initial life across proved native address relocation
+
+STATIC IMPLEMENTED, runtime not yet validated. Competing causes of A270 stop2:
+same-weak native address move; actual missing known life before observer;
+new weak/gen; mutable key (D8 native rename); header/world mismatch. Later B
+read-only same weak/key observation narrows, but does NOT prove first cause.
+Do not claim relocation caused that exam or loosen any other refusal.
+
+Evidence quota for the specific source fix: (1) graph convergence: generic
+RelocatableHeap_MoveBlockAndRebindRecord1415FDE50 invokes native object+8 at
+1415FDF01; exact Pirate14294B9D0 slot14294B9D8=1404A9490, tailcalls base
+140428080. (2) concrete dataflow: move fixes owned pointers, memmoves FULL
+allocation1415FDF0D then updates SAME weak record+0/+8 at1415FDF1C/1F,
+preserving copied Process+A8/+BC; Character_RelocateOwnedPointers141E9FF90
+rebases native body. (3) independent structural/native vtable evidence plus
+earlier confirmed owned-reset relocation: captured weak/gen resolved another
+object address without a new logical life. Raw address equality cannot be a
+universal life identity. FullKey is still strict: Process_SetNameIdAndReindex
+1416A6B20 and Script_RenameObject141C2E540 prove D8 can change, but no observed
+rename in A270 and no semantic authorization to adopt a changed key here.
+
+Complete current census now maps by exact original weakrecord/generation, then
+requires identical fullKey. ALL current rows, duplicates, unknowns, positive
+missing witnesses and revision overflow are checked BEFORE any metadata update.
+Only Local.actor/spawner addresses refresh under existing work permit+mailbox;
+++row.revision invalidates stale scheduling. NativeBinding table, initial fixed
+life, session/peer/world, packet sequence/attempt/event, HP, timestamp, leases
+and terminal latches unchanged. In-flight final native identity/body/current-
+self checks remain; no cross-phase pointer or cache reuse and no concurrent
+relocation lifetime lease. Same weak+new gen/key, actual failed native read,
+new birth and missing without native witness still close, not reset/rearm.
+
+First complete-census rejection POD freezes ONLY already-copied roster values
+before reset. censusReject reasons1header/2unknownWeak/3changedKey/4duplicate/
+5missingWithoutWitness/6revisionOverflow; header mask1manager/2array/4world/
+8player/16playerGen; local mask1actor/2record/4gen/8spawner/16spawnerId/32D8/
+64DC/128name. Old/new numeric tuple, initial/current enemy count, witness bits,
+name firstdiff byte are emitted by EXISTING private worker, no native reads.
+relocationRefreshes counts this metadata repair, not prior-run causality.
+18 numeric native D08/Dead entry/PC/world/selector/publication counters precede
+current_world gate so post-stop callbacks are distinguishable through exact
+PDB if necessary. No perframe Active counter, new memory reads, logger in game
+thread, callback broadening, exception conversion or altered native return.
+Source independent review PASS for both dataflow/refusal and once-forward
+behavior; whitespace PASS. No new offline test/observer framework.
+
+Sole IDB saved/restarted/readback: reports/apply_enemy_relocation_20261025.txt
+2149functions/102data/3types, save_database returned True. New Pirate relocation,
+live rename handler/setter and Human Active factory/request +Dead in-place ctor
+labels/readback PASS; exact Pirate+8 xref14294B9D8 checked. Native Active
+descriptor143D46440 named/readback. Old A16076/B8844 evidence archived again
+as final-before-agent-close-* and agent intentionally closed ONLY exact
+PID/path/rawFILETIME-validated copies. Both were alive, no crash/menu-exit claim.
+
+HYPOTHESIS / NEW PRELAUNCH PREDICTION: after DIRECT same live-enemy checkpoint
+in BOTH and initial livesReady1, ordinary engine address moves will produce
+relocationRefreshes without changing life/session or censusStop2; an unknown
+key/gen or missing-without-witness MUST still terminally reject with explicit
+first mismatch. Promptly killing ONE regular enemy on A/Chloe (INSAS allowed),
+B no shots, must yield native D08/Dead accepted witness ->deathEvents ->B
+deathReceived/<=one attempt ->B native Dead ->positive A result and SAME enemy
+visibly dead on B, while other native roots continue within existing30s slice.
+If instead reject5 with no prior accepted witness, or observer entry/refusal
+blocks commit, this falsifies relocation as sufficient cure and identifies the
+remaining boundary; do not describe packets/counters/build as success. No
+weapon whitelist experiment, full shots/AI/B kill authority/respawn claim or
+limit increase. Fresh build+immediate launch next, user input only.

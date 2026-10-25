@@ -55,7 +55,16 @@ native1415FDE50 relocation preservesweak/gen whilechangingrawaddresses; whole
 Localequality falselycanstop2. Narrow freshsameweak/gen/fullKey addressupdate+
 revision inprogress, no binding/session/life/sequence reset. FirstmismatchPOD
 fromownedrosters +nativeentry/gaterefusals beforecurrent_world needed toavoid
-silentpoststopobservers. Noextra native reads/framework oruncheckedretry.
+silentpoststopobservers. NOWimplemented+reviewed: completecensus exactweak/gen/
+fullKey addressrefresh onlyAFTERallrowchecks; ++revision, noidentity/sequence/
+event/lease/latchreset. Unknown/key/gen/missingwithoutwitness stillreject.
+FirstmismatchPOD reason1..6/header+localmask +18numericnativeentry/gatecounters
+inexistingprivateworker, noextra native reads/framework/game-threadlog. New
+quota/alternatives/prediction COOP_STATUS; source+IDB2149/102/3 savedTrue,
+MCP restarted/readbackPASS. A16076/B8844 closedINTENTIONALLYbyagent after
+exactidentitycheck+finalevidencearchive; no crash/menuclaim. Build/newexam next,
+samecheckpoint+ONEA/Chloe INSASkill whileBnoshooting. Priorcausalfieldstill
+UNPROVED; fresh relocationRefreshes isnewbehavior, notretroactiveproof.
 ReadonlyBpostfailureall10sameinitialweak/gen/D8/DC, A6initialrecordsNULL/4same
 livekeys; laternonatomicNOTcausalfirstmismatch/deathcommit. NativeVT/FSM/FLS/
 directdispatch auditPASS; doNOTbroadenhealth/deathcallbacks. No full shots/B

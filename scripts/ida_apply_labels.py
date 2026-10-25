@@ -8292,6 +8292,50 @@ FUNCTIONS = {
         "Native executor routes establish CurrentProcess(owner). Not an "
         "arbitrary postrender call or universal special-state death API.",
     ),
+    0x1404A9490: (
+        "Pirate_RelocateOwnedPointers",
+        "STATIC exact Pirate14294B9D0 virtual+08 (data14294B9D8). Rebases "
+        "owned F428/F430/F438 pointers in the moved range, tailcalls base "
+        "Npc relocation140428080. Generic RelocatableHeap_MoveBlockAndRebindRecord "
+        "1415FDE50 invokes object+08 at1415FDF01 before full memmove and SAME "
+        "weak record+0/+8 rewrite at1415FDF1C/1F. Actor A8/BC and logical life "
+        "are copied, raw actor address is not immutable identity. No concurrent "
+        "relocation lifetime lease follows from observing the old tuple.",
+    ),
+    0x1416A6B20: (
+        "Process_SetNameIdAndReindex",
+        "STATIC live Process+D8 name/token ID mutator. Removes old token index "
+        "at1416A6B42 when indexed, writes newD8 at1416A6B56, invokes virtualF0 "
+        "old/new at1416A6B5C, reindexes1416A6B72. Script_RenameObject141C2E540 "
+        "calls141C2E643 for arbitrary resolved object. D8 is not universally "
+        "immutable authored identity; actual rename in A270 run NOT observed.",
+    ),
+    0x141C2E540: (
+        "Script_RenameObject",
+        "STATIC rename-object handler: registration1401003D0 loads literal "
+        "at1401003D7; resolves object and symbol argument then calls "
+        "Process_SetNameIdAndReindex1416A6B20 at141C2E643. Shows a supported "
+        "live D8 mutation path, not proof it ran in the rejected NPC exam.",
+    ),
+    0x1404A0690: (
+        "HumanActive_CreateState",
+        "STATIC factory from Human/Active descriptor143D46440. Allocates native "
+        "Active storage and installs exact HumanActive VT142949558; its virtual "
+        "+20 is HumanActive_Update1404A0660. Process switch later sets owner+8.",
+    ),
+    0x1404A0730: (
+        "Human_RequestActiveProcessState",
+        "STATIC exact Pirate+50: queues Human/Active descriptor143D46440 and "
+        "native pending-state flags when transition predicate accepts. Factory "
+        "1404A0690 installs142949558. Request is not state-entry commitment.",
+    ),
+    0x1404A0A40: (
+        "HumanDead_ConstructInPlace",
+        "STATIC in-place Human::Dead constructor: calls NpcDead_Construct "
+        "14042F5D0, installs exact HumanDead VT142949590, stores constructor "
+        "context+10. Entry dispatch remains virtual+10=1404A0780, not a "
+        "devirtualized bypass. No independent gameplay death witness here.",
+    ),
     0x1404A0660: (
         "HumanActive_Update",
         "STATIC exact Human::Active VT142949558 virtual+20 (142949578). "
@@ -16247,6 +16291,11 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x143D46440: (
+        "g_HumanActiveStateDescriptor",
+        "STATIC Human/Active descriptor requested by1404A0730; factory "
+        "1404A0690 installs exact142949558, update virtual+20=1404A0660.",
+    ),
     0x143D46460: (
         "g_HumanDeadStateDescriptor",
         "STATIC descriptor initialized14004D890: Human/Dead strings, "

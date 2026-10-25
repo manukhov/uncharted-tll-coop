@@ -21,6 +21,39 @@ using DirectDamageFunction = std::int32_t(__fastcall*)(
     void*, std::int32_t, std::uint8_t, std::int32_t, bool);
 
 std::atomic<bool> hooks_ready{}, installation_attempted{};
+// Bounded numeric diagnostics, never admission state. Entry/PC counts precede
+// current_world(), including after the enemy worker's terminal stop. They can
+// still be inspected through this exact image's PDB after its last status line.
+// No raw native pointer, per-event buffer, game-thread log or Active-frame count.
+std::atomic<std::uint64_t> observer_cleanup_entries{}, observer_cleanup_pc_known{}, observer_cleanup_pc_refused{};
+std::atomic<std::uint64_t> observer_cleanup_world_refused{}, observer_cleanup_selector_refused{}, observer_cleanup_selected{};
+std::atomic<std::uint64_t> observer_cleanup_world_changed{}, observer_cleanup_published{}, observer_cleanup_publish_refused{};
+std::atomic<std::uint64_t> observer_dead_entries{}, observer_dead_world_refused{}, observer_dead_selector_refused{};
+std::atomic<std::uint64_t> observer_dead_world_changed{}, observer_dead_captured{}, observer_dead_returned{};
+std::atomic<std::uint64_t> observer_dead_post_world_refused{}, observer_dead_published{}, observer_dead_publish_refused{};
+
+void append_observer_status(std::ostringstream& line) {
+    // Existing private worker only. Relaxed snapshots are diagnostic counts,
+    // not an atomic cross-thread chronology or authority to mutate an actor.
+    line << " cleanupEntry=" << observer_cleanup_entries.load(std::memory_order_relaxed)
+         << " cleanupPc=" << observer_cleanup_pc_known.load(std::memory_order_relaxed)
+         << " cleanupPcNo=" << observer_cleanup_pc_refused.load(std::memory_order_relaxed)
+         << " cleanupWorldNo=" << observer_cleanup_world_refused.load(std::memory_order_relaxed)
+         << " cleanupSelectNo=" << observer_cleanup_selector_refused.load(std::memory_order_relaxed)
+         << " cleanupSelected=" << observer_cleanup_selected.load(std::memory_order_relaxed)
+         << " cleanupWorldChanged=" << observer_cleanup_world_changed.load(std::memory_order_relaxed)
+         << " cleanupPublish=" << observer_cleanup_published.load(std::memory_order_relaxed)
+         << " cleanupPublishNo=" << observer_cleanup_publish_refused.load(std::memory_order_relaxed)
+         << " deadEntry=" << observer_dead_entries.load(std::memory_order_relaxed)
+         << " deadWorldNo=" << observer_dead_world_refused.load(std::memory_order_relaxed)
+         << " deadSelectNo=" << observer_dead_selector_refused.load(std::memory_order_relaxed)
+         << " deadWorldChanged=" << observer_dead_world_changed.load(std::memory_order_relaxed)
+         << " deadCaptured=" << observer_dead_captured.load(std::memory_order_relaxed)
+         << " deadReturned=" << observer_dead_returned.load(std::memory_order_relaxed)
+         << " deadPostWorldNo=" << observer_dead_post_world_refused.load(std::memory_order_relaxed)
+         << " deadPublish=" << observer_dead_published.load(std::memory_order_relaxed)
+         << " deadPublishNo=" << observer_dead_publish_refused.load(std::memory_order_relaxed);
+}
 
 bool ready() { return hooks_ready.load(std::memory_order_acquire); }
 
@@ -99,28 +132,44 @@ bool seh_current_state(void* state, std::uintptr_t expected_vtable,
 bool capture_state_event(void* state, NativeLifeEvent& event) noexcept {
     const auto epoch = current_world();
     std::uintptr_t actor{};
-    if (!epoch || !seh_current_state(state, kHumanDeadVtable, event, actor) ||
-        current_world() != epoch) return false;
+    if (!epoch) { observer_dead_world_refused.fetch_add(1, std::memory_order_relaxed); return false; }
+    if (!seh_current_state(state, kHumanDeadVtable, event, actor)) {
+        observer_dead_selector_refused.fetch_add(1, std::memory_order_relaxed); return false;
+    }
+    if (current_world() != epoch) {
+        observer_dead_world_changed.fetch_add(1, std::memory_order_relaxed); return false;
+    }
     event.kind = NativeLifeKind::dead_commit;
     event.worldEpoch = epoch;
+    observer_dead_captured.fetch_add(1, std::memory_order_relaxed);
     return true;
 }
 
 std::uintptr_t __fastcall hooked_cleanup(void* object) {
     const DWORD entry_error = GetLastError();
+    observer_cleanup_entries.fetch_add(1, std::memory_order_relaxed);
     // Restrict the positive pre-cleanup witness to the two proved native
     // Active HP-dead branches. Unknown callers still receive stock once.
     const auto pc = reinterpret_cast<std::uintptr_t>(_ReturnAddress());
+    const bool known_pc = pc == g_module + 0x42D27E || pc == g_module + 0x42D5D3;
+    (known_pc ? observer_cleanup_pc_known : observer_cleanup_pc_refused).fetch_add(1, std::memory_order_relaxed);
     const auto epoch = current_world();
     NativeLifeEvent event{};
-    if (epoch && (pc == g_module + 0x42D27E || pc == g_module + 0x42D5D3) &&
-        seh_current_actor(reinterpret_cast<std::uintptr_t>(object), event) &&
-        current_world() == epoch) {
-        event.kind = NativeLifeKind::retiring;
-        event.worldEpoch = epoch;
-        // Metadata-only monotonic publication maps an ALREADY bound tuple;
-        // no lock/drop and no unknown tuple adoption or game pointer escapes.
-        publish_native_life_event(event);
+    if (!epoch) observer_cleanup_world_refused.fetch_add(1, std::memory_order_relaxed);
+    else if (known_pc) {
+        if (!seh_current_actor(reinterpret_cast<std::uintptr_t>(object), event))
+            observer_cleanup_selector_refused.fetch_add(1, std::memory_order_relaxed);
+        else {
+            observer_cleanup_selected.fetch_add(1, std::memory_order_relaxed);
+            if (current_world() != epoch) observer_cleanup_world_changed.fetch_add(1, std::memory_order_relaxed);
+            else {
+                event.kind = NativeLifeKind::retiring;
+                event.worldEpoch = epoch;
+                // Same monotonic publication/result, with no new native reads.
+                (publish_native_life_event(event) ? observer_cleanup_published : observer_cleanup_publish_refused)
+                    .fetch_add(1, std::memory_order_relaxed);
+            }
+        }
     }
     SetLastError(entry_error);
     return reinterpret_cast<CleanupFunction>(g_module + kPirateCleanup)(object);
@@ -128,6 +177,7 @@ std::uintptr_t __fastcall hooked_cleanup(void* object) {
 
 void __fastcall hooked_dead_enter(void* state) {
     const DWORD entry_error = GetLastError();
+    observer_dead_entries.fetch_add(1, std::memory_order_relaxed);
     NativeLifeEvent event{};
     const bool have_event = capture_state_event(state, event);
     SetLastError(entry_error);
@@ -135,8 +185,13 @@ void __fastcall hooked_dead_enter(void* state) {
     // there is no success publication and no post-call actor/state read.
     reinterpret_cast<StateFunction>(g_module + kHumanDeadEnter)(state);
     const DWORD native_error = GetLastError();
-    if (have_event && current_world() == event.worldEpoch)
-        publish_native_life_event(event);
+    observer_dead_returned.fetch_add(1, std::memory_order_relaxed);
+    if (have_event) {
+        if (current_world() == event.worldEpoch) {
+            (publish_native_life_event(event) ? observer_dead_published : observer_dead_publish_refused)
+                .fetch_add(1, std::memory_order_relaxed);
+        } else observer_dead_post_world_refused.fetch_add(1, std::memory_order_relaxed);
+    }
     SetLastError(native_error);
 }
 
