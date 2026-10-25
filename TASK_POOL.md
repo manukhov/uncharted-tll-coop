@@ -4,6 +4,9 @@
 
 Full campaign co-op between two game copies. Current user-directed order:
 
+- NEW P0: FULL shared world, not root-only/30s death probes. A owns enemy/shot/
+  damage/object/script outcomes; B sends Player actions and presents confirmed
+  results. ROADMAP.md is the chosen contract, not implemented capability.
 - Preserve local Chloe in copy A, local Nadine in copy B and current player sync.
 - Work on enemy synchronization now; first-load mutual Player visibility/movement
   USER-CONFIRMED. Preserve it; appearance/hand repair is PARKED.
@@ -12,6 +15,25 @@ Full campaign co-op between two game copies. Current user-directed order:
 - Complete combat authority and remaining player/appearance work separately.
 
 ## P0 CURRENT: Enemy positions after confirmed Player sync (2026-10-24)
+
+SUPERSEDING FULL-WORLD HANDOFF2026-10-25: latest0C0E is USER-REJECTED overall.
+A nativeDead/events5, B deathReceived0/attempt0 aftercensusStop1/apply1743;
+relocationRefreshesA421/B182 prove address bookkeeping only, not gameplay sync.
+Both games absent, exit cause UNKNOWN. Logs archived rejected-* in exactrun dir.
+No newlaunch. Small foundation code fix: COMPLETEvalid census losing mailbox
+defers to NEWfullcensus instead of inventing semanticnegativegap; realnegative/
+historicalexpiry/terminalstops kept. ObjectcompilePASS; no freshDLLlinked/game.
+Native ownership audit: no safe Online/NetSkill/RequestDisableAi toggle; campaign
+netgenerator+15A0 notconstructed. Next concrete native boundary: campaign skill
+selection4201E7->41F1A0 and Skill+28@41CBD4, with full helper/anim/physics kept,
+paired with replacement host action/result transport BEFORE B suppression.
+Combat source: freshtypedProjectileAttackInfo shooter weak fromprojectile+100,
+nativeAttackpublisher27A270 ->targetD0; A alreadyruns realBpuppetprojectiles.
+DoNOTaddClientDamage scalars. Playerhealth/revive hasdistinct nativepaths.
+Taskqueue oldschemaCORRECTED +4graph/+8subnode,+24clockvalue; no rawrecordreplay.
+Exactworld/life/shot/child/eventIDs, snapshotbaseline+journal, nativeowner-aware
+spawn/despawn and typed world objects are REQUIRED, notimplemented. Preserve
+Player sync/menu safeguards/appearancePARKED. No claim fullworld solved.
 
 CURRENT12:39MSK: source5c24a0c fresh0C0EB1B6...build/linkPASS, A11680/B22172
 launchedRoot+Combat. BothfullCOOP-BOOT missing000/event1; initialworldEpoch0/

@@ -281,6 +281,7 @@ std::uint64_t work_ticket{}, paused_ticket{}; // exclusively owned by work_busy.
 std::atomic<bool> refresh_required{true};
 std::atomic<std::uint64_t> certified_ticket{}, certified_epoch{}, certified_session{};
 std::atomic<std::uint64_t> budget_pauses{};
+std::atomic<std::uint64_t> census_publish_deferrals{};
 std::uintptr_t system_page_size{}; // initialized before installer reads/worker publication.
 unsigned work_queries{};
 std::atomic<unsigned> cost_stop{}, cost_site{}, peak_queries{};
@@ -289,7 +290,7 @@ std::atomic<std::uint64_t> cost_total_ticks{}, peak_scope_ticks{}, peak_window_t
 HANDLE stop_request{}, stop_ack{}; // retained for the pinned process lifetime
 std::atomic<bool> external_stop{};
 std::atomic<bool> native_apply_fault{};
-enum : unsigned { kCostClock = 1, kCostTime = 2, kCostQueries = 3, kCostWindow = 4 };
+enum : unsigned { kCostClock = 1, kCostTime = 2, kCostQueries = 3, kCostWindow = 4, kCostPublication = 5 };
 struct CostStopContext {
     unsigned site{}, scope_queries{}, window_queries{}, read_calls{};
     std::uintptr_t read_address{}, query_address{};
@@ -457,6 +458,7 @@ struct WorkBudget {
 void append_budget_pause(std::ostringstream& line) {
     const auto count = budget_pauses.load(std::memory_order_acquire);
     line << " budgetPauses=" << count
+         << " publishDeferrals=" << census_publish_deferrals.load(std::memory_order_relaxed)
          << " refreshRequired=" << refresh_required.load(std::memory_order_acquire)
          << " certifiedWindow=" << certified_ticket.load(std::memory_order_acquire);
     if (!count) return;
@@ -1165,8 +1167,22 @@ void tick() {
     // This runs from Player/Nadine update: never wait for a receiver/native job.
     // An unpublished census must not leave the writer enabled until next tick.
     if (!TryAcquireSRWLockExclusive(&lock)) {
-        census_gap = true;
-        active_scope.store(false, std::memory_order_release);
+        if (valid && !census_gap && !stopped.load(std::memory_order_acquire)) {
+            // A COMPLETE valid observation that lost the metadata mailbox is
+            // not negative native identity/read evidence. Discard its values,
+            // close this window and require a NEW complete census, exactly as
+            // with a resource deferral. Never renew the historical deadline,
+            // reset a terminal stop or publish/cache this abandoned snapshot.
+            census_publish_deferrals.fetch_add(1, std::memory_order_relaxed);
+            budget.defer(kCostPublication);
+            if (historical_census_expired(GetTickCount64())) stop_census(3);
+        } else {
+            // Preserve an ACTUAL failed observation (and any prior gap) even
+            // if the mailbox is also contended. It must never become a retry
+            // permission just because publication was unavailable.
+            census_gap = true;
+            active_scope.store(false, std::memory_order_release);
+        }
         ticking.clear(); return;
     }
     // Check the OLD absolute deadline with a POST-census timestamp, before any

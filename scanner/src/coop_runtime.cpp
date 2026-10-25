@@ -39557,10 +39557,11 @@ bool publish_fresh_nadine_attackinfo() {
 
 std::uint64_t __fastcall hooked_npc_damage(void* a1, void* a2, void* a3) {
     if (a2 != nullptr) {
-        // CLIENT->HOST damage relay: on the client (role B), the local player's attack
-        // on an enemy lands here. Forward {enemy name-hash, damage} to the host, which
-        // re-applies it authoritatively. Keep the native client damage path running as
-        // well, so both copies perform the same hit/death transition.
+        // REJECTED legacy scalar damage relay, kept OFF. This hook does NOT
+        // restrict the attacker to local B; stock damage below still executes,
+        // while real puppet projectiles already run on A. Enabling this is
+        // duplicate simulation/damage, NOT host combat authority. A new world
+        // owner needs one hit resolver plus explicit replicated consequences.
         if (g_client_damage_relay && !g_applying_peer_enemy_death &&
             g_net_role_b && g_state_net.enabled &&
             g_state_net.peer_set && a1 != nullptr &&

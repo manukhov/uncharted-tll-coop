@@ -8,6 +8,94 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-10-25: campaign world authority, not Online-mode activation ---
+    0x1417F8B00: (
+        "EventQueue_Post",
+        "STATIC source EventQueue::Post(const Event&,TypedProcessHandle<Process>) "
+        "at event.cpp177. Owns local spinlock, allocates328B queue node, copies "
+        "typed Event via1417F89A0, copies LOCAL16B process handle to node+130, "
+        "appends native list. NOT network serialization or a raw wire schema.",
+    ),
+    0x1417F89A0: (
+        "Event_CopyTypedParameters",
+        "STATIC Event copy used by EventQueue_Post1417F8B00. Copies header and "
+        "16B typed values; type metadata141831090 can invoke a local value-copy "
+        "allocator. Contains local references, not a pointer-free packet codec.",
+    ),
+    0x141F8A710: (
+        "SpawnerReplicationManager_PrepareProceduralSpawnerGroup",
+        "STATIC sole direct caller EntitySpawnerGroup_Update141EDAAC0. Invokes "
+        "SplineRecord_DistributeReplicantSpawners141F88D60; this replication is "
+        "procedural authored-template/spline duplication, NOT network world sync.",
+    ),
+    0x141F88D60: (
+        "SplineRecord_DistributeReplicantSpawners",
+        "STATIC source assert SplineRecord::DistributeReplicantSpawners in "
+        "spawner-replication.cpp. Uses replication-randomizer, trig and desired/"
+        "completed replicant counts. Procedural placement, not interprocess transport.",
+    ),
+    0x141CDD2E0: (
+        "GameTaskGraphMgr_CompleteSubnodeAndPublish",
+        "STATIC native Type3 completion target from Update141CB9820. Sets local "
+        "task state4, retires task Process handles, runs scripts and emits local "
+        "task-complete. Campaign progression seam, NOT complete object-state "
+        "replication or safe arbitrary worker-thread/network replay.",
+    ),
+    0x1403E4AF0: (
+        "NpcManager_UpdateWorldAndSkills",
+        "STATIC14015C7C0 passes manager143D3C0D0 at14015C7D0. Updates native "
+        "knowledge/navigation/world work, then weak NPC batch1403E6D30 at "
+        "1403E4F70. Suppressing this entire update loses more than AI decisions.",
+    ),
+    0x1403E6D30: (
+        "NpcManager_UpdateKnowledgeAndSkillsWeakBatch",
+        "STATIC validates native weak/gen/dead flags and establishes CurrentProcess "
+        "around knowledge14063A900 and actor runtime14041FA40 at1403E6F46. "
+        "Two-pass native batch, not a presentation-safe disable-all-AI switch.",
+    ),
+    0x1403D2CE0: (
+        "Npc_BindAnimLayersAndOptionalNetGenerator",
+        "STATIC exact Pirate+B50. HIBYTE(g_NetModeFlags) gate1403D343F encloses "
+        "53744B NetAnim generator allocation/ctor and online-tree names, init3638, "
+        "actor+15A0 store3642 and net-anim-layer binding36DB. Campaign skips this "
+        "block; NavCharacter ctor141DE163B zeros15A0. Do not force+5E8/NetSkill.",
+    ),
+    0x1403D4EC0: (
+        "Npc_GetNetAnimCommandGenerator",
+        "STATIC exact Pirate virtual+E48 at14294C818 returns actor+15A0, NOT "
+        "actor fieldE48. Constructor leaves null in campaign; native network "
+        "animation consumer requires the separately constructed generator/layer.",
+    ),
+    0x1406A7FC0: (
+        "NetSkill_Construct",
+        "STATIC installs NetSkill VT142979C18/name. Native skill factory1406BCFD0 "
+        "creates it only for authored skill29 (1406BEB9C..1406BEC03). Presence "
+        "of code is not campaign object/layer construction or runtime admission.",
+    ),
+    0x1406A80C0: (
+        "NetSkill_OnEnter",
+        "STATIC NetSkill VT+30, source net-skill.cpp42 OnEnter assertion. Requires "
+        "net-anim-layer parameter and dereferences resolved layer+3D at1406A820F. "
+        "Missing campaign dependencies make forcing this skill unsafe.",
+    ),
+    0x1406A8280: (
+        "NetSkill_OnExit",
+        "STATIC exact NetSkill VT+38; native ClearCurrentStateObject calls Skill "
+        "+38 at14041C879. Fades net layer, calls141DE47E0 and decrements actor "
+        "+15AB. Selector+40 notification is NOT OnExit. Not a standalone AI pause.",
+    ),
+    0x1406A8510: (
+        "NetSkill_EvaluateSnapshotAndRemoteControl",
+        "STATIC NetSkill VT+28: obtains generator via NPC+E48, uses snapshot "
+        "availability and remote attachment/control bindings14156BFA0/actor+950. "
+        "Not render-only; campaign generator/layer construction not established.",
+    ),
+    0x1406A85B0: (
+        "NetSkill_ThinkViaEval",
+        "STATIC exact NetSkill VT+20 tail-dispatches current Skill+28 evaluation. "
+        "Does not prove a campaign-safe network proxy or permit skipping all "
+        "surrounding helper/animation/death/physics updates.",
+    ),
     # --- 2026-10-24: bounded native frame completion and dead-owner witnesses ---
     0x1416A50D0: (
         "Process_ExecuteProcesses",
@@ -8580,10 +8668,12 @@ FUNCTIONS = {
     ),
     0x14027A270: (
         "PublishAttackEventToTarget",
-        "Native high-level attack publisher. Accepts a polymorphic AttackInfo "
-        "object and a target character, builds the authored Attack event, "
-        "dispatches it through the target event path, and publishes the "
-        "Attack-broadcast state. This is the preferred damage relay entry.",
+        "STATIC campaign high-level Attack publisher. Resolves shooter from "
+        "AttackInfo+8/+10, temporarily sets CurrentProcess=target, calls target "
+        "+D0 at14027A4D0, restores contextA4DA and emits Attack-broadcast. "
+        "Regular bullet chain14152F250/141526AA0 converges here. NOT permission "
+        "to clone raw AttackInfo, replay a foreign handle or add scalar damage "
+        "after A already simulated the corresponding remote-player projectile.",
     ),
     0x14040E7C0: (
         "NpcHandleAttackEvent",
@@ -8593,10 +8683,21 @@ FUNCTIONS = {
     ),
     0x140409F70: (
         "CharacterApplyAttackInfo",
-        "Shared character virtual at vtable +0x1170 (slot 558). Applies a valid "
+        "STATIC Npc/Pirate implementation of virtual+1170 (slot558), NOT Player's "
+        "same-offset method (exact Player+1170 is empty1401D4EC0). Applies a valid "
         "AttackInfo to a character, calls NpcArmor::OnHealthDamage, updates "
         "HealthSystem, and participates in knockdown/death decisions. Do not "
-        "call directly with a partial copied structure.",
+        "call directly with a partial copied structure. Player+D00 is also a "
+        "different FSM request140E762B0, not NPC health141DEE1D0; authority "
+        "adapters must be type-specific.",
+    ),
+    0x1403FB2B0: (
+        "ProjectileAttackInfo_Construct",
+        "STATIC constructs a FRESH native ProjectileAttackInfo with exact "
+        "VT142935C50; bullet materialization calls141530B26 then copies "
+        "projectile+100 local shooter weak handle to AttackInfo+8 at141530B44. "
+        "Useful local source identity provenance, NOT a pointer-free wire type "
+        "or a cloned cached attack template.",
     ),
     0x1403D7DF0: (
         "NpcArmorOnHealthDamage",
@@ -10942,14 +11043,17 @@ FUNCTIONS = {
         "stores the resulting scalar back into helper state under owner+0x1A0 "
         "and owner virtual +0xCE8.",
     ),
-    0x14041FA90: (
-        "RefreshOwnerRuntimeHelperBundle_1FC0_1FD8_1FE8_1FF8",
-        "Owner-side update over the helper bundle after +0x1F80. Refreshes the "
+    0x14041FA40: (
+        "Npc_UpdateRuntimeHelpersAndSelectSkill",
+        "STATIC true function entry14041FA40, NOT interior14041FA90. Owner-side "
+        "update over the helper bundle after +0x1F80. Refreshes the "
         "attached materialized-state slot, conditionally updates helpers "
         "+0x1FC0/+0x1FD8/+0x1FE8/+0x1FF8, rebinds the actor-bound helper "
         "owner+0x1FE8 to the current live actor, then combines late-decision "
         "and nested-control scalar paths into the helper state under "
-        "owner+0x1A0 and owner virtual +0xCE8.",
+        "owner+0x1A0 and owner virtual +0xCE8. Native batch1403E6D30 calls "
+        "1403E6F46; skill selector14041F1A0 at1404201E7 is only one part. "
+        "Suppressing the whole function loses helper/lookaim presentation.",
     ),
     0x14041CED0: (
         "ResolveOwnerReferenceTransformViaHelper1FC0OrRetainedPlayers",
@@ -11632,7 +11736,8 @@ FUNCTIONS = {
         "NotifyPlayerEnteringVehicleAndPublishEntryRecordToActor",
         "VehicleCtrl::NotifyPlayerEntering path. Hashes 'vehicle-entry-def', "
         "builds packaged entry records from the incoming VehicleEntryDef, "
-        "serializes them through 0x1417F8B00, and when a matching live actor "
+        "posts typed LOCAL EventQueue records through1417F8B00 (NOT network "
+        "serialization), and when a matching live actor "
         "is present publishes the resulting entry record through actor "
         "virtual +0xD0.",
     ),
@@ -15393,7 +15498,7 @@ FUNCTIONS = {
         "VehicleCtrl::NotifyPlayerEntering(const DC::VehicleEntryDef*): hashes "
         "'vehicle-entry-def' (0x142926668), resolves controller sub-objects via "
         "0x14142B890(...,2/3), packages 0x150 records, copies the VehicleEntryDef "
-        "payload (+0xA8/+0xBC), serializes via 0x1417F8B00, and pushes the entry "
+        "payload (+0xA8/+0xBC), posts via local EventQueue_Post1417F8B00, and pushes the entry "
         "record into the live rider actor via actor->virtual+0xD0. The bridge for "
         "co-op vehicle entry (driver/passenger seat).",
     ),
@@ -15410,9 +15515,10 @@ FUNCTIONS = {
         "GameTaskGraphMgr::Update (per-frame): drains and applies the campaign "
         "task-graph COMMAND list at g_GameTaskGraphCommandList (0x146A514A8, count "
         "0x146A51568, stride 0x28), advancing active subnodes (objectives). This "
-        "IS the campaign progression backbone (script 'task-complete' issues "
-        "commands via AddCommand). Co-op Option 1 follower-apply target: replay "
-        "the driver's relayed task-graph commands here. STATIC owns recursive "
+        "IS a campaign progression seam (script task-complete issues commands "
+        "via AddCommand), NOT a generic world replication engine. Native input "
+        "records require graph/subnode resolution and clock/reset semantics; "
+        "raw follower replay is NOT admitted. STATIC owns recursive "
         "global146A51570/depth146A51580, same singleton+200 lock as Reset; "
         "token1415C5E50 follows native execution/FLS identity. This lock alone "
         "does not establish TaskManager active ProcessTask quiescence.",
@@ -15424,15 +15530,18 @@ FUNCTIONS = {
         "0x28) for a matching 40-byte command; if absent appends it (assert "
         "'m_numQueuedTaskCommands < kMaxQueuedTaskCommands', kMax=5) copying "
         "record fields +0..+36. Record schema: +0 TYPE (1/2/3 = kinds; built by "
-        "wrappers 0x141CB9700/9760/97C0), +4 subnode id (*(subnode+8)), +8 graph "
-        "id (*(graph+8)), +12 param, +16 (-1 for types 2/3), +24 qword, +32 byte, "
-        "+36 int. Co-op Option 1 follower-apply: build the driver's relayed "
-        "command record and call this; GameTaskGraphMgr_Update then applies it.",
+        "wrappers141CB9700/9760/97C0), +4 GRAPH id (*(subnode+F8)+8), +8 "
+        "SUBNODE id (*(subnode+8)), +12 param, +16 (-1 for types2/3), +24 "
+        "8B clock-related VALUE, +32byte,+36int. Old reversed graph/subnode "
+        "schema is REJECTED. Update resolves both locally; +24 passes through "
+        "a local temporary then clock comparison141CDB3A4. Type1/2 can reset "
+        "world, Type3 completes141CDD2E0; no generic raw network replay admitted.",
     ),
     0x141CB9700: (
         "GameTaskGraphMgr_AddCommand_Type1",
         "Typed AddCommand wrapper: builds a TYPE-1 task-graph command record from "
-        "(graph a2, subnode) with param a4, then calls GameTaskGraphMgr_AddCommand.",
+        "subnode a2 (graph=[a2+F8]); writes graph ID+4/subnode ID+8 then calls "
+        "GameTaskGraphMgr_AddCommand. Not a flat pointer-free world command codec.",
     ),
     0x141C8E680: (
         "TaskManager_UpdateAndQuery",
@@ -15730,11 +15839,14 @@ FUNCTIONS = {
     ),
     0x141519B50: (
         "ProcessWeapon_SpawnProjectile",
-        "Exact embedded signature ProcessWeapon::SpawnProjectile(const SpawnInfo "
+        "Exact embedded VOID signature ProcessWeapon::SpawnProjectile(const SpawnInfo "
         "&, Process **). SpawnInfo+0x28 is the authoritative selected launch-record "
         "pointer. Job-policy bit 0 selects direct materialization at 0x141519C26; "
         "otherwise it submits ProcessWeapon_MaterializeProjectileJob and blocks in "
-        "Ndjob_WaitForCounter before returning.",
+        "Ndjob_WaitForCounter before returning. RAX is incidental current-context "
+        "restore, not a projectile return ABI. Output Process** becomes available "
+        "after materialization; synchronous Init hits can precede return, so "
+        "registering ShotId only afterwards loses causal events.",
     ),
     0x141519B20: (
         "ProcessWeapon_MaterializeProjectileJob",
@@ -17341,6 +17453,8 @@ def apply_labels():
     # A previous melee pass accidentally put the dispatcher function name on an
     # interior instruction, forcing IDA to suffix the real entry with `_0`.
     ida_name.set_name(0x141273B20, "", ida_name.SN_NOWARN)
+    # Old NPC helper label was placed 0x50 bytes inside the true runtime update.
+    ida_name.set_name(0x14041FA90, "", ida_name.SN_NOWARN)
     # Auto-analysis coalesces the adjacent SkelTable bucket-count DWORD and
     # initialized byte into one wider item. Split them so both confirmed
     # lifecycle fields can carry independent names and comments.

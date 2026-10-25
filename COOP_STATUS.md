@@ -2,6 +2,20 @@
 
 ## Current user priority / handoff (2026-10-25)
 
+USER P0 SUPERSEDES THE BOUNDED EXAMS: FULL shared campaign world (NPC actions/
+positions/combat/deaths, shots and world/script state), not another root-only or
+30s death retry. Latest0C0E A11680/B22172 is USER-REJECTED for severe divergence.
+A did observe5 genuine native Dead commits/events; B received0 before terminal
+censusStop1 (1743root applies). Relocation refresh worked numerically A421/B182,
+but is NOT full sync. Both copies now absent; exit cause unclassified. Exact
+final logs preserved. No new game launched this turn. Chosen implementation
+direction is A-owned world simulation + B player intents/typed result playback,
+not two independent AI/script/combat simulations. New ROADMAP.md records scope,
+native evidence and missing ownership gates. Actual full-world feature is NOT
+implemented/validated. Preserve first-load Player sync/menu safeguards; appearance
+PARKED. Source-only base fix defers COMPLETE-census mailbox contention without
+inventing negative read evidence; native/read/world terminal stops remain closed.
+
 CURRENT EXAM: fresh0C0EB1B6... after strict same-weak/fullKey relocation metadata
 fix +first-mismatch/native-entry counters, A11680/B22172 launched12:39MSK.
 Both complete COOP-BOOT READY missing000; initial enemy worldEpoch0/livesReady0,
@@ -47013,4 +47027,140 @@ worldEpoch0/actors0/livesReady0/capture0/apply0/death0/stopped0 and all native
 observer counters0 are expected before user load. Same direct enemy checkpoint,
 one A/Chloe INSAS kill once mutual Players appear, B no shots; report SAME B
 enemy death and remaining NPC tracking. 30s starts first effect, not menus.
-Visual/result outcome PENDING. No runtime success from build/READY/packets.
+Visual/result outcome REJECTED below. No runtime success from build/READY/packets.
+
+### 2026-10-25 — Reject partial world model; adopt single world authority
+
+REJECTED by direct user report: severe divergence in enemies, firing, position,
+state and world; user explicitly requests FULL world synchronization. This
+supersedes the root/death30s vertical exams as the product objective, not the
+native safety rules. Exact0C0E image/run is the last exam; no new launch here.
+Saved reports/enemy-relocation-death-20261025093911Z/rejected-locomotion_hook.log
+and rejected-enemy_root_11680/22172.log. Both processes absent on inspection;
+agent did not close this pair and exit cause is unclassified.
+
+Runtime data: A accepted5 D08 retirement and5 normal HumanDead commits, created5
+deathEvents, but received0 deathResults. Its relocationRefreshes421; no first
+complete-census rejection/cost/native fault/worker gap. Last A terminal reason
+is not uniquely distinguished from effect/lifecycle close by this log. B matched
+1930/applied1743 roots and refreshed182 addresses, then terminal censusStop1,
+deathReceived/nativeAttempts/nativeCommits0, costStop/nativeFault/workerGap0.
+This removes the previous whole-address reconciliation failure for many actual
+moves and proves the A witness path executed, NOT that shared combat works.
+Accepted A events cannot repair B after the channel has already closed. Native
+simulation and campaign scripts still independently advance in both processes.
+
+STATIC source bug fixed (not retroactive proof of Bstop1 cause): tick's COMPLETE
+valid native census could lose TryAcquire on the short metadata mailbox, set
+census_gap, then later be classified as negative native evidence and stop1 after
+any effect. Publication contention is not a failed native read/identity check.
+The valid/no-prior-gap/nonterminal branch now discards the snapshot and uses the
+existing closed-window/fresh-full-census deferral (reason5, publishDeferrals).
+All actual invalid/read/SEH/semantic evidence and prior gaps stay sticky; no
+old values published, no historical150ms renewal, no nonce/life reset, no old
+certificate reuse, no terminal latch cleared. Same1ms/50ms/256query bounds and
+new-window requirement. Independent source review PASS; current object target
+compiled PASS with only existing Recipe C4324. NO fresh runtime DLL linked and
+NO new game launched: full-world native ownership/apply feature is not ready.
+Current ignored DLL remains the exact rejected0C0E image, do not relaunch it as
+a full-world result. Legacy protocol/damage comments now explicitly say rejected
+and remove false +3C=currentHP / namehash=identity / duplicate-damage=authority.
+
+DESIGN DECISION, not implemented game fact: A is world authority; B submits
+logical Player actions and presents typed authoritative results. Keep local
+camera/input/presentation and permitted movement prediction. World identity/
+generation, snapshot+journal cutover, native owner-aware spawn/retire, NPC action
+playback and B consequence suppression, typed NPC/Player/object/script results
+must be integrated. ROADMAP.md (previously missing) records the actual scope,
+alternatives, implementation gates and behavioral acceptance. Merely matching
+load times/poses does not make AI/RNG/physics/scripts deterministic. Extending
+the30s prototype, raising budgets or resetting stopped is NOT this redesign.
+
+STATIC native ownership audit — three independent evidence kinds (constructors/
+field writes+branches, exact RTTI/vslots/call graph, authored strings/assertions):
+
+- NpcManager_UpdateWorldAndSkills1403E4AF0 calls weak batch1403E6D30 at1403E4F70.
+  Batch establishes CurrentProcess and enters true actor runtime14041FA40 at
+ 1403E6F46. Skill selector14041F1A0 is only one call1404201E7; current Skill
+  executes+28 at14041CBD4. Native clear uses OnExit+38 at14041C879; selector+40
+  is a different notification. Dropping the entire helper/knowledge/lookaim/
+  animation path or freezing the existing skill is NOT safe replica control.
+- Exact Pirate+E48 data14294C818 returns actor+15A0 through1403D4EC0; E48 is a
+  virtual offset, not an NPC field. NavCharacter constructor141DE163B zeros15A0.
+  Pirate+B50 setup1403D2CE0 constructs53744B network generator ONLY inside
+  HIBYTE(g_NetModeFlags) gate1403D343F; init1403D3638/store3642/layerbind36DB,
+  names thug-04-nw-aggr-idle/anim-npc-normal-multiplayer/net-anim-layer. Ordinary
+  campaign builder141DE36E0 uses anim-npc. No campaign-ready snapshot consumer
+  established by the Online code's presence.
+- NetSkill VT142979C18: ctor1406A7FC0, Think+20=1406A85B0, Eval+28=1406A8510,
+  OnEnter+30=1406A80C0, OnExit+38=1406A8280. Factory1406BCFD0 creates authored29
+  only at1406BEB9C..BEC03. OnEnter has net-skill.cpp42 assertion and dereferences
+  required layer+3D at1406A820F; Eval uses NPC+E48 and can bind attachment/control
+  through14156BFA0/actor+950. Forcing NetSkill/+5E8/global Online flags is REJECTED
+  as a campaign shortcut; absent dependencies can crash or suppress reactions.
+  Next specific proof: campaign AnimControl/action inputs alongside selective
+  skill-execution ownership and pending fire/script policy, BEFORE B suppression.
+
+STATIC combat authority audit:
+
+- Regular bullet14152DD40 ->14152F250 at14152DF0C/DFF5 constructs FRESH native
+  ProjectileAttackInfo1403FB2B0 (VT142935C50) at141530B26, copies local shooter
+  weak from projectile+100 to AttackInfo+8 at141530B44, calls141526AA0 at
+ 141530FB9 ->PublishAttackEventToTarget14027A270 at141527220. Publisher resolves
+  source+8/+10, sets CurrentProcess=target, invokes target+D0 at14027A4D0,
+  restores atA4DA, emits Attack-broadcast. Npc event14040E7C0 passes event+28
+  into target+1170/140409F70 health/armor/reaction/death.
+- Existing Fire fallback already makes real B-puppet projectiles on A, and B
+  independently commits native hits. Old ClientDamage hook has no local-source
+  restriction/dedup and calls stock B after adding a scalar relay; enabling it
+  ADDS duplicated effects. Proposed B hit reports can only be correlated inputs,
+  never another automatic scalar application after A's own collision resolve.
+- A ShotId needs world/authority/shooter/ordinal plus projectile/pellet/child hit
+  identity. Native ProcessWeapon_SpawnProjectile141519B50 is VOID with Process**
+  output, direct materialization141519C26 or submit141519CEC/wait141519CF9.
+  Synchronous Init hits can precede return; assigning IDs only after output or
+  using sender thread_local across worker jobs loses causal events. Current
+  direction/selected-launch context is NOT a complete persistent shot journal.
+- Exact Player+1170 data142A4D158 is empty1401D4EC0; Player+D00 data142A4CCE8 is
+  FSM request140E762B0, NOT NPC health141DEE1D0. NPC consequence gates cannot
+  be generalized to Player health/death/revive or script/environmental damage.
+  B suppression and typed authority playback must ship together, not an immune
+  mirror world without working results.
+
+STATIC campaign world/progression audit; corrected false shortcuts:
+
+- EntitySpawner_Spawn141D22420/Process::SpawnProcess1417C3790 publish native
+  weak identity after Init/PostInit. EntitySpawner_Kill141D22310 manages retry;
+  bare KillTree permits recreation. Dynamic TaskManager owners differ.
+- Native Online flags previously crashed before load; campaign tracker sets in
+  NetGameManager143DD70C0 were empty. Fresh Npc_PostInit1404026BD gates network
+  spawn140A96B00 ->140BD7A50 on NetMode. Online IDs/session context absent; no
+  turning global flags on. net-task-complete140B54F30 is MP-only;140A5D3F0 sends,
+  not a usable campaign local-half mutation.
+- GameTaskGraphMgr_AddCommand141CB95B0 ->Update141CB9820 (direct postrender caller
+ 14016685D) drains<=5 local40B records under recursive146A51570/580. DEFINITE
+  CORRECTION to old labels: +4=GRAPH id, +8=SUBNODE id. Native1413C8BC0 loads
+  graph=subnode+F8, stores graph+8 atcommand+4@8BF0 and subnode+8 at+8@8BE4;
+  wrapper141CB9700 and resolver141CBA1B0 independently agree. +24 is8B VALUE,
+  passed via local stack copy into141CDA800 then compared with native clock at
+ 141CDB3A4; NOT established raw pointer or wire-ready time. Type1/2 can reset/
+  restart world, Type3 completes141CDD2E0 (state4, Process retirement, scripts,
+  task-complete). Do not replay all native records while B scripts also trigger.
+- EventQueue_Post1417F8B00 is LOCAL EventQueue::Post per event.cpp177, alloc328B,
+  copies typed values1417F89A0 and LOCAL16B Process handle to+130, appends locked
+  queue. Old serialization wording corrected; raw event bytes are not network
+  schema. Native breakable14088D960/postsuccess14088DC83 is a typed observation
+  seam; network execute140A65160's local+D0 call still needs cross-copy identity.
+- SpawnerReplicationManager141F8A710 (callerEntitySpawnerGroup_Update141EDAAC0)
+  invokes SplineRecord_DistributeReplicantSpawners141F88D60, source asserts,
+  randomizer/trig/counts: procedural template replication, NOT networking.
+  Save-state apply141585640 restores broad settings/checkpoint/tasks, not realtime
+  world state. No turnkey complete campaign replication layer was established.
+
+LABEL HANDOFF: scripts/ida_apply_labels.py corrects graph/subnode/event wording,
+VOID projectile ABI and wrong interior NPC label14041FA90 (true entry14041FA40),
+adds exact world/AI/NetSkill/event/spawner/ProjectileAttackInfo names. SoleIDB
+MCP stopped before write; reports/apply_world_authority_20261025.txt records
+2164functions/102data/3types, save_database returned True. MCP restarted and
+all16 relevant function readbacks PASS; Pirate+E48 xref14294C818 verified. No
+duplicate database. No full-world runtime feature/build/result claimed.

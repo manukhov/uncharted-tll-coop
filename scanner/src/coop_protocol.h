@@ -239,21 +239,21 @@ static_assert(sizeof(IdleArmPosePacket) == 1104);
 static_assert(sizeof(IdleArmPosePacket) <= 1472);
 static_assert(offsetof(IdleArmPosePacket, matrices) == 48);
 
-// Phase 3 (host-authoritative world sync): the HOST (role A) enumerates the
-// CharacterManager, picks out enemy NPCs, and sends their transforms; the CLIENT
-// (role B) matches each by name-hash to its own local enemy, disables its AI, and
-// applies the host transform. Sent on the same UDP socket pair as StatePacket;
-// dispatched by magic.
+// REJECTED LEGACY CONE experiment, disabled in the ordinary runtime. This is
+// NOT host-authoritative world synchronization: the truncated name hash has no
+// world/life identity, native AI disable is unsafe, and raw roots/health do not
+// establish shared combat, lifecycle or campaign state. Preserve wire layout
+// only for historical tooling; do not enable/reuse it for the new world owner.
 constexpr std::uint32_t kEnemyPacketMagic = 0x454E4F43;  // "CONE"
 constexpr std::uint16_t kEnemyPacketVersion = 1;
-constexpr int kMaxEnemies = 32;  // CharacterManager cap is 32
+constexpr int kMaxEnemies = 32;  // Legacy packet capacity, not a universal world limit.
 
 struct EnemyState {
-    std::uint32_t name_hash = 0;  // FNV-1a of the actor name (stable cross-instance)
+    std::uint32_t name_hash = 0;  // Legacy truncated debug-name hash; no unique-life proof.
     float pos[4]{};               // world position block (Char+0x240)
     float quat[4]{};              // orientation quaternion (Char+0x140)
     std::uint32_t flags = 0;      // bit0 = dead (host vtable became ProcessRagdoll)
-    std::int32_t hp = -1;         // host current HP (HealthSystem+0x3c); -1 = unknown
+    std::int32_t hp = -1;         // Legacy +0x3C is previous-health history, NOT raw HP+0x38.
 };
 constexpr std::uint32_t kEnemyFlagDead = 0x1;
 
