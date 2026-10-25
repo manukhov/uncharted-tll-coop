@@ -19,7 +19,12 @@ semanticidentity failuresstillterminal. Stickyreadrefusalbeatscoincidenttimeout.
 Originalhistorical150msexpiryonBOTHroles andphysical50mswindow checked; nooldptr/
 packetstampreuse. first_applycommitsonlyafteractualnormalsetterreturn. Reviews
 found/fixedexpiry-before-tickrace andunappliedcandidate/peerfalse-stop. Fresh
-delayed-B-loadpositionpredictioninCOOP_STATUS; build/examPENDING. Initial<=10m
+343037A5...build/linkPASS. A24324/B24136 launched/injectedEnemyRootSync;
+window-census-final/defer-fresh-census READY,worldEpoch0/costStop0/censusStop0/
+budgetPauses0, refreshRequired1/certifiedWindow0 expectedpreload. ExactDLL/PDB/
+bootlogs reports/enemy-window-census-20261025080541Z. UserstartsAloadthenB~2s
+later(sameLIVE-ENEMYcheckpoint,noinitialshoot/aggro/kills). VISIBLEoutcomePENDING.
+Delayed-B-loadpositionpredictioninCOOP_STATUS; Initial<=10m
 catchup alreadyexists; capNOTwidened (keyframedvelocity/contact path). NoAI/
 combat/deathwriter, noofflineframework. No fairness/hardlatencyguarantee.
 

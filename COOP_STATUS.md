@@ -60,7 +60,10 @@ No stopped reset or old-job/cache reuse. Negative API/protection/SEH evidence
 outranks coincident time exhaustion; history150ms expires on BOTH roles. Only
 new full same-roster/world/session census can reopen writes in a later window.
 First-effect clock now commits only after normal native setter return. Source
-review/fresh delayed-load root-only exam preparation below; no combat claim.
+review PASS; fresh343037A5...build/linkPASS, A24324/B24136 launched/injected.
+Both native channels waiting worldEpoch0/costStop0/censusStop0/budgetPauses0;
+refreshRequired1/certifiedWindow0 is expected before user load. Delayed-load
+root-only scenario given; visible result PENDING. Latest entry below controls.
 
 NEW BOUNDED CANDIDATE: full-postrender native callback tail, POSITIVE old owned
 OnKill->heap-unlink witness, observed physical menu close/reopen and fresh primary
@@ -46502,3 +46505,39 @@ were corrected BEFORE building. No terminal stopped=false path exists. Current
 retail image reverified1.4.21058.0, no games running; IDB/MCP remains saved and
 idle with existing2128 labels. Ready for fresh build then immediate LocalPair2
 exam using the written delayed-B-load/no-combat prediction above.
+
+### 2026-10-25 11:05 MSK — Launch fresh-census budget policy exam
+
+Source7a9c949 committed/pushed after final reviews/prediction; fresh normal
+tll_coop_runtime C++ build/link PASS, only expected Recipe alignment-padding
+C4324. No new standalone test framework or native labels/database changes.
+Immediately launched/injected two LocalPair -EnemyRootSync copies after build,
+no debugger. No old processes needed closing; current source changes are not
+applied live to old terminal channels. No game input/menu/window control.
+
+Exact DLL SHA256
+343037A50B5702476E86EFC65428DD0688D9A08212C8A0FB6A601F6832677772;
+PDBABA8C8430555CCF9F5E018EC6F962AD27499B190C336677AE0D957C43A490798.
+Both archived BEFORE launch in reports/enemy-window-census-20261025080541Z,
+with launch stdout/stderr and boot-locomotion_hook.log plus both private boot
+enemy logs. Launch helper exited0 and both injector loads confirmed.
+
+A/role1 PID24324 creation2026-10-25T11:05:42.1974818+03:00;
+B/role2 PID24136 creation2026-10-25T11:05:44.2096885+03:00. Both exact retail
+path/version1.4.21058.0. Explicit process reads verify BOTH alive (avoid mixed
+PowerShell auto-table output hiding Id columns). Native channel marker is
+admission=window-census-final; budget=defer-fresh-census; ordinary=POD, with
+baseline Player-world/owned-reset/stock-companion/local-look package READY.
+
+Initial private status in BOTH: actors0/paired0/worldEpoch0/capture0/match0/
+apply0/stopped0/costStop0/censusStop0/budgetPauses0, refreshRequired1 and
+certifiedWindow0. This is expected BEFORE paired scene admission, NOT failure
+or visible-sync confirmation. No budget stop ACK is expected for a merely
+paused window; existing terminal external-stop request/ACK remains available.
+
+User told start SAME live-enemy save loading in A, then start B a couple seconds
+later WITHOUT waiting for a whole A load first; initially no shooting/aggro/kills.
+Need visible first current-pose catch-up within10m and continuing NPC updates
+through new certified windows, plus usable responsiveness. Ask ready after both
+load. B30s effect slice and all real-failure stops remain; AI/health/armor/death
+NOT synchronized. Both currently waiting, visible/runtime outcome PENDING.
