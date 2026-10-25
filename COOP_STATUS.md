@@ -43,8 +43,16 @@ cadence/limit/lease/cache-lifetime/rearm expansion. Two independent reviews pass
 bounded position-only prediction written below. Fresh5834844D... build/linkPASS;
 A12360/B25932 launched/injected, native channels installed and waiting epoch0/
 costStop0/queries0. User DIRECT same LIVE-ENEMY checkpoint BOTH, initially no
-shooting/kills. Position result PENDING; latest handoff entry below controls.
+shooting/kills. NOW REJECTED as sustained sync: both reached epoch1 and stopped
+again. A cumulative1ms/site2; B census1595us/query28/other1567us/site1 after2
+applies. Both stop ACKs already quiescent via InspectOnly, no signal. Exact
+terminal logs preserved; games remain open, no new native fault/worker gap.
 A1895us non-query stall remains a competing cause, not guaranteed fixed.
+NEXT STATIC POLICY AUDIT: budget-incomplete observation must not be conflated
+with negative identity/read evidence. A possible per-window BudgetPaused state
+would require a NEW complete same-roster/world/session census before writes,
+typed refusal precedence and unchanged historical lease expiry. NOT implemented,
+NOT a reset of stopped and NOT an earned fresh runtime candidate yet.
 
 NEW BOUNDED CANDIDATE: full-postrender native callback tail, POSITIVE old owned
 OnKill->heap-unlink witness, observed physical menu close/reopen and fresh primary
@@ -46284,3 +46292,79 @@ Root slice remains<=30s from first qualified candidate and terminal/no rearm;
 death, HP, armor and AI state are explicitly NOT synchronized in this exam.
 Both processes remain open awaiting user. No old-game termination needed because
 user had already closed prior pair. No stop signal/live patch/agent game input.
+
+### 2026-10-25 — Reject final-admission run; identify budget/observation state conflict
+
+REJECTED as sustained enemy movement: while recording the launch handoff, both
+fresh5834844D... processes reached worldEpoch1 and the existing cost2/time fuse.
+No new user-visible result claimed; failure of the written sustained-channel
+prediction is already established by native channel termination. Source/POD
+reductions remain implemented, but NOT a demonstrated total-cost cure.
+
+Exact A12360/B25932 paths/creation identities revalidated as above, both alive.
+Terminal-enemy_root_12360.log/25932.log and cost-rejected-locomotion_hook.log
+preserved in reports/enemy-final-admission-20261025073340Z. Existing stop/ACKs
+both InspectOnly=True/stoppedAndQuiescent=True: no signal or live rearm sent.
+
+| Copy | Apply/match | Terminal site | Scope us | Window us | Query scope us | Other scope us |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| A12360 | 0/0 (normal A direction) | guard2 | 25 | 1000 | 15 | 9 |
+| B25932 | 2/2 | census1 | 1595 | 1595 | 28 | 1567 |
+
+A: scope15queries/72reads; window162queries/query224us; total284queries,
+peakScope524/peakWindow1000/peakQueries162; lastRead10E124C8D0,135B body span,
+lastQuery1038D91000, lastQueryBracket0/pending0. This is accumulated work, not
+a query-count overflow or a single1ms protection call. B: scope/window13queries,
+43reads; total2146queries, peakScope/window1602, peakQueries79; lastRead
+10E1102C3C,4B, lastQuery10E1102000, last bracket1us/pending0. Current read
+address is assigned before entry budget.check, not proof that this scalar
+read itself consumed1567us. Both workerGap0/external0/nativeFault0.
+
+H1 reduced-redundancy hypothesis is REJECTED as a complete liveness fix, not as
+source-operation reduction: the one final native graph remains correct STATIC
+and the native setter returned twice, but budget termination persists. No
+identical retry, budget increase, cadence/lease expansion, body-guard deletion
+or debugger attached. Death/armor/AI-state synchronization remains absent.
+
+HYPOTHESIS for NEXT source policy investigation, NOT implemented/admitted:
+cost exhaustion is incomplete observation, not itself proof of stale identity
+or unsafe native state. A separate BudgetPaused/NeedsFullCensus state could
+abort current work, close ALL root writes for the rest of its50ms work window,
+and reopen only after a NEW complete native-tick census in a LATER window
+matches historical roster, admitted world epoch and session. Each actual write
+still needs fresh current-native-self/job identity/ordinary and all late gates.
+Never reset the terminal stopped latch, native faults or lifecycle/peer state.
+This explicitly CHANGES cost-response policy; it is NOT the unchanged old fuse,
+not blind retries/rearm and not proof old objects remained alive during a gap.
+
+Independent adversarial reviews identify mandatory proof/code blockers:
+
+- Current bool copy/census conflates semantic-invalid, API/protection/SEH
+  rejection, terminal and budget-incomplete. copy's post-query QPC check can
+  mask API/Valid/protection failure, and its post-memcpy check can mask SEH.
+  Need sticky typed outcome/precedence: observed negative evidence wins over
+  simultaneous budget exhaustion. Only pure BudgetIncomplete may avoid the
+  existing semantic census_gap/reset/after-apply stop route.
+- A pause can occur while mailbox lock is already held. Pause publication must
+  be atomics-only under the existing single work permit, no lock acquisition
+  or writing tick-owned plain census_gap from another callback.
+- Each scope needs immutable work-window ticket plus certified(window,world,
+  session) metadata. A postblend opening a new QPC window CANNOT certify it;
+  it must skip native reads and request fresh tick census. Tick's50ms throttle
+  cannot suppress a required recertification. No partial roster/value/page
+  cache or callback/native pointer survives a pause.
+- Never reset a work window mid-scope or borrow counters. A scope can cross
+  the physical50ms boundary while its own work remains<1ms; final QPC must
+  reject old certification after that boundary, not merely compare old IDs.
+- Retain original last-COMPLETE census absolute expiry150ms and packet receive/
+  capture stamps200/150ms. Clearing active scope must not erase expiry and
+  silently revive an expired session. A new complete but changed/invalid census
+  retains existing after-apply terminal behavior. No new generation adoption.
+- Only successfully completed full census plus final budget/world/terminal
+  publication checks may certify the new window. Current setter-side closure
+  and final sequence/index/manager/BC/OnKill/freshness gates remain mandatory.
+
+These are STATIC policy constraints, not a new native writer hypothesis or
+runtime success. No further build/launch is prepared until typed observation
+semantics and these publication races are resolved on paper and in source.
+Existing1ms/50ms/256-query implementation remains terminal in the running image.

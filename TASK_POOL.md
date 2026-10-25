@@ -60,6 +60,16 @@ nativeadmission=metadata-then-final/ordinary=POD READY, worldEpoch0/costStop0/
 queries0 beforeuserload. reports/enemy-final-admission-20261025073340Z exactDLL/
 PDB+bootlogs. UserDIRECTsameLIVE-ENEMYsceneBOTH,noempty/menu,noinitialshoot/kills.
 VISIBLEPOSITIONRESULTPENDING. A1895usnonqueryOSstallNOTguaranteedfixed.
+NOWREJECTED: both5834844D...channelsSTOPPED epoch1; Awindow1000us/site2
+scope25/query15/window162queries; Bcensus1595/query28/other1567/site1,apply2.
+ACKInspectOnlyBOTHquiescent/no signal; exactterminal logsarchived,samegamesopen.
+DoNOTretryimage/raisebudget/deletefinalguards. ReducedreadworkNOTtotallivenesscure.
+NEXTSTATIC: explicitBudgetPaused->NEWlaterwindowFULLsame-roster/world/session
+censuscertification; terminalstoppedNEVERreset. NOTimplemented/noexamready.
+BLOCKERS: typedcopy/censusnegativeevidenceprecedence(API/SEHmaybemaskedbyQPC),
+atomics-onlypauseunderheldmailbox, immutablewindowticket+finalphysicalboundary,
+tickrecertificationnotthrottled, original150mshistoricallease+packetstampskept,
+no partialpublication/cache/ptrreuse, changed/negativecensusafterapplyterminal.
 IDBsaved2128/99/3True/readbackPASS. NoHP/death/AI-stateclaim.
 CombatSTATIC: narrowAA3Dwrite-skipdoesNOTpreservearmordetachment (old/newHP
 ratio thresholds). New141FCB3F0 isHS+28predicateNOTmutator. Needauthoritative
