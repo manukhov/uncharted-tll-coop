@@ -15,7 +15,13 @@ through PID+creation-bound kernel events, with staged lifecycle diagnostics.
 Actual new slice reviewed: stable initial enemy lives, native committed Dead
 witness and reliable A->B death request in B's CURRENT HumanActive update. It
 is default OFF ordinarily; fresh A270CA7F... image NOW enabled/launched A16076/
-B8844 with complete bootstrap READY in BOTH. World load/visible death PENDING,
+B8844 with complete bootstrap READY in BOTH. NOW REJECTED: user A/Chloe INSAS
+rifle kills did not kill B enemies. Both initial10 lives bound/worldEpoch1; B
+applied950 roots/matched1070, then BOTH censusStop2 before any accepted native
+retirement/Dead witness or death event. Weapon fire envelopes were received by
+B; missing weapon name is not the cause of this channel's failure. Exact field
+of first roster mismatch was not recorded; whole-Local raw-address equality
+can reject proven native relocation, but this run's causal field is UNPROVED.
 not full shots/B damage authority. Preserve
 Player sync, menu lifetime safeguards and stock-Nadine removal; appearance stays
 PARKED. No more position-only retry in lieu of the requested combat behavior.
@@ -46845,4 +46851,64 @@ User scenario: DIRECT same live-enemy checkpoint BOTH; once mutual Players
 visible promptly kill ONE ordinary enemy on A/Chloe, B does not shoot; report
 whether SAME enemy dies on B and surviving NPCs continue following. 30s bounded
 slice starts on first real sync effect, not menu startup. Visible outcome and
-positive death result PENDING. No repeated unmodified launch/rearm/toggle.
+positive death result NOW REJECTED below. No repeated unmodified launch/rearm/toggle.
+
+### 2026-10-25 — Reject A270CA7F death exam at complete-census reconciliation
+
+REJECTED by user's visible report: A/Chloe automatic-rifle kills remain alive
+on B/Nadine. Both install packages did pass and both initial manifests bound10
+same-key lives in paired worldEpoch1. A captured>=950 roots; B matched1070,
+applied950. BOTH terminal censusStop2; costStop0/workerGap0/nativeFault0/
+external0, budgetPauses11 each. All accepted retiring/prebindRefused/nativeDead/
+deathEvents/deathReceived/nativeAttempts/deathResults counters remain0. Stop2
+means a COMPLETE readable census failed reconciliation (header, fresh Local or
+missing initial row), NOT a failed read (stop1), budget stop or30s expiry.
+The exact first mismatching field is not in this image's log. current_world()
+suppresses observations AFTER stopped, so zero accepted counters do NOT prove
+native hooks were never entered, nor prove weapon-specific bypass. No broadened
+native callback/HP/Die admission is justified. Raw logs/image preserved at
+reports/enemy-native-death-20261025091031Z/rejected-*.log.
+
+Current exact-run shared log shows A fire art9A07E17F envelopes sent/received
+and selected launch direction/origin applied on B, e.g. seq57..67. Repo native
+art registry entry at prior attachment analysis resolves9A07E17F to
+assault-rifle-insas/type1 (old pistol alias is REJECTED). Packet/launch marker
+does NOT prove bullet hit/damage parity, but death-result channel deliberately
+observes committed NPC death independent of weapon events. Implementing a new
+INSAS whitelist does not explain or cure this known census stop.
+
+READONLY postfailure inspection of exact-PID/creation A270 DLL local PDB symbols
+and immutable NativeBinding values: B all10 initial record/gen still match live
+objects, D8/DC unchanged; A6 initial weak records currentlyNULL, four remain
+same gen/D8/DC. These are a later non-atomic observation, NOT the first mismatch
+snapshot or death commit proof. Native manager/array remain1100F738A0/
+1100F738D0; header observed11 rowsA/12B earlier, count evolves during combat.
+No remote memory write, input or new game launch. Existing native read-only
+memory reader plus local DbgHelp symbol lookup only. Actual current generation
+changes, raw pointers or absences are NOT adopted as authority.
+
+STATIC eliminated wrong state/FLS layout and unhandled direct dispatch:
+HumanDead factory1404A09D0 and in-place ctor1404A0A40 install exact142949590;
+entry only exact virtual+10, published current/owner before call. HumanActive
+request1404A0730 descriptor143D46440/factory1404A0690 selects142949558+20.
+Pirate D08 PCs42D27E/5D3 match disassembly. Getter1416A2E80 and setter1416A2ED0
+use same FLS+90/+98; worker and synchronous executor establish current owner.
+Special lethal helpers1405063D0/6AB0/6E20 request death animation via1405014C0/
+140504FF0/1418B0580, not another proven Process Dead commit. Separate direct
+cleanup1404A60E2 belongs non-Pirate vtable14294DB18. Falling-through-world
+NpcPostAnimKill14042FB9E is not ordinary gun death; do not broaden to it.
+
+STATIC real source defect: Local equality treats actor/spawner addresses as
+identity. Native generic mover1415FDE50 calls exact Pirate+8=1404A9490 at
+1415FDF01, memmoves allocation at1415FDF0D, rewrites SAME weak record+0/+8
+at1415FDF1C/1F. Character_RelocateOwnedPointers141E9FF90 rebases native body.
+Thus valid same-life relocation BETWEEN complete observations must not become
+a new life or a global roster stop. Narrow fix in progress: complete fresh
+record/gen/fullKey correspondence, update only current Local actor/spawner
+addresses under existing mailbox/workpermit, ++revision invalidates scheduled
+old pointer; never alter immutable bindings/session/life/event/seq/leases.
+New weak/gen/key/missing-without-positive-witness still refuse. This is NOT a
+concurrent-relocation lifetime lease. Add first mismatch POD from ALREADY copied
+rosters before reset, and bounded native D08/Dead entry+gate counters BEFORE
+current_world; existing private worker only, no extra native reads/framework.
+No earned runtime retry until source review/quota/new prediction are complete.

@@ -47,7 +47,19 @@ in BOTH, all lifecycle stagescomplete. Initial worldEpoch0/livesReady0/apply0/
 death0 expected BEFOREload, NOT behavior success. User DIRECTsameLIVEcheckpoint,
 when mutualPlayers appear promptly kill ONEordinaryNPC onA/Chloe; Bno shooting;
 within30s effect slice require visible sameBdeath +nativeDead/ACK +survivorroots.
-Visible result PENDING; no full shots/B authority claim. User confirms old
+NOW visibleREJECTED: A/Chloe rifle kills notmirroredB. Both paired10livesReady1;
+A capture950 thencomplete-censusstop2; Bmatch1070/apply950 thenstop2. Native
+acceptedretiring/Dead/events/attempts0, cost/gap/fault/external0. Notweaponname:
+9A07E17F INSASfireenvelopes receivedB. ExactfirstmismatchUNKNOWN. ProvenSTATIC
+native1415FDE50 relocation preservesweak/gen whilechangingrawaddresses; whole
+Localequality falselycanstop2. Narrow freshsameweak/gen/fullKey addressupdate+
+revision inprogress, no binding/session/life/sequence reset. FirstmismatchPOD
+fromownedrosters +nativeentry/gaterefusals beforecurrent_world needed toavoid
+silentpoststopobservers. Noextra native reads/framework oruncheckedretry.
+ReadonlyBpostfailureall10sameinitialweak/gen/D8/DC, A6initialrecordsNULL/4same
+livekeys; laternonatomicNOTcausalfirstmismatch/deathcommit. NativeVT/FSM/FLS/
+directdispatch auditPASS; doNOTbroadenhealth/deathcallbacks. No full shots/B
+authority claim. User confirms old
 failure was NEWEST5CCpair, not the prior3430pair.
 No respawn,
 prebind death, B combat prediction or shot/AI authority claim. Labels applied
