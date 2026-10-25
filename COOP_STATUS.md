@@ -69,6 +69,9 @@ kills, so B is expected bounded living-roster refusal, not a no-combat failure.
 New one-line policy makes query-quota exhaustion use the SAME closed-window/
 fresh-census deferral, still never issues257th API; actual read/clock/lifecycle
 failures remain absorbing. Fresh revised build/no-combat exam pending below.
+NOW fresh5CCBD7F4...build/linkPASS; A19756/B25328 launched/injected with
+budget=defer-time-query-census. Both waiting epoch0/costStop0/censusStop0/
+budgetPauses0, refresh1/cert0 as expected before load; visible outcome PENDING.
 
 NEW BOUNDED CANDIDATE: full-postrender native callback tail, POSITIVE old owned
 OnKill->heap-unlink witness, observed physical menu close/reopen and fresh primary
@@ -46605,3 +46608,26 @@ reports/apply_character_manager_init_20261025.txt confirms2129functions/100data/
 3types, save_database returned True. MCP restarted; Init new name and singleton
 xrefs read back. Both query-deferral delta reviews pass; fresh build/launch
 ready using the revised no-combat prediction. Prior copies closed by USER.
+
+### 2026-10-25 11:16 MSK — Launch time+query fresh-census exam
+
+Source d3aef53, two query-delta reviews, saved/readback2129/100/3 sole IDB and
+revised prediction complete. Fresh normal runtime build/link PASS, expected
+Recipe C4324 only. Immediately launched/injected LocalPair2 -EnemyRootSync,
+no debugger/input/menu control. Prior3430 copies closed by USER, no crash.
+
+Exact DLL5CCBD7F418E4203131D99058C71C33D17BF4EC8D22C99CC8494C95913808E9F4;
+PDB7CFE09D5D52A5670446A443113C47CBD5870CDA5A77AA14CAC8A161709E1E091.
+Archived BEFORE launch at reports/enemy-quota-census-20261025081635Z with
+launch stdout/stderr, boot-locomotion_hook.log and both private boot logs.
+A19756 creation2026-10-25T11:16:35.7162302+03:00;
+B25328 creation2026-10-25T11:16:37.7328063+03:00; exact retail paths, both alive.
+
+Both show budget=defer-time-query-census/ordinary=POD and native baseline
+package READY. Initial actors0/paired0/worldEpoch0/capture0/match0/apply0/
+stopped0/costStop0/censusStop0/budgetPauses0, refreshRequired1/certifiedWindow0:
+expected BEFORE user load, NOT visible-sync success. No stop event signaled.
+User scenario unchanged: SAME enemy checkpoint, start B load~2s after A starts,
+initially NO shooting/aggro/kills. Need visible catch-up +continuing NPC tracking
+and repeated fresh certified windows; combat/death still outside this slice.
+Both copies remain waiting. Runtime/visible outcome PENDING; no unchanged retry.

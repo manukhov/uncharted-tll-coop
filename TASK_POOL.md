@@ -27,7 +27,11 @@ later(sameLIVE-ENEMYcheckpoint,noinitialshoot/aggro/kills). NOWAquery257stopped
 AFTERtimepause1+recertWindow15; Bapply46/match54 thenchangedRoster2, USERCONFIRMS
 combat/kills. No claimno-combatfailureonB. NEWqueryquota->samefreshcensusdefer,
 cap256unchanged/no257thAPI/readrefusalprioritykept. Twoexact-deltareviewsPASS;
-revisedbuild/testPENDING. OldgamesUSERclosedhimself,nocrashreported/noagentclose.
+REVISED5CCBD7F4...build/linkPASS; A19756/B25328 launched/injected,
+defer-time-query-census READY,epoch0/costStop0/censusStop0/pauses0 beforeload.
+reports/enemy-quota-census-20261025081635Z exactDLL/PDB+bootlogs.
+UserSAMEcheckpoint/startB~2safterAstarts, initiallyNOshoot/aggro/kills.
+VISIBLEoutcomePENDING. OldgamesUSERclosedhimself,nocrashreported/noagentclose.
 Delayed-B-loadpositionpredictioninCOOP_STATUS; Initial<=10m
 catchup alreadyexists; capNOTwidened (keyframedvelocity/contact path). NoAI/
 combat/deathwriter, noofflineframework. No fairness/hardlatencyguarantee.
