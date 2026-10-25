@@ -801,25 +801,74 @@ static_assert(offsetof(BodyImportFields, native) == 0x00 && offsetof(BodyImportF
 constexpr std::size_t kBodyImportSpan = offsetof(BodyImportFields, source) + sizeof(BodyImportFields::source);
 static_assert(kBodyImportSpan == 0x87 && kBodyImportSpan <= sizeof(BodyImportFields));
 
+struct OrdinaryJobFields {
+    std::uintptr_t control, fg;
+    std::uint8_t gap10[4];
+    std::uint8_t flag;
+    std::uint8_t gap15[0xB];
+    std::uintptr_t postpose;
+};
+static_assert(std::is_trivial_v<OrdinaryJobFields> && std::is_standard_layout_v<OrdinaryJobFields> &&
+              std::is_trivially_copyable_v<OrdinaryJobFields>);
+static_assert(sizeof(OrdinaryJobFields) == 0x28 && offsetof(OrdinaryJobFields, control) == 0 &&
+              offsetof(OrdinaryJobFields, fg) == 8 && offsetof(OrdinaryJobFields, flag) == 0x14 &&
+              offsetof(OrdinaryJobFields, postpose) == 0x20);
+struct FgOrdinaryHeaderFields {
+    std::uint32_t flags;
+    std::uint8_t gap04, perform, mode, gap07, export_flag;
+    std::uint8_t gap09[7];
+    std::uintptr_t control;
+};
+static_assert(std::is_trivial_v<FgOrdinaryHeaderFields> && std::is_standard_layout_v<FgOrdinaryHeaderFields> &&
+              std::is_trivially_copyable_v<FgOrdinaryHeaderFields>);
+static_assert(sizeof(FgOrdinaryHeaderFields) == 0x18 && offsetof(FgOrdinaryHeaderFields, flags) == 0 &&
+              offsetof(FgOrdinaryHeaderFields, perform) == 5 && offsetof(FgOrdinaryHeaderFields, mode) == 6 &&
+              offsetof(FgOrdinaryHeaderFields, export_flag) == 8 && offsetof(FgOrdinaryHeaderFields, control) == 0x10);
+struct FgWeakIdentityFields {
+    std::uintptr_t record;
+    std::uint32_t generation;
+};
+static_assert(std::is_trivial_v<FgWeakIdentityFields> && std::is_standard_layout_v<FgWeakIdentityFields> &&
+              std::is_trivially_copyable_v<FgWeakIdentityFields>);
+static_assert(sizeof(FgWeakIdentityFields) == 0x10 && offsetof(FgWeakIdentityFields, record) == 0 &&
+              offsetof(FgWeakIdentityFields, generation) == 8);
+// Read through Fg+1B3 only, excluding the POD's four trailing alignment bytes.
+constexpr std::size_t kFgWeakIdentitySpan = offsetof(FgWeakIdentityFields, generation) + sizeof(FgWeakIdentityFields::generation);
+static_assert(kFgWeakIdentitySpan == 0xC && kFgWeakIdentitySpan <= sizeof(FgWeakIdentityFields));
+struct FgCustomCallbackFields { std::uintptr_t first, second; };
+static_assert(std::is_trivial_v<FgCustomCallbackFields> && std::is_standard_layout_v<FgCustomCallbackFields> &&
+              std::is_trivially_copyable_v<FgCustomCallbackFields>);
+static_assert(sizeof(FgCustomCallbackFields) == 0x10 && offsetof(FgCustomCallbackFields, first) == 0 &&
+              offsetof(FgCustomCallbackFields, second) == 8);
+
 bool ordinary(std::uintptr_t actor, std::uintptr_t job, std::array<float, 8>& transform, unsigned& gate, ReadCache& cache) noexcept {
     const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
     gate = 1;
-    std::uintptr_t fg{}, record{}, record_actor{}, owner_record{}, control{}, fg_control{}, owner_control{}, control_fg{};
-    std::uintptr_t job_fg{}, custom{}, art{}, active_art{}, cache_art{}, raw{}, art_raw{}, composite{}, composite_owner{}, bodies{};
-    std::uint32_t id{}, fg_id{}, flags{}, database{}, skeleton{}, parent_key{}, parent_generation{}, body_count{}, bindings{}, gate18{}, gate24{};
-    std::uint8_t job_flag{}, perform{}, mode{}, export_flag{}, force{}, cached{}, composite_flags{};
-    std::uintptr_t local_pose{}, postpose{};
-    if (!read(actor+0x1A8, fg) || !read(job+8, job_fg) || job_fg != fg || !read(job+0x14, job_flag) || job_flag ||
-        !read(job+0x20, postpose) || postpose != g_module+0x6CD220 ||
-        !read(actor+0xA8, owner_record) || !read(fg+0x1A8, record) || record != owner_record || !read(record+8, record_actor) || record_actor != actor ||
-        !read(actor+0xBC, id) || !id || !read(fg+0x1B0, fg_id) || fg_id != id ||
-        !read(job, control) || !control || !read(fg+0x10, fg_control) || fg_control != control ||
-        !read(actor+0x1A0, owner_control) || owner_control != control || !read(control+0x20, control_fg) || control_fg != fg ||
-        !read(fg, flags) || (flags & 0x60) != 0x60 || !read(fg+5, perform) || !perform ||
-        !read(fg+6, mode) || !mode || !read(fg+8, export_flag) || !(export_flag & 1) ||
-        !read(fg+0x298, custom) || custom || !read(fg+0x2A0, custom) || custom ||
+    std::uintptr_t fg{}, record_actor{}, owner_record{}, owner_control{}, control_fg{};
+    std::uintptr_t art{}, active_art{}, cache_art{}, raw{}, art_raw{}, composite{}, composite_owner{}, bodies{};
+    std::uint32_t id{}, database{}, skeleton{}, parent_key{}, parent_generation{}, body_count{}, bindings{}, gate18{}, gate24{};
+    std::uint8_t force{}, cached{}, composite_flags{};
+    std::uintptr_t local_pose{};
+    // Owned, uninitialized PODs: a failed full-span guarded copy short-circuits
+    // before any field use. Spans can inspect gaps/late fields earlier and so
+    // refuse more strictly. Every ordinary() call obtains NEW observations;
+    // neither a batch nor the lexical page cache is an atomic/lifetime lease.
+    OrdinaryJobFields job_fields;
+    FgWeakIdentityFields fg_identity;
+    FgOrdinaryHeaderFields fg_header;
+    FgCustomCallbackFields custom;
+    if (!read(actor+0x1A8, fg) || !read(job, job_fields) || job_fields.fg != fg || job_fields.flag ||
+        job_fields.postpose != g_module+0x6CD220 ||
+        !read(actor+0xA8, owner_record) || !copy(fg+0x1A8, &fg_identity, kFgWeakIdentitySpan, &cache) ||
+        fg_identity.record != owner_record || !read(fg_identity.record+8, record_actor) || record_actor != actor ||
+        !read(actor+0xBC, id) || !id || fg_identity.generation != id ||
+        !job_fields.control || !read(fg, fg_header) || fg_header.control != job_fields.control ||
+        !read(actor+0x1A0, owner_control) || owner_control != job_fields.control ||
+        !read(job_fields.control+0x20, control_fg) || control_fg != fg ||
+        (fg_header.flags & 0x60) != 0x60 || !fg_header.perform || !fg_header.mode || !(fg_header.export_flag & 1) ||
+        !read(fg+0x298, custom) || custom.first || custom.second ||
         !read(g_module+0x3682F49, force) || !read(g_module+0x3682F4B, cached) || cached || !read(fg+0x100, local_pose)) return false;
-    if (((force || (flags & 2)) && local_pose ? 2 : mode) != 2) return false;
+    if (((force || (fg_header.flags & 2)) && local_pose ? 2 : fg_header.mode) != 2) return false;
     gate = 2;
     if (!read(fg+0x18, art) || !art || !read(fg+0x1A0, active_art) || art != active_art ||
         !read(fg+0xF0, cache_art) || art != cache_art || !read(fg+0xF8, raw) || !raw ||
@@ -937,7 +986,12 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
         schedule_now > census_valid_until.load(std::memory_order_acquire)) return;
     if (!TryAcquireSRWLockExclusive(&lock)) return;
     bool due{};
-    wire::Packet scheduled_packet{}; const auto scheduled_session = session;
+    // Select values, NEVER admit a native pointer from the mailbox. The final
+    // pass below must rediscover this exact weak/key tuple from native self.
+    wire::Packet scheduled_packet{};
+    Local scheduled_local{};
+    std::size_t scheduled_index = roster.count;
+    const auto scheduled_session = session;
     if (session && confirmed && active_scope.load(std::memory_order_acquire) &&
         schedule_now <= census_valid_until.load(std::memory_order_acquire) &&
         schedule_now-peer_seen <= 1000 && !stopped.load(std::memory_order_acquire) && !g_dll_inert) {
@@ -955,68 +1009,67 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
                     scheduled_packet = row.incoming;
                 }
             }
+            if (due) { scheduled_local = roster.rows[i]; scheduled_index = i; }
             break;
         }
     }
     ReleaseSRWLockExclusive(&lock);
     if (!due) return;
-    // Cache protections only for this callback, after stock and before setter.
-    // Repeated identity/eligibility checks below still reread actual game data.
+    // ONE fresh final observation, after the scheduling mailbox was released.
+    // Former B discovery + final passes both traversed the same native graphs;
+    // discovery had no side effect/retention and selected only these copied
+    // mailbox values. Keep the FINAL identity/ordinary/late checks, not fields
+    // or protection observations borrowed from an earlier callback/worker.
     ReadCache cache{}; cache.budget = &budget;
     const auto read = [&cache]<class T>(std::uintptr_t at, T& value) noexcept { return copy(at, &value, sizeof(value), &cache); };
-    Local local{}; std::array<float, 8> transform{}; unsigned gate{};
-    if (!identity(actor, local, cache) || !ordinary(actor, reinterpret_cast<std::uintptr_t>(native_job), transform, gate, cache)) {
+    Local local{}; std::array<float, 8> fresh{}; unsigned gate{};
+    if (!identity(actor, local, cache) || !(local == scheduled_local) ||
+        !ordinary(actor, reinterpret_cast<std::uintptr_t>(native_job), fresh, gate, cache)) {
         last_rejection.store(gate, std::memory_order_relaxed);
         rejected.fetch_add(1, std::memory_order_relaxed); return;
     }
     const auto now = GetTickCount64();
     if (!TryAcquireSRWLockExclusive(&lock)) return; // never wait in an animation job
     if (!session || session != scheduled_session || !active_scope.load(std::memory_order_acquire) || stopped.load() ||
-        now > census_valid_until.load(std::memory_order_acquire) || !roster_scope_current(roster, cache)) {
+        now > census_valid_until.load(std::memory_order_acquire) || !roster_scope_current(roster, cache) ||
+        scheduled_index >= roster.count || !(roster.rows[scheduled_index] == local)) {
         ReleaseSRWLockExclusive(&lock); return;
     }
-    std::size_t index = roster.count;
-    for (std::size_t i = 0; i < roster.count; ++i) if (roster.rows[i] == local) { index = i; break; }
-    wire::Packet packet{}; bool use{}; const auto local_session = session;
-    if (index < roster.count) {
-        auto& row = rows[index];
-        if (!g_net_role_b) {
-            packet.kind = wire::Kind::root; packet.key = local.key;
-            std::copy_n(transform.begin(), 3, packet.position.begin()); std::copy_n(transform.begin()+4, 4, packet.rotation.begin());
-            if (wire::valid_pose(packet) && budget.check()) { row.outgoing = packet; row.captured = now; row.dirty = true; captured.fetch_add(1, std::memory_order_relaxed); }
-        } else if (confirmed && now-peer_seen <= 1000 && row.received && now-row.received <= 200 &&
-            scheduled_packet.sender == peer && scheduled_packet.receiver == session &&
-            row.incoming.sequence == scheduled_packet.sequence) {
-            packet = scheduled_packet;
-            double distance{};
-            for (unsigned axis = 0; axis < 3; ++axis) { const double delta = packet.position[axis]-transform[axis]; distance += delta*delta; }
-            // First prototype never teleports a mismatched encounter across the map.
-            use = distance <= 100.0;
-            if (use && !first_apply) first_apply = now;
-            if (first_apply && now-first_apply > 30000) { stopped.store(true); use = false; }
+    const auto index = scheduled_index;
+    auto& row = rows[index];
+    wire::Packet packet{};
+    if (!g_net_role_b) {
+        packet.kind = wire::Kind::root; packet.key = local.key;
+        std::copy_n(fresh.begin(), 3, packet.position.begin()); std::copy_n(fresh.begin()+4, 4, packet.rotation.begin());
+        if (wire::valid_pose(packet) && budget.check()) {
+            row.outgoing = packet; row.captured = now; row.dirty = true;
+            captured.fetch_add(1, std::memory_order_relaxed);
         }
+        ReleaseSRWLockExclusive(&lock); return;
     }
-    ReleaseSRWLockExclusive(&lock);
-    if (!use) return;
-    // Refresh identity/eligibility after releasing the mailbox, never dereference
-    // an actor obtained from the receive thread. Current native caller owns self.
-    Local after{}; std::array<float, 8> fresh{};
-    if (!identity(actor, after, cache) || !(after == local) || !ordinary(actor, reinterpret_cast<std::uintptr_t>(native_job), fresh, gate, cache)) return;
-    if (!TryAcquireSRWLockExclusive(&lock)) return;
+    if (!confirmed || now-peer_seen > 1000 || !row.received || now-row.received > 200 ||
+        scheduled_packet.sender != peer || scheduled_packet.receiver != session ||
+        row.incoming.sequence != scheduled_packet.sequence) {
+        ReleaseSRWLockExclusive(&lock); return;
+    }
+    packet = scheduled_packet;
+    // First prototype never teleports a mismatched encounter across the map.
+    double fresh_distance{};
+    for (unsigned axis = 0; axis < 3; ++axis) { const double delta = packet.position[axis]-fresh[axis]; fresh_distance += delta*delta; }
+    if (!(fresh_distance <= 100.0)) { ReleaseSRWLockExclusive(&lock); return; }
+    if (!first_apply) first_apply = now;
+    if (now-first_apply > 30000) { stopped.store(true); ReleaseSRWLockExclusive(&lock); return; }
     const auto apply_now = GetTickCount64();
     std::uintptr_t manager{};
     const bool still_current = !g_dll_inert && active_scope.load(std::memory_order_acquire) && !stopped.load() &&
         apply_now <= census_valid_until.load(std::memory_order_acquire) &&
-        session == local_session && session == packet.receiver && peer == packet.sender &&
+        session == scheduled_session && session == packet.receiver && peer == packet.sender &&
         confirmed && apply_now-peer_seen <= 1000 && index < roster.count && roster.rows[index] == local &&
         rows[index].received && apply_now-rows[index].received <= 200 && first_apply && apply_now-first_apply <= 30000 &&
         rows[index].incoming.sequence == packet.sequence &&
         roster_scope_current(roster, cache, true) &&
         read(g_module+0x3898630, manager) && manager == roster.manager;
     if (!still_current) { ReleaseSRWLockExclusive(&lock); return; }
-    double fresh_distance{};
-    for (unsigned axis = 0; axis < 3; ++axis) { const double delta = packet.position[axis]-fresh[axis]; fresh_distance += delta*delta; }
-    if (!(fresh_distance <= 100.0)) { ReleaseSRWLockExclusive(&lock); return; }
     // ordinary() walks animation/physics after identity(). Recheck kill state
     // and generations after that walk, before the final freshness/cost cutoff.
     // These are actual budgeted SEH reads, NOT a lifetime lease across the setter.
@@ -1107,7 +1160,7 @@ bool install_enemy_root_sync() {
     const bool ready = changed && sealed;
     if (!ready) enemy_root::stopped.store(true);
     enemy_root::installed.store(ready, std::memory_order_release);
-    boot_log_line(ready ? "ENEMY-ROOT native Pirate+408 root replication installed (readGuard=QueryWorkingSetEx-page; 30-second first slice; no HP/AI writes)" :
+    boot_log_line(ready ? "ENEMY-ROOT native Pirate+408 root replication installed (readGuard=QueryWorkingSetEx-page; admission=metadata-then-final; ordinary=POD; 30-second first slice; no HP/AI writes)" :
         "ENEMY-ROOT installation refused; stock forwarding only");
     return ready;
 }

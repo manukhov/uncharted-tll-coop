@@ -34,6 +34,15 @@ can stop all other NPCs. Need per-life row retirement/stable encounter plus
 reliable world-keyed death events, not old scalar damage/rawHP/AI-disable paths.
 Native npc-die provenance is NOT yet a safe replication phase/lifetime proof.
 
+NEW STATIC SOURCE (2026-10-25): metadata-then-final admission snapshots the
+expected row/session/packet by value, then performs ONE fresh complete native
+identity/ordinary pass immediately before final write checks. B's redundant
+earlier discovery pass removed; FINAL ordinary/body/health/weak/OnKill/time gates
+retained. Adjacent gate1 POD spans reduce22->13 guarded copies per pass. No
+cadence/limit/lease/cache-lifetime/rearm expansion. Two independent reviews pass;
+bounded position-only prediction written below. Fresh build/runtime pending.
+A1895us non-query stall remains a competing cause, not guaranteed fixed.
+
 NEW BOUNDED CANDIDATE: full-postrender native callback tail, POSITIVE old owned
 OnKill->heap-unlink witness, observed physical menu close/reopen and fresh primary
 recipe. Per-world leave envelopes prevent an old menu packet closing a new pair.
@@ -46123,3 +46132,120 @@ did NOT close them. User now explicitly confirms he closed BOTH himself.
 CONFIRMED USER OUTCOME: manual closure, no crash reported; this is not a watched
 normal-exit or native menu-cleanup result. No new launch/rebuild/rearm authorized
 or performed merely by this clarification; enemy-sync rejection above stands.
+
+## 2026-10-25 — Select enemy metadata before one final native admission
+
+STATIC source candidate, NOT yet runtime-confirmed. User resumes actual enemy
+synchronization after B-local kill and positional divergence; preserve Player
+sync/stock-companion removal, leave appearance and combat writers parked. No
+games currently running; user closed prior A10696/B23744 himself, no crash.
+
+Precise hypothesis: enemy_root::postblend already knows the due row, packet and
+local session under its scheduling mailbox lock. Former B discovery
+identity()+ordinary() only re-observed that row/transform before releasing the
+mailbox and repeating BOTH full native graph walks. It had no native side
+effect, retention, exclusion or lifetime lease. Snapshot expected Local
+(actor/record/generation/spawner/full Key), packet, index and session BY VALUE;
+release scheduling lock; run ONE fresh identity(current native self) that MUST
+equal expectedLocal and ONE fresh ordinary(current native job). Then preserve
+the final locked session/peer/index/row/sequence/world/manager checks, latest
+<=10m distance, actual BC/OnKill rereads and final post-read QPC/freshness gate.
+Do not follow scheduledLocal.actor or any receive-worker pointer.
+
+IMPLEMENTED in enemy_root_sync_runtime.inl: A still makes one fresh capture
+pass and no native write. B removes ONLY the early discovery graph; its FINAL
+complete native eligibility pass and setter-side lifecycle close check remain.
+Use the freshly observed transform (including receiver+13C service lane), never
+a census/scheduled pose. The final mailbox remains locked through final reads
+and native setter as before. A changed packet during fresh reads is rejected
+by sequence equality; new local session/peer/roster/index fails closed. Reuse/
+relocation/kill fails current identity versus copied tuple or late BC/OnKill;
+matching authored Key alone cannot adopt a new life. first_apply remains a
+qualified candidate timestamp after fresh-distance check, not a death ACK.
+
+Same-pass POD batching: exact job[0,28), Fg[0,18), Fg[1A8,1B4), Fg[298,2A8).
+All offsets/widths/full spans have trivial/standard-layout/offsetof assertions;
+weak span excludes trailing4B padding. Fields used only after successful
+guarded full copy, and native pointers followed at original validation gates.
+Spans include gaps/observe some later fields earlier and can REFUSE more
+strictly; this is not an atomic snapshot. Gate1 successful copy count22->13;
+B additionally avoids the entire redundant early identity/ordinary pass.
+Page-query count is NOT promised halved: the old final pass shared lexical
+pages with discovery, while scalar reads/QPC/cache scans were still repeated.
+
+Competing hypotheses / evidence quota:
+
+- H1: redundant guard/read/bookkeeping work causes B's cumulative1ms stop.
+  Concrete source call graph shows old two read-only graph walks, and new
+  by-value metadata selection keeps the later/final complete write predicate.
+  Prior B14us terminal scope with window1000us/query171us is accumulated cost,
+  not an individually slow protection query. Removing early work targets this.
+- H2: unpreemptible paging/scheduling dominates. A1895us/query32us remains
+  compatible; no source refactor can guarantee a1ms wall bound. If new reduced
+  read scopes still stop on non-query wall time, reject a claimed total cure;
+  do not raise the fuse or call a guessed scheduler cause CONFIRMED.
+- H3: all game graphs are needed twice as a native lease. REJECTED: early
+  identity/ordinary are read-only and retain no native lock/strong handle;
+  all final native reads/current-callback ownership and late guards remain.
+- H4: reduce cadence or defer at soft budget. Not chosen: average cadence
+  alone does not reduce a bunched peak; fixed-order soft skips can starve rows,
+ 100ms census narrows150ms lease margin. Avoid new scheduler state until needed.
+
+Independent evidence KINDS beyond code review: exact Pirate14294B9D0+408
+native call141A929A1/return141A929A7 proves current owner/RSI job boundary;
+dataflow writes async job+20 at141781EE3/EEA and sync141783173/17A BEFORE this
+boundary, and native Fg weak identity14177F94E/95A/975 matches copied offsets;
+independent confirmed control/cache and game-driven body structure registry
+(owner+1A0==job0==Fg10/control20) preserves admission coverage. Native setter
+141E7D0D0 remains unchanged, not a new guessed function. Prior B12 actual native
+returns established reachability but NOT stable sync. Source quota and TWO
+independent adversarial reviews pass; stock once-forward/RAX/LastError and
+work-permit/mailbox order unchanged. No new offline test framework.
+
+FALSIFIABLE prediction BEFORE fresh build/launch: fresh direct same live-enemy
+checkpoint in BOTH, no empty/menu first and initially NO shooting/kills. B's
+normal update performs only the one final graph walk; expect sustained root
+updates beyond the old12, costStop0 through the bounded first<=30s slice, and
+user-visible corresponding NPC position/rotation following A without severe
+lag. READY/counters alone are NOT success; actual visible behavior required.
+If early B cumulative-cost stop persists, or A again stops on non-query work,
+preserve exact terminal context and reject stable-sync claim. No automatic
+identical retry. Keep1ms/50ms/256-call fuse,50ms cadence,150ms census lease,
+200ms packet age and all final guards; no debugger for performance exam.
+Death/HP/armor/AI-state synchronization is NOT predicted by this root-only exam.
+
+### 2026-10-25 — Narrow B health suppression versus armor presentation
+
+STATIC, no combat writer admitted: CharacterApplyAttackInfo140409F70 has exact
+health-deduction call14040AA3D [r10+D00], return14040AA44. For exact Pirate
+14294B9D0, slot data14294C6D0 is141DEE1D0 -> HS142BBE128+20=141FCB210.
+HS+1C0=141FCAE40 performs real rawHP+38 store141FCAE54 through damage calls
+141FCB2E6/310/336/3A1. This is narrower than returning early from whole +1170,
+but predicted-lethal/KnockedDownSkill branches PRECEDE it. Generic HS suppression
+would also affect Player/heal/scripted authoritative paths; not a B-only gate.
+
+REJECTED claim: skipping AA3D preserves ALL armor/hit presentation. After it,
+HS+F8=141FCB570 at14040AA4E supplies effectiveHP/maxHP; pre/post ratios feed
+NpcArmorOnHealthDamage1403D7DF0 at14040AA70. Native old ratio XMM3/XMM6 at
+1403D7E56 and new stack/XMM7 at7E66 drive SIMD7F30 / scalar7FE9..8045 tests
+old>=threshold AND threshold>new. Equal ratios suppress these armor-detachment
+crossings, even if the outer hit handler still executes. B presentation needs
+an explicit authoritative armor policy or another proven mechanism.
+
+Strong STATIC new name141FCB3F0 HealthSystem_WouldDamageDepleteHealth, exact
+HS+28, a predicate NOT mutation. Quota: vtable142BBE128+28 identity; direct
+caller14040EC42/target+1170 continuationEC7D; disassembly uses effective health,
+scaled damage+90, mode+68/override70/minimum6C and native gates without HP store.
+Its bool only gates melee last-hit flag14040EC5A; forcing false does NOT suppress
+health. HS+118/141FCA9F0 returns damage mode; mode3 also suppresses upper
+armor/effects, so not a preserved-presentation solution either. Direct scalar
+damage relay still risks duplicate damage from already mirrored real shots.
+
+Labels script adds that one unique function, narrows existing health/armor
+comments and four instruction comments. Only sole ida/tll.i64 is being saved
+through stopped-MCP/headless pipeline; runtime build has no new combat hook.
+IDB saved PASS: reports/apply_enemy_damage_frontier_20261025.txt records
+2128functions/99data/3types, save_database returned True. Restarted MCP readback
+resolves141FCB3F0 to HealthSystem_WouldDamageDepleteHealth and vtable xref.
+Retail tll.exe remains1.4.21058.0; no game currently running. Source/reviews/
+prediction are ready for immediate fresh build then two-copy root-only exam.

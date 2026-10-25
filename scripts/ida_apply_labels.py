@@ -8351,9 +8351,26 @@ FUNCTIONS = {
     ),
     0x141FCB210: (
         "HealthSystemApplyDamage",
-        "HealthSystem virtual +0x20. Applies integer health damage and updates "
-        "the system's current-health/death-related state. Called by "
-        "PirateApplyDirectHealthDamage.",
+        "STATIC exact HealthSystem142BBE128 virtual+20, distinct from "
+        "nonmutating damage-depletion predicate+28/141FCB3F0. Native "
+        "Pirate+D00/141DEE1D0 forwards integer damage here. Honors mode+68, "
+        "override+70, scale+90, health floors and timer/flag policy; records "
+        "old effective HP at+3C and invokes+1C0 at141FCB2E6/310/336/3A1. "
+        "That virtual stores raw current HP+38, not a completed corpse. A "
+        "global suppression would also intercept Player/script/other callers; "
+        "not an admitted B-only combat/presentation boundary.",
+    ),
+    0x141FCB3F0: (
+        "HealthSystem_WouldDamageDepleteHealth",
+        "STATIC exact HealthSystem142BBE128 virtual+28; bool predicate, NOT "
+        "an HP store/death transition. Compares EDX integer damage scaled by "
+        "+90 with effective current-health getter+B8, subject to mode+68, "
+        "override+70, minimum health+6C and native timer/flag gates. Campaign "
+        "NpcHandleAttackEvent calls+28 at14040EC42; its result controls the "
+        "melee flag updateEC5A, then target+1170 executes atEC7D regardless. "
+        "Forcing false here would not suppress the later native HP write or "
+        "establish health/death authority. Invalidating a whole attack is a "
+        "different operation from retaining hit/armor presentation.",
     ),
     0x141FCB510: (
         "HealthSystemIsDead",
@@ -8418,9 +8435,15 @@ FUNCTIONS = {
     ),
     0x1403D7DF0: (
         "NpcArmorOnHealthDamage",
-        "NpcArmor::OnHealthDamage(Npc*, AttackInfo*, float, float). Processes "
-        "armor/body-part damage and detach definitions after AttackInfo has "
-        "already been built by the upper attack path.",
+        "STATIC source NpcArmor::OnHealthDamage(Npc*,AttackInfo*,float,float), "
+        "npc-armor.cpp365. Called after native health deduction at14040AA70. "
+        "Receives pre-health ratio inXMM3 (savedXMM6 at1403D7E56) and post "
+        "ratio on stack (XMM7 at7E66). SIMD7F30 and scalar7FE9..8045 detect "
+        "threshold crossings old>=threshold AND threshold>new for armor/"
+        "detachment processing. If ratios stay equal, those crossings vanish: "
+        "skipping native health deduction does NOT preserve all stock armor "
+        "visual behavior merely because this helper is still called. This "
+        "body is not a safe high-level damage replay API.",
     ),
     0x1402791C0: (
         "DamageInfoConstructor",
@@ -16711,6 +16734,34 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x14040AA3D: (
+        "STATIC exact7B indirect CALL [r10+D00], return14040AA44. RCX is the "
+        "CURRENT CharacterApplyAttackInfo victim; exact Pirate14294B9D0+D00 "
+        "is141DEE1D0, forwarding to HealthSystem+20/141FCB210. EDX is computed "
+        "integer damage, R8D0, R9D native floor/policy and fifth stack byte "
+        "derived from AttackInfo kind. Narrow health-write frontier ONLY, "
+        "not a safe B presentation split: predicted-lethal/KnockedDownSkill "
+        "branches precede it and armor ratio processing follows. Global "
+        "D00/HS suppression is broader than this callsite; no writer admitted."
+    ),
+    0x14040AA4E: (
+        "STATIC post-damage HealthSystem virtual+F8 ratio observation. It "
+        "overwrites native D00 return; old ratio was saved inXMM7 before the "
+        "damage. Both ratios feed NpcArmorOnHealthDamage1403D7DF0 atAA70. "
+        "Do not describe a skipped HP write as preserving all armor effects."
+    ),
+    0x14040EC42: (
+        "STATIC HealthSystem+28/141FCB3F0 depletion PREDICATE, not damage "
+        "application. Result only gates the following melee last-hit flag "
+        "updateEC5A; target+1170 attack processing still runs atEC7D. False "
+        "is not a presentation-preserving B health-suppression gate."
+    ),
+    0x141FCB2E6: (
+        "STATIC HealthSystemApplyDamage invokes virtual+1C0=141FCAE40 "
+        "with scaled/clamped remaining HP. Actual raw current HP+38 store "
+        "is141FCAE54; additional floor/timer branches call the same virtual "
+        "at141FCB310/336/3A1. HP depletion is not corpse/state commitment."
+    ),
     0x141E7D0D0: (
         "STATIC primary-independent exact-Pirate root helper: copies two16B "
         "blocks from RDX to current ownerRCX+130/+140, then tail-dispatches "

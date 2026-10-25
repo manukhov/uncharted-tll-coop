@@ -47,8 +47,19 @@ AiHitDieRET/request-activeNOTdeathcommit; newlynamed140504FF0 isdeathANIMATION
 request, notProcessdeath. Nexttrace140660260 current-ownerpostdamage+B8calls
 140660C27/140661538 andBhealthsuppression/presentation, thenworld/lifeeventservice.
 IDBsaved2127/99/3True/restartname+xrefreadbackPASS. AIactions/HP/deathNOTinprotocol.
-NOnewruntimecandidateprepared; nogamebuild/launch orofflineframeworkadded.
+Previousunitaddednogamebuild/launch/offlineframework; latestpreparedcandidatebelow.
 No budgetraise/latechecksremove/identicalretry/debuggerforperformanceexam.
+
+LATEST2026-10-25SOURCE: metadata-select copiedLocal/index/session/packet ->ONE
+FINALfreshidentity+ordinary beforewrite; removeONLYearlyreadonlydiscoverygraph.
+Allfinalweak/key/body/HP/world/manager/BC/OnKill/freshness/distance/QPC retained.
+PODgate1copies22->13. NOcadence/limit/lease/cachelifechange. TWOreviewsPASS;
+staticquota+boundedpositionpredictioninlatestCOOP_STATUS. Freshbuild/runtime
+PENDING; immediatepairafterbuild. A1895usnonqueryOSstallNOTguaranteedfixed.
+IDBsaved2128/99/3True/readbackPASS. NoHP/death/AI-stateclaim.
+CombatSTATIC: narrowAA3Dwrite-skipdoesNOTpreservearmordetachment (old/newHP
+ratio thresholds). New141FCB3F0 isHS+28predicateNOTmutator. Needauthoritative
+armor/presentationpolicy+otherdamagepaths+truedeathcommit, noBcombatwriter.
 
 NEW USER CLARIFICATION: the empty->enemy location change was THROUGH MAIN MENU.
 The old explicit CPLV process-terminal behavior was intentionally unrejoinable.
