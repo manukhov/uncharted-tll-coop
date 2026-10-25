@@ -54,6 +54,14 @@ would require a NEW complete same-roster/world/session census before writes,
 typed refusal precedence and unchanged historical lease expiry. NOT implemented,
 NOT a reset of stopped and NOT an earned fresh runtime candidate yet.
 
+LATEST SOURCE: explicit time/window BudgetPaused + per-window complete-census
+certificate implemented; query256/clock/native/lifecycle stops remain absorbing.
+No stopped reset or old-job/cache reuse. Negative API/protection/SEH evidence
+outranks coincident time exhaustion; history150ms expires on BOTH roles. Only
+new full same-roster/world/session census can reopen writes in a later window.
+First-effect clock now commits only after normal native setter return. Source
+review/fresh delayed-load root-only exam preparation below; no combat claim.
+
 NEW BOUNDED CANDIDATE: full-postrender native callback tail, POSITIVE old owned
 OnKill->heap-unlink witness, observed physical menu close/reopen and fresh primary
 recipe. Per-world leave envelopes prevent an old menu packet closing a new pair.
@@ -46368,3 +46376,129 @@ These are STATIC policy constraints, not a new native writer hypothesis or
 runtime success. No further build/launch is prepared until typed observation
 semantics and these publication races are resolved on paper and in source.
 Existing1ms/50ms/256-query implementation remains terminal in the running image.
+
+## 2026-10-25 — Implement budget deferral behind fresh per-window census admission
+
+User accepts initial catch-up plus continuing NPC synchronization. Earlier
+loading is a plausible INITIAL displacement source, not proof of a2-second UDP
+delay; old runs separately stoppedcost2. Current game processes are absent;
+last test's cause of process closure is not newly classified. No old image
+retry/live patch and no agent game input. Appearance remains parked.
+
+STATIC existing initial catch-up: after paired Player world and mutual ENR2
+nonce echo, B's FIRST eligible root directly copies A's CURRENT xyz/quaternion,
+not A's spawn pose. Full authored Key/weak owner/ordinary/current epoch and
+packet ages must match; squared delta<=100 remains conservative10m POLICY.
+Do NOT widen it: existing labeled native keyframe chain141F808E0 ->141F80430 /
+141F80100 derives target-current displacement/time and invokes linear velocity
+14237BC50 at141F801C3 plus angular velocity14237BC70 at141F803A1. Larger catch-up
+changes physical sweeps/contacts without navigation/collision reset proof.
+Quaternion norm validation is not an angular-jump bound. This is positions,
+NOT synchronized AI/nav/health/armor/death; stock AI is not frozen for readiness.
+
+Precise NEW policy hypothesis: a pure timed-out observation is incomplete,
+not evidence that its actor identity is invalid. Abort that observation and
+close writes for its work window; a NEW complete native-tick census in a later
+window may certify the SAME historical roster/world/session before any write.
+This explicitly changes the response to time/window exhaustion. It is NOT
+blind retry, resetting a terminal latch or retaining native pointers across
+callbacks. Old clock/query-limit/native faults/lifecycle/explicit stop remain
+terminal. Numeric1ms work allowance/50ms windows/256 query cap are not raised.
+One stalled call is still unpreemptible; no hard frame-time guarantee claimed.
+
+IMPLEMENTED only in enemy_root_sync_runtime.inl:
+
+- WorkBudget has immutable ticket/window start per invocation. Opening a NEW
+  window invalidates active admission; it cannot reset counters mid-scope.
+  Time>=1ms or crossing physical50ms closes that ticket via atomics-only
+  defer(), even with mailbox held. No more reads/reservations that ticket.
+  Clock failure/nonmonotonic time/ticket overflow/query257 remain absorbing.
+- tick alone can publish certified(window,worldEpoch,session), only after a
+  NEW complete all-or-nothing census, final budget/physical-window/world checks
+  and unchanged live historical tuple. Postblend opening a clock window must
+  skip, never certify. refresh_required bypasses tick's normal50ms throttle.
+  Game-side certificate readers all hold the existing single work permit;
+  ticket commits after fields, refresh/admission last. Worker has status only.
+- Every native field read remains guarded by SEH/QPC. Sticky read_refused is
+  set for observed API/Valid/Bad/protection/bounds failures BEFORE the existing
+  post-query QPC sample, and for memcpy SEH BEFORE post-copy sample. Therefore
+  Observation::rejected/terminal beats simultaneous budget_incomplete. Failed
+  query metadata is inspected only in owned stack storage; no cache/copy after
+  failed budget. Pre-read exhaustion alone is not negative memory evidence.
+- ONLY pure budget_incomplete avoids census_gap/re-nonce. Partial local rows
+  are discarded. Session/sequence/capture/receive/attempt timestamps and the
+  last COMPLETE absolute150ms deadline are not reset or renewed by a pause.
+  Expiry is checked after tick serialization, POST-census and before renewal
+  for BOTH roles, including A whose applied counter normally stays0. An expired
+  certificate is absorbing. Clocking expiry before serialized tick ownership
+  was rejected: it could race a concurrent renewal and falsely stop the channel.
+- Semantic invalid/changed roster after ANY captured/applied effect now stops
+  A as well as B (no A silently rekeying after roots affected the peer). Only
+  truly pre-effect startup may stage complete new metadata; it remains
+  uncertified/inactive until a complete successful census publication.
+- B reserves copied Local/index/session/packet metadata, then obtains current
+  native self/job identity/ordinary as before. Final manager/weak/BC/OnKill,
+  sequence/age/distance/epoch checks remain; setter boundary re-samples budget,
+  physical window and certificate. Certificate METADATA can be checked once
+  per permit (no other certifier can mutate it), not once per scalar; this is
+  NOT a native memory lease. Setter explicitly rechecks it and current world.
+- first_apply formerly armed a candidate before late guards. A pure pause
+  could leave applied0/first_apply!=0, then a permitted pre-effect reset cleared
+  peer and the next hello stopped spuriously. Now a local slice_start supplies
+  all prewrite30s checks; global first_apply commits ONLY after normal native
+  setter return while mailbox is held, alongside applied++. No clock clearing
+  on pause/reset; native fault does not commit an effect/ACK.
+- Destructor overrun after a completed capture/setter only closes subsequent
+  admission; never undo/replay/refund the completed native effect. External
+  stop request/ACK remains terminal+quiescent, not a budget-pause ACK.
+
+Existing worker status now reports budgetPauses/refreshRequired/certifiedWindow
+and immutable first-pause context; censusStop1=rejected,2=changed,3=expired.
+This reuses existing worker/QPC diagnostics, not a new observer/test framework.
+First context is written once then release-published by budgetPauses; no races
+from repeated non-atomic context updates. State/transport packets unchanged.
+
+Competing hypotheses / static evidence quota:
+
+1. Pure cost is the blocker: old B2/12 native returns then cost2, no nativeFault,
+   and tiny final query bracket versus cumulative1ms show a cost-policy exit,
+   not proof of invalid actor. Deferral targets only typed incomplete work.
+2. Actual memory/identity/lifecycle failure is masked by cost: explicitly NOT
+   treated as harmless. Predicate dataflow and read-refusal precedence keep
+   observed negative evidence, then current native weak/spawner/OnKill/body
+   guards plus all-or-nothing census. No partial/failed observation certifies.
+3. Reset stopped/reuse old packet or lease is sufficient: REJECTED by native
+   early-OnKill1416A5E2A before+BC clear1416A6044 and exact local weak lifecycle;
+   only a new current-owner invocation plus full same-epoch census is authority.
+4. Simultaneous load/AI freeze solves it: not chosen. Readiness gates data only;
+   RequestDisableAi remains REJECTED/OFF. Current-root first packet handles
+   admitted initial drift but cannot establish AI/damage/death authority.
+
+Independent evidence KINDS: exact Pirate+408/native return141A929A7 caller and
+job provenance; disassembly/dataflow of weak+BC/OnKill cleanup and physical
+keyframe writer; registry consistency of all-or-nothing full authored Key/
+paired world/single native phase with fresh local caches; actual prior bounded
+setter returns and exact cost-stop contexts. No new native function is guessed,
+called from a worker or promoted to safe based on a bool. Sole IDB remains
+previously saved/readback2128functions/99data/3types; no new native label needed.
+
+FALSIFIABLE prediction BEFORE fresh build/launch: user starts SAME live-enemy
+checkpoint loading in A then starts B a couple seconds later (not waiting a
+whole A load before starting B), no shooting/aggro/kills. For a matched patrol
+within the retained10m cap, B first catches A's CURRENT pose, then repeated
+updates survive ordinary budget pauses: budgetPauses may grow, later certified
+windows advance and B applies keep increasing with costStop0/censusStop0 and
+no terminal latch until the bounded30s slice ends normally. Need actual visible
+initial alignment AND continuing NPC tracking/responsiveness, not counts/READY.
+Any negative census, historical expiry, persistent inability to certify, native
+fault or visible nonconvergence falsifies usable-sync claim; save exact context
+and do not relax bounds/retry unchanged. Full AI, armor, health/death are NOT
+predicted. Fairness across all actors and fitting an oversized census are not
+guaranteed by deferral; no debugger on this performance-sensitive exam.
+
+Final source reviews PASS (two independent full-diff adversarial passes plus
+startup/handshake/effect-clock review). Expiry race and candidate/effect mismatch
+were corrected BEFORE building. No terminal stopped=false path exists. Current
+retail image reverified1.4.21058.0, no games running; IDB/MCP remains saved and
+idle with existing2128 labels. Ready for fresh build then immediate LocalPair2
+exam using the written delayed-B-load/no-combat prediction above.

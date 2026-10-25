@@ -13,6 +13,16 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy positions after confirmed Player sync (2026-10-24)
 
+LATEST2026-10-25: explicitbudgettime/windowpause +NEWfullnativecensuscertificate
+perworkticket IMPLEMENTEDsource; NOTresetstopped. Query257/clock/native/world/
+semanticidentity failuresstillterminal. Stickyreadrefusalbeatscoincidenttimeout.
+Originalhistorical150msexpiryonBOTHroles andphysical50mswindow checked; nooldptr/
+packetstampreuse. first_applycommitsonlyafteractualnormalsetterreturn. Reviews
+found/fixedexpiry-before-tickrace andunappliedcandidate/peerfalse-stop. Fresh
+delayed-B-loadpositionpredictioninCOOP_STATUS; build/examPENDING. Initial<=10m
+catchup alreadyexists; capNOTwidened (keyframedvelocity/contact path). NoAI/
+combat/deathwriter, noofflineframework. No fairness/hardlatencyguarantee.
+
 USER CONFIRMS both Players visible and movement synchronized in A26552/B22404;
 closed BOTH SELF, no crash (watchersEXIT0). Noepoch2/menu-rejoinclaim. KeepDB884...
 baseline. EnemyOFFrunwasnotNPCtest; returnP0toactualenemypositionsNOW.

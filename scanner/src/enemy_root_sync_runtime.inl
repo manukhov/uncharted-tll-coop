@@ -98,24 +98,31 @@ std::atomic<std::uint64_t> sent{}, send_dropped{};
 // OS call/page fault and must never be described as a hard frame-time bound.
 std::atomic_flag work_busy = ATOMIC_FLAG_INIT;
 std::uint64_t qpc_frequency{}, work_window{}, work_spent{}, work_query_ticks{};
+std::uint64_t work_ticket{}, paused_ticket{}; // exclusively owned by work_busy.
+std::atomic<bool> refresh_required{true};
+std::atomic<std::uint64_t> certified_ticket{}, certified_epoch{}, certified_session{};
+std::atomic<std::uint64_t> budget_pauses{};
 std::uintptr_t system_page_size{}; // initialized before installer reads/worker publication.
 unsigned work_queries{};
 std::atomic<unsigned> cost_stop{}, cost_site{}, peak_queries{};
+std::atomic<unsigned> census_stop_reason{}; //1=rejected,2=changed,3=expired.
 std::atomic<std::uint64_t> cost_total_ticks{}, peak_scope_ticks{}, peak_window_ticks{}, query_total{}, work_skips{};
 HANDLE stop_request{}, stop_ack{}; // retained for the pinned process lifetime
 std::atomic<bool> external_stop{};
 std::atomic<bool> native_apply_fault{};
-enum : unsigned { kCostClock = 1, kCostTime = 2, kCostQueries = 3 };
+enum : unsigned { kCostClock = 1, kCostTime = 2, kCostQueries = 3, kCostWindow = 4 };
 struct CostStopContext {
     unsigned site{}, scope_queries{}, window_queries{}, read_calls{};
     std::uintptr_t read_address{}, query_address{};
     std::size_t read_bytes{};
     std::uint64_t scope_ticks{}, window_ticks{}, scope_query_ticks{}, window_query_ticks{}, last_query_ticks{};
-    bool query_pending{};
+    bool query_pending{}, read_refused{};
 };
 // Only the work-permit owner writes this, once, BEFORE cost_stop release.
 // The worker reads it only after acquiring a nonzero reason; it is immutable.
 CostStopContext cost_stop_context{};
+CostStopContext first_pause_context{};
+unsigned first_pause_reason{}; // immutable after budget_pauses release-publishes1.
 void stop_cost(unsigned reason, const CostStopContext& context) noexcept {
     if (!cost_stop.load(std::memory_order_relaxed)) {
         cost_stop_context = context;
@@ -123,8 +130,40 @@ void stop_cost(unsigned reason, const CostStopContext& context) noexcept {
         cost_stop.store(reason, std::memory_order_release);
     }
     stopped.store(true, std::memory_order_release);
+    refresh_required.store(true, std::memory_order_release);
     active_scope.store(false, std::memory_order_release);
 }
+
+bool certificate_current(std::uint64_t ticket) noexcept {
+    // Authorization readers hold work_busy. Worker-visible fields are atomic
+    // for status only; no worker is allowed to certify or dereference objects.
+    if (!ticket || refresh_required.load(std::memory_order_acquire) ||
+        certified_ticket.load(std::memory_order_acquire) != ticket) return false;
+    const auto published = published_session.load(std::memory_order_acquire);
+    if (!published || certified_session.load(std::memory_order_acquire) != published) return false;
+    if constexpr (player_world::kEnablePlayerWorldRearm) {
+        return certified_epoch.load(std::memory_order_acquire) ==
+                   bound_world_epoch.load(std::memory_order_acquire) && scope_current();
+    }
+    return true;
+}
+
+bool historical_census_expired(ULONGLONG now) noexcept {
+    // A never increments applied, even after its roots affect B. Published
+    // certificate history, not B's write counter, owns this absorbing expiry.
+    const auto historical = certified_session.load(std::memory_order_acquire);
+    const auto until = census_valid_until.load(std::memory_order_acquire);
+    return historical && historical == published_session.load(std::memory_order_acquire) &&
+           until && now > until;
+}
+
+void stop_census(unsigned reason) noexcept {
+    census_stop_reason.store(reason, std::memory_order_relaxed);
+    stopped.store(true, std::memory_order_release);
+    active_scope.store(false, std::memory_order_release);
+}
+
+enum class Observation { complete, budget_incomplete, rejected, terminal };
 template<class T> void set_peak(std::atomic<T>& peak, T value) noexcept {
     // Called only by the permit owner; readers are the transport worker.
     if (value > peak.load(std::memory_order_relaxed)) peak.store(value, std::memory_order_relaxed);
@@ -137,8 +176,9 @@ struct WorkBudget {
     std::uintptr_t read_address{}, query_address{};
     std::size_t read_bytes{};
     unsigned read_calls{}, scope_queries{};
-    bool query_pending{};
-    void stop(unsigned reason) noexcept {
+    std::uint64_t ticket{}, window_begin{};
+    bool query_pending{}, incomplete{}, read_refused{}, certificate_seen{};
+    CostStopContext context() const noexcept {
         CostStopContext context{};
         context.site = site; context.scope_queries = scope_queries;
         context.window_queries = work_queries; context.read_calls = read_calls;
@@ -148,7 +188,30 @@ struct WorkBudget {
         context.window_ticks = work_spent; context.scope_query_ticks = query_ticks;
         context.window_query_ticks = work_query_ticks; context.last_query_ticks = last_query_ticks;
         context.query_pending = query_pending;
-        stop_cost(reason, context);
+        context.read_refused = read_refused;
+        return context;
+    }
+    void stop(unsigned reason) noexcept { stop_cost(reason, context()); }
+    void reject_read() noexcept { read_refused = true; }
+    Observation outcome(bool complete) const noexcept {
+        // A simultaneous API/protection/SEH refusal is not harmless timeout.
+        if (stopped.load(std::memory_order_acquire)) return Observation::terminal;
+        if (read_refused) return Observation::rejected;
+        if (incomplete) return Observation::budget_incomplete;
+        return complete ? Observation::complete : Observation::rejected;
+    }
+    void defer(unsigned reason) noexcept {
+        incomplete = true;
+        // May run with the mailbox already held: atomics ONLY, no wait/lock.
+        refresh_required.store(true, std::memory_order_release);
+        active_scope.store(false, std::memory_order_release);
+        if (paused_ticket != ticket) {
+            paused_ticket = ticket;
+            if (!budget_pauses.load(std::memory_order_relaxed)) {
+                first_pause_context = context(); first_pause_reason = reason;
+            }
+            budget_pauses.fetch_add(1, std::memory_order_release);
+        }
     }
     explicit WorkBudget(unsigned where) noexcept : site(where) {
         owned = !work_busy.test_and_set(std::memory_order_acquire);
@@ -156,16 +219,29 @@ struct WorkBudget {
         LARGE_INTEGER now{};
         if (!qpc_frequency || !QueryPerformanceCounter(&now) || now.QuadPart <= 0 ||
             static_cast<std::uint64_t>(now.QuadPart) < work_window) { stop(kCostClock); return; }
-        begin = last = static_cast<std::uint64_t>(now.QuadPart);
+        const auto value = static_cast<std::uint64_t>(now.QuadPart);
         // Never reset a window mid-scope: a stalled scope stays fully charged.
-        if (!work_window || begin-work_window >= qpc_frequency/20) {
-            work_window = begin; work_spent = 0; work_queries = 0; work_query_ticks = 0;
+        if (!work_window || value-work_window >= qpc_frequency/20) {
+            if (work_ticket == ~std::uint64_t{}) { stop(kCostClock); return; }
+            ++work_ticket;
+            work_window = value; work_spent = 0; work_queries = 0; work_query_ticks = 0;
+            refresh_required.store(true, std::memory_order_release);
+            active_scope.store(false, std::memory_order_release);
         }
+        ticket = work_ticket; window_begin = work_window; begin = last = value;
+        incomplete = paused_ticket == ticket;
     }
     WorkBudget(const WorkBudget&) = delete;
     WorkBudget& operator=(const WorkBudget&) = delete;
     bool check(bool query = false, std::uintptr_t query_at = 0) noexcept {
-        if (!owned || !last) return false;
+        if (!owned || !last || incomplete || stopped.load(std::memory_order_acquire)) return false;
+        if (site == 2 && !certificate_seen) {
+            if (!certificate_current(ticket)) return false;
+            // Only certificate METADATA is stable under this work permit, not
+            // native memory. Every copy keeps its SEH/QPC and final setter
+            // explicitly rechecks certificate/world/terminal state again.
+            certificate_seen = true;
+        }
         LARGE_INTEGER now{};
         if (!QueryPerformanceCounter(&now) || now.QuadPart < 0 || static_cast<std::uint64_t>(now.QuadPart) < last) {
             stop(kCostClock); return false;
@@ -180,10 +256,13 @@ struct WorkBudget {
         }
         cost_total_ticks.fetch_add(delta, std::memory_order_relaxed);
         set_peak(peak_scope_ticks, value-begin); set_peak(peak_window_ticks, work_spent);
-        if (work_spent >= qpc_frequency/1000) { stop(kCostTime); return false; }
+        // Query/clock failures remain absorbing; pure wall-time exhaustion is
+        // a closed window, never permission to retry an old observation.
+        if (query && work_queries == 256) { stop(kCostQueries); return false; }
+        if (work_spent >= qpc_frequency/1000) { defer(kCostTime); return false; }
+        if (value-window_begin >= qpc_frequency/20) { defer(kCostWindow); return false; }
         if (stopped.load(std::memory_order_acquire)) return false;
         if (query) {
-            if (work_queries == 256) { stop(kCostQueries); return false; }
             ++work_queries; query_total.fetch_add(1, std::memory_order_relaxed); set_peak(peak_queries, work_queries);
             ++scope_queries; query_address = query_at; query_pending = true;
         }
@@ -194,6 +273,21 @@ struct WorkBudget {
     }
     ~WorkBudget() noexcept { finish(); }
 };
+
+void append_budget_pause(std::ostringstream& line) {
+    const auto count = budget_pauses.load(std::memory_order_acquire);
+    line << " budgetPauses=" << count
+         << " refreshRequired=" << refresh_required.load(std::memory_order_acquire)
+         << " certifiedWindow=" << certified_ticket.load(std::memory_order_acquire);
+    if (!count) return;
+    const auto context = first_pause_context;
+    line << " firstPauseReason=" << first_pause_reason << " firstPauseSite=" << context.site
+         << " firstPauseScopeUs=" << context.scope_ticks*1000000/qpc_frequency
+         << " firstPauseWindowUs=" << context.window_ticks*1000000/qpc_frequency
+         << " firstPauseQueryUs=" << context.scope_query_ticks*1000000/qpc_frequency
+         << " firstPauseReads=" << context.read_calls
+         << " firstPauseReadRefused=" << context.read_refused;
+}
 
 void append_cost_stop_context(std::ostringstream& line) {
     const auto reason = cost_stop.load(std::memory_order_acquire);
@@ -295,21 +389,25 @@ static_assert(offsetof(SpawnerIdentityFields, flags) == 0x31);
 // Do not read the C++ structure's trailing alignment padding past spawner+51.
 constexpr std::size_t kSpawnerIdentitySpan = offsetof(SpawnerIdentityFields, flags)+1;
 static_assert(kSpawnerIdentitySpan == 0x32 && kSpawnerIdentitySpan <= sizeof(SpawnerIdentityFields));
+bool refuse_copy_read(WorkBudget* budget) noexcept {
+    if (budget) budget->reject_read();
+    return false;
+}
 bool copy(std::uintptr_t at, void* out, std::size_t size, ReadCache* cache = nullptr) noexcept {
     auto* budget = cache ? cache->budget : nullptr;
     if (budget) { budget->read_address = at; budget->read_bytes = size; ++budget->read_calls; }
     if (budget && !budget->check()) return false;
-    if (!size || size > 4096 || at < 0x10000 || at > 0x7FFFFFFFFFFFULL-size) return false;
+    if (!size || size > 4096 || at < 0x10000 || at > 0x7FFFFFFFFFFFULL-size) return refuse_copy_read(budget);
     if (cache) {
         // Query ONLY the one/two requested native pages, not the remainder of
         // a potentially enormous same-protection game-heap region. This is
         // lexical observation, not page residency/protection or identity lease.
         const auto page_size = system_page_size;
-        if (page_size < 4096 || (page_size & (page_size-1))) return false;
+        if (page_size < 4096 || (page_size & (page_size-1))) return refuse_copy_read(budget);
         const auto mask = page_size-1;
         const auto first = at & ~mask;
         const auto last = (at+size-1) & ~mask; // bounded canonical range above.
-        if (last < first || last-first > page_size) return false;
+        if (last < first || last-first > page_size) return refuse_copy_read(budget);
         std::array<PSAPI_WORKING_SET_EX_INFORMATION, 2> query{};
         std::size_t missing{};
         for (auto page = first;; page = last) {
@@ -318,7 +416,7 @@ bool copy(std::uintptr_t at, void* out, std::size_t size, ReadCache* cache = nul
                 if (cache->pages[i] == page) { found = true; break; }
             }
             if (!found) {
-                if (missing == query.size()) return false;
+                if (missing == query.size()) return refuse_copy_read(budget);
                 query[missing++].VirtualAddress = reinterpret_cast<void*>(page);
             }
             if (page == last) break;
@@ -327,21 +425,26 @@ bool copy(std::uintptr_t at, void* out, std::size_t size, ReadCache* cache = nul
             if (budget && !budget->check(true, reinterpret_cast<std::uintptr_t>(query[0].VirtualAddress))) return false;
             const auto queried = QueryWorkingSetEx(GetCurrentProcess(), query.data(),
                 static_cast<DWORD>(missing*sizeof(query[0])));
-            if (budget && !budget->check()) return false;
-            if (!queried) return false;
-            for (std::size_t i = 0; i < missing; ++i) {
+            // Preserve observed negative evidence BEFORE the one post-query
+            // clock check can also report exhaustion. Inspect only this owned
+            // API result: no game read or cache admission after budget failure.
+            bool readable = queried != FALSE;
+            for (std::size_t i = 0; readable && i < missing; ++i) {
                 const auto& attributes = query[i].VirtualAttributes;
                 // With Valid==0, protection/other valid-layout members are
                 // undefined. Reject without touching or faulting in that page.
-                if (!attributes.Valid) return false;
-                if (attributes.Bad) return false;
+                if (!attributes.Valid) { readable = false; break; }
+                if (attributes.Bad) { readable = false; break; }
                 switch (attributes.Win32Protection) {
                 case PAGE_READONLY: case PAGE_READWRITE: case PAGE_WRITECOPY:
                 case PAGE_EXECUTE_READ: case PAGE_EXECUTE_READWRITE: case PAGE_EXECUTE_WRITECOPY:
                     break;
-                default: return false; // observed GUARD/NOACCESS/modifiers/unknown.
+                default: readable = false; break; // observed GUARD/NOACCESS/modifiers/unknown.
                 }
             }
+            if (!readable && budget) budget->reject_read();
+            const bool within_budget = !budget || budget->check();
+            if (!within_budget || !readable) return false;
             for (std::size_t i = 0; i < missing && cache->count < cache->pages.size(); ++i)
                 cache->pages[cache->count++] = reinterpret_cast<std::uintptr_t>(query[i].VirtualAddress);
         }
@@ -365,6 +468,9 @@ bool copy(std::uintptr_t at, void* out, std::size_t size, ReadCache* cache = nul
     __try { std::memcpy(out, reinterpret_cast<const void*>(at), size); copied = true; }
     __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION || GetExceptionCode() == EXCEPTION_IN_PAGE_ERROR ||
         GetExceptionCode() == EXCEPTION_GUARD_PAGE ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {}
+    // A caught memory fault is not a merely incomplete observation, even when
+    // the same operation also crosses the window's time/query allowance.
+    if (!copied && budget) budget->reject_read();
     return (!budget || budget->check()) && copied;
 }
 template<class T> bool read(std::uintptr_t at, T& out) noexcept { return copy(at, &out, sizeof(out)); }
@@ -494,6 +600,10 @@ bool census(Roster& out, WorkBudget& budget) noexcept {
 }
 void reset_locked() {
     active_scope.store(false, std::memory_order_release);
+    refresh_required.store(true, std::memory_order_release);
+    certified_ticket.store(0, std::memory_order_release);
+    certified_session.store(0, std::memory_order_release);
+    certified_epoch.store(0, std::memory_order_release);
     census_valid_until.store(0, std::memory_order_release);
     published_session.store(0, std::memory_order_release);
     session = peer = 0; confirmed = false; peer_seen = last_hello = 0; hello_sequence = 0;
@@ -548,8 +658,11 @@ void tick() {
     }
     if (!startup_admitted()) return;
     if (ticking.test_and_set()) return;
+    if (historical_census_expired(GetTickCount64())) {
+        stop_census(3); ticking.clear(); return;
+    }
     const auto now = GetTickCount64();
-    if (now-last_tick < 50) { ticking.clear(); return; }
+    if (now-last_tick < 50 && !refresh_required.load(std::memory_order_acquire)) { ticking.clear(); return; }
     if constexpr (player_world::kEnablePlayerWorldRearm) {
         if (stop_for_player_lifecycle() || !scope_current()) { ticking.clear(); return; }
     }
@@ -559,11 +672,20 @@ void tick() {
     if (!budget.check()) { ticking.clear(); return; }
     last_tick = now;
     Roster current{};
-    const bool valid = census(current, budget) && budget.check();
+    bool valid = census(current, budget);
+    auto result = budget.outcome(valid);
+    if (result == Observation::complete && !budget.check()) { valid = false; result = budget.outcome(false); }
+    if (result == Observation::budget_incomplete) {
+        // No partial observation, lease refresh, nonce reset or old-certificate
+        // reopening. A later window must start a wholly new native census.
+        if (historical_census_expired(GetTickCount64())) stop_census(3);
+        ticking.clear(); return;
+    }
+    valid = result == Observation::complete;
     if (!valid) {
         census_gap = true;
         active_scope.store(false, std::memory_order_release);
-        if (applied.load(std::memory_order_acquire)) stopped.store(true);
+        if (applied.load(std::memory_order_acquire) || captured.load(std::memory_order_acquire)) stop_census(1);
     }
     // This runs from Player/Nadine update: never wait for a receiver/native job.
     // An unpublished census must not leave the writer enabled until next tick.
@@ -572,28 +694,33 @@ void tick() {
         active_scope.store(false, std::memory_order_release);
         ticking.clear(); return;
     }
+    // Check the OLD absolute deadline with a POST-census timestamp, before any
+    // reset or renewal can erase it. This applies to both A and B certificates.
+    if (historical_census_expired(GetTickCount64())) {
+        stop_census(3);
+        reset_locked(); ReleaseSRWLockExclusive(&lock); ticking.clear(); return;
+    }
     if (census_gap) {
         // An in-flight first apply may have completed after the failed try-lock.
         // Once the lock is ours, it cannot race this decision. Before any apply
         // reset the session; after one apply the gap is terminal, never rearm.
-        if (applied.load(std::memory_order_acquire)) stopped.store(true);
+        if (applied.load(std::memory_order_acquire) || captured.load(std::memory_order_acquire)) stop_census(1);
         reset_locked(); census_gap = false;
-    }
-    if (session && now > census_valid_until.load(std::memory_order_acquire) && applied.load()) {
-        stopped.store(true); reset_locked();
     }
     if (stopped.load()) {
         ReleaseSRWLockExclusive(&lock); ticking.clear(); return;
     }
     if (!valid) {
-        if (applied.load(std::memory_order_relaxed)) stopped.store(true);
+        if (applied.load(std::memory_order_relaxed) || captured.load(std::memory_order_relaxed)) stop_census(1);
         reset_locked();
     }
     else {
-        if (session && current != roster && applied.load(std::memory_order_relaxed)) {
+        if (session && current != roster && (applied.load(std::memory_order_relaxed) || captured.load(std::memory_order_relaxed))) {
             // First experiment never silently rebinds across a death/load/spawn.
-            stopped.store(true); reset_locked();
+            stop_census(2); reset_locked();
         } else if (!session || current != roster) {
+            // Do not change historical metadata after a known budget abort.
+            if (!budget.check()) { ReleaseSRWLockExclusive(&lock); ticking.clear(); return; }
             reset_locked();
             // A worker-prepared nonce, not a crypto-provider call in game update.
             // No nonce yet means no session; a later census may try again.
@@ -607,8 +734,22 @@ void tick() {
     const bool within_budget = budget.check();
     const bool within_world = !player_world::kEnablePlayerWorldRearm || scope_current();
     if (!within_world) stopped.store(true, std::memory_order_release);
-    census_valid_until.store(valid && session && within_budget && within_world ? now+150 : 0, std::memory_order_release);
-    active_scope.store(session && confirmed && now-peer_seen <= 1000 && within_budget && within_world && !stopped.load(), std::memory_order_release);
+    const auto publish_now = GetTickCount64();
+    if (historical_census_expired(publish_now)) stop_census(3);
+    if (within_budget && publish_now > now+150) budget.defer(kCostWindow);
+    if (valid && session && within_budget && !budget.incomplete && within_world && !stopped.load(std::memory_order_acquire)) {
+        // All game-side certificate readers hold work_busy. Ticket is committed
+        // after its fields; refresh barrier/admission are published LAST.
+        census_valid_until.store(now+150, std::memory_order_release);
+        certified_epoch.store(current.world_epoch, std::memory_order_release);
+        certified_session.store(session, std::memory_order_release);
+        certified_ticket.store(budget.ticket, std::memory_order_release);
+        refresh_required.store(false, std::memory_order_release);
+        active_scope.store(confirmed && publish_now-peer_seen <= 1000 && !stopped.load(std::memory_order_acquire), std::memory_order_release);
+    } else {
+        // In particular, never zero/renew historical expiry on budget pause.
+        active_scope.store(false, std::memory_order_release);
+    }
     ReleaseSRWLockExclusive(&lock);
     ticking.clear();
 }
@@ -668,7 +809,7 @@ DWORD WINAPI transport_worker(void*) {
                 hello.sender = session; hello.receiver = peer; hello.sequence = ++sequence;
                 pending[count++] = {hello, now}; last_hello = now;
             }
-            if (fresh && active_scope.load(std::memory_order_acquire) && confirmed && peer && now-peer_seen <= 1000 && !g_net_role_b) {
+            if (fresh && !refresh_required.load(std::memory_order_acquire) && active_scope.load(std::memory_order_acquire) && confirmed && peer && now-peer_seen <= 1000 && !g_net_role_b) {
                 for (std::uint32_t i = 0; i < roster.count; ++i) {
                     auto& row = rows[i];
                     if (!row.dirty) continue;
@@ -701,10 +842,12 @@ DWORD WINAPI transport_worker(void*) {
                      << " apply=" << applied.load() << " reject=" << rejected.load() << " sent=" << sent.load()
                      << " sendDrop=" << send_dropped.load() << " lastGate=" << last_rejection.load() << " stopped=" << stopped.load()
                      << " costStop=" << cost_stop.load() << " costSite=" << cost_site.load()
+                     << " censusStop=" << census_stop_reason.load()
                      << " peakScopeUs=" << peak_scope_ticks.load()*1000000/qpc_frequency
                      << " peakWindowUs=" << peak_window_ticks.load()*1000000/qpc_frequency
                      << " queries=" << query_total.load() << " peakQueries=" << peak_queries.load() << " workSkips=" << work_skips.load();
                 append_cost_stop_context(line);
+                append_budget_pause(line);
                 write_status(line.str());
             }
         }
@@ -718,11 +861,13 @@ DWORD WINAPI transport_worker(void*) {
         << " workerGapMs=" << worker_gap_ms.load()
         << " external=" << external_stop.load() << " nativeFault=" << native_apply_fault.load()
         << " costStop=" << cost_stop.load() << " costSite=" << cost_site.load()
+        << " censusStop=" << census_stop_reason.load()
         << " peakScopeUs=" << peak_scope_ticks.load()*1000000/qpc_frequency
         << " peakWindowUs=" << peak_window_ticks.load()*1000000/qpc_frequency
         << " queries=" << query_total.load() << " peakQueries=" << peak_queries.load()
         << "; native AI/root resumes; no automatic rearm";
     append_cost_stop_context(line);
+    append_budget_pause(line);
     write_status(line.str());
     if (log != INVALID_HANDLE_VALUE) CloseHandle(log);
     return 0;
@@ -760,16 +905,21 @@ bool start_transport() {
     return true;
 }
 
-void apply_root_and_release(void* object, const void* transform, WorkBudget* budget) {
+void apply_root_and_release(void* object, const void* transform, WorkBudget* budget, ULONGLONG slice_start) {
     using SetLocalRoot = void(__fastcall*)(void*, const void*);
     // Finally cleans up even if an outer native SEH handler resumes the game.
     // Do NOT catch/translate the game's exception or count a partial write as
     // success. Normal return leaves the permit with the enclosing scope.
     __try {
+        if (!budget->check() || !certificate_current(budget->ticket)) return;
         if constexpr (player_world::kEnablePlayerWorldRearm) {
             if (stop_for_player_lifecycle() || !scope_current()) return;
         }
         reinterpret_cast<SetLocalRoot>(g_module+0x1E7D0D0)(object, transform);
+        // Commit the effect clock ONLY after normal native return, while the
+        // same mailbox still excludes peer/reset processing. An abandoned
+        // candidate must not masquerade as an applied effect on the next hello.
+        if (!first_apply) first_apply = slice_start;
         applied.fetch_add(1, std::memory_order_relaxed);
     } __finally {
         ReleaseSRWLockExclusive(&lock);
@@ -980,7 +1130,7 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     // recheck after obtaining the permit before reserving the exact sequence.
     // All identity/ordinary/final generation checks below remain mandatory.
     const auto schedule_now = GetTickCount64();
-    if (!installed.load(std::memory_order_acquire) ||
+    if (!certificate_current(budget.ticket) || !installed.load(std::memory_order_acquire) ||
         !active_scope.load(std::memory_order_acquire) ||
         stopped.load(std::memory_order_acquire) || g_dll_inert ||
         schedule_now > census_valid_until.load(std::memory_order_acquire)) return;
@@ -1057,15 +1207,15 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     double fresh_distance{};
     for (unsigned axis = 0; axis < 3; ++axis) { const double delta = packet.position[axis]-fresh[axis]; fresh_distance += delta*delta; }
     if (!(fresh_distance <= 100.0)) { ReleaseSRWLockExclusive(&lock); return; }
-    if (!first_apply) first_apply = now;
-    if (now-first_apply > 30000) { stopped.store(true); ReleaseSRWLockExclusive(&lock); return; }
+    const auto slice_start = first_apply ? first_apply : now;
+    if (now-slice_start > 30000) { stopped.store(true); ReleaseSRWLockExclusive(&lock); return; }
     const auto apply_now = GetTickCount64();
     std::uintptr_t manager{};
     const bool still_current = !g_dll_inert && active_scope.load(std::memory_order_acquire) && !stopped.load() &&
         apply_now <= census_valid_until.load(std::memory_order_acquire) &&
         session == scheduled_session && session == packet.receiver && peer == packet.sender &&
         confirmed && apply_now-peer_seen <= 1000 && index < roster.count && roster.rows[index] == local &&
-        rows[index].received && apply_now-rows[index].received <= 200 && first_apply && apply_now-first_apply <= 30000 &&
+        rows[index].received && apply_now-rows[index].received <= 200 && apply_now-slice_start <= 30000 &&
         rows[index].incoming.sequence == packet.sequence &&
         roster_scope_current(roster, cache, true) &&
         read(g_module+0x3898630, manager) && manager == roster.manager;
@@ -1090,12 +1240,12 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     const auto write_now = GetTickCount64();
     if (!budget.check() || g_dll_inert || stopped.load() || !active_scope.load(std::memory_order_acquire) ||
         write_now > census_valid_until.load(std::memory_order_acquire) ||
-        write_now-peer_seen > 1000 || write_now-rows[index].received > 200 || write_now-first_apply > 30000) {
+        write_now-peer_seen > 1000 || write_now-rows[index].received > 200 || write_now-slice_start > 30000) {
         ReleaseSRWLockExclusive(&lock); return;
     }
     std::copy_n(packet.position.begin(), 3, fresh.begin()); // keep receiver +13C service lane
     std::copy(packet.rotation.begin(), packet.rotation.end(), fresh.begin()+4);
-    apply_root_and_release(object, fresh.data(), &budget);
+    apply_root_and_release(object, fresh.data(), &budget, slice_start);
 }
 } // namespace enemy_root
 
@@ -1160,7 +1310,7 @@ bool install_enemy_root_sync() {
     const bool ready = changed && sealed;
     if (!ready) enemy_root::stopped.store(true);
     enemy_root::installed.store(ready, std::memory_order_release);
-    boot_log_line(ready ? "ENEMY-ROOT native Pirate+408 root replication installed (readGuard=QueryWorkingSetEx-page; admission=metadata-then-final; ordinary=POD; 30-second first slice; no HP/AI writes)" :
+    boot_log_line(ready ? "ENEMY-ROOT native Pirate+408 root replication installed (readGuard=QueryWorkingSetEx-page; admission=window-census-final; budget=defer-fresh-census; ordinary=POD; 30-second first slice; no HP/AI writes)" :
         "ENEMY-ROOT installation refused; stock forwarding only");
     return ready;
 }
