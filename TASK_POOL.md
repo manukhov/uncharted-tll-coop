@@ -13,6 +13,15 @@ Full campaign co-op between two game copies. Current user-directed order:
 
 ## P0 CURRENT: Enemy positions after confirmed Player sync (2026-10-24)
 
+CURRENT12:39MSK: source5c24a0c fresh0C0EB1B6...build/linkPASS, A11680/B22172
+launchedRoot+Combat. BothfullCOOP-BOOT missing000/event1; initialworldEpoch0/
+livesReady0/observer0/apply0 beforeload. reports/enemy-relocation-death-20261025093911Z
+exactDLL/PDB+launch+bootlogs; userSAMEenemycheckpoint and ONEpromptA/ChloeINSAS
+kill, Bnoshooting within30s effectslice. Visibledeath/stableroots PENDING. Old
+A270pair agentclosedintentionally afterexactidentitycheck+archive. Newfixsameweak/
+gen/fullKey addressrefresh+revision only, notdeclaredcauseofoldrun/successyet.
+No fullshots/Bauthority, no unchangedretry/rearm/limitraise.
+
 AUTHORITATIVE2026-10-25 OVERRIDE: user reports A/Chloe kills remain alive on B
 and major shot/position divergence. Do NOT substitute another root-only test.
 5CCBD7F4 A19756/B25328 NEVER admitted enemy sync: A PEER-LIFECYCLE REFUSED,

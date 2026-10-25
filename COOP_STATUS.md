@@ -2,6 +2,13 @@
 
 ## Current user priority / handoff (2026-10-25)
 
+CURRENT EXAM: fresh0C0EB1B6... after strict same-weak/fullKey relocation metadata
+fix +first-mismatch/native-entry counters, A11680/B22172 launched12:39MSK.
+Both complete COOP-BOOT READY missing000; initial enemy worldEpoch0/livesReady0,
+visible death outcome PENDING. Previous A270 failed, not confirmed fixed.
+Same checkpoint, promptly ONE A/Chloe INSAS kill, B no shooting; bounded30s
+slice. No full shot/AI/B-origin kill authority claim. All exact artifacts below.
+
 LATEST OVERRIDE: user reports severe shot/death/position divergence, including
 A/Chloe kills remaining alive on B/Nadine. Root-only is NOT combat sync. The
 5CCBD7F4 A19756/B25328 run is REJECTED AS AN ADMITTED EXAM: A's mandatory
@@ -46981,3 +46988,29 @@ blocks commit, this falsifies relocation as sufficient cure and identifies the
 remaining boundary; do not describe packets/counters/build as success. No
 weapon whitelist experiment, full shots/AI/B kill authority/respawn claim or
 limit increase. Fresh build+immediate launch next, user input only.
+
+### 2026-10-25 12:39 MSK — Launch relocation-safe native death exam
+
+Source5c24a0c; independent relocation/refusal review plus native once-forward/
+gate-counter review PASS, labelsave2149/102/3/readback PASS, prediction above.
+Fresh normal build/link PASS, only existing Recipe C4324. Immediately launched/
+injected2 LocalPair+EnemyRootSync+EnemyCombatSync, no debugger or game input.
+Old A16076/B8844 intentionally agent-closed after archive/exactidentity check,
+not a crash. New launcher helper exits0, DONE11680,22172.
+
+Archive BEFORE launch reports/enemy-relocation-death-20261025093911Z:
+DLL0C0EB1B679305779167CE1010D9184D459BF5BEA4E228C2A6488D31A80126134;
+PDB38C9FB152819D0698DF30ACC2C8F62D186A2332A44E0738E22E109E0CFD0A60B.
+launch.stdout/stderr logs and copied boot shared/private logs present.
+A11680 creation2026-10-25T12:39:11.7648103+03:00,
+rawFILETIME134373947517648103 /01DD6464B0DB3CE7;
+B22172 creation2026-10-25T12:39:13.7759228+03:00,
+rawFILETIME134373947537759228 /01DD6464B20E1BFC. Both exact retail path/alive.
+Complete lifecycle cleanup/menu/companion1, full Player native package all1,
+ENEMY-COMBAT installed, COOP-BOOT missing000/event1/error0 accepted through
+exactcreation events in BOTH. Bootstrap ONLY, not visible behavior. Initial
+worldEpoch0/actors0/livesReady0/capture0/apply0/death0/stopped0 and all native
+observer counters0 are expected before user load. Same direct enemy checkpoint,
+one A/Chloe INSAS kill once mutual Players appear, B no shots; report SAME B
+enemy death and remaining NPC tracking. 30s starts first effect, not menus.
+Visual/result outcome PENDING. No runtime success from build/READY/packets.
