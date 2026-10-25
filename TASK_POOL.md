@@ -30,12 +30,19 @@ post-owner read; reliable A->B keyed death events; B consumes native health op
 141DEE1D0 ONCE from current HumanActive_Update1404A0660, then stock once.
 ACK requires native Dead witness, not HP/native-damage return/absence. Fixed
 per-life rows preserve known live survivors, actual read failures terminal.
-Review blockers before build/launch: final actor revalidation AFTER health walk;
+Review blockers NOW FIXED before build/launch: final actor revalidation AFTER health walk;
 first native health/Dead effect starts shared30s clock even if no root write;
 Applied attribution requires actual native return +positive Dead (reserved-but-
-aborted must not count). Native ordinary HS/flags proof in progress. No respawn,
+aborted must not count). Native ordinary HS/flags proof CLOSED: floor/override
+default1/1 are UNUSED in exactmode0, removed false0-gates; +40bit01 only set
+after KillTree invalidates generation, so +05 guard kept. Full D00/HS callee
+closure excludes synchronous owner/state destruction before stock Active.
+Earliest-only shared30s clock now covers both roles/worker and every effect;
+finite per-control bind/death deadlines never refreshed by duplicates. All
+source released/reviewed, build/exam next. User confirms failure was NEWESTpair.
+No respawn,
 prebind death, B combat prediction or shot/AI authority claim. Labels applied
-soleIDB2138/101/3 saveTrue, MCP restarted/readback+vslotxrefsPASS. Detailed static
+soleIDB2143/101/3 saveTrue, MCP restarted/readback+vslotxrefsPASS. Detailed static
 alternatives/evidence in latest COOP_STATUS. Preserve first-load Player sync,
 menu safeguards and confirmed stock-Nadine removal. Appearance PARKED.
 

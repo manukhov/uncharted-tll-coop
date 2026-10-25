@@ -12,9 +12,9 @@ the agent missed the refusal. Exact failing installer stage is UNKNOWN. Both
 processes later absent; closure/crash is NOT classified without fresh evidence.
 Source now fails launch readiness closed on every required native dependency
 through PID+creation-bound kernel events, with staged lifecycle diagnostics.
-Actual new slice in review: stable initial enemy lives, native committed Dead
+Actual new slice reviewed: stable initial enemy lives, native committed Dead
 witness and reliable A->B death request in B's CURRENT HumanActive update. It
-is default OFF, not yet built/run, not full shots/B damage authority. Preserve
+is default OFF, source/IDB ready for build/exam below, not full shots/B damage authority. Preserve
 Player sync, menu lifetime safeguards and stock-Nadine removal; appearance stays
 PARKED. No more position-only retry in lieu of the requested combat behavior.
 
@@ -46661,8 +46661,8 @@ worldEpoch0, queries/capture/match/apply/pauses0. Therefore there was NO enemy
 admission and no A->B combat writer. The reported visible failure is real;
 diagnosing it as quota/roster failure in this particular run would be false.
 Booted image hashes and exact creations remain in the prior entry. Agent did
-not close this pair; both later absent, exit cause unclassified. Current-vs-prior
-run question pending, not a blocker to fixing the independently proved refusal.
+not close this pair; both later absent, exit cause unclassified. User now
+explicitly confirms the reported battle/divergence was in this NEWEST pair.
 
 STATIC source correction: native package readiness now requires lifecycle,
 owned reset and Player update as well as fresh recipe/retirement/menu cycle.
@@ -46735,3 +46735,84 @@ reports/apply_enemy_dead_state_20261025.txt: apply_labels OK2138 functions,
 HumanDead_OnEnter1404A0780 and HumanActive_Update1404A0660 readback and exact
 vtable xrefs1429495A0/142949578 PASS; g_HumanDeadStateDescriptor143D46460 PASS.
 No newly confirmed runtime claim and no game launch for these findings yet.
+
+### 2026-10-25 — Complete reviewed initial-life death slice and prelaunch prediction
+
+STATIC implementation in enemy_root_sync_protocol.h / enemy_root_sync_runtime.inl
+and new enemy_combat_native.inl. ENR2 legacy264B remains unchanged when combat
+OFF; explicit launch EnemyRootSync+EnemyCombatSync enables separate ENC2/288B.
+Initial SAME paired world/unique full spawner Key population ONLY, max32 lives.
+Both peers exchange count/key/unique-life binding; native weakrecord/generation
+table publishes ONCE after the entire initial manifest binds. Encounter nonce
+and fixed row indices survive ONLY positively witnessed known retirement; no
+unknown birth/new generation/adoption or inferred disappearance. Native hooks
+publish monotonic numeric bits without waiting for mailbox or retaining objects.
+No wire game pointer/handle. A Dead commit makes one event ID per life; reliable
+controls retransmit every>=100ms, duplicate controls never restamp deadlines.
+B same-world/fullKey/life/event intent is serviced only in current native Active.
+One reserved native attempt, no retry after final refusal/fault. Native returned
+is NOT ACK: positive HumanDead witness is required. Applied additionally needs
+matching returned status without Refused/Fault; aborted-reservation-independent
+death is AlreadyApplied, never falsely Applied. Root late index/life/revision
+checks +atomic retiring bits prevent old root overwriting a retiring/dead life.
+
+Independent source review found/fixed: final actor/FSM/weak/OnKill validation
+must follow the full health walk; lexical health cache destroyed before native
+FLS accessor; shared30s effect clock must start even when no root ever wrote;
+reserved-but-aborted attempt cannot claim Applied. Earliest-only atomic clock
+commits on normal native root/health effect or bound Dead BOTH roles, never on
+reservation. Final native metadata deadline immediately precedes damage, and
+worker/receive/tick/root path enforce same cutoff. Each initial bind/new death
+has finite non-restamped30s control deadline. Timeout closes terminally, does
+not discard/ACK as success. Existing1ms/50ms/256query/150ms census certificate,
+world/native/read/SEH guards and all absorbing stops retained. This bounds an
+exam, NOT persistent full co-op. A concurrent retirement after census witness
+precheck may still cause sticky read/semantic refusal; not claimed fixed.
+
+STATIC added guard provenance: ProcessKillTree1416A6030 asserts bit01 clear,
+zeroes generation+BC at1416A6044, then sets dead bit01 at1416A604D AFTER OnKill/
+index removal. Process_UpdateState checks bit01 before switch/update at
+1416A5728/5736. Thus reject+40&05 before stock HumanDead entry is appropriate;
+combat HP-dead is not Process-dead. HealthSystem factory141FCBB20 is called by
+Character_Init at141E99638, publishes actor+4A8 at141E9963D; defaults mode0 at
+141FCBBA8, floor1 at141FCBBAB, override1 at141FCBBB2, scale1 at141FCBBC7.
+The draft's floor0/override0 gates would systematically reject ordinary defaults
+and were removed BEFORE launch. Exact mode0 skips both policy fields in
+141FCB210; modes1/2/3 remain refused and no policy field is mutated. D00 passes
+native health arguments(damage,checkTimer0,override0,minHP0,policyfalse).
+
+STATIC non-destruction proof (independent full callee closure): D00141DEE1D0
+ONLY calls HS+20 at141DEE1F8 then tailcalls HS+B8. Exact HS142BBE128 targets
++20=141FCB210, +90=141FCAEB0, +B8=141FCAFA0, +C0=141FCA9C0,
++1B8=141FCA840, +1C0=141FCAE40 are verified at installation. All internal
+calls resolve to HP/max/history/scalar clocks plus1418971F0(timer test) and
+141897130(timer set), external FlsGetValue only. NO owner callbacks, FSM writes,
+event dispatch, allocation/free, KillTree or unresolved callback in this exact
+chain. Therefore this health operation cannot itself destroy/switch the current
+HumanActive state before wrapper forwards original update once. This is NOT a
+global lifetime lease against unrelated engine teardown; final world/weak checks
+are still mandatory and retained. Native exceptions propagate, not translated.
+
+SoleIDB second label save: reports/apply_enemy_health_defaults_20261025.txt
+2143functions/101data/3types, save_database returned True. MCP stopped before
+write, restarted PID21280; all five new default/clock/timer names read back,
+exactHS+90 xref142BBE1B8 PASS. Source whitespace and PowerShell AST pass; no
+game currently running. Full code review complete; build/exam next.
+
+HYPOTHESIS / FALSIFIABLE PREDICTION, written BEFORE launch: exact required
+bootstrap stages must ALL install in BOTH processes, else launcher archives and
+closes its own exact pair with no retry (old incomplete READY is not accepted).
+User loads SAME live-enemy checkpoint DIRECTLY in both; once mutual Players
+appear, promptly kill ONE ordinary enemy on A/Chloe, B does not shoot. Within
+the bounded30s slice: both livesReady1 with same initial count; A native commit
+creates deathEvents1; B deathReceived1, <=1 nativeAttempts for that event, then
+B nativeCommits and A deathResults advance; SAME enemy visibly dead on B.
+Surviving NPC roots should continue being captured/applied without nonce reset
+or changed-roster stop2. It specifically must NOT treat HP return/OnKill/absence
+as a death ACK, reuse a stale root on that life or stop every surviving row just
+because known dead enemy vanished. If no native Dead/positive result/visible
+death, candidate is rejected despite packets/build/installer success. Unknown
+state, native policy, concurrent failed read or deadline refusal remains a real
+limitation and must be recorded, not loosened live. No full shot/AI-state sync,
+B-origin kills, prebind death, respawn, second world or full corpse pose parity
+claim. No debugger, menu/input automation or unchanged root-only retry.

@@ -5,8 +5,11 @@ param(
     [int]$SettleSeconds = 14,
     [ValidateRange(0, 30)]
     [int]$InjectionGapSeconds = 5,
+    [ValidateRange(1, 60)]
+    [int]$BootReadyTimeoutSeconds = 45,
     [switch]$LocalPair,
-    [switch]$EnemyRootSync
+    [switch]$EnemyRootSync,
+    [switch]$EnemyCombatSync
 )
 
 $ErrorActionPreference = "Stop"
@@ -15,6 +18,67 @@ $injectorPath = Join-Path $buildPath "tll_dll_injector.exe"
 
 if ($LocalPair -and $Count -ne 2) {
     throw "LocalPair requires Count=2"
+}
+if ($EnemyCombatSync -and -not $EnemyRootSync) {
+    throw 'EnemyCombatSync requires EnemyRootSync; no separate legacy damage relay'
+}
+
+function Wait-CoopBootstrap {
+    param([Diagnostics.Process]$Process, [long]$Created)
+    $stem = 'Local\TllCoopBoot_v1_{0}_{1:X16}' -f $Process.Id, [uint64]$Created
+    $events = @{}
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    try {
+        while ($timer.Elapsed.TotalSeconds -lt $BootReadyTimeoutSeconds) {
+            $Process.Refresh()
+            if ($Process.HasExited) { throw "PID=$($Process.Id) exited before co-op bootstrap readiness (exit=$($Process.ExitCode))" }
+            if ($Process.StartTime.ToFileTimeUtc() -ne $Created) { throw "PID=$($Process.Id) creation changed" }
+            # A refusal wins if an inconsistent producer ever signals both.
+            foreach ($kind in 'REFUSED', 'READY') {
+                if (-not $events.ContainsKey($kind)) {
+                    [Threading.EventWaitHandle]$opened = $null
+                    if ([Threading.EventWaitHandle]::TryOpenExisting("${stem}_$kind", [ref]$opened)) {
+                        $events[$kind] = $opened
+                    }
+                }
+                if ($events.ContainsKey($kind) -and $events[$kind].WaitOne(0)) {
+                    if ($kind -eq 'REFUSED') { throw "PID=$($Process.Id) COOP-BOOT REFUSED; see preserved native installer stages" }
+                    Write-Output "COOP-BOOT READY PID=$($Process.Id) created=$Created (bootstrap only; scene pairing/NPC behavior pending)"
+                    return
+                }
+            }
+            Start-Sleep -Milliseconds 100
+        }
+        throw "PID=$($Process.Id) co-op bootstrap timed out; LoadLibrary alone is not readiness"
+    } finally {
+        foreach ($event in $events.Values) { $event.Dispose() }
+    }
+}
+
+function Stop-OwnedLaunchCopies {
+    param([object[]]$Processes, [hashtable]$Identities, [string]$ExpectedImage)
+    foreach ($owned in $Processes) {
+        try {
+            $owned.Refresh()
+            if ($owned.HasExited) {
+                Write-Output "PID=$($owned.Id) already exited (exit=$($owned.ExitCode)); not classified as a crash"
+                continue
+            }
+            if (-not $Identities.ContainsKey($owned.Id) -or
+                $owned.StartTime.ToFileTimeUtc() -ne $Identities[$owned.Id] -or
+                [IO.Path]::GetFullPath($owned.MainModule.FileName) -ne $ExpectedImage) {
+                Write-Warning "Do not close PID=$($owned.Id): executable/creation identity mismatch"
+                continue
+            }
+            # Original Process.Start object retains the exact process handle.
+            # No process-name kill, game input or native menu action is used.
+            $owned.Kill()
+            [void]$owned.WaitForExit(5000)
+            Write-Output "Intentionally closed exact launched PID=$($owned.Id) after bootstrap failure; not a menu-exit result"
+        } catch {
+            Write-Warning "Could not close exact launched PID=$($owned.Id): $($_.Exception.Message)"
+        }
+    }
 }
 
 # Do not relaunch the rejected auto-enabled image while an updated build is
@@ -34,7 +98,10 @@ if (-not (Test-Path -LiteralPath $injectorPath -PathType Leaf)) {
 }
 
 $gameDirectory = [IO.Path]::GetDirectoryName($GamePath)
+$expectedImage = [IO.Path]::GetFullPath($GamePath)
 $processes = @()
+$identities = @{}
+try {
 for ($instance = 1; $instance -le $Count; $instance++) {
     Write-Host "== launching instance $instance =="
     # Per-process A/B roles: do not rewrite the shared user's coop_role.txt.
@@ -45,12 +112,14 @@ for ($instance = 1; $instance -le $Count; $instance++) {
     $startInfo.UseShellExecute = $false
     if ($LocalPair) { $startInfo.EnvironmentVariables['TLL_COOP_ROLE'] = [string]$instance }
     $startInfo.EnvironmentVariables['TLL_ENEMY_ROOT_SYNC'] = if ($EnemyRootSync) { '1' } else { '0' }
+    $startInfo.EnvironmentVariables['TLL_ENEMY_COMBAT_SYNC'] = if ($EnemyCombatSync) { '1' } else { '0' }
     $process = [Diagnostics.Process]::Start($startInfo)
+    $processes += $process
+    $identities[$process.Id] = $process.StartTime.ToFileTimeUtc()
     Start-Sleep -Seconds 2
     if ($process.HasExited) {
         throw "Instance $instance exited during startup"
     }
-    $processes += $process
     Write-Host "instance $instance PID=$($process.Id)"
 }
 
@@ -67,11 +136,13 @@ try {
         if ($LASTEXITCODE -ne 0) {
             throw "Injection failed for PID=$($process.Id) (exit $LASTEXITCODE)"
         }
-        # LoadLibrary returns before the runtime's worker thread has finished
-        # installing its thread-suspended callsite relays. Starting the second
-        # worker immediately can make both processes suspend/audit at once and
-        # causes one copy to skip otherwise valid relays. Serialize their cold
-        # initialization; zero remains available for explicit stress tests.
+        if ($LocalPair -or $EnemyRootSync) {
+            Wait-CoopBootstrap -Process $process -Created $identities[$process.Id]
+        }
+        # LoadLibrary returns before installer completion; the readiness wait
+        # above supplies the actual ordering for co-op pairs. Retain the legacy
+        # optional gap without claiming it explains a cross-process failure:
+        # each suspend helper filters threads by its own process identity.
         if ($index + 1 -lt $processes.Count -and $InjectionGapSeconds -gt 0) {
             Write-Host "waiting $InjectionGapSeconds seconds for PID=$($process.Id) runtime init"
             Start-Sleep -Seconds $InjectionGapSeconds
@@ -81,5 +152,37 @@ try {
     Pop-Location
 }
 
+foreach ($process in $processes) {
+    # Earlier copies can exit while a later bootstrap is still being installed.
+    # Revalidate the complete pair, not only the most recently waited process.
+    $process.Refresh()
+    if ($process.HasExited -or $process.StartTime.ToFileTimeUtc() -ne $identities[$process.Id] -or
+        [IO.Path]::GetFullPath($process.MainModule.FileName) -ne $expectedImage) {
+        throw "Launched PID=$($process.Id) is no longer the expected live game; pair is not ready"
+    }
+}
 $pidList = ($processes | ForEach-Object Id) -join ", "
 Write-Host "DONE PIDs=$pidList"
+} catch {
+    $launchFailure = $_
+    # Preserve evidence BEFORE stopping this exact newly-created pair. These
+    # are ignored local artifacts, not a new game observer or retry mechanism.
+    try {
+        $failureRoot = Join-Path ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\reports'))) (
+            'bootstrap-refused-' + [DateTime]::UtcNow.ToString('yyyyMMddHHmmssfffZ'))
+        New-Item -ItemType Directory -Path $failureRoot -ErrorAction Stop | Out-Null
+        $sharedLog = Join-Path $PSScriptRoot '..\reports\locomotion_hook.log'
+        if (Test-Path -LiteralPath $sharedLog -PathType Leaf) {
+            Copy-Item -LiteralPath $sharedLog -Destination (Join-Path $failureRoot 'locomotion_hook.log')
+        }
+        foreach ($owned in $processes) {
+            $privateLog = Join-Path $PSScriptRoot "..\reports\enemy_root_$($owned.Id).log"
+            if (Test-Path -LiteralPath $privateLog -PathType Leaf) {
+                Copy-Item -LiteralPath $privateLog -Destination $failureRoot
+            }
+        }
+        Write-Output "Bootstrap failure evidence: $failureRoot"
+    } catch { Write-Warning "Could not preserve bootstrap failure logs: $($_.Exception.Message)" }
+    Stop-OwnedLaunchCopies -Processes $processes -Identities $identities -ExpectedImage $expectedImage
+    throw $launchFailure
+}

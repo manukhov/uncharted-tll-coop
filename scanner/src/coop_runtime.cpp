@@ -42467,67 +42467,137 @@ char __fastcall hooked_lifecycle_enter_menu(
 bool install_peer_lifecycle_callsite(
     std::uintptr_t call_rva, std::uintptr_t target_rva, const void* hook,
     bool pass_live_task_manager = false) {
+    const DWORD entry_error = GetLastError();
     std::uint8_t* call = nullptr;
     std::uint8_t* relay = nullptr;
     std::int32_t displacement = 0;
+    std::array<std::uint8_t, 5> before{}, after{};
+    std::uintptr_t before_target{}, after_target{};
+    std::size_t suspended_count{};
+    DWORD old_protection{}, write_error{}, restore_error{}, relay_flush_error{}, patch_flush_error{};
+    bool before_known{}, after_known{}, published{}, restored{}, readback{};
+    bool relay_flush_observed{}, relay_flushed{}, patch_flush_observed{}, patch_flushed{};
+    const auto observe_call = [&](std::array<std::uint8_t, 5>& bytes,
+                                  std::uintptr_t& target, bool& known) {
+        if (!call) return;
+        std::memcpy(bytes.data(), call, bytes.size());
+        known = true;
+        target = 0;
+        if (bytes[0] == 0xE8) {
+            std::int32_t relative{};
+            std::memcpy(&relative, bytes.data()+1, sizeof(relative));
+            target = reinterpret_cast<std::uintptr_t>(call+5) + static_cast<std::intptr_t>(relative);
+        }
+    };
+    const auto finish = [&](bool ready, const char* stage, DWORD helper_error_observed = 0) {
+        // Call ONLY after the shared resume helper (or without suspension).
+        // Never deliberately format/log while owning suspended threads; those
+        // threads may own logger locks. Helpers do not expose resume outcomes,
+        // and their cleanup may overwrite the failing API's LastError.
+        std::ostringstream line;
+        line << "PEER-LIFECYCLE CALLSITE status=" << (ready ? "ready" : "refused")
+             << " stage=" << stage << " rva=0x" << std::hex << call_rva
+             << " targetRva=0x" << target_rva
+             << " expectedTarget=0x" << g_module+target_rva
+             << " beforeTarget=0x" << before_target << " afterTarget=0x" << after_target
+             << " relay=0x" << reinterpret_cast<std::uintptr_t>(relay)
+             << " beforeBytes=";
+        for (const auto byte : before) line << std::setw(2) << std::setfill('0') << static_cast<unsigned>(byte);
+        line << " afterBytes=";
+        for (const auto byte : after) line << std::setw(2) << std::setfill('0') << static_cast<unsigned>(byte);
+        line << " oldProtection=0x" << old_protection << std::dec
+             << " beforeObserved=" << before_known << " afterObserved=" << after_known
+             << " suspended=" << suspended_count << " published=" << published
+             << " restored=" << restored << " readback=" << readback
+             << " helperErrorObserved=" << helper_error_observed
+             << " writeError=" << write_error << " restoreError=" << restore_error
+             << " relayFlushObserved=" << relay_flush_observed << " relayFlushed=" << relay_flushed
+             << " relayFlushError=" << relay_flush_error
+             << " patchFlushObserved=" << patch_flush_observed << " patchFlushed=" << patch_flushed
+             << " patchFlushError=" << patch_flush_error;
+        boot_log_line(line.str().c_str());
+        SetLastError(entry_error);
+        return ready;
+    };
     if (pass_live_task_manager) {
         // Native26C5 has three arguments, no stack parameters. RDI is its live
         // complete TaskManager; move it into volatile R9 as hook argument four.
         // Tail-jump only: preserve native RA, shadow space, RSP, flags and every
         // nonvolatile register. Allocate all17 bytes, not the plain14-byte relay.
         if (call_rva != kTaskManagerNadineSpawnCallsiteRva ||
-            target_rva != kTaskManagerCompanionSpawnRva) return false;
+            target_rva != kTaskManagerCompanionSpawnRva) return finish(false, "context-contract");
         call = reinterpret_cast<std::uint8_t*>(g_module + call_rva);
+        observe_call(before, before_target, before_known);
         constexpr std::array<std::uint8_t, 5> kNativeCall{0xE8, 0xC6, 0xC9, 0xFF, 0xFF};
-        if (std::memcmp(call, kNativeCall.data(), kNativeCall.size()) != 0) return false;
+        if (std::memcmp(call, kNativeCall.data(), kNativeCall.size()) != 0) return finish(false, "context-native-bytes");
         constexpr std::size_t kRelaySize = 17;
         relay = static_cast<std::uint8_t*>(allocate_executable_near(call, kRelaySize));
-        if (relay == nullptr) return false;
+        if (relay == nullptr) return finish(false, "relay-allocate-helper", GetLastError());
         constexpr std::array<std::uint8_t, 9> kContextJump{
             0x4C, 0x8B, 0xCF,             // mov r9,rdi
             0xFF, 0x25, 0, 0, 0, 0};    // jmp qword ptr[rip+0]
         std::memcpy(relay, kContextJump.data(), kContextJump.size());
         const auto hook_address = reinterpret_cast<std::uintptr_t>(hook);
         std::memcpy(relay + kContextJump.size(), &hook_address, sizeof(hook_address));
-        FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize);
+        relay_flush_observed = true;
+        relay_flushed = FlushInstructionCache(GetCurrentProcess(), relay, kRelaySize) != FALSE;
+        if (!relay_flushed) relay_flush_error = GetLastError();
         const auto delta = reinterpret_cast<std::intptr_t>(relay) -
             reinterpret_cast<std::intptr_t>(call + 5);
         if (delta < INT32_MIN || delta > INT32_MAX) {
             VirtualFree(relay, 0, MEM_RELEASE);
-            return false;
+            return finish(false, "relay-range");
         }
         displacement = static_cast<std::int32_t>(delta);
-    } else if (!prepare_plain_callsite_relay(
-                   call_rva, target_rva, hook, call, relay, displacement)) {
-        return false;
+    } else {
+        const bool prepared = prepare_plain_callsite_relay(
+            call_rva, target_rva, hook, call, relay, displacement);
+        const DWORD helper_error = prepared ? 0 : GetLastError();
+        observe_call(before, before_target, before_known);
+        if (!prepared) return finish(false, "prepare-plain-helper", helper_error);
     }
     SuspendedProcessThreads suspended{};
     if (!suspend_other_process_threads(suspended)) {
+        const DWORD helper_error = GetLastError();
         VirtualFree(relay, 0, MEM_RELEASE);
-        return false;
+        return finish(false, "suspend-helper", helper_error);
     }
+    suspended_count = suspended.count;
     std::int32_t old_displacement = 0;
     std::memcpy(&old_displacement, call + 1, sizeof(old_displacement));
     const bool unchanged = call[0] == 0xE8 &&
         reinterpret_cast<std::uintptr_t>(call + 5) +
             static_cast<std::intptr_t>(old_displacement) == g_module + target_rva;
-    DWORD old_protection = 0;
-    if (!unchanged || !VirtualProtect(call, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+    observe_call(after, after_target, after_known);
+    if (!unchanged) {
         resume_suspended_process_threads(suspended);
         VirtualFree(relay, 0, MEM_RELEASE);
-        return false;
+        return finish(false, "suspended-native-target");
+    }
+    if (!VirtualProtect(call, 5, PAGE_EXECUTE_READWRITE, &old_protection)) {
+        write_error = GetLastError();
+        resume_suspended_process_threads(suspended);
+        VirtualFree(relay, 0, MEM_RELEASE);
+        return finish(false, "protect-write");
     }
     std::memcpy(call + 1, &displacement, sizeof(displacement));
-    FlushInstructionCache(GetCurrentProcess(), call, 5);
+    published = true;
+    patch_flush_observed = true;
+    patch_flushed = FlushInstructionCache(GetCurrentProcess(), call, 5) != FALSE;
+    if (!patch_flushed) patch_flush_error = GetLastError();
     DWORD ignored = 0;
-    const bool restored = VirtualProtect(call, 5, old_protection, &ignored) != FALSE;
-    const bool readback = std::memcmp(call + 1, &displacement, sizeof(displacement)) == 0;
+    restored = VirtualProtect(call, 5, old_protection, &ignored) != FALSE;
+    if (!restored) restore_error = GetLastError();
+    readback = std::memcmp(call + 1, &displacement, sizeof(displacement)) == 0;
+    observe_call(after, after_target, after_known);
     resume_suspended_process_threads(suspended);
     // Published relay stays resident on restoration/readback failure too.
-    return restored && readback;
+    return finish(restored && readback,
+        restored ? (readback ? "complete" : "readback") : (readback ? "restore-protection" : "restore-and-readback"));
 }
 
 bool install_peer_lifecycle() {
+    const DWORD entry_error = GetLastError();
     g_lifecycle_original_destroy_dead = reinterpret_cast<LifecycleDestroyDeadFunction>(
         g_module + kProcessMgrDestroyDeadRva);
     g_lifecycle_original_enter_menu = reinterpret_cast<LifecycleEnterMenuFunction>(
@@ -42546,9 +42616,16 @@ bool install_peer_lifecycle() {
     const bool ready = cleanup && menu && companion_spawn;
     g_companion_spawn_callsite_ready.store(ready, std::memory_order_release);
     g_peer_lifecycle_ready.store(ready, std::memory_order_release);
+    char stages[192]{};
+    std::snprintf(stages, sizeof(stages),
+        "PEER-LIFECYCLE INSTALL cleanup=%u menuAttempted=%u menu=%u companionAttempted=%u companion=%u ready=%u",
+        cleanup ? 1u : 0u, cleanup ? 1u : 0u, menu ? 1u : 0u,
+        menu ? 1u : 0u, companion_spawn ? 1u : 0u, ready ? 1u : 0u);
+    boot_log_line(stages);
     boot_log_line(ready
         ? "PEER-LIFECYCLE READY explicitMenu=1 liveWorldOnKill=1 ownedOnly=1 companion=native-nadine-buddy taskManagerGate=1413C26C5 generationBudget=1"
         : "PEER-LIFECYCLE REFUSED phase/menu/companion callsite; native pass-through retained");
+    SetLastError(entry_error);
     return ready;
 }
 
@@ -83918,9 +83995,16 @@ DWORD WINAPI install_hook(void*) {
         const bool fresh = player_world_spawn::install();
         const bool retired = fresh && player_world_retirement::install();
         const bool cycle = retired && player_world_menu_cycle::install();
-        boot_log_line(fresh && retired && cycle
-            ? "PLAYER-WORLD native package READY fresh=1 retirement=1 menuCycle=1 consumer=full-postrender-tail"
-            : "PLAYER-WORLD native package REFUSED; no legacy-pointer fallback");
+        const bool reset = g_remote_player_reset_ready.load(std::memory_order_acquire);
+        const bool lifecycle = g_peer_lifecycle_ready.load(std::memory_order_acquire);
+        const bool update = g_player_update_hook_ready.load(std::memory_order_acquire);
+        char package[288]{};
+        std::snprintf(package, sizeof(package),
+            "PLAYER-WORLD native package %s fresh=%u retirement=%u menuCycle=%u reset=%u lifecycle=%u update=%u consumer=full-postrender-tail",
+            fresh && retired && cycle && reset && lifecycle && update ? "READY" : "REFUSED",
+            fresh ? 1u : 0u, retired ? 1u : 0u, cycle ? 1u : 0u,
+            reset ? 1u : 0u, lifecycle ? 1u : 0u, update ? 1u : 0u);
+        boot_log_line(package);
     } else {
         // Preserve the deployed one-shot baseline while the per-world native
         // service/retirement boundary is still under static investigation.
@@ -83961,13 +84045,69 @@ DWORD WINAPI install_hook(void*) {
     // Re-arm manually via the Numpad/PageUp hotkeys if input RE is needed again.
     boot_log_line("remote Player descriptor capture armed (required)");
     {
-        char line[320]{};
+        // Whole co-op bootstrap admission, not just appearance or LoadLibrary.
+        // It deliberately does NOT claim paired scenes or working NPC behavior.
+        std::uint32_t missing{};
+        const auto require = [&missing](std::uint32_t bit, bool ready) {
+            if (!ready) missing |= bit;
+        };
+        require(0x001, local_appearance_hook_ready);
+        require(0x002, state_net_started && g_state_net.enabled && g_state_net.peer_set &&
+                       g_state_net.running.load(std::memory_order_acquire));
+        require(0x004, g_remote_player_reset_ready.load(std::memory_order_acquire));
+        require(0x008, g_peer_lifecycle_ready.load(std::memory_order_acquire) &&
+                       g_companion_spawn_callsite_ready.load(std::memory_order_acquire));
+        require(0x010, g_player_update_hook_ready.load(std::memory_order_acquire));
+        if constexpr (player_world::kEnablePlayerWorldRearm) {
+            require(0x020, player_world_spawn::capture_ready.load(std::memory_order_acquire));
+            require(0x040, player_world_retirement::ready.load(std::memory_order_acquire));
+            require(0x080, player_world_menu_cycle::ready());
+        } else {
+            require(0x020, g_spawn_veh != nullptr);
+        }
+        require(0x100, !g_dll_inert && g_enable_remote_player_autospawn && !g_play_as_clone &&
+                       !g_hide_clone_from_slot && !g_enable_legacy_clone_autospawn);
+#if defined(TLL_ENEMY_ROOT_SYNC)
+        const bool enemy_requested = enemy_root_opt_in_size == 1 && enemy_root_opt_in[0] == '1';
+        require(0x200, !enemy_requested || (enemy_root::installed.load(std::memory_order_acquire) &&
+                                          !enemy_root::stopped.load(std::memory_order_acquire)));
+        require(0x400, !enemy_root::combat_requested() || enemy_root::combat_ready());
+#endif
+        const bool complete = missing == 0;
+        // PID reuse cannot satisfy the launcher's wait: name includes raw
+        // process creation FILETIME. Keep the event for this pinned lifetime.
+        const DWORD prior_error = GetLastError();
+        FILETIME created{}, exited{}, kernel{}, user{};
+        const bool have_creation = GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user) != FALSE;
+        DWORD signal_error = have_creation ? ERROR_SUCCESS : GetLastError();
+        const auto creation = (static_cast<unsigned long long>(created.dwHighDateTime) << 32) |
+                              created.dwLowDateTime;
+        static HANDLE boot_result_event{};
+        char event_name[160]{};
+        std::snprintf(event_name, sizeof(event_name), "Local\\TllCoopBoot_v1_%lu_%016llX_%s",
+            GetCurrentProcessId(), creation, complete ? "READY" : "REFUSED");
+        if (have_creation) {
+            boot_result_event = CreateEventA(nullptr, TRUE, FALSE, event_name);
+            if (!boot_result_event) signal_error = GetLastError();
+        }
+        bool signaled{};
+        if (boot_result_event) {
+            signaled = SetEvent(boot_result_event) != FALSE;
+            signal_error = signaled ? ERROR_SUCCESS : GetLastError();
+        }
+        char line[384]{};
         std::snprintf(line, sizeof(line),
-            "LOCAL-LOOK READY hook=%u state-net=%u requested=%s hash=%08x "
+            "COOP-BOOT %s created=%016llX missing=%03X event=%u error=%lu; bootstrap only, scene pairing and NPC behavior pending",
+            complete && signaled ? "READY" : "REFUSED", creation, missing, signaled ? 1u : 0u, signal_error);
+        boot_log_line(line);
+        std::snprintf(line, sizeof(line),
+            "LOCAL-LOOK %s hook=%u state-net=%u requested=%s hash=%08x "
             "visual=pending; load-scene only after this marker; no live rebuild",
+            complete && signaled ? "READY" : "WAIT",
             local_appearance_hook_ready ? 1u : 0u, state_net_started ? 1u : 0u,
             g_local_make_nadine ? "Nadine" : "Chloe", g_nadine_swap_hash);
         boot_log_line(line);
+        SetLastError(prior_error);
     }
     log_line("input-capture breakpoints NOT auto-armed (they broke aiming); spawn only");
     log_line("velprobe disabled on load (press Insert to enable)");

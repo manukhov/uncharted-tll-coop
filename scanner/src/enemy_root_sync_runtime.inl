@@ -1,6 +1,8 @@
 // Included only in the ordinary co-op runtime. No P99/offer/observer pipeline.
-// First root-only slice: exact Pirate, unique reciprocal spawner, identity
-// parent, normal Perform -> phase40 -> JointBlend, game-driven bodies only.
+// Root base: exact Pirate, unique reciprocal spawner, identity parent, normal
+// Perform -> phase40 -> JointBlend, game-driven bodies only. Separate explicit
+// default-OFF ENC2 capability adds only initial-life A -> B HumanDead results
+// below; legacy ENR2 retains roots only. Both remain one bounded encounter.
 namespace enemy_root {
 namespace wire = coop::enemy_root_sync;
 constexpr std::uintptr_t kPirate = 0x294B9D0, kPostblend = 0x1DE9910;
@@ -29,7 +31,14 @@ std::array<Row, wire::kActors> rows{};
 std::uint64_t session{}, peer{};
 std::uint32_t sequence{}, hello_sequence{};
 ULONGLONG peer_seen{}, last_hello{}, last_tick{};
-ULONGLONG first_apply{};
+std::atomic<ULONGLONG> first_apply{};
+void commit_first_effect(ULONGLONG when) noexcept {
+    auto prior=first_apply.load(std::memory_order_acquire);
+    // A synchronous Dead witness can precede damage's normal return. The
+    // qualified call's earlier candidate may only tighten, never extend, time.
+    while ((!prior || when<prior) &&
+        !first_apply.compare_exchange_weak(prior,when,std::memory_order_acq_rel,std::memory_order_acquire)) {}
+}
 bool confirmed{};
 // Owned by the serialized tick. Never lose an invalid/unpublished census while
 // a native callback holds the mailbox; decide terminal/rebind under that lock.
@@ -92,6 +101,155 @@ std::atomic<std::uint64_t> next_session{}, published_session{};
 std::atomic<ULONGLONG> census_valid_until{};
 std::atomic<ULONGLONG> worker_gap_ms{};
 std::atomic<std::uint64_t> sent{}, send_dropped{};
+
+// ONE opt-in capability, default OFF. Initial unique-Key population only: no
+// prebind death, respawn adoption, B damage authority or general campaign claim.
+bool combat_requested_state{};
+std::atomic<bool> combat_hooks_ready{};
+bool combat_requested() noexcept {
+    wchar_t value[8]{};
+    return GetEnvironmentVariableW(L"TLL_ENEMY_COMBAT_SYNC", value, 8) == 1 && value[0] == L'1';
+}
+bool combat_enabled() noexcept { return combat_requested_state; }
+bool combat_ready() noexcept { return installed.load(std::memory_order_acquire) && combat_hooks_ready.load(std::memory_order_acquire); }
+enum class NativeLifeKind : std::uint8_t { retiring, dead_commit };
+struct NativeLifeEvent {
+    NativeLifeKind kind{};
+    std::uint64_t worldEpoch{};
+    std::uintptr_t record{};
+    std::uint32_t generation{};
+};
+enum class NativeAttemptStatus : std::uint8_t { refused, native_returned, native_fault };
+struct NativeDeathAttempt {
+    wire::Key key{};
+    std::uint64_t worldEpoch{}, session{}, peer{}, lifeId{}, eventId{}, rowRevision{};
+    std::uintptr_t record{};
+    std::uint32_t generation{};
+    ULONGLONG effectStart{}, controlStart{};
+};
+struct CombatRow {
+    std::uint64_t life{}, revision{1}, death_event{}, attempted_event{};
+    ULONGLONG last_control{}, control_started{};
+    wire::combat::Result result = wire::combat::Result::none;
+    bool bound{}, bind_confirmed{}, bind_reply{}, root_seen{}, result_confirmed{};
+    bool local_retiring{}, local_dead{}, authority_dead{};
+};
+std::array<CombatRow, wire::kActors> combat_rows{}; // existing mailbox lock
+bool encounter_sealed{};
+std::uint64_t next_death_event{};
+struct NativeBinding {
+    wire::Key key{};
+    std::uint64_t world{}, session{}, peer{}, life{};
+    std::uintptr_t record{};
+    std::uint32_t generation{};
+};
+// Published ONCE. Native observers never follow a saved game pointer or wait
+// for the mailbox: per-life monotonic bits are a bounded lossless MPSC mailbox.
+std::array<NativeBinding, wire::kActors> native_bindings{};
+std::array<std::atomic<unsigned>, wire::kActors> native_life_bits{};
+std::array<std::atomic<std::uint64_t>, wire::kActors> native_attempt_event{};
+std::array<unsigned, wire::kActors> observed_life_bits{}; // mailbox only
+std::atomic<bool> native_bindings_ready{};
+std::atomic<bool> native_death_pending_hint{};
+std::uint32_t native_binding_count{}; // immutable after ready release
+enum : unsigned { kNativeRetiring=1, kNativeDead=2, kNativeReturned=4, kNativeRefused=8, kNativeFault=16 };
+std::atomic<std::uint64_t> combat_death_events{}, combat_death_results{}, combat_native_refusals{};
+std::atomic<std::uint64_t> combat_death_received{}, combat_native_attempts{}, combat_native_commits{};
+std::atomic<std::uint64_t> combat_retiring_observed{}, combat_prebind_refused{}, combat_b_prediction{};
+namespace combat_native { bool install(); bool ready(); }
+bool effect_slice_current(ULONGLONG now) noexcept {
+    const auto start=first_apply.load(std::memory_order_acquire);
+    // Another callback may publish the first clock after this timestamp was
+    // sampled; that is not a clock rollback or an expired slice.
+    if (!start || now<start || now-start<=30000) return true;
+    stopped.store(true,std::memory_order_release);
+    active_scope.store(false,std::memory_order_release);
+    native_death_pending_hint.store(false,std::memory_order_release);
+    return false;
+}
+bool native_death_pending() noexcept {
+    return combat_enabled() && g_net_role_b && native_death_pending_hint.load(std::memory_order_acquire) &&
+        !stopped.load(std::memory_order_acquire) && effect_slice_current(GetTickCount64());
+}
+void refresh_native_pending_locked() noexcept {
+    bool pending{};
+    if (g_net_role_b) for (std::size_t i=0; i<roster.count; ++i) {
+        const auto& row=combat_rows[i];
+        pending=pending || (row.death_event && row.authority_dead && !row.attempted_event &&
+            !row.local_retiring && !row.local_dead && row.result==wire::combat::Result::none);
+    }
+    native_death_pending_hint.store(pending,std::memory_order_release);
+}
+
+bool combat_row_writable(std::size_t index) noexcept {
+    if (!combat_enabled()) return true;
+    if (!native_bindings_ready.load(std::memory_order_acquire) || index >= roster.count) return false;
+    const auto& row = combat_rows[index];
+    return row.bound && row.bind_confirmed && !row.authority_dead && !row.local_retiring && !row.local_dead &&
+        !(native_life_bits[index].load(std::memory_order_acquire) & (kNativeRetiring|kNativeDead));
+}
+bool combat_known_retiring(std::uintptr_t record, std::uint32_t generation) noexcept {
+    if (!combat_enabled() || !native_bindings_ready.load(std::memory_order_acquire)) return false;
+    for (std::size_t i=0; i<native_binding_count; ++i)
+        if (native_bindings[i].record==record && native_bindings[i].generation==generation)
+            return (native_life_bits[i].load(std::memory_order_acquire)&(kNativeRetiring|kNativeDead)) != 0;
+    return false;
+}
+void publish_native_bindings_locked() noexcept {
+    if (!combat_enabled() || !encounter_sealed || !session || !peer || !confirmed ||
+        native_bindings_ready.load(std::memory_order_acquire)) return;
+    for (std::size_t i=0; i<roster.count; ++i)
+        if (!combat_rows[i].bound || !combat_rows[i].bind_confirmed || !combat_rows[i].life) return;
+    native_binding_count=roster.count;
+    for (std::size_t i=0; i<roster.count; ++i) {
+        const auto& local=roster.rows[i];
+        native_bindings[i]={local.key,roster.world_epoch,session,peer,combat_rows[i].life,local.record,local.generation};
+    }
+    native_bindings_ready.store(true,std::memory_order_release);
+}
+void seal_initial_combat_locked() noexcept {
+    if (!combat_enabled() || encounter_sealed || !session || !peer || !confirmed || !roster.count) return;
+    combat_rows={}; encounter_sealed=true;
+    const auto now=GetTickCount64();
+    for (auto& row:combat_rows) row.control_started=now;
+    for (std::size_t i=0; i<roster.count; ++i) if (!g_net_role_b) {
+        combat_rows[i].life=i+1; combat_rows[i].bound=true;
+    }
+}
+void update_death_result_locked(std::size_t index,unsigned bits) noexcept {
+    auto& row=combat_rows[index];
+    if (!g_net_role_b || !row.death_event || !row.local_dead || row.result!=wire::combat::Result::none) return;
+    if (row.attempted_event==row.death_event) {
+        // A reservation is not an effect. A synchronous HumanDead entry may
+        // precede damage's return; wait for that attempt's terminal status.
+        if (!(bits&(kNativeReturned|kNativeRefused|kNativeFault))) return;
+        row.result=(bits&kNativeReturned) && !(bits&(kNativeRefused|kNativeFault)) ?
+            wire::combat::Result::applied : wire::combat::Result::already_applied;
+    } else row.result=wire::combat::Result::already_applied;
+    row.last_control=0;
+}
+void drain_native_life_locked() noexcept {
+    if (!combat_enabled() || !native_bindings_ready.load(std::memory_order_acquire)) return;
+    for (std::size_t i=0; i<native_binding_count; ++i) {
+        const auto bits=native_life_bits[i].load(std::memory_order_acquire);
+        const auto fresh=bits&~observed_life_bits[i]; if (!fresh) continue;
+        observed_life_bits[i]|=fresh;
+        auto& row=combat_rows[i];
+        if (fresh&kNativeRetiring) { row.local_retiring=true; ++row.revision; }
+        if (fresh&kNativeDead) {
+            row.local_dead=true; row.local_retiring=true; ++row.revision;
+            if (g_net_role_b && !row.death_event) combat_b_prediction.fetch_add(1,std::memory_order_relaxed);
+            if (!g_net_role_b && !row.death_event) {
+                if (next_death_event==~std::uint64_t{}) { stopped.store(true); active_scope.store(false); return; }
+                row.death_event=++next_death_event; row.authority_dead=true;
+                row.control_started=GetTickCount64();
+                combat_death_events.fetch_add(1,std::memory_order_relaxed);
+            }
+        }
+        update_death_result_locked(i,bits);
+    }
+    refresh_native_pending_locked();
+}
 
 // One nonwaiting permit covers ALL synchronous enemy census/native guard work.
 // A QPC wall-time cutoff contains repeated work; it cannot preempt one blocked
@@ -235,7 +393,7 @@ struct WorkBudget {
     WorkBudget& operator=(const WorkBudget&) = delete;
     bool check(bool query = false, std::uintptr_t query_at = 0) noexcept {
         if (!owned || !last || incomplete || stopped.load(std::memory_order_acquire)) return false;
-        if (site == 2 && !certificate_seen) {
+        if (site >= 2 && !certificate_seen) {
             if (!certificate_current(ticket)) return false;
             // Only certificate METADATA is stable under this work permit, not
             // native memory. Every copy keeps its SEH/QPC and final setter
@@ -289,6 +447,16 @@ void append_budget_pause(std::ostringstream& line) {
          << " firstPauseReads=" << context.read_calls
          << " firstPauseReadRefused=" << context.read_refused;
 }
+void append_combat_status(std::ostringstream& line) {
+    const bool bound=native_bindings_ready.load(std::memory_order_acquire);
+    line << " combat=" << combat_enabled() << " livesReady=" << bound
+         << " boundLives=" << (bound ? native_binding_count : 0)
+         << " deathEvents=" << combat_death_events.load() << " deathReceived=" << combat_death_received.load()
+         << " nativeAttempts=" << combat_native_attempts.load() << " nativeCommits=" << combat_native_commits.load()
+         << " deathResults=" << combat_death_results.load() << " nativeRefused=" << combat_native_refusals.load()
+         << " retiring=" << combat_retiring_observed.load() << " prebindRefused=" << combat_prebind_refused.load()
+         << " unsupportedBPrediction=" << combat_b_prediction.load();
+}
 
 void append_cost_stop_context(std::ostringstream& line) {
     const auto reason = cost_stop.load(std::memory_order_acquire);
@@ -311,6 +479,132 @@ void append_cost_stop_context(std::ostringstream& line) {
          << " terminalQuery=0x" << context.query_address << std::dec
          << " terminalReadBytes=" << context.read_bytes
          << " terminalQueryPending=" << context.query_pending;
+}
+
+bool publish_native_life_event(const NativeLifeEvent& event) noexcept {
+    if (!combat_enabled() || !combat_ready() || stopped.load(std::memory_order_acquire) ||
+        event.worldEpoch!=bound_world_epoch.load(std::memory_order_acquire) || !scope_current() ||
+        !effect_slice_current(GetTickCount64())) return false;
+    if (!native_bindings_ready.load(std::memory_order_acquire)) {
+        combat_prebind_refused.fetch_add(1,std::memory_order_relaxed); return false;
+    }
+    const unsigned bit=event.kind==NativeLifeKind::retiring ? kNativeRetiring :
+        event.kind==NativeLifeKind::dead_commit ? kNativeDead : 0;
+    if (!bit) return false;
+    for (std::size_t i=0; i<native_binding_count; ++i) {
+        const auto& binding=native_bindings[i];
+        if (binding.world==event.worldEpoch && binding.record==event.record && binding.generation==event.generation &&
+            binding.session==published_session.load(std::memory_order_acquire)) {
+            if (bit==kNativeDead) commit_first_effect(GetTickCount64());
+            const auto old=native_life_bits[i].fetch_or(bit,std::memory_order_release);
+            if (!(old&bit)) {
+                if (bit==kNativeDead) combat_native_commits.fetch_add(1,std::memory_order_relaxed);
+                else combat_retiring_observed.fetch_add(1,std::memory_order_relaxed);
+            }
+            return true;
+        }
+    }
+    return false; // prebind/foreign generation is unsupported, never adopted.
+}
+bool peek_native_death(std::uintptr_t record,std::uint32_t generation,NativeDeathAttempt& out) noexcept {
+    if (!combat_enabled() || !g_net_role_b || !combat_hooks_ready.load(std::memory_order_acquire) ||
+        !native_bindings_ready.load(std::memory_order_acquire) || stopped.load(std::memory_order_acquire) ||
+        !scope_current() || !TryAcquireSRWLockExclusive(&lock)) return false;
+    drain_native_life_locked();
+    const auto now=GetTickCount64();
+    if (!effect_slice_current(now)) { ReleaseSRWLockExclusive(&lock); return false; }
+    const auto effect_start=first_apply.load(std::memory_order_acquire);
+    bool found{};
+    for (std::size_t i=0; i<native_binding_count; ++i) {
+        const auto& binding=native_bindings[i]; const auto& row=combat_rows[i];
+        if (binding.record==record && binding.generation==generation && binding.session==session && binding.peer==peer &&
+            row.death_event && row.authority_dead && !row.attempted_event && !row.local_retiring && !row.local_dead &&
+            row.result==wire::combat::Result::none && row.control_started && now>=row.control_started &&
+            now-row.control_started<=30000) {
+            out={binding.key,binding.world,session,peer,row.life,row.death_event,row.revision,record,generation,
+                effect_start ? effect_start : now,row.control_started};
+            found=true; break;
+        }
+    }
+    ReleaseSRWLockExclusive(&lock); return found;
+}
+bool try_begin_native_death(const NativeDeathAttempt& attempt) noexcept {
+    if (!combat_enabled() || !g_net_role_b || !combat_ready() || !native_bindings_ready.load(std::memory_order_acquire) ||
+        stopped.load(std::memory_order_acquire) || !scope_current() ||
+        !TryAcquireSRWLockExclusive(&lock)) return false;
+    drain_native_life_locked(); bool begun{};
+    const auto now=GetTickCount64();
+    if (!attempt.effectStart || now<attempt.effectStart || now-attempt.effectStart>30000 ||
+        !attempt.controlStart || now<attempt.controlStart || now-attempt.controlStart>30000 ||
+        !effect_slice_current(now)) { ReleaseSRWLockExclusive(&lock); return false; }
+    for (std::size_t i=0; i<roster.count; ++i) {
+        auto& row=combat_rows[i]; const auto& local=roster.rows[i];
+        if (attempt.session==session && attempt.peer==peer && attempt.worldEpoch==roster.world_epoch &&
+            attempt.lifeId==row.life && attempt.eventId==row.death_event && attempt.rowRevision==row.revision &&
+            attempt.controlStart==row.control_started &&
+            attempt.record==local.record && attempt.generation==local.generation && attempt.key==local.key &&
+            row.authority_dead && !row.attempted_event && !row.local_retiring && !row.local_dead &&
+            row.result==wire::combat::Result::none &&
+            !(native_life_bits[i].load(std::memory_order_acquire)&(kNativeRetiring|kNativeDead))) {
+            row.attempted_event=attempt.eventId;
+            combat_native_attempts.fetch_add(1,std::memory_order_relaxed);
+            native_attempt_event[i].store(attempt.eventId,std::memory_order_release); begun=true; break;
+        }
+    }
+    refresh_native_pending_locked(); ReleaseSRWLockExclusive(&lock); return begun;
+}
+bool native_death_attempt_current(const NativeDeathAttempt& attempt) noexcept {
+    const auto now=GetTickCount64();
+    if (!combat_enabled() || !g_net_role_b || !combat_ready() ||
+        !native_bindings_ready.load(std::memory_order_acquire) || stopped.load(std::memory_order_acquire) ||
+        !attempt.effectStart || now<attempt.effectStart || now-attempt.effectStart>30000 ||
+        !attempt.controlStart || now<attempt.controlStart || now-attempt.controlStart>30000 ||
+        !effect_slice_current(now) || !scope_current() ||
+        published_session.load(std::memory_order_acquire)!=attempt.session) return false;
+    for (std::size_t i=0; i<native_binding_count; ++i) {
+        const auto& binding=native_bindings[i];
+        if (binding.world==attempt.worldEpoch && binding.session==attempt.session && binding.peer==attempt.peer &&
+            binding.life==attempt.lifeId && binding.record==attempt.record && binding.generation==attempt.generation &&
+            binding.key==attempt.key && native_attempt_event[i].load(std::memory_order_acquire)==attempt.eventId)
+            return !(native_life_bits[i].load(std::memory_order_acquire)&
+                (kNativeRetiring|kNativeDead|kNativeReturned|kNativeRefused|kNativeFault));
+    }
+    return false;
+}
+void finish_native_death_attempt(const NativeDeathAttempt& attempt,NativeAttemptStatus status) noexcept {
+    if (!combat_enabled() || !native_bindings_ready.load(std::memory_order_acquire)) return;
+    for (std::size_t i=0; i<native_binding_count; ++i) {
+        const auto& binding=native_bindings[i];
+        if (binding.world!=attempt.worldEpoch || binding.session!=attempt.session || binding.peer!=attempt.peer ||
+            binding.life!=attempt.lifeId || binding.record!=attempt.record || binding.generation!=attempt.generation ||
+            native_attempt_event[i].load(std::memory_order_acquire)!=attempt.eventId) continue;
+        const unsigned bit=status==NativeAttemptStatus::native_returned ? kNativeReturned :
+            status==NativeAttemptStatus::native_fault ? kNativeFault : kNativeRefused;
+        if (status==NativeAttemptStatus::native_returned) commit_first_effect(attempt.effectStart);
+        native_life_bits[i].fetch_or(bit,std::memory_order_release);
+        if (status==NativeAttemptStatus::refused) combat_native_refusals.fetch_add(1,std::memory_order_relaxed);
+        if (status==NativeAttemptStatus::native_fault) {
+            native_apply_fault.store(true,std::memory_order_release);
+            stopped.store(true,std::memory_order_release); refresh_required.store(true,std::memory_order_release);
+            active_scope.store(false,std::memory_order_release);
+        }
+        return; // native_returned is NEVER a positive result.
+    }
+}
+
+bool reconcile_combat_census_locked(const Roster& current) noexcept {
+    if (current.manager!=roster.manager || current.array!=roster.array || current.world_epoch!=roster.world_epoch ||
+        current.player!=roster.player || current.player_id!=roster.player_id) return false;
+    std::array<bool,wire::kActors> seen{};
+    for (std::size_t i=0; i<current.count; ++i) {
+        std::size_t index=roster.count;
+        for (std::size_t j=0; j<roster.count; ++j) if (current.rows[i]==roster.rows[j]) { index=j; break; }
+        if (index==roster.count || seen[index]) return false; // unknown birth/respawn is not adopted.
+        seen[index]=true;
+    }
+    for (std::size_t i=0; i<roster.count; ++i)
+        if (!seen[i] && !combat_known_retiring(roster.rows[i].record,roster.rows[i].generation)) return false;
+    return true; // only positive native retiring/dead witnesses may disappear.
 }
 
 DWORD WINAPI stop_waiter(void*) {
@@ -578,6 +872,9 @@ bool census(Roster& out, WorkBudget& budget) noexcept {
                        static_cast<std::size_t>(count)*sizeof(RetainedEntry), &cache)) return false;
     for (std::uint32_t index = 0; index < count; ++index) {
         const auto& entry = entries[index];
+        // Only the bound CURRENT native D08/HumanDead observer can supply this
+        // exclusion. Absence, HP0, a failed read and a new generation cannot.
+        if (combat_known_retiring(entry.record,entry.id)) continue;
         std::uintptr_t actor{}, vt{}; std::uint32_t id{};
         if (!entry.record || !read(entry.record+8, actor) || !read(actor, vt) || !read(actor+0xBC, id) || id != entry.id) return false;
         if (vt != g_module+kPirate) continue;
@@ -609,14 +906,33 @@ void reset_locked() {
     published_session.store(0, std::memory_order_release);
     session = peer = 0; confirmed = false; peer_seen = last_hello = 0; hello_sequence = 0;
     roster = {}; rows = {};
+    // Never rewrite a published observer table. Terminal stop is absorbing;
+    // initial prebind retries have no native observer readers yet.
+    if (!native_bindings_ready.load(std::memory_order_acquire)) {
+        combat_rows={}; encounter_sealed=false;
+    }
+    native_death_pending_hint.store(false,std::memory_order_release);
 }
 void receive(const void* bytes, int size, const sockaddr_in& source, int source_size, ULONGLONG poll_started) {
-    if (size != sizeof(wire::Packet) || source_size < sizeof(source) ||
+    if (source_size < sizeof(source) ||
         source.sin_family != transport_peer.sin_family || source.sin_addr.s_addr != transport_peer.sin_addr.s_addr ||
         source.sin_port != transport_peer.sin_port) return;
-    wire::Packet packet{}; std::memcpy(&packet, bytes, sizeof(packet));
-    if (!wire::valid(packet) || packet.role_b == static_cast<std::uint8_t>(g_net_role_b)) return;
+    wire::Packet packet{};
+    wire::combat::Packet modern{};
+    if (combat_enabled()) {
+        if (size!=sizeof(modern)) return;
+        std::memcpy(&modern,bytes,sizeof(modern));
+        if (!wire::combat::valid(modern) || modern.role_b==static_cast<std::uint8_t>(g_net_role_b)) return;
+        packet.role_b=modern.role_b; packet.sender=modern.sender; packet.receiver=modern.receiver;
+        packet.sequence=modern.sequence; packet.key=modern.key; packet.position=modern.position; packet.rotation=modern.rotation;
+        packet.kind=modern.kind==wire::combat::Kind::hello ? wire::Kind::hello : wire::Kind::root;
+    } else {
+        if (size!=sizeof(packet)) return;
+        std::memcpy(&packet,bytes,sizeof(packet));
+        if (!wire::valid(packet) || packet.role_b==static_cast<std::uint8_t>(g_net_role_b)) return;
+    }
     const auto now = GetTickCount64();
+    if (combat_enabled() && !effect_slice_current(now)) return;
     if (now-poll_started > 100) {
         worker_gap_ms.store(now-poll_started, std::memory_order_relaxed);
         stopped.store(true); active_scope.store(false, std::memory_order_release); return;
@@ -624,12 +940,51 @@ void receive(const void* bytes, int size, const sockaddr_in& source, int source_
     // Enemy UDP is lossy; never wait for a native animation job.
     if (!TryAcquireSRWLockExclusive(&lock)) return;
     if (!session || stopped.load(std::memory_order_relaxed)) { ReleaseSRWLockExclusive(&lock); return; }
+    if (combat_enabled() && modern.kind!=wire::combat::Kind::hello && modern.kind!=wire::combat::Kind::root) {
+        if (!confirmed || modern.sender!=peer || modern.receiver!=session || now-peer_seen>1000 || !encounter_sealed) {
+            ReleaseSRWLockExclusive(&lock); return;
+        }
+        drain_native_life_locked();
+        std::size_t index=roster.count;
+        for (std::size_t i=0; i<roster.count; ++i) if (roster.rows[i].key==modern.key) { index=i; break; }
+        if (index<roster.count) {
+            auto& row=combat_rows[index];
+            if (modern.kind==wire::combat::Kind::bind && g_net_role_b) {
+                bool unique=true;
+                for (std::size_t i=0; i<roster.count; ++i)
+                    if (i!=index && combat_rows[i].life==modern.life_id) unique=false;
+                if (unique && modern.manifest_count==roster.count && (!row.life || row.life==modern.life_id)) {
+                    row.life=modern.life_id; row.bound=row.bind_confirmed=true; row.bind_reply=true; row.last_control=0;
+                    publish_native_bindings_locked();
+                }
+            } else if (modern.life_id==row.life && row.bound && row.bind_confirmed) {
+                if (modern.kind==wire::combat::Kind::death && g_net_role_b &&
+                    native_bindings_ready.load(std::memory_order_acquire) && (!row.death_event || row.death_event==modern.event_id)) {
+                    if (!row.death_event) {
+                        row.death_event=modern.event_id; row.authority_dead=true; ++row.revision;
+                        row.control_started=now;
+                        combat_death_received.fetch_add(1,std::memory_order_relaxed);
+                    }
+                    update_death_result_locked(index,native_life_bits[index].load(std::memory_order_acquire));
+                    row.last_control=0;
+                } else if (modern.kind==wire::combat::Kind::result && !g_net_role_b &&
+                    row.authority_dead && row.death_event==modern.event_id && !row.result_confirmed) {
+                    row.result_confirmed=true; combat_death_results.fetch_add(1,std::memory_order_relaxed);
+                }
+            } else if (modern.kind==wire::combat::Kind::bound && !g_net_role_b && row.bound && modern.life_id==row.life &&
+                       modern.manifest_count==roster.count) {
+                row.bind_confirmed=true; publish_native_bindings_locked();
+            }
+        }
+        refresh_native_pending_locked();
+        ReleaseSRWLockExclusive(&lock); return;
+    }
     if (packet.kind == wire::Kind::hello) {
         if (hello_sequence && now-peer_seen < 2000 && !wire::newer(packet.sequence, hello_sequence)) {
             ReleaseSRWLockExclusive(&lock); return;
         }
         if (peer != packet.sender) {
-            if (first_apply) {
+            if (first_apply.load(std::memory_order_acquire) || captured.load(std::memory_order_relaxed) || (combat_enabled() && encounter_sealed)) {
                 stopped.store(true); active_scope.store(false); ReleaseSRWLockExclusive(&lock); return;
             }
             peer = packet.sender; confirmed = false;
@@ -640,9 +995,11 @@ void receive(const void* bytes, int size, const sockaddr_in& source, int source_
     } else if (g_net_role_b && confirmed && packet.sender == peer && packet.receiver == session && now-peer_seen <= 1000) {
         received.fetch_add(1, std::memory_order_relaxed);
         for (std::uint32_t i = 0; i < roster.count; ++i) if (roster.rows[i].key == packet.key) {
+            if (combat_enabled() && (modern.life_id!=combat_rows[i].life || !combat_row_writable(i))) break;
             auto& row = rows[i];
             if (!row.last_sequence || wire::newer(packet.sequence, row.last_sequence)) {
                 row.incoming = packet; row.received = now; row.last_sequence = packet.sequence;
+                if (combat_enabled()) { combat_rows[i].root_seen=true; combat_rows[i].bind_reply=false; }
                 matched.fetch_add(1, std::memory_order_relaxed);
             }
             break;
@@ -657,6 +1014,7 @@ void tick() {
         active_scope.store(false, std::memory_order_release);
         return;
     }
+    if (combat_enabled() && !effect_slice_current(GetTickCount64())) return;
     if (!startup_admitted()) return;
     if (ticking.test_and_set()) return;
     if (historical_census_expired(GetTickCount64())) {
@@ -686,7 +1044,8 @@ void tick() {
     if (!valid) {
         census_gap = true;
         active_scope.store(false, std::memory_order_release);
-        if (applied.load(std::memory_order_acquire) || captured.load(std::memory_order_acquire)) stop_census(1);
+        if (applied.load(std::memory_order_acquire) || captured.load(std::memory_order_acquire) ||
+            (combat_enabled() && encounter_sealed)) stop_census(1);
     }
     // This runs from Player/Nadine update: never wait for a receiver/native job.
     // An unpublished census must not leave the writer enabled until next tick.
@@ -705,18 +1064,23 @@ void tick() {
         // An in-flight first apply may have completed after the failed try-lock.
         // Once the lock is ours, it cannot race this decision. Before any apply
         // reset the session; after one apply the gap is terminal, never rearm.
-        if (applied.load(std::memory_order_acquire) || captured.load(std::memory_order_acquire)) stop_census(1);
+        if (applied.load(std::memory_order_acquire) || captured.load(std::memory_order_acquire) ||
+            (combat_enabled() && encounter_sealed)) stop_census(1);
         reset_locked(); census_gap = false;
     }
     if (stopped.load()) {
         ReleaseSRWLockExclusive(&lock); ticking.clear(); return;
     }
     if (!valid) {
-        if (applied.load(std::memory_order_relaxed) || captured.load(std::memory_order_relaxed)) stop_census(1);
+        if (applied.load(std::memory_order_relaxed) || captured.load(std::memory_order_relaxed) ||
+            (combat_enabled() && encounter_sealed)) stop_census(1);
         reset_locked();
     }
     else {
-        if (session && current != roster && (applied.load(std::memory_order_relaxed) || captured.load(std::memory_order_relaxed))) {
+        if (combat_enabled() && encounter_sealed) {
+            drain_native_life_locked();
+            if (!reconcile_combat_census_locked(current)) { stop_census(2); reset_locked(); }
+        } else if (session && current != roster && (applied.load(std::memory_order_relaxed) || captured.load(std::memory_order_relaxed))) {
             // First experiment never silently rebinds across a death/load/spawn.
             stop_census(2); reset_locked();
         } else if (!session || current != roster) {
@@ -731,6 +1095,9 @@ void tick() {
                 published_session.store(session, std::memory_order_release);
             }
         }
+    }
+    if (combat_enabled() && valid && session && confirmed && !stopped.load(std::memory_order_acquire)) {
+        seal_initial_combat_locked(); publish_native_bindings_locked(); drain_native_life_locked();
     }
     const bool within_budget = budget.check();
     const bool within_world = !player_world::kEnablePlayerWorldRearm || scope_current();
@@ -766,10 +1133,16 @@ DWORD WINAPI transport_worker(void*) {
         const auto record = line+'\n'; DWORD written{};
         WriteFile(log, record.data(), static_cast<DWORD>(record.size()), &written, nullptr);
     };
-    struct Pending { wire::Packet packet; ULONGLONG captured; };
+    struct Pending {
+        wire::Packet packet{}; ULONGLONG captured{};
+        wire::combat::Packet modern_packet{};
+        std::size_t index=wire::kActors;
+        bool modern{}, control{};
+    };
     ULONGLONG last_send{}, last_log{}, last_poll{};
     while (!stopped.load(std::memory_order_acquire) && g_state_net.running.load()) {
         if (stop_for_player_lifecycle()) break;
+        if (combat_enabled() && !effect_slice_current(GetTickCount64())) break;
         if (!next_session.load(std::memory_order_acquire)) {
             std::uint64_t nonce{};
             if (BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(&nonce), sizeof(nonce), BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0 || !nonce) {
@@ -789,8 +1162,8 @@ DWORD WINAPI transport_worker(void*) {
         // Bounded draining, even under unrelated or malformed UDP traffic.
         // WSAEWOULDBLOCK is normal; always sleep before another poll.
         for (unsigned i = 0; i < 64 && !stopped.load(); ++i) {
-            wire::Packet packet{}; sockaddr_in source{}; int source_size = sizeof(source);
-            const int bytes = recvfrom(transport_socket, reinterpret_cast<char*>(&packet), sizeof(packet), 0,
+            std::array<char,sizeof(wire::combat::Packet)> packet{}; sockaddr_in source{}; int source_size = sizeof(source);
+            const int bytes = recvfrom(transport_socket, packet.data(), static_cast<int>(packet.size()), 0,
                 reinterpret_cast<sockaddr*>(&source), &source_size);
             if (bytes == SOCKET_ERROR) {
                 const int error = WSAGetLastError();
@@ -798,27 +1171,74 @@ DWORD WINAPI transport_worker(void*) {
                 if (error == WSAEMSGSIZE || error == WSAECONNRESET) continue;
                 stopped.store(true); break;
             }
-            receive(&packet, bytes, source, source_size, poll_started);
+            receive(packet.data(), bytes, source, source_size, poll_started);
         }
         const auto now = GetTickCount64();
-        std::array<Pending, wire::kActors+1> pending{}; std::size_t count{};
+        std::array<Pending, wire::kActors*2+1> pending{}; std::size_t count{};
         if (now-last_send >= 50 && TryAcquireSRWLockExclusive(&lock)) {
             last_send = now;
+            if (combat_enabled()) { drain_native_life_locked(); publish_native_bindings_locked(); }
+            const auto modernize = [](Pending& item,wire::combat::Kind kind,std::uint64_t life=0,
+                                      std::uint64_t event=0,wire::combat::Result result=wire::combat::Result::none) {
+                item.modern=true;
+                auto& output=item.modern_packet;
+                output.kind=kind; output.role_b=item.packet.role_b; output.sender=item.packet.sender;
+                output.receiver=item.packet.receiver; output.sequence=item.packet.sequence; output.key=item.packet.key;
+                output.life_id=life; output.event_id=event; output.result=result;
+                if (kind==wire::combat::Kind::root) { output.position=item.packet.position; output.rotation=item.packet.rotation; }
+            };
             const bool fresh = session && now <= census_valid_until.load(std::memory_order_acquire) && !stopped.load();
             if (fresh && now-last_hello >= 200) {
                 wire::Packet hello{}; hello.role_b = static_cast<std::uint8_t>(g_net_role_b);
                 hello.sender = session; hello.receiver = peer; hello.sequence = ++sequence;
-                pending[count++] = {hello, now}; last_hello = now;
+                pending[count] = {hello, now};
+                if (combat_enabled()) modernize(pending[count],wire::combat::Kind::hello);
+                ++count; last_hello = now;
             }
             if (fresh && !refresh_required.load(std::memory_order_acquire) && active_scope.load(std::memory_order_acquire) && confirmed && peer && now-peer_seen <= 1000 && !g_net_role_b) {
                 for (std::uint32_t i = 0; i < roster.count; ++i) {
                     auto& row = rows[i];
+                    if (!combat_row_writable(i)) continue;
                     if (!row.dirty) continue;
                     row.dirty = false;
                     if (now-row.captured > 150) continue;
                     auto packet = row.outgoing;
                     packet.sender = session; packet.receiver = peer; packet.sequence = ++sequence;
-                    pending[count++] = {packet, row.captured};
+                    pending[count] = {packet, row.captured}; pending[count].index=i;
+                    if (combat_enabled()) modernize(pending[count],wire::combat::Kind::root,combat_rows[i].life);
+                    ++count;
+                }
+            }
+            // Reliable control values survive ordinary root budget pauses.
+            // No native pointers/calls escape this short metadata mailbox.
+            if (combat_enabled() && session && peer && confirmed && encounter_sealed && scope_current() && !stopped.load()) {
+                for (std::size_t i=0; i<roster.count && count<pending.size(); ++i) {
+                    auto& row=combat_rows[i];
+                    if (row.last_control && now-row.last_control<100) continue;
+                    wire::combat::Kind kind{}; bool send_control{};
+                    if (!g_net_role_b && row.death_event && !row.result_confirmed) { kind=wire::combat::Kind::death; send_control=true; }
+                    else if (g_net_role_b && row.death_event && row.result!=wire::combat::Result::none) { kind=wire::combat::Kind::result; send_control=true; }
+                    else if (!g_net_role_b && row.bound && !row.bind_confirmed) { kind=wire::combat::Kind::bind; send_control=true; }
+                    else if (g_net_role_b && row.bind_reply && row.bound) { kind=wire::combat::Kind::bound; send_control=true; }
+                    if (!send_control) continue;
+                    // Finite retransmission lifetime even before any native
+                    // effect. Duplicates never restamp control_started. The
+                    // shared first-effect deadline can only close us earlier.
+                    if (!row.control_started || now-row.control_started>30000) {
+                        stopped.store(true,std::memory_order_release);
+                        active_scope.store(false,std::memory_order_release); break;
+                    }
+                    wire::Packet header{}; header.role_b=static_cast<std::uint8_t>(g_net_role_b);
+                    header.sender=session; header.receiver=peer; header.key=roster.rows[i].key;
+                    header.sequence=++sequence; if (!header.sequence) header.sequence=++sequence;
+                    pending[count]={header,now}; pending[count].control=true; pending[count].index=i;
+                    modernize(pending[count],kind,row.life,
+                        kind==wire::combat::Kind::death || kind==wire::combat::Kind::result ? row.death_event : 0,
+                        kind==wire::combat::Kind::result ? row.result : wire::combat::Result::none);
+                    if (kind==wire::combat::Kind::bind || kind==wire::combat::Kind::bound)
+                        pending[count].modern_packet.manifest_count=roster.count;
+                    ++count; row.last_control=now;
+                    if (kind==wire::combat::Kind::bound) row.bind_reply=false;
                 }
             }
             const auto local_count = roster.count; const bool paired = confirmed;
@@ -828,11 +1248,16 @@ DWORD WINAPI transport_worker(void*) {
             for (std::size_t i = 0; i < count; ++i) {
                 const auto& item = pending[i]; const auto send_now = GetTickCount64();
                 if (stopped.load() || item.packet.sender != published_session.load(std::memory_order_acquire) ||
-                    send_now > census_valid_until.load(std::memory_order_acquire) || send_now-item.captured > 150 ||
-                    (item.packet.kind == wire::Kind::root && !active_scope.load(std::memory_order_acquire))) continue;
-                const int bytes = sendto(transport_socket, reinterpret_cast<const char*>(&item.packet), sizeof(item.packet), 0,
+                    (combat_enabled() && (!scope_current() || !effect_slice_current(send_now))) ||
+                    (!item.control && (send_now > census_valid_until.load(std::memory_order_acquire) || send_now-item.captured > 150 ||
+                    (item.packet.kind == wire::Kind::root && !active_scope.load(std::memory_order_acquire))))) continue;
+                if (item.modern && !item.control && item.index<wire::kActors &&
+                    (native_life_bits[item.index].load(std::memory_order_acquire)&(kNativeRetiring|kNativeDead))) continue;
+                const auto* data=item.modern ? reinterpret_cast<const char*>(&item.modern_packet) : reinterpret_cast<const char*>(&item.packet);
+                const int size=item.modern ? static_cast<int>(sizeof(item.modern_packet)) : static_cast<int>(sizeof(item.packet));
+                const int bytes = sendto(transport_socket, data, size, 0,
                     reinterpret_cast<const sockaddr*>(&transport_peer), sizeof(transport_peer));
-                if (bytes == sizeof(item.packet)) sent.fetch_add(1, std::memory_order_relaxed);
+                if (bytes == size) sent.fetch_add(1, std::memory_order_relaxed);
                 else send_dropped.fetch_add(1, std::memory_order_relaxed);
             }
             if (now-last_log >= 2000) {
@@ -849,6 +1274,7 @@ DWORD WINAPI transport_worker(void*) {
                      << " queries=" << query_total.load() << " peakQueries=" << peak_queries.load() << " workSkips=" << work_skips.load();
                 append_cost_stop_context(line);
                 append_budget_pause(line);
+                append_combat_status(line);
                 write_status(line.str());
             }
         }
@@ -869,6 +1295,7 @@ DWORD WINAPI transport_worker(void*) {
         << "; corrections closed; native AI continues; terminal latch retained";
     append_cost_stop_context(line);
     append_budget_pause(line);
+    append_combat_status(line);
     write_status(line.str());
     if (log != INVALID_HANDLE_VALUE) CloseHandle(log);
     return 0;
@@ -906,13 +1333,16 @@ bool start_transport() {
     return true;
 }
 
-void apply_root_and_release(void* object, const void* transform, WorkBudget* budget, ULONGLONG slice_start) {
+void apply_root_and_release(void* object, const void* transform, WorkBudget* budget, ULONGLONG slice_start,
+                            std::size_t index, std::uint64_t revision) {
     using SetLocalRoot = void(__fastcall*)(void*, const void*);
     // Finally cleans up even if an outer native SEH handler resumes the game.
     // Do NOT catch/translate the game's exception or count a partial write as
     // success. Normal return leaves the permit with the enclosing scope.
     __try {
         if (!budget->check() || !certificate_current(budget->ticket)) return;
+        if (combat_enabled() && !effect_slice_current(GetTickCount64())) return;
+        if (!combat_row_writable(index) || (combat_enabled() && combat_rows[index].revision!=revision)) return;
         if constexpr (player_world::kEnablePlayerWorldRearm) {
             if (stop_for_player_lifecycle() || !scope_current()) return;
         }
@@ -920,7 +1350,7 @@ void apply_root_and_release(void* object, const void* transform, WorkBudget* bud
         // Commit the effect clock ONLY after normal native return, while the
         // same mailbox still excludes peer/reset processing. An abandoned
         // candidate must not masquerade as an applied effect on the next hello.
-        if (!first_apply) first_apply = slice_start;
+        commit_first_effect(slice_start);
         applied.fetch_add(1, std::memory_order_relaxed);
     } __finally {
         ReleaseSRWLockExclusive(&lock);
@@ -1106,12 +1536,14 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     // shared work window. Never dereference actor or reserve a row here, and
     // release this lock BEFORE attempting the work permit (no lock inversion).
     const auto preflight_now = GetTickCount64();
+    if (combat_enabled() && !effect_slice_current(preflight_now)) return;
     if (preflight_now > census_valid_until.load(std::memory_order_acquire)) return;
     if (!TryAcquireSRWLockExclusive(&lock)) return;
     bool preflight_due{};
     if (session && confirmed && active_scope.load(std::memory_order_acquire) &&
         preflight_now-peer_seen <= 1000 && !stopped.load(std::memory_order_acquire)) {
         for (std::size_t i = 0; i < roster.count; ++i) if (roster.rows[i].actor == actor) {
+            if (!combat_row_writable(i)) break;
             const auto& row = rows[i];
             preflight_due = !g_net_role_b ? preflight_now >= row.next_capture :
                 row.received && preflight_now-row.received <= 200 &&
@@ -1142,11 +1574,13 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     wire::Packet scheduled_packet{};
     Local scheduled_local{};
     std::size_t scheduled_index = roster.count;
+    std::uint64_t scheduled_revision{};
     const auto scheduled_session = session;
     if (session && confirmed && active_scope.load(std::memory_order_acquire) &&
         schedule_now <= census_valid_until.load(std::memory_order_acquire) &&
         schedule_now-peer_seen <= 1000 && !stopped.load(std::memory_order_acquire) && !g_dll_inert) {
         for (std::size_t i = 0; i < roster.count; ++i) if (roster.rows[i].actor == actor) {
+            if (!combat_row_writable(i)) break;
             auto& row = rows[i];
             if (!g_net_role_b) {
                 due = schedule_now >= row.next_capture;
@@ -1160,7 +1594,7 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
                     scheduled_packet = row.incoming;
                 }
             }
-            if (due) { scheduled_local = roster.rows[i]; scheduled_index = i; }
+            if (due) { scheduled_local = roster.rows[i]; scheduled_index = i; scheduled_revision=combat_rows[i].revision; }
             break;
         }
     }
@@ -1183,7 +1617,8 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     if (!TryAcquireSRWLockExclusive(&lock)) return; // never wait in an animation job
     if (!session || session != scheduled_session || !active_scope.load(std::memory_order_acquire) || stopped.load() ||
         now > census_valid_until.load(std::memory_order_acquire) || !roster_scope_current(roster, cache) ||
-        scheduled_index >= roster.count || !(roster.rows[scheduled_index] == local)) {
+        scheduled_index >= roster.count || !(roster.rows[scheduled_index] == local) || !combat_row_writable(scheduled_index) ||
+        (combat_enabled() && combat_rows[scheduled_index].revision!=scheduled_revision)) {
         ReleaseSRWLockExclusive(&lock); return;
     }
     const auto index = scheduled_index;
@@ -1208,7 +1643,8 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     double fresh_distance{};
     for (unsigned axis = 0; axis < 3; ++axis) { const double delta = packet.position[axis]-fresh[axis]; fresh_distance += delta*delta; }
     if (!(fresh_distance <= 100.0)) { ReleaseSRWLockExclusive(&lock); return; }
-    const auto slice_start = first_apply ? first_apply : now;
+    const auto prior_effect=first_apply.load(std::memory_order_acquire);
+    const auto slice_start = prior_effect ? prior_effect : now;
     if (now-slice_start > 30000) { stopped.store(true); ReleaseSRWLockExclusive(&lock); return; }
     const auto apply_now = GetTickCount64();
     std::uintptr_t manager{};
@@ -1246,9 +1682,11 @@ void postblend(void* object, void* native_job, std::uintptr_t pc) noexcept {
     }
     std::copy_n(packet.position.begin(), 3, fresh.begin()); // keep receiver +13C service lane
     std::copy(packet.rotation.begin(), packet.rotation.end(), fresh.begin()+4);
-    apply_root_and_release(object, fresh.data(), &budget, slice_start);
+    apply_root_and_release(object, fresh.data(), &budget, slice_start,index,scheduled_revision);
 }
 } // namespace enemy_root
+
+#include "enemy_combat_native.inl"
 
 extern "C" std::uintptr_t TllEnemyRootPostblendBridge(void*);
 extern "C" std::uintptr_t __fastcall TllEnemyRootPostblend(void* owner, void* job) {
@@ -1260,6 +1698,10 @@ extern "C" std::uintptr_t __fastcall TllEnemyRootPostblend(void* owner, void* jo
     SetLastError(error); return result;
 }
 bool install_enemy_root_sync() {
+    enemy_root::combat_requested_state=enemy_root::combat_requested();
+    if (enemy_root::combat_enabled() && !player_world::kEnablePlayerWorldRearm) {
+        boot_log_line("ENEMY-COMBAT refused: paired Player-world lifecycle is required"); return false;
+    }
     SYSTEM_INFO info{};
     GetSystemInfo(&info);
     const auto page_size = static_cast<std::uintptr_t>(info.dwPageSize);
@@ -1308,10 +1750,17 @@ bool install_enemy_root_sync() {
     const bool sealed = VirtualProtect(slot, sizeof(void*), old, &ignored) != FALSE;
     // Pointer publication is one aligned atomic exchange, not a torn instruction
     // patch. Already-loaded stock targets remain stock; no relay is freed.
-    const bool ready = changed && sealed;
+    const bool root_ready = changed && sealed;
+    const bool native_ready = !enemy_root::combat_enabled() || (root_ready && enemy_root::combat_native::install());
+    enemy_root::combat_hooks_ready.store(enemy_root::combat_enabled() && native_ready,std::memory_order_release);
+    const bool ready = root_ready && native_ready;
     if (!ready) enemy_root::stopped.store(true);
     enemy_root::installed.store(ready, std::memory_order_release);
-    boot_log_line(ready ? "ENEMY-ROOT native Pirate+408 root replication installed (readGuard=QueryWorkingSetEx-page; admission=window-census-final; budget=defer-time-query-census; ordinary=POD; 30-second first slice; no HP/AI writes)" :
-        "ENEMY-ROOT installation refused; stock forwarding only");
+    boot_log_line(!ready ? "ENEMY-ROOT installation refused; stock forwarding only" :
+        enemy_root::combat_enabled() ? "ENEMY-ROOT native Pirate+408 root replication installed (admission=window-census-final; budget=defer-time-query-census; ENC2 initial-life death capability opt-in)" :
+        "ENEMY-ROOT native Pirate+408 root replication installed (readGuard=QueryWorkingSetEx-page; admission=window-census-final; budget=defer-time-query-census; ordinary=POD; 30-second first slice; no HP/AI writes)");
+    if (enemy_root::combat_enabled()) boot_log_line(ready ?
+        "ENEMY-COMBAT READY optin=1 protocol=ENC2 initialLives=32-max A-HumanDead-event B-current-HumanActive-health positiveResult=HumanDead-only; no respawn/B-authority/full-shots" :
+        "ENEMY-COMBAT REFUSED native package; all effects fail closed");
     return ready;
 }

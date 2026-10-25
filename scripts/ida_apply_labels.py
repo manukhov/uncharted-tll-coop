@@ -8432,6 +8432,44 @@ FUNCTIONS = {
         "or activated animation request proves neither completed corpse nor "
         "health/death authority, idempotence or native actor lifetime.",
     ),
+    0x141FCA840: (
+        "HealthSystem_GetCurrentContextClock",
+        "STATIC exact HealthSystem142BBE128+1B8. Selects special global input "
+        "clock or FLS current-context/global clock; external FlsGetValue only. "
+        "Called through verified slots by health read/write/damage paths. "
+        "No actor callbacks, FSM writes, allocation/free or owner retirement.",
+    ),
+    0x141FCAEB0: (
+        "HealthSystem_SetHealthAndClockTimestamp",
+        "STATIC exact HealthSystem142BBE128+90. Forwards EDX HP to+1C0 at "
+        "141FCAEC3, then copies supplied clock tick into HS+20 at141FCAECC. "
+        "Only callee is verified raw HP/history writer; no actor/state callback.",
+    ),
+    0x1418971F0: (
+        "NativeTimer_HasExpiredAgainstCurrentContextClock",
+        "STATIC FLS current-context/global clock selector, then unsigned "
+        "current clock+10 >= timer qword at14189724A. Direct external calls "
+        "only FlsGetValue. HealthSystemApplyDamage checks HS+B8/HS+C8 timers "
+        "through this helper; no health/actor/FSM mutation or callback.",
+    ),
+    0x141897130: (
+        "NativeTimer_SetCurrentContextDeadlineFromSeconds",
+        "STATIC converts XMM1 seconds using142BE9EC4 at14189713A, adds current "
+        "FLS-context/global clock+10 at141897195, stores timer qword at "
+        "141897198. External calls only FlsGetValue; no actor callbacks. "
+        "HealthSystemApplyDamage uses it for its scalar timer policy.",
+    ),
+    0x141FCBB20: (
+        "HealthSystem_CreateDefault",
+        "STATIC allocate0xE0/alignment16 and install exact HealthSystem "
+        "vtable142BBE128 at141FCBB5F. Character_Init calls141E99638; shared "
+        "Player initialization calls140CC025C. Defaults mode+68=0 at141FCBBA8, "
+        "floor+6C=1 at141FCBBAB, override+70=1 at141FCBBB2, scale+90=1.0 "
+        "at141FCBBC7. Do not require floor/override0 for ordinary mode0: "
+        "HealthSystemApplyDamage141FCB210 short-circuits+70 while mode!=3, "
+        "and its mode1/2-only floor branches do not execute for mode0. "
+        "That is not permission to admit modes1/2/3 or mutate policy fields.",
+    ),
     0x141FCB210: (
         "HealthSystemApplyDamage",
         "STATIC exact HealthSystem142BBE128 virtual+20, distinct from "

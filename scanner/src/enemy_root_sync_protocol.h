@@ -5,8 +5,9 @@
 #include <cstring>
 #include <type_traits>
 
-// Separate from legacy CONE and StatePacket. A root-only prototype: no health,
-// death, AI commands, pointers or runtime handles cross the wire.
+// Separate from legacy CONE and StatePacket. ENR2 v1 below remains root-only;
+// the explicit opt-in ENC2 channel adds initial-life bind/death/result values.
+// Neither channel transports pointers, runtime handles or general AI commands.
 namespace coop::enemy_root_sync {
 inline constexpr std::uint32_t kMagic = 0x32524E45; // ENR2
 inline constexpr std::uint16_t kVersion = 1;
@@ -50,4 +51,48 @@ inline bool valid(const Packet& p) {
 inline bool newer(std::uint32_t value, std::uint32_t previous) {
     const auto distance = value-previous; return distance && distance < 0x80000000u;
 }
+
+// Integrated initial-life combat channel. Deliberately a different magic/size:
+// an enabled peer never interprets a legacy root as a life-bound command.
+namespace combat {
+inline constexpr std::uint32_t kMagic = 0x32434E45; // ENC2
+inline constexpr std::uint16_t kVersion = 1;
+enum class Kind : std::uint8_t { hello = 1, root, bind, bound, death, result };
+enum class Result : std::uint32_t { none, applied, already_applied };
+struct Packet {
+    std::uint32_t magic = kMagic;
+    std::uint16_t version = kVersion;
+    Kind kind = Kind::hello;
+    std::uint8_t role_b{};
+    std::uint64_t sender{}, receiver{};
+    std::uint32_t sequence{}, reserved{};
+    std::uint64_t life_id{}, event_id{};
+    Key key{};
+    Result result = Result::none;
+    std::uint32_t manifest_count{};
+    std::array<float, 3> position{};
+    std::array<float, 4> rotation{};
+};
+static_assert(sizeof(Packet) == 288 && std::is_trivially_copyable_v<Packet>);
+inline bool valid(const Packet& p) {
+    if (p.magic != kMagic || p.version != kVersion || p.role_b > 1 || !p.sender ||
+        !p.sequence || p.reserved) return false;
+    const bool zero_pose = p.position == std::array<float, 3>{} && p.rotation == std::array<float, 4>{};
+    if (p.kind == Kind::hello)
+        return !p.life_id && !p.event_id && !p.manifest_count && p.key == Key{} && p.result == Result::none && zero_pose;
+    if (!p.receiver || !p.life_id || !valid_key(p.key)) return false;
+    if (p.kind == Kind::root) {
+        ::coop::enemy_root_sync::Packet pose{}; pose.position = p.position; pose.rotation = p.rotation;
+        return !p.role_b && !p.event_id && !p.manifest_count && p.result == Result::none && valid_pose(pose);
+    }
+    if (!zero_pose) return false;
+    if (p.kind == Kind::bind || p.kind == Kind::bound)
+        return p.role_b == (p.kind == Kind::bound ? 1 : 0) && !p.event_id && p.result == Result::none &&
+            p.manifest_count && p.manifest_count<=kActors;
+    if (p.manifest_count) return false;
+    if (p.kind == Kind::death) return !p.role_b && p.event_id && p.result == Result::none;
+    return p.kind == Kind::result && p.role_b && p.event_id &&
+        (p.result == Result::applied || p.result == Result::already_applied);
+}
+} // namespace combat
 }
