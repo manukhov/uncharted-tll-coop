@@ -35,7 +35,7 @@ freshA0BD2551...build/linkPASS/importK32QWSEconfirmed. A10696/B23744 NOWREJECTED
 userB/NadinekillnotmirroredtoA/secondspositiondivergence. Acapture144 thencost2site1
 scope1895/query32/other1863us; Bmatch23/apply12 thencumulativewindow1000us,
 site2lastscope14/query10us/132windowqueries. BothACKInspectOnlyquiescent/no signal;
-gameslaterabsent/exitintentasked, noagentclose/crashclassification. reports/enemy-page-query-20261024205736Z
+gamesabsent/USERclosedBOTHhimself, nocrashreported/noagentclose. reports/enemy-page-query-20261024205736Z
 exactDLL/PDB+terminal logs. QWSEmadeprogressNOTsustainedsync; no2sUDPlatencyproof.
 P0NEXT: workloadadmission/fairphasing+same-passPODbatch staticproof, unchanged
 hard1ms/50ms/256calls/latechecks.50->100msaloneNOTpeakfix/norstallguarantee.

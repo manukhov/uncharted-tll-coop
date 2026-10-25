@@ -25,7 +25,8 @@ kill in one copy does not kill the peer NPC and positions diverge by seconds.
 B applied12/matched23 then stopped at cumulative1ms/50ms (site2); A captured144
 then stopped census1895us/query32us/other1863us (site1). Both epoch1, no native
 fault/worker gap/external stop; stop ACKs already quiescent. Exact terminal logs
-preserved; both games later absent, exit intent asked (not classified). Page queries made real progress but did NOT
+preserved; user confirms he closed BOTH himself, not a crash or agent close.
+Page queries made real progress but did NOT
 solve total cost/sustained movement. No actual2-second network delay established.
 Position/rotation only; AI/combat-state/HP/death authority is NOT implemented.
 STATIC: a single NPC death/retirement also changes the whole-roster session and
@@ -46118,4 +46119,7 @@ pre-existing duplicate entries are unchanged). No unrelated label cleanup.
 No game build/writer/hook/transport change or fresh runtime candidate in this
 unit. First-stop evidence and authority/lifetime gaps are the next work, not
 new offline test scaffolding. Games became absent later in this audit; agent
-did NOT close them. User exit intent requested, no crash classification yet.
+did NOT close them. User now explicitly confirms he closed BOTH himself.
+CONFIRMED USER OUTCOME: manual closure, no crash reported; this is not a watched
+normal-exit or native menu-cleanup result. No new launch/rebuild/rearm authorized
+or performed merely by this clarification; enemy-sync rejection above stands.
