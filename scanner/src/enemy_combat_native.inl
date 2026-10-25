@@ -16,6 +16,7 @@ constexpr std::uintptr_t kHealthVtable = 0x2BBE128;
 using CleanupFunction = std::uintptr_t(__fastcall*)(void*);
 // Process state dispatch1416A574A and state entry1416A411C pass RCX=state only.
 using StateFunction = void(__fastcall*)(void*);
+using CurrentOwnerFunction = void*(__fastcall*)();
 using DirectDamageFunction = std::int32_t(__fastcall*)(
     void*, std::int32_t, std::uint8_t, std::int32_t, bool);
 
@@ -54,7 +55,7 @@ bool seh_current_actor(std::uintptr_t actor, NativeLifeEvent& value) noexcept {
         const auto record = ptr(actor + 0xA8);
         const auto generation = id(actor + 0xBC);
         if (!record || !generation || ptr(record + 8) != actor) return false;
-        const auto current = reinterpret_cast<CurrentProcessFunction>(
+        const auto current = reinterpret_cast<CurrentOwnerFunction>(
             g_module + kThreadContextGetCurrentProcessRva)();
         if (reinterpret_cast<std::uintptr_t>(current) != actor ||
             ptr(actor) != g_module + kPirate || ptr(actor + 0xA8) != record ||
@@ -128,13 +129,13 @@ std::uintptr_t __fastcall hooked_cleanup(void* object) {
 void __fastcall hooked_dead_enter(void* state) {
     const DWORD entry_error = GetLastError();
     NativeLifeEvent event{};
-    const bool captured = capture_state_event(state, event);
+    const bool have_event = capture_state_event(state, event);
     SetLastError(entry_error);
     // OnEnter may KillTree its owner. An abnormal native return propagates;
     // there is no success publication and no post-call actor/state read.
     reinterpret_cast<StateFunction>(g_module + kHumanDeadEnter)(state);
     const DWORD native_error = GetLastError();
-    if (captured && current_world() == event.worldEpoch)
+    if (have_event && current_world() == event.worldEpoch)
         publish_native_life_event(event);
     SetLastError(native_error);
 }
