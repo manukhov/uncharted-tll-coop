@@ -133,6 +133,10 @@ struct CombatRow {
     wire::combat::Result result = wire::combat::Result::none;
     bool bound{}, bind_confirmed{}, bind_reply{}, root_seen{}, result_confirmed{};
     bool local_retiring{}, local_dead{}, authority_dead{};
+    wire::combat::Refusal refusal = wire::combat::Refusal::none;
+    wire::combat::Refusal remote_refusal = wire::combat::Refusal::none;
+    wire::combat::Result remote_result = wire::combat::Result::none;
+    bool receipt_seen{}, receipt_reply{}, report_acked{}, remote_response{}, response_ack_reply{}, delivery_failed{};
 };
 std::array<CombatRow, wire::kActors> combat_rows{}; // existing mailbox lock
 bool encounter_sealed{};
@@ -158,6 +162,24 @@ static_assert(std::is_trivial_v<CensusRejectContext> && std::is_standard_layout_
 CensusRejectContext census_reject_context{};
 std::atomic<CensusReject> first_census_reject{};
 std::atomic<std::uint64_t> combat_relocation_refreshes{};
+struct ControlLife { wire::Key key{}; std::uint64_t life{}; };
+struct ControlBook {
+    std::uint64_t world{}, session{}, peer{};
+    std::uint32_t count{};
+    std::array<ControlLife,wire::kActors> lives{};
+};
+// Frozen once after COMPLETE initial binding. No native address/weak handle is
+// retained in this transport book, and reset_locked never rewrites it.
+ControlBook control_book{};
+std::atomic<bool> control_book_ready{}, control_closed{};
+enum class ControlClose : unsigned { none, world, inert, native_fault, external, socket, unbound };
+std::atomic<ControlClose> control_close_reason{};
+std::uint32_t control_hello_sequence{}; // mailbox only, never a rebind permission
+ULONGLONG control_last_hello{};
+std::atomic<std::uint64_t> control_receipts{}, control_refusals{}, control_refusals_received{}, control_report_acks{}, control_delivery_failed{};
+std::atomic<unsigned> control_pending{};
+bool control_current() noexcept;
+void close_control(ControlClose reason) noexcept;
 struct NativeBinding {
     wire::Key key{};
     std::uint64_t world{}, session{}, peer{}, life{};
@@ -225,8 +247,13 @@ void publish_native_bindings_locked() noexcept {
     for (std::size_t i=0; i<roster.count; ++i) {
         const auto& local=roster.rows[i];
         native_bindings[i]={local.key,roster.world_epoch,session,peer,combat_rows[i].life,local.record,local.generation};
+        control_book.lives[i]={local.key,combat_rows[i].life};
     }
+    control_book.world=roster.world_epoch; control_book.session=session;
+    control_book.peer=peer; control_book.count=roster.count;
+    control_hello_sequence=hello_sequence;
     native_bindings_ready.store(true,std::memory_order_release);
+    control_book_ready.store(true,std::memory_order_release);
 }
 void seal_initial_combat_locked() noexcept {
     if (!combat_enabled() || encounter_sealed || !session || !peer || !confirmed || !roster.count) return;
@@ -247,7 +274,7 @@ void update_death_result_locked(std::size_t index,unsigned bits) noexcept {
         row.result=(bits&kNativeReturned) && !(bits&(kNativeRefused|kNativeFault)) ?
             wire::combat::Result::applied : wire::combat::Result::already_applied;
     } else row.result=wire::combat::Result::already_applied;
-    row.last_control=0;
+    row.last_control=0; row.report_acked=false;
 }
 void drain_native_life_locked() noexcept {
     if (!combat_enabled() || !native_bindings_ready.load(std::memory_order_acquire)) return;
@@ -287,10 +314,74 @@ unsigned work_queries{};
 std::atomic<unsigned> cost_stop{}, cost_site{}, peak_queries{};
 std::atomic<unsigned> census_stop_reason{}; //1=rejected,2=changed,3=expired.
 std::atomic<std::uint64_t> cost_total_ticks{}, peak_scope_ticks{}, peak_window_ticks{}, query_total{}, work_skips{};
-HANDLE stop_request{}, stop_ack{}; // retained for the pinned process lifetime
+HANDLE stop_request{}, stop_ack{}, control_close_ack{}; // pinned process lifetime
 std::atomic<bool> external_stop{};
 std::atomic<bool> native_apply_fault{};
 enum : unsigned { kCostClock = 1, kCostTime = 2, kCostQueries = 3, kCostWindow = 4, kCostPublication = 5 };
+void close_control(ControlClose reason) noexcept {
+    auto empty=ControlClose::none;
+    control_close_reason.compare_exchange_strong(empty,reason,std::memory_order_release,std::memory_order_relaxed);
+    control_closed.store(true,std::memory_order_release);
+    stopped.store(true,std::memory_order_release);
+    active_scope.store(false,std::memory_order_release);
+}
+bool control_current() noexcept {
+    if (!combat_enabled() || !control_book_ready.load(std::memory_order_acquire) ||
+        control_closed.load(std::memory_order_acquire)) return false;
+    if (g_dll_inert) { close_control(ControlClose::inert); return false; }
+    if (native_apply_fault.load(std::memory_order_acquire)) { close_control(ControlClose::native_fault); return false; }
+    if (external_stop.load(std::memory_order_acquire)) { close_control(ControlClose::external); return false; }
+    if (stop_for_player_lifecycle() || !scope_current() ||
+        bound_world_epoch.load(std::memory_order_acquire)!=control_book.world) {
+        close_control(ControlClose::world); return false;
+    }
+    return true; // metadata ONLY: root stopped/certificate/30s never authorize writes here.
+}
+wire::combat::Refusal stopped_writer_reason(ULONGLONG now) noexcept {
+    switch (census_stop_reason.load(std::memory_order_acquire)) {
+    case 1: return wire::combat::Refusal::census_rejected;
+    case 2: return wire::combat::Refusal::census_changed;
+    case 3: return wire::combat::Refusal::census_expired;
+    default: break;
+    }
+    if (cost_stop.load(std::memory_order_acquire)) return wire::combat::Refusal::cost_stopped;
+    if (worker_gap_ms.load(std::memory_order_acquire)) return wire::combat::Refusal::worker_gap;
+    const auto first=first_apply.load(std::memory_order_acquire);
+    if (first && now>=first && now-first>30000) return wire::combat::Refusal::effect_limit;
+    return wire::combat::Refusal::root_stopped;
+}
+void refresh_control_reports_locked(ULONGLONG now) noexcept {
+    if (!control_book_ready.load(std::memory_order_acquire)) return;
+    unsigned pending{};
+    for (std::size_t i=0; i<control_book.count; ++i) {
+        auto& row=combat_rows[i];
+        if (!row.death_event || !row.control_started || now<row.control_started) continue;
+        const auto age=now-row.control_started;
+        if (g_net_role_b && row.result==wire::combat::Result::none && row.refusal==wire::combat::Refusal::none) {
+            auto reason=wire::combat::Refusal::none;
+            if (age>30000) {
+                reason=wire::combat::Refusal::event_deadline;
+                stopped.store(true,std::memory_order_release); active_scope.store(false,std::memory_order_release);
+            } else if (native_life_bits[i].load(std::memory_order_acquire)&kNativeRefused)
+                reason=wire::combat::Refusal::native_attempt_refused;
+            else if (stopped.load(std::memory_order_acquire)) reason=stopped_writer_reason(now);
+            if (reason!=wire::combat::Refusal::none) {
+                // Refusal means NO positive native commit witness, not proof
+                // that an already-admitted operation had no partial effect.
+                row.refusal=reason; row.report_acked=false; row.last_control=0;
+                control_refusals.fetch_add(1,std::memory_order_relaxed);
+            }
+        }
+        const bool failed=!g_net_role_b ? age>30000 && !row.remote_response :
+            age>35000 && !row.report_acked;
+        if (failed && !row.delivery_failed) {
+            row.delivery_failed=true;
+            control_delivery_failed.fetch_add(1,std::memory_order_relaxed);
+        }
+        if (!g_net_role_b ? !row.remote_response : !row.report_acked) ++pending;
+    }
+    control_pending.store(pending,std::memory_order_release);
+}
 struct CostStopContext {
     unsigned site{}, scope_queries{}, window_queries{}, read_calls{};
     std::uintptr_t read_address{}, query_address{};
@@ -480,6 +571,15 @@ void append_combat_status(std::ostringstream& line) {
          << " retiring=" << combat_retiring_observed.load() << " prebindRefused=" << combat_prebind_refused.load()
          << " unsupportedBPrediction=" << combat_b_prediction.load()
          << " relocationRefreshes=" << combat_relocation_refreshes.load();
+    const bool control_ready=control_book_ready.load(std::memory_order_acquire);
+    const bool closed=control_closed.load(std::memory_order_acquire);
+    line << " controlReady=" << control_ready << " controlClosed=" << closed
+         << " controlCloseReason=" << static_cast<unsigned>(control_close_reason.load(std::memory_order_acquire))
+         << " controlDegraded=" << (control_ready && (stopped.load(std::memory_order_acquire) || closed ||
+            control_refusals.load() || control_refusals_received.load() || control_delivery_failed.load()))
+         << " eventReceipts=" << control_receipts.load() << " refusedCreated=" << control_refusals.load()
+         << " refusedReceived=" << control_refusals_received.load() << " reportAcks=" << control_report_acks.load()
+         << " deliveryFailed=" << control_delivery_failed.load() << " controlPending=" << control_pending.load(std::memory_order_acquire);
     combat_native::append_observer_status(line);
     const auto reason=first_census_reject.load(std::memory_order_acquire);
     if (reason==CensusReject::none) return;
@@ -726,38 +826,49 @@ bool reconcile_combat_census_locked(const Roster& current) noexcept {
 
 DWORD WINAPI stop_waiter(void*) {
     // No logging, sockets, RNG or game pointers on this emergency path.
-    while (!stopped.load(std::memory_order_acquire)) {
+    bool acknowledged{};
+    for (;;) {
         const DWORD state = WaitForSingleObject(stop_request, 50);
         if (state != WAIT_TIMEOUT) {
             external_stop.store(true);
-            stopped.store(true, std::memory_order_release);
-            active_scope.store(false, std::memory_order_release);
+            close_control(ControlClose::external);
         }
+        if (!stopped.load(std::memory_order_acquire)) continue;
+        if (!acknowledged) {
+            // ACK still means native work is quiescent, NOT that the values-
+            // only critical-event transport is closed after a writer failure.
+            while (work_busy.test_and_set(std::memory_order_acquire)) Sleep(1);
+            active_scope.store(false, std::memory_order_release);
+            SetEvent(stop_ack);
+            work_busy.clear(std::memory_order_release);
+            acknowledged=true;
+        }
+        if (!combat_enabled() || !control_book_ready.load(std::memory_order_acquire) ||
+            control_closed.load(std::memory_order_acquire) || !g_state_net.running.load(std::memory_order_acquire)) return 0;
+        // Retain this existing listener so a later explicit stop closes the
+        // surviving control socket too. No new thread and no native rearm.
     }
-    // ACK means all admitted game work (including a setter already in flight)
-    // has left. New scopes recheck stopped after acquiring this same permit.
-    while (work_busy.test_and_set(std::memory_order_acquire)) Sleep(1);
-    active_scope.store(false, std::memory_order_release);
-    SetEvent(stop_ack);
-    work_busy.clear(std::memory_order_release);
-    return 0;
 }
 bool start_stop_control() {
     FILETIME created{}, exited{}, kernel{}, user{};
     if (!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user)) return false;
     const auto stamp = (std::uint64_t{created.dwHighDateTime} << 32) | created.dwLowDateTime;
-    char request_name[128]{}, ack_name[128]{};
+    char request_name[128]{}, ack_name[128]{}, control_ack_name[160]{};
     std::snprintf(request_name, sizeof(request_name), "Local\\TllEnemyRootStop_v1_%lu_%016llX", GetCurrentProcessId(), stamp);
     std::snprintf(ack_name, sizeof(ack_name), "%s_ACK", request_name);
+    std::snprintf(control_ack_name, sizeof(control_ack_name), "%s_CONTROL_CLOSED", request_name);
     const auto fail = [] {
         if (stop_request) CloseHandle(stop_request);
         if (stop_ack) CloseHandle(stop_ack);
-        stop_request = stop_ack = nullptr; return false;
+        if (control_close_ack) CloseHandle(control_close_ack);
+        stop_request = stop_ack = control_close_ack = nullptr; return false;
     };
     stop_request = CreateEventA(nullptr, TRUE, FALSE, request_name);
     if (!stop_request || GetLastError() == ERROR_ALREADY_EXISTS) return fail();
     stop_ack = CreateEventA(nullptr, TRUE, FALSE, ack_name);
     if (!stop_ack || GetLastError() == ERROR_ALREADY_EXISTS) return fail();
+    control_close_ack = CreateEventA(nullptr, TRUE, FALSE, control_ack_name);
+    if (!control_close_ack || GetLastError() == ERROR_ALREADY_EXISTS) return fail();
     const HANDLE thread = CreateThread(nullptr, 0, stop_waiter, nullptr, 0, nullptr);
     if (!thread) return fail();
     CloseHandle(thread);
@@ -1030,6 +1141,74 @@ void reset_locked() {
     }
     native_death_pending_hint.store(false,std::memory_order_release);
 }
+void receive_frozen_control(const wire::combat::Packet& packet,ULONGLONG now) noexcept {
+    if (!control_current() || !TryAcquireSRWLockExclusive(&lock)) return;
+    if (!control_current() || packet.sender!=control_book.peer || packet.receiver!=control_book.session) {
+        ReleaseSRWLockExclusive(&lock); return;
+    }
+    if (packet.kind==wire::combat::Kind::hello) {
+        if (!control_hello_sequence || wire::newer(packet.sequence,control_hello_sequence)) {
+            control_hello_sequence=packet.sequence;
+            // Maintain existing root freshness ONLY while its unchanged book
+            // remains admitted. Never resurrect reset/stopped root metadata.
+            if (!stopped.load(std::memory_order_acquire) && session==control_book.session && peer==control_book.peer) {
+                hello_sequence=packet.sequence; peer_seen=now; confirmed=true;
+            }
+        }
+        ReleaseSRWLockExclusive(&lock); return;
+    }
+    drain_native_life_locked(); // previously admitted numeric observations ONLY
+    std::size_t index=control_book.count;
+    for (std::size_t i=0; i<control_book.count; ++i)
+        if (control_book.lives[i].life==packet.life_id && control_book.lives[i].key==packet.key) { index=i; break; }
+    if (index<control_book.count) {
+        auto& row=combat_rows[index];
+        if (g_net_role_b && packet.kind==wire::combat::Kind::bind && packet.manifest_count==control_book.count) {
+            row.bind_reply=true; row.last_control=0;
+        } else if (g_net_role_b && packet.kind==wire::combat::Kind::death &&
+                   (!row.death_event || row.death_event==packet.event_id)) {
+            if (!row.death_event) {
+                row.death_event=packet.event_id; row.authority_dead=true; row.control_started=now;
+                if (row.revision==~std::uint64_t{}) {
+                    stopped.store(true,std::memory_order_release); active_scope.store(false,std::memory_order_release);
+                } else ++row.revision;
+                combat_death_received.fetch_add(1,std::memory_order_relaxed);
+            }
+            row.receipt_reply=true; row.last_control=0;
+            update_death_result_locked(index,native_life_bits[index].load(std::memory_order_acquire));
+        } else if (row.death_event && row.death_event==packet.event_id && row.authority_dead) {
+            if (!g_net_role_b && packet.kind==wire::combat::Kind::received) {
+                if (!row.receipt_seen) { row.receipt_seen=true; control_receipts.fetch_add(1,std::memory_order_relaxed); }
+            } else if (!g_net_role_b && (packet.kind==wire::combat::Kind::result || packet.kind==wire::combat::Kind::refused)) {
+                if (!row.receipt_seen) { row.receipt_seen=true; control_receipts.fetch_add(1,std::memory_order_relaxed); }
+                if (packet.kind==wire::combat::Kind::result) {
+                    if (!row.result_confirmed) {
+                        row.result_confirmed=true; row.remote_result=packet.result;
+                        combat_death_results.fetch_add(1,std::memory_order_relaxed);
+                    }
+                    row.remote_refusal=wire::combat::Refusal::none;
+                } else if (row.remote_result==wire::combat::Result::none && !row.remote_response) {
+                    row.remote_refusal=packet.refusal;
+                    control_refusals_received.fetch_add(1,std::memory_order_relaxed);
+                }
+                // A positive witness may supersede a prior refusal, but a
+                // delayed refusal can NEVER downgrade a committed result.
+                row.remote_response=true; row.response_ack_reply=true; row.last_control=0;
+            } else if (g_net_role_b && packet.kind==wire::combat::Kind::received) {
+                const bool positive=row.result!=wire::combat::Result::none && packet.result==row.result &&
+                    packet.refusal==wire::combat::Refusal::none;
+                const bool negative=row.result==wire::combat::Result::none && packet.result==wire::combat::Result::none &&
+                    row.refusal!=wire::combat::Refusal::none && packet.refusal==row.refusal;
+                if ((positive || negative) && !row.report_acked) {
+                    row.report_acked=true; control_report_acks.fetch_add(1,std::memory_order_relaxed);
+                }
+            }
+        }
+    }
+    refresh_control_reports_locked(now);
+    refresh_native_pending_locked(); // stopped native APIs still reject unconditionally
+    ReleaseSRWLockExclusive(&lock);
+}
 void receive(const void* bytes, int size, const sockaddr_in& source, int source_size, ULONGLONG poll_started) {
     if (source_size < sizeof(source) ||
         source.sin_family != transport_peer.sin_family || source.sin_addr.s_addr != transport_peer.sin_addr.s_addr ||
@@ -1049,6 +1228,9 @@ void receive(const void* bytes, int size, const sockaddr_in& source, int source_
         if (!wire::valid(packet) || packet.role_b==static_cast<std::uint8_t>(g_net_role_b)) return;
     }
     const auto now = GetTickCount64();
+    if (combat_enabled() && control_book_ready.load(std::memory_order_acquire) && modern.kind!=wire::combat::Kind::root) {
+        receive_frozen_control(modern,now); return;
+    }
     if (combat_enabled() && !effect_slice_current(now)) return;
     if (now-poll_started > 100) {
         worker_gap_ms.store(now-poll_started, std::memory_order_relaxed);
@@ -1268,16 +1450,27 @@ DWORD WINAPI transport_worker(void*) {
         wire::Packet packet{}; ULONGLONG captured{};
         wire::combat::Packet modern_packet{};
         std::size_t index=wire::kActors;
-        bool modern{}, control{};
+        ULONGLONG control_started{};
+        unsigned control_max_age{};
+        bool modern{}, control{}, frozen{};
     };
     ULONGLONG last_send{}, last_log{}, last_poll{};
-    while (!stopped.load(std::memory_order_acquire) && g_state_net.running.load()) {
-        if (stop_for_player_lifecycle()) break;
-        if (combat_enabled() && !effect_slice_current(GetTickCount64())) break;
-        if (!next_session.load(std::memory_order_acquire)) {
+    while (g_state_net.running.load(std::memory_order_acquire)) {
+        if (combat_enabled() && control_book_ready.load(std::memory_order_acquire)) {
+            if (!control_current()) break;
+        } else if (stop_for_player_lifecycle() || stopped.load(std::memory_order_acquire)) {
+            close_control(ControlClose::unbound); break;
+        }
+        // Retain the native writer's original absorbing 30s stop. A frozen
+        // values-only book can still report what was received/refused afterward.
+        if (combat_enabled()) effect_slice_current(GetTickCount64());
+        if (stopped.load(std::memory_order_acquire) && !control_book_ready.load(std::memory_order_acquire)) {
+            close_control(ControlClose::unbound); break;
+        }
+        if (!stopped.load(std::memory_order_acquire) && !next_session.load(std::memory_order_acquire)) {
             std::uint64_t nonce{};
             if (BCryptGenRandom(nullptr, reinterpret_cast<PUCHAR>(&nonce), sizeof(nonce), BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0 || !nonce) {
-                stopped.store(true); break;
+                close_control(ControlClose::unbound); break;
             }
             next_session.store(nonce, std::memory_order_release);
         }
@@ -1287,12 +1480,14 @@ DWORD WINAPI transport_worker(void*) {
         // datagram into a fresh root. No draining/rearming after a worker gap.
         if (last_poll && poll_started-last_poll > 100) {
             worker_gap_ms.store(poll_started-last_poll, std::memory_order_relaxed);
-            stopped.store(true); active_scope.store(false, std::memory_order_release); break;
+            stopped.store(true); active_scope.store(false, std::memory_order_release);
+            if (!combat_enabled() || !control_book_ready.load(std::memory_order_acquire)) break;
         }
         last_poll = poll_started;
         // Bounded draining, even under unrelated or malformed UDP traffic.
         // WSAEWOULDBLOCK is normal; always sleep before another poll.
-        for (unsigned i = 0; i < 64 && !stopped.load(); ++i) {
+        for (unsigned i = 0; i < 64 && !control_closed.load(std::memory_order_acquire) &&
+             (!stopped.load(std::memory_order_acquire) || (combat_enabled() && control_book_ready.load(std::memory_order_acquire))); ++i) {
             std::array<char,sizeof(wire::combat::Packet)> packet{}; sockaddr_in source{}; int source_size = sizeof(source);
             const int bytes = recvfrom(transport_socket, packet.data(), static_cast<int>(packet.size()), 0,
                 reinterpret_cast<sockaddr*>(&source), &source_size);
@@ -1300,7 +1495,7 @@ DWORD WINAPI transport_worker(void*) {
                 const int error = WSAGetLastError();
                 if (error == WSAEWOULDBLOCK) break;
                 if (error == WSAEMSGSIZE || error == WSAECONNRESET) continue;
-                stopped.store(true); break;
+                close_control(ControlClose::socket); break;
             }
             receive(packet.data(), bytes, source, source_size, poll_started);
         }
@@ -1308,7 +1503,11 @@ DWORD WINAPI transport_worker(void*) {
         std::array<Pending, wire::kActors*2+1> pending{}; std::size_t count{};
         if (now-last_send >= 50 && TryAcquireSRWLockExclusive(&lock)) {
             last_send = now;
-            if (combat_enabled()) { drain_native_life_locked(); publish_native_bindings_locked(); }
+            if (combat_enabled()) {
+                drain_native_life_locked();
+                if (!stopped.load(std::memory_order_acquire)) publish_native_bindings_locked();
+                refresh_control_reports_locked(now);
+            }
             const auto modernize = [](Pending& item,wire::combat::Kind kind,std::uint64_t life=0,
                                       std::uint64_t event=0,wire::combat::Result result=wire::combat::Result::none) {
                 item.modern=true;
@@ -1319,7 +1518,7 @@ DWORD WINAPI transport_worker(void*) {
                 if (kind==wire::combat::Kind::root) { output.position=item.packet.position; output.rotation=item.packet.rotation; }
             };
             const bool fresh = session && now <= census_valid_until.load(std::memory_order_acquire) && !stopped.load();
-            if (fresh && now-last_hello >= 200) {
+            if (fresh && now-last_hello >= 200 && (!combat_enabled() || !control_book_ready.load(std::memory_order_acquire))) {
                 wire::Packet hello{}; hello.role_b = static_cast<std::uint8_t>(g_net_role_b);
                 hello.sender = session; hello.receiver = peer; hello.sequence = ++sequence;
                 pending[count] = {hello, now};
@@ -1340,9 +1539,60 @@ DWORD WINAPI transport_worker(void*) {
                     ++count;
                 }
             }
-            // Reliable control values survive ordinary root budget pauses.
-            // No native pointers/calls escape this short metadata mailbox.
-            if (combat_enabled() && session && peer && confirmed && encounter_sealed && scope_current() && !stopped.load()) {
+            // The frozen CONTROL book survives a failed root writer. These
+            // packets contain values only; they cannot mint a native admission.
+            if (combat_enabled() && control_book_ready.load(std::memory_order_acquire) && control_current()) {
+                const auto stage=[&](wire::combat::Kind kind,std::size_t index,std::uint64_t event,
+                                     wire::combat::Result result=wire::combat::Result::none,
+                                     wire::combat::Refusal refusal=wire::combat::Refusal::none) {
+                    if (count==pending.size()) return false;
+                    auto& item=pending[count++]; item={}; item.modern=item.control=item.frozen=true; item.index=index;
+                    item.packet.sender=control_book.session; item.packet.receiver=control_book.peer;
+                    auto& output=item.modern_packet; output.kind=kind; output.role_b=static_cast<std::uint8_t>(g_net_role_b);
+                    output.sender=control_book.session; output.receiver=control_book.peer;
+                    output.sequence=++sequence; if (!output.sequence) output.sequence=++sequence;
+                    output.event_id=event; output.result=result; output.refusal=refusal;
+                    if (index<control_book.count) {
+                        output.life_id=control_book.lives[index].life; output.key=control_book.lives[index].key;
+                        item.control_started=combat_rows[index].control_started;
+                        item.control_max_age=kind==wire::combat::Kind::result || kind==wire::combat::Kind::refused ||
+                            (kind==wire::combat::Kind::received && !g_net_role_b) ? 35000u : 30000u;
+                    }
+                    if (kind==wire::combat::Kind::bound) output.manifest_count=control_book.count;
+                    return true;
+                };
+                // Session heartbeat, not a root/census freshness certificate.
+                if (now-control_last_hello>=200 && stage(wire::combat::Kind::hello,wire::kActors,0)) control_last_hello=now;
+                for (std::size_t i=0; i<control_book.count && count<pending.size(); ++i) {
+                    auto& row=combat_rows[i];
+                    if (row.last_control && now-row.last_control<100) continue;
+                    if (!row.control_started || now<row.control_started) continue;
+                    const auto age=now-row.control_started;
+                    bool staged{};
+                    if (!g_net_role_b) {
+                        if (row.response_ack_reply && age<=35000) {
+                            staged=stage(wire::combat::Kind::received,i,row.death_event,row.remote_result,row.remote_refusal);
+                            if (staged) row.response_ack_reply=false;
+                        } else if (row.death_event && !row.remote_response && age<=30000)
+                            staged=stage(wire::combat::Kind::death,i,row.death_event);
+                    } else if (row.death_event) {
+                        if (!row.report_acked && age<=35000 && row.result!=wire::combat::Result::none)
+                            staged=stage(wire::combat::Kind::result,i,row.death_event,row.result);
+                        else if (!row.report_acked && age<=35000 && row.refusal!=wire::combat::Refusal::none)
+                            staged=stage(wire::combat::Kind::refused,i,row.death_event,wire::combat::Result::none,row.refusal);
+                        else if (row.receipt_reply && age<=30000) {
+                            staged=stage(wire::combat::Kind::received,i,row.death_event);
+                            if (staged) row.receipt_reply=false;
+                        }
+                    } else if (row.bind_reply && age<=30000) {
+                        staged=stage(wire::combat::Kind::bound,i,0);
+                        if (staged) row.bind_reply=false;
+                    }
+                    if (staged) row.last_control=now;
+                }
+            } else if (combat_enabled() && session && peer && confirmed && encounter_sealed && scope_current() && !stopped.load()) {
+                // Initial binding still requires the original complete census.
+                // An incomplete prebind world cannot invent a frozen book.
                 for (std::size_t i=0; i<roster.count && count<pending.size(); ++i) {
                     auto& row=combat_rows[i];
                     if (row.last_control && now-row.last_control<100) continue;
@@ -1378,7 +1628,10 @@ DWORD WINAPI transport_worker(void*) {
             // A full send buffer drops this snapshot, never queues/retries it.
             for (std::size_t i = 0; i < count; ++i) {
                 const auto& item = pending[i]; const auto send_now = GetTickCount64();
-                if (stopped.load() || item.packet.sender != published_session.load(std::memory_order_acquire) ||
+                if (item.frozen) {
+                    if (!control_current() || item.packet.sender!=control_book.session || item.packet.receiver!=control_book.peer ||
+                        (item.control_max_age && (send_now<item.control_started || send_now-item.control_started>item.control_max_age))) continue;
+                } else if (stopped.load() || item.packet.sender != published_session.load(std::memory_order_acquire) ||
                     (combat_enabled() && (!scope_current() || !effect_slice_current(send_now))) ||
                     (!item.control && (send_now > census_valid_until.load(std::memory_order_acquire) || send_now-item.captured > 150 ||
                     (item.packet.kind == wire::Kind::root && !active_scope.load(std::memory_order_acquire))))) continue;
@@ -1411,13 +1664,18 @@ DWORD WINAPI transport_worker(void*) {
         }
         Sleep(10);
     }
-    stopped.store(true, std::memory_order_release);
-    active_scope.store(false, std::memory_order_release);
-    closesocket(transport_socket); WSACleanup();
+    if (!control_closed.load(std::memory_order_acquire))
+        close_control(control_book_ready.load(std::memory_order_acquire) ? ControlClose::world : ControlClose::unbound);
+    const bool socket_closed=closesocket(transport_socket)==0;
+    const int close_error=socket_closed ? 0 : WSAGetLastError();
+    if (socket_closed) transport_socket=INVALID_SOCKET;
+    WSACleanup();
+    if (socket_closed && control_close_ack) SetEvent(control_close_ack);
     std::ostringstream line; line << "ENEMY-ROOT STOPPED apply=" << applied.load() << " match=" << matched.load()
         << " worldEpoch=" << bound_world_epoch.load(std::memory_order_acquire)
         << " workerGapMs=" << worker_gap_ms.load()
         << " external=" << external_stop.load() << " nativeFault=" << native_apply_fault.load()
+        << " controlSocketClosed=" << socket_closed << " controlSocketCloseError=" << close_error
         << " costStop=" << cost_stop.load() << " costSite=" << cost_site.load()
         << " censusStop=" << census_stop_reason.load()
         << " peakScopeUs=" << peak_scope_ticks.load()*1000000/qpc_frequency
@@ -1436,20 +1694,29 @@ bool start_transport() {
     sockaddr_in local{}; int size = sizeof(local);
     if (!g_state_net.enabled || !g_state_net.peer_set ||
         getsockname(g_state_net.recv_socket, reinterpret_cast<sockaddr*>(&local), &size) == SOCKET_ERROR ||
-        size != sizeof(local) || local.sin_family != AF_INET) return false;
+        size != sizeof(local) || local.sin_family != AF_INET) {
+        if (control_close_ack) SetEvent(control_close_ack); return false;
+    }
     const auto local_port = ntohs(local.sin_port), peer_port = ntohs(g_state_net.peer_addr.sin_port);
     if ((local_port != coop::kStatePort && local_port != coop::kStatePort+1) ||
-        (peer_port != coop::kStatePort && peer_port != coop::kStatePort+1)) return false;
+        (peer_port != coop::kStatePort && peer_port != coop::kStatePort+1)) {
+        if (control_close_ack) SetEvent(control_close_ack); return false;
+    }
     // Derive ports from actual binds, NOT role B: on separate PCs both state
     // sockets bind31338. Only this socket becomes nonblocking; baseline is intact.
     local.sin_port = htons(local_port+2);
     transport_peer = g_state_net.peer_addr; transport_peer.sin_port = htons(peer_port+2);
     WSADATA data{};
-    if (WSAStartup(MAKEWORD(2, 2), &data)) return false;
+    if (WSAStartup(MAKEWORD(2, 2), &data)) {
+        if (control_close_ack) SetEvent(control_close_ack); return false;
+    }
     transport_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     const auto fail = [] {
-        if (transport_socket != INVALID_SOCKET) closesocket(transport_socket);
-        transport_socket = INVALID_SOCKET; WSACleanup(); return false;
+        const bool closed=transport_socket==INVALID_SOCKET || closesocket(transport_socket)==0;
+        if (closed) transport_socket=INVALID_SOCKET;
+        WSACleanup();
+        if (closed && control_close_ack) SetEvent(control_close_ack);
+        return false;
     };
     if (transport_socket == INVALID_SOCKET) return fail();
     BOOL exclusive = TRUE; u_long nonblocking = 1;
@@ -1891,7 +2158,7 @@ bool install_enemy_root_sync() {
         enemy_root::combat_enabled() ? "ENEMY-ROOT native Pirate+408 root replication installed (admission=window-census-final; budget=defer-time-query-census; ENC2 initial-life death capability opt-in)" :
         "ENEMY-ROOT native Pirate+408 root replication installed (readGuard=QueryWorkingSetEx-page; admission=window-census-final; budget=defer-time-query-census; ordinary=POD; 30-second first slice; no HP/AI writes)");
     if (enemy_root::combat_enabled()) boot_log_line(ready ?
-        "ENEMY-COMBAT READY optin=1 protocol=ENC2 initialLives=32-max A-HumanDead-event B-current-HumanActive-health positiveResult=HumanDead-only; no respawn/B-authority/full-shots" :
+        "ENEMY-COMBAT READY optin=1 protocol=ENC2v2 initialLives=32-max control=world-values-only receipt!=commit positiveResult=HumanDead-only; native-stop/no-rearm; no respawn/B-authority/full-shots" :
         "ENEMY-COMBAT REFUSED native package; all effects fail closed");
     return ready;
 }

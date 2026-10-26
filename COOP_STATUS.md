@@ -1,6 +1,32 @@
 # TLL Campaign Co-op — Status & Findings (2026-06-28)
 
-## Current user priority / handoff (2026-10-25)
+## Current user priority / handoff (2026-10-26)
+
+P0 remains FULL shared world with A/Chloe authority, not another position-only
+exam. No game launched, fresh DLL linked or full-world behavior validated this
+turn. Last runtime image0C0EB1B6... remains USER-REJECTED; preserve Player sync,
+menu lifetime safeguards and stock-Nadine removal. Appearance stays PARKED.
+
+STATIC/source-only implementation: ENC2v2 separates frozen numeric initial-life
+control delivery from root-writer admission. Event storage receipt, native
+HumanDead positive result and typed refusal are distinct. Root/census/cost/30s
+stops still forbid native work; values-only reporting may survive. It cannot
+make a stopped B enemy die. Separate CONTROL_CLOSED event now proves dedicated
+socket closure; existing ACK proves native quiescence only. Object compile,
+packet-shape smoke and own-process event-contract check PASS, NOT game results.
+Initial32/once-world only; no dynamic baseline/journal/recovery implemented.
+
+STATIC native inputs now resolved/labeled: MoveTo141DE4D20 ->AddCommand141E15030
+owns values, PointWs lookaim140542970 clones its descriptor. But shooting FSM
+1405ECDA0 runs BEFORE skill selector41F1A0; CombatSkill exit does not stop it,
+and another fire callback lacks B0 check (actual caller still unresolved).
+Do NOT enable a generic AI/skill skip. Next concrete work: exact dynamic child
+cleanup/fire-effect ownership plus typed A action stream and B apply together.
+Detailed contracts/remaining blockers are in the 2026-10-26 entries at EOF.
+SoleIDB saved2195functions/110data/3types, save_database returned True, MCP
+restarted/readback passed. No parallel DB; tracked changes committed/pushed.
+
+## Previous handoff (2026-10-25, historical)
 
 USER P0 SUPERSEDES THE BOUNDED EXAMS: FULL shared campaign world (NPC actions/
 positions/combat/deaths, shots and world/script state), not another root-only or
@@ -16,10 +42,10 @@ implemented/validated. Preserve first-load Player sync/menu safeguards; appearan
 PARKED. Source-only base fix defers COMPLETE-census mailbox contention without
 inventing negative read evidence; native/read/world terminal stops remain closed.
 
-CURRENT EXAM: fresh0C0EB1B6... after strict same-weak/fullKey relocation metadata
+HISTORICAL EXAM (now REJECTED): fresh0C0EB1B6... after strict same-weak/fullKey relocation metadata
 fix +first-mismatch/native-entry counters, A11680/B22172 launched12:39MSK.
 Both complete COOP-BOOT READY missing000; initial enemy worldEpoch0/livesReady0,
-visible death outcome PENDING. Previous A270 failed, not confirmed fixed.
+visible death outcome was pending at launch; rejection recorded below. Previous A270 failed, not confirmed fixed.
 Same checkpoint, promptly ONE A/Chloe INSAS kill, B no shooting; bounded30s
 slice. No full shot/AI/B-origin kill authority claim. All exact artifacts below.
 
@@ -47164,3 +47190,167 @@ MCP stopped before write; reports/apply_world_authority_20261025.txt records
 2164functions/102data/3types, save_database returned True. MCP restarted and
 all16 relevant function readbacks PASS; Pirate+E48 xref14294C818 verified. No
 duplicate database. No full-world runtime feature/build/result claimed.
+
+### 2026-10-26 — Separate critical delivery from terminal native root admission
+
+STATIC/source-only: last rejected0C0E run produced5 native A death events, but
+B stopped census1 before receiving any. That supports separating delivery from
+write admission; it does NOT prove every old lost death had this sole cause.
+Competing causes remain autonomous B simulation, missing native action/result
+authority and finite initial-life binding. Do not advertise transport as combat.
+
+Implemented in enemy_root_sync_protocol.h / enemy_root_sync_runtime.inl:
+
+- ENC2v2 remains288B; former offset28 reserved word is a checked Refusal enum.
+  ENR2v1 remains264B unchanged. Both combat peers must run v2; v1 is rejected.
+  B `received` means stored only. B `result` requires native HumanDead witness;
+  `applied` and `already_applied` remain distinct (the latter need not have
+  been caused by this request). B `refused` is explicit absence of a positive
+  commit witness, NOT proof no partial native effect occurred. A ACK echoes
+  the exact positive result/refusal; negative ACK cannot acknowledge an upgrade.
+- Once complete initial binding publishes, frozen ControlBook retains ONLY
+  numeric world/session/peer/fullKey/life IDs, no native address or weak handle.
+  Previously admitted native bit observations can drain after root stop; worker
+  makes NO new game read/call through this book. Root census/cost/worker-gap/
+  historical150ms/30s terminal admissions are not rearmed, widened or cleared.
+- Per-event30s request/receipt and35s result/report-ACK deadlines, copied-value
+  final-send deadline recheck; duplicate traffic cannot refresh the start.
+  Refusal/deliveryFailed/controlDegraded make missing commit explicit. Already
+  published positive witness may upgrade refusal; late refusal cannot downgrade.
+  Heartbeats grant no write/census lease. World/lifecycle/inert/native-fault/
+  external/socket close terminates control too. No new thread was introduced.
+- Existing PID+creation stop listener survives native ACK while control lives.
+  `_ACK` is native quiescence ONLY. New `_CONTROL_CLOSED` is signaled only after
+  successful dedicated closesocket (or startup proves no socket was created).
+  WSACleanup is not closure proof. stop_enemy_root_channel.ps1 reports/waits
+  each independently and still signals REQUEST even if native ACK was set.
+  Missing control event error2 alone means old image; other errors fail closed.
+
+Independent reviews PASS. MSVC main object-only compile PASS (existing Recipe
+C4324 only), ENC2v2 packet-shape assertions PASS, PowerShell parser and isolated
+own-process named-event contract PASS. These are source/API checks, NOT packet
+delivery, native effect, FPS or visible world validation. Current ignored DLL
+still exact rejected0C0E; no full link/injection/game. `controlReady`, `livesReady`
+and ENEMY-COMBAT READY indicate capability/binding, NEVER full-world readiness.
+Fixed initial<=32 lives, one death/life, once/world; no dynamic spawn, resnapshot,
+late join, shots/armor/reactions/objects/scripts or native recovery added here.
+
+### 2026-10-26 — Resolve campaign NPC inputs and independent fire ownership
+
+STATIC evidence kinds: (1) constructors and exact RTTI/vtable slots, (2) callers
+and callees/ordered field writes, (3) source strings/assertions and independent
+producers/consumers. These establish representation/control boundaries, NOT a
+safe integrated replica switch. Alternatives explicitly eliminated below.
+
+Skill ownership:
+
+- Sole selector call1404201E7 to14041F1A0 has RCX=actor, EDX=BL; callee tests
+  DL@41F1F0. a2 is eligibility, NOT a think-frame bit. False clears the skill;
+  ScriptSkill path copies pending loco2470->2620@41F2F4. Forcing false can abort
+  authored behavior. Current Skill+28 evaluation14041CBD4 returns AL bool.
+- Exact CombatSkill VT142974D78: +40 RequestExit14066EAF0 sets skill+A0=1;
+  +28 Eval14066E9D0 returns false, selector clears via14041C820. +38 OnExit
+  14066EB00 (combat-skill.cpp196) resets flags/demeanor/Charger reservation,
+  NOT actor+1FF8 shooting. Exact Combat graceful request plus stock selector
+  eligibility ONCE is a candidate, not permission to force ScriptSkill exit.
+- Clear first destroys currentSkillState. CombatSkill::Open VT142974E88 +18
+  140670960 stops current actor+1F80 behavior+68. Exact BehaviorOpen+68
+  1404585E0 ->+48 Stop1404757D0 (behavior-open.cpp74)/state+18/delete. Its Open
+  exit140476610 in turn calls another dynamic child+68 and releases Suppress.
+  Exact child VT+68 closure or null-child plus independent quiescence is still
+  REQUIRED. Outer skill exit is not universal pending movement/fire/melee drain.
+
+Independent shooting:
+
+- Campaign NpcInit140401028 constructs AiShootingLogicNormal1403BE200, stores
+  actor+1FF8@140401032, binds owner+10@1404012B0. VT14292C6B0 +18 Update1405ECDA0
+  runs@14041FBD5 BEFORE selector4201E7, current+60/pending+68/state+28. Therefore
+  skipping skills alone cannot provide one fire authority.
+- Logic+68 RequestFire1405ECED0 writes B0/request/timingC0 (float ABI unresolved,
+  no typed call admitted). +70 Clear1405ECF90 clears B0/B1/timing. FireBurst
+  VT14296ACB0 +28 Update1405EDC70 checks B0 then dispatches1405E94E0. But +48
+  1405EDEC0 dispatches without B0 check; logic+88 1405ECFD0 forwards to state+48.
+  Concrete caller/reachability of +88 is unresolved; NOT a confirmed animation
+  callback. ClearB0 alone is not established as an exclusive fire gate.
+- Dispatcher1405E94E0 resolves local owner weak then NPC+FE0; exact Pirate slot
+  14294C9B0 ->14041AAA0 ->active ProcessWeapon+870@14041AF10. Effect frontier
+  resolved, but suppression and authoritative replacement inputs/results must
+  ship together. No immune/frozen B world or raw scalar damage fallback.
+
+Typed campaign aim/movement:
+
+- DcNpcSetLookAimModePoint140542970 (npc-script-funcs.cpp818) builds stack
+  descriptor VT142968888/Vec4+10; calls Npc_SetLookAimMode140435630@140542AD7
+  with Script layer3/duration-1. +38 CloneTo1405CD2F0 copies ONLY VT/Vec4 to
+  owned storage; independent vector caller140542C87 and downstream140436790
+  agree. Need ScriptSkill exclusion and priority/cleanup policy before replay.
+- NavCharacter_RequestMoveToLocation141DE4D20 ABI: RCXactor/RDX48B NavLocation/
+  R848B MoveParams. actor+1748=params+18; native kind2 command embeds params+10/
+  location+40 and enters actor+15C0 NavStateMachine_AddCommand141E15030. Strings
+  distinguish MoveTo/StopAndStand/AP/Spline. Plain BehaviorMoveTo140473D30 calls
+  @140474089; AP/spline branches are NOT the same action. Existing owned PointWs
+  from141DF21C0@141E15131/return15136 needs no extra query. Conversion alone
+  is NOT accepted: correlate accepted copy141E156C0@141E1564E into SM+80 extent94h
+  and command ID+1C0/status+208/time+220. No caller stack pointer retained.
+- NavLocation_IsValid141DF3750 accepts resolved types1/2. Build wrapper141DF0170
+  has four args actor/out48/PointWs/mode, actor+15B8 radius+1C8 into XMM3, then
+  141DF2D60. No direct codecaller found. Builder queries/allocates and may
+  Ndjob_WaitForCounter@141C833A4; NOT a pure worldpoint struct constructor.
+
+STATIC one strict scalar MoveParams representation (field-based, no padding or
+raw48B wire copy). Producer1406A6480@1406A6666 radius0.5; caller1406A67B0 is exact
+MeleeSkill::Coordinate VT142979980+28, independently constructed1406A7550/75B0,
+NOT generic locomotion. Reject unsupported values, do not silently coerce:
+
+| Offset | Native field/consumer | Strict profile |
+| --- | --- | --- |
+| 00..0F | facing Vec4, read when +10 set@141E17A56/5C | four positive zero floats |
+| 10 | hasFacing | 0 |
+| 11 | copied byte, behavior meaning unresolved | 0 only |
+| 14 | goal radius ->SM+2E0@141E15E64/6C | 0.5, bits3F000000 |
+| 18 | actor motion type/query+60, strings141E134C0 | 0walk/1run/2sprint |
+| 1C | motion subcategory StringId/query+64 | 0; reject melee/other |
+| 20 | SM+440/facing enable@141E17AE9 | 0 |
+| 24 | copied DWORD, meaning unresolved | 0 only |
+| 28 | copied float, meaning unresolved | positive zero only |
+| 2C | strafe policy@141E1CF06..47 | explicit0 only |
+
+NavStateMachine_BuildMovementQueryFromCommand141E1CDE0: strafe -1 inherits
+receiver actor1898..1900 layers, not deterministic; 0/1 are explicit false/true.
+This restricted representation does NOT cover all host navigation/actions.
+
+STATIC native phase: HumanActive1404A0660 ->NpcActive14042D120 ->Pirate+D20
+@14042D7A0 (other conditionalD235), exact14294C6F0 ->1404AC920 ->14049F000 ->
+14041DA30 ->1403D0E70 ->NavCharacter_UpdateNavigationAndControllers141DE8820.
+D20 entry is too early:1403D0E70 closes Havok bracket@1403D0FBF before tailnav.
+Candidate apply point AFTER actual stock nav acquisition@141DE8911/return8916,
+SAME fiber. In-scope query precedent141DE89FF ->141DEA3D0 ->141C85470@141DEA484
+includes allocation/ledge query. Descendant ProcessCommand_MoveTo141E15C80
+acquires same navlock@141E15DBE and builds mode1/actor-radius@141E15FAB.
+JlsLock_TryAcquireRecursiveReadLock1415BF460 uses FLS ID13/D0/D8, increments
+recursion, skips outer wait/acquisition when already held; balances1415BF4E0.
+It is MUTATING, NOT a read-only ownership probe. Native scope ends8ABE/8AF8
+BEFORE NavStateMachine_Update141E19F90 call8CB1. No mod lock over native query,
+no actor/nav pointer retained across query; revalidate self/world/weak afterward.
+Stock callbacks/script/physics still run once. Old interior label141E1A000 removed.
+
+STATIC shot causality refinement:141519B20 job payload is TWO QWORD references
+{original SpawnInfo*, output Process**}; parent141519B50 submits aligned local
+payload and waits before return. SpawnInfo itself is NOT copied by this wrapper.
+Potential causal scope across worker must handle duplicate/concurrent pointers,
+synchronous Init hits and ownership lifetime; NO ShotId bridge implemented here.
+
+HYPOTHESIS / NEXT SPECIFIC WORK: resolve dynamic BehaviorOpen child+68 exit and
+actual logic+88 callers; define exact allowed quiescent plain-MoveTo/PointWs
+profile plus authoritative action IDs/native apply phase. Pair replacement
+inputs/results with scoped decision/fire-effect ownership BEFORE suppressing B.
+Then canonical VALUE baseline at atomic journal cut S, ACK baseline, deltas>S;
+multi-frame live census is not an atomic baseline. Dynamic host life observation
+at native publish, owner-aware B creation or typed MissingLife refusal; bounded
+overflow requires resnapshot transition, never clear stopped. No integrated
+runtime hypothesis has met its complete ownership/lifecycle quota yet; no launch.
+
+LABEL HANDOFF: sole ida/tll.i64 updated through scripts/ida_apply_labels.py after
+MCP stop; reports/apply_campaign_inputs_20261026.txt:2195functions/110data/3types,
+save_database returned True. MCP restarted; exact function/name and PirateFE0/
+MeleeCoordinate+28/MoveTo caller readbacks PASS. No persistent duplicate IDB.

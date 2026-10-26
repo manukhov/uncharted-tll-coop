@@ -8,6 +8,195 @@ import idc
 
 
 FUNCTIONS = {
+    # --- 2026-10-26: campaign NPC action inputs and independent fire ownership ---
+    0x14066E9D0: (
+        "CombatSkill_Evaluate",
+        "STATIC exact CombatSkill VT142974D78+28. Requested exit via skill+A0 "
+        "returns false; selector14041F1A0 then clears current skill. This is "
+        "not a universal drain of pending behavior or actor+1FF8 shooting.",
+    ),
+    0x14066EAF0: (
+        "CombatSkill_RequestExit",
+        "STATIC exact CombatSkill VT+40 writes skill+A0=1. Leaf request only; "
+        "native selector/evaluation must complete ordered exit. Do not invoke "
+        "on ScriptSkill or conflate this slot with OnExit+38.",
+    ),
+    0x14066EB00: (
+        "CombatSkill_OnExit",
+        "STATIC exact CombatSkill VT+38, combat-skill.cpp196. Clears A0 and "
+        "NPC+1D53 bit20, restores demeanor141DE54A0 and Charger reservation. "
+        "Does NOT access/stop actor+1FF8 AiShootingLogicNormal.",
+    ),
+    0x140670960: (
+        "CombatSkillOpen_OnExit",
+        "STATIC CombatSkill::Open VT142974E88+18. Calls actor+1F80 current "
+        "behavior+68 then clears slot. Concrete child cleanup still matters; "
+        "outer skill exit is not proof of all controller/fire quiescence.",
+    ),
+    0x1404585E0: (
+        "Behavior_StopAndDestroyCurrentState",
+        "STATIC exact BehaviorOpen+68. Calls behavior+48 Stop and current "
+        "state+18/delete. BehaviorOpen::Open exit can in turn stop another "
+        "dynamic child; this is not a universal pending-action fence.",
+    ),
+    0x1404757D0: (
+        "BehaviorOpen_Stop",
+        "STATIC exact BehaviorOpen+48, behavior-open.cpp74; forwards base "
+        "Stop14048EDC0. Reached from1404585E0 before state destruction.",
+    ),
+    0x140476610: (
+        "BehaviorOpenOpen_OnExit",
+        "STATIC BehaviorOpen::Open state+18. Invokes dynamically selected "
+        "child behavior+68 and releases Suppress reservation. Exact child "
+        "vtable closure remains required before replica takeover.",
+    ),
+    0x1403BE200: (
+        "AiShootingLogicNormal_Construct",
+        "STATIC installs VT14292C6B0. NpcInit140401028 constructs and stores "
+        "actor+1FF8 at140401032; owner+10 bound1404012B0. Campaign object, "
+        "independent of current Skill* at actor+1FF0 and Online generator.",
+    ),
+    0x1405ECDA0: (
+        "AiShootingLogicNormal_UpdateStateMachine",
+        "STATIC exact shooting logic+18, called14041FBD5 BEFORE selector "
+        "1404201E7. Advances current+60/pending+68 and state+28. Skipping "
+        "skill selection does not stop this independent fire FSM.",
+    ),
+    0x1405ECED0: (
+        "AiShootingLogicNormal_RequestFire",
+        "STATIC exact shooting logic+68 sets B0 request and timing/durationC0. "
+        "Float call ABI not yet fully admitted; no arbitrary typed replay call.",
+    ),
+    0x1405ECF90: (
+        "AiShootingLogicNormal_ClearFireRequest",
+        "STATIC exact shooting logic+70 clears B0/B1 and timing. FireBurst+48 "
+        "has a separate dispatch without testing B0, so this leaf alone is "
+        "not an exclusive-fire ownership gate.",
+    ),
+    0x1405EDC70: (
+        "AiShootingLogicNormal_FireBurstUpdate",
+        "STATIC exact FireBurst VT14296ACB0+28 tests logic+B0 then emits via "
+        "1405E94E0. Compare separate +48 path1405EDEC0 which lacks that test.",
+    ),
+    0x1405EDEC0: (
+        "AiShootingLogicNormal_FireBurstState48",
+        "STATIC exact FireBurst VT+48 dispatches1405E94E0 WITHOUT B0 test. "
+        "Logic+88 forwards here; concrete caller/reachability of that forwarder "
+        "is unresolved, not confirmed as an animation callback.",
+    ),
+    0x1405ECFD0: (
+        "AiShootingLogicNormal_ForwardToCurrentState48",
+        "STATIC exact logic+88 forwards current state+48. FireBurst target "
+        "1405EDEC0 bypasses B0. Concrete caller of +88 remains unresolved; "
+        "do not assert runtime reachability or admit suppression from it alone.",
+    ),
+    0x1405E94E0: (
+        "AiShootingOwner_DispatchFire",
+        "STATIC resolves local owner weak handle then invokes NPC+FE0 or "
+        "other owner paths. Exact Pirate+FE0 data14294C9B0 is14041AAA0, "
+        "which reaches active ProcessWeapon+870. Not a packet serializer.",
+    ),
+    0x14041AAA0: (
+        "Npc_FireActiveWeapon",
+        "STATIC exact Pirate+FE0 target14294C9B0. Builds native FireParams "
+        "and calls active ProcessWeapon+870 at14041AF10. Actual fire-effect "
+        "frontier, not complete ownership, shot causality or typed results.",
+    ),
+    0x140542970: (
+        "ScriptNpc_SetLookAimModePointWs",
+        "STATIC DcNpcSetLookAimModePoint, npc-script-funcs.cpp818. Stack "
+        "descriptor VT142968888 with Vec4+10 enters Npc_SetLookAimMode140435630 "
+        "at140542AD7, Script layer3/duration-1. Need ScriptSkill exclusion/"
+        "priority cleanup; representation alone does not admit replica control.",
+    ),
+    0x1405CD2F0: (
+        "LookAimPointWs_CloneTo",
+        "STATIC exact descriptor VT142968888+38. Copies only vtable and "
+        "Vec4+10 into owned destination; no retained pointer to caller stack "
+        "or foreign actor. Independent vector caller140542C87 agrees.",
+    ),
+    0x140473D30: (
+        "BehaviorMoveTo_SubmitCurrentGoal",
+        "STATIC plain/AP/spline branches; only plain MoveTo calls "
+        "NavCharacter_RequestMoveToLocation141DE4D20 at140474089. Do not "
+        "represent traversal/AP/spline actions as ordinary point goals.",
+    ),
+    0x141E156C0: (
+        "NavCommand_CopyValueFields",
+        "STATIC copies accepted command to NavStateMachine+80 at141E1564E "
+        "(extent94h); fields/ID/status/time, not a retained input stack pointer. "
+        "Point conversion141E15131 precedes this and alone is not acceptance.",
+    ),
+    0x141DF21C0: (
+        "NavLocation_GetPointWs",
+        "STATIC resolves native NavLocation to PointWs; existing AddCommand "
+        "call141E15131 returns141E15136 under acquired nav scope. Observe "
+        "that owned value, not extra worker queries or acceptance inferred early.",
+    ),
+    0x141DF3750: (
+        "NavLocation_IsValid",
+        "STATIC accepts resolved NavLocation types1/2 only. Zero-mode/raw "
+        "world-point bytes are not a valid shortcut to a native MoveTo goal.",
+    ),
+    0x141DF0170: (
+        "NavCharacter_BuildNavLocationFromPointWs",
+        "STATIC four arguments actor/output48B/PointWs/mode. Loads actor+15B8 "
+        "radius+1C8 into XMM3, then141DF2D60. No direct code caller found. "
+        "Builder can query/allocate/wait; requires proved same-fiber nav scope.",
+    ),
+    0x141E1CDE0: (
+        "NavStateMachine_BuildMovementQueryFromCommand",
+        "STATIC copies command motion-type/subcategory into query+60/+64; "
+        "+2C strafe0/1 explicit, -1 inherits receiver actor layers1898..1900. "
+        "Fixed scalar replica profile must reject inheritance/unhandled fields.",
+    ),
+    0x1406A6480: (
+        "MeleeSkillCoordinate_SubmitMoveGoal",
+        "STATIC MeleeSkill::Coordinate producer of48B MoveParams: radius0.5 "
+        "at1406A6666, optional melee subcategory, bool strafe, motion type. "
+        "One field-defined representation, not proof all campaign goals use it.",
+    ),
+    0x1406A67B0: (
+        "MeleeSkillCoordinate_Evaluate",
+        "STATIC exact MeleeSkill::Coordinate VT142979980+28, NOT generic "
+        "locomotion. Calls1406A6480. Constructors1406A7550/75B0 independently "
+        "establish state VT/context; do not suppress all melee on this evidence.",
+    ),
+    0x1406A7550: (
+        "MeleeSkillCoordinate_CreateState",
+        "STATIC allocates64B/align16, installs VT142979980 at1406A7592 and "
+        "context+10; exact state+28 is1406A67B0.",
+    ),
+    0x1406A75B0: (
+        "MeleeSkillCoordinate_ConstructInPlace",
+        "STATIC in-place MeleeSkill::Coordinate constructor installs "
+        "VT142979980/context and initial fields; corroborates exact Eval slot.",
+    ),
+    0x1404AC920: (
+        "Pirate_UpdateNpcRuntimeAndCallbacks",
+        "STATIC exact Pirate+D20 data14294C6F0. HumanActive1404A0660 via "
+        "NpcActive14042D120 enters D20 at14042D7A0 (other branchD235). "
+        "Calls14049F000 ->14041DA30 ->1403D0E70 ->141DE8820; preserve stock once.",
+    ),
+    0x141DE8820: (
+        "NavCharacter_UpdateNavigationAndControllers",
+        "STATIC stock nav acquire call141DE8911 returns8916 on same fiber; "
+        "inner query precedent141DE89FF ->141DEA3D0 ->141C85470. Scope ends "
+        "8ABE/8AF8 BEFORE NavStateMachine_Update call8CB1. D20 entry is too "
+        "early:1403D0E70 closes Havok bracket1403D0FBF before this tail call.",
+    ),
+    0x1415BF460: (
+        "JlsLock_TryAcquireRecursiveReadLock",
+        "STATIC checks FLS[index*16], increments count+8 and changes owner "
+        "when already held. FALSE when no same-fiber scope. MUTATING recursion "
+        "acquire, NOT read-only ownership probe. Nav uses index13 (D0/D8).",
+    ),
+    0x1415BF4E0: (
+        "JlsLock_ReleaseRecursiveReadLock",
+        "STATIC JlsLock_ReleaseReadLock assertion, atomic-lock-priv.h38. "
+        "Decrements FLS[index*16+8], clears outer slot at zero and tells caller "
+        "whether recursive scope remains. Balance every successful acquire.",
+    ),
     # --- 2026-10-25: campaign world authority, not Online-mode activation ---
     0x1417F8B00: (
         "EventQueue_Post",
@@ -9988,24 +10177,12 @@ FUNCTIONS = {
         "from owner+0x80 into owner+0x120..+0x1B0, refreshes owner time fields "
         "+0x228/+0x218, and marks publication flags.",
     ),
-    0x141E1A000: (
-        "UpdateOwnerMovementStateMachineAndPublishCurrentDescriptor",
-        "Broader owner-side movement-state update loop above 0x141E1BA20 and "
-        "0x141E1A040. First runs the large queued-entry chooser "
-        "0x141E1BA20, then dispatches owner+0x80 through 0x141E15C80 or "
-        "0x141E158B0 when needed, mirrors the resolved descriptor into "
-        "owner+0x120..+0x1B0, refreshes owner+0x228/+0x218, advances state "
-        "flags under +0x468/+0x472, and handles several follow-up cases such "
-        "as disappeared traversal action-packs and reserved-action-pack "
-        "cleanup. This currently looks like the strongest ordinary-Chloe "
-        "movement-state loop above the prepared setter 0x141E14890.",
-    ),
     0x141E19F90: (
-        "NavStateMachineUpdateBool",
-        "Real function start for NavStateMachine::Update(bool). Owns the broad "
-        "movement-state update loop whose internal label at 0x141E1A000 runs "
-        "0x141E1BA20, dispatches owner+0x80, and then continues into "
-        "0x141E1AA20 and other moving/action-pack follow-up work.",
+        "NavStateMachine_Update",
+        "STATIC real entry NavStateMachine::Update(bool), native caller "
+        "141DE8CB1. Nav scope141DE8911 has already ended8ABE/8AF8 before "
+        "this call. Interior141E1A000 is NOT another function/ownership scope. "
+        "Advances queued commands/path/AP state via141E1BA20/141E1AA20.",
     ),
     0x141E1AA20: (
         "ProcessPathFindResultsAndSwitchPreparedMovementState",
@@ -10888,9 +11065,11 @@ FUNCTIONS = {
         "the deeper actor-bound runtime setup path.",
     ),
     0x14041F1A0: (
-        "RefreshOrSelectCurrentStateObject_1FF0",
-        "Npc/Player skill think selector. Scans skill candidates; installs current "
-        "Skill* at owner+0x1FF0; logs Entering/Exiting skill; calls Clear on failure.",
+        "Npc_SelectOrExitCurrentSkill",
+        "STATIC sole call1404201E7: RCX=actor, EDX=BL eligibility, tests DL at "
+        "14041F1F0. NOT a think-frame flag. False path clears current skill; "
+        "ScriptSkill copies pending loco2470->2620 at41F2F4, so forcing false "
+        "can abort authored behavior. Exact CombatSkill+40 only requests exit.",
     ),
     0x140664690: (
         "Skill_IsAuthorityForRootTransform",
@@ -11374,18 +11553,19 @@ FUNCTIONS = {
         "actor state, and marks companion/runtime bits after install.",
     ),
     0x141DE4D20: (
-        "ApplyPreparedNavCharacterStateRecordThroughNestedControlSink",
-        "Copies a compact prepared state block into owner+nested-control state, "
-        "writes owner+0x1748 from the record mode id, then forwards the payload "
-        "into 0x141E15030 through owner+0x15C0.",
+        "NavCharacter_RequestMoveToLocation",
+        "STATIC three arguments RCX=actor/RDX=48B NavLocation/R8=48B "
+        "MoveParams. Writes actor+1748 from params+18; constructs kind2 "
+        "command with params+10/location+40 and submits through actor+15C0. "
+        "Not a prepared root-transform setter or raw wire format.",
     ),
     0x141E15030: (
-        "ConsumePreparedNavCharacterStateRecordAndRefreshNestedControl",
-        "Heavy nested-control sink for prepared NavCharacter state records. "
-        "Validates owner actor identity, compares the incoming record against "
-        "current control state, updates owner+0x110/+0x120 live transforms, "
-        "rebuilds control deltas, emits NavMesh-tagged diagnostics, and commits "
-        "accepted state into owner-side nested-control storage.",
+        "NavStateMachine_AddCommand",
+        "STATIC Received command MoveTo/StopAndStand/AP/Spline strings. "
+        "Acquires nav scope150AE, gets owned PointWs via141DF21C0@15131; "
+        "conversion alone is not accepted. Accepted command copy141E156C0 "
+        "at1564E writes SM+80, ID+1C0/status+208/time+220. No retained caller "
+        "stack pointer; do not observe unaccepted converted goals as actions.",
     ),
     0x1410F1910: (
         "SpawnPlayerFromRetainedDescriptor",
@@ -15850,10 +16030,11 @@ FUNCTIONS = {
     ),
     0x141519B20: (
         "ProcessWeapon_MaterializeProjectileJob",
-        "Worker callback installed by ProcessWeapon_SpawnProjectile at "
-        "0x141519C44. Materializes the selector packet and writes the optional "
-        "Process output pointer; nested projectile and Tracer Init execute on this "
-        "worker thread.",
+        "STATIC worker callback141519C44: payload is TWO QWORD references "
+        "{original SpawnInfo*, output Process**}, not a copied SpawnInfo. Parent "
+        "141519B50 submits its aligned stack payload and waits before return. "
+        "Synchronous Init may hit before output. ShotId propagation needs "
+        "collision/lifetime-aware causal scope; thread_local/direction alone fails.",
     ),
     0x1415B5300: (
         "Ndjob_WaitForCounter",
@@ -16403,6 +16584,46 @@ FUNCTIONS = {
 
 # Data/global names (set via ida_name on data addresses).
 DATA_NAMES = {
+    0x142974D78: (
+        "vtbl_CombatSkill",
+        "STATIC exact CombatSkill: +28 Evaluate14066E9D0/+38 OnExit14066EB00/"
+        "+40 RequestExit14066EAF0. Ordered exit does not stop actor+1FF8 shooting.",
+    ),
+    0x142974E88: (
+        "vtbl_CombatSkill_Open",
+        "STATIC CombatSkill::Open state; +18 OnExit140670960 stops current "
+        "behavior+68 before clearing. Dynamic child closure remains unresolved.",
+    ),
+    0x14292C6B0: (
+        "vtbl_AiShootingLogicNormal",
+        "STATIC campaign actor+1FF8 helper ctor1403BE200: +18 Update1405ECDA0, "
+        "+68 RequestFire1405ECED0/+70 Clear1405ECF90/+88 ForwardState481405ECFD0.",
+    ),
+    0x14296ACB0: (
+        "vtbl_AiShootingLogicNormal_FireBurst",
+        "STATIC +28 Update1405EDC70 tests B0; +48 callback1405EDEC0 does not. "
+        "Concrete caller/reachability of logic+88 still unresolved.",
+    ),
+    0x142968888: (
+        "vtbl_LookAimMode_PointWs",
+        "STATIC PointWs descriptor, Vec4+10; +38 CloneTo1405CD2F0 copies "
+        "owned values. Script producer140542970 uses Script layer3/duration-1.",
+    ),
+    0x142979980: (
+        "vtbl_MeleeSkill_Coordinate",
+        "STATIC ctor1406A7550/75B0, +28 Evaluate1406A67B0 -> goal producer "
+        "1406A6480. Exact melee state, not generic campaign locomotion.",
+    ),
+    0x14294C6F0: (
+        "vt_Pirate_D20_UpdateNpcRuntimeAndCallbacks",
+        "STATIC Pirate+D20 ->1404AC920. HumanActive/NpcActive callers; keep "
+        "native stock update once. Entry precedes actual nav query scope.",
+    ),
+    0x14294C9B0: (
+        "vt_Pirate_FE0_FireActiveWeapon",
+        "STATIC Pirate+FE0 ->14041AAA0, reached by shooting owner dispatcher "
+        "1405E94E0; downstream active ProcessWeapon+870 at14041AF10.",
+    ),
     0x143D46440: (
         "g_HumanActiveStateDescriptor",
         "STATIC Human/Active descriptor requested by1404A0730; factory "
@@ -17041,6 +17262,27 @@ DATA_NAMES = {
 
 
 INSTRUCTION_COMMENTS = {
+    0x1404201E7: (
+        "STATIC Npc_SelectOrExitCurrentSkill: RCX=actor, EDX=BL eligibility. "
+        "False means ordered exit (including ScriptSkill loco cleanup), NOT "
+        "skip thinking while safely preserving current skill/controller state."
+    ),
+    0x141DE8916: (
+        "STATIC return from native nav acquisition141DE8911, SAME fiber, after "
+        "parent Havok bracket closed. Candidate goal-build phase only while "
+        "this actual stock scope exists; no mod lock over query/wait, no cached "
+        "actor/nav pointer across query. Scope ends before8CB1 NavSMUpdate."
+    ),
+    0x141E15136: (
+        "STATIC existing NavLocation_GetPointWs return: owned command goal "
+        "under nav scope. Conversion is NOT command acceptance; correlate to "
+        "accepted copy141E1564E/ID+1C0 before publishing an authoritative action."
+    ),
+    0x141E1564E: (
+        "STATIC accepted command value copy141E156C0 into SM+80, extent94h; "
+        "ID+1C0/status+208/time+220. No retained original input stack pointer. "
+        "Only admitted scalar plain-MoveTo profile can become a wire action."
+    ),
     0x14040AA3D: (
         "STATIC exact7B indirect CALL [r10+D00], return14040AA44. RCX is the "
         "CURRENT CharacterApplyAttackInfo victim; exact Pirate14294B9D0+D00 "
@@ -17455,6 +17697,8 @@ def apply_labels():
     ida_name.set_name(0x141273B20, "", ida_name.SN_NOWARN)
     # Old NPC helper label was placed 0x50 bytes inside the true runtime update.
     ida_name.set_name(0x14041FA90, "", ida_name.SN_NOWARN)
+    # Old movement loop name was on an interior block of NavStateMachine_Update.
+    ida_name.set_name(0x141E1A000, "", ida_name.SN_NOWARN)
     # Auto-analysis coalesces the adjacent SkelTable bucket-count DWORD and
     # initialized byte into one wider item. Split them so both confirmed
     # lifecycle fields can carry independent names and comments.

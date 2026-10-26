@@ -24,7 +24,7 @@ $failures = @()
 # Signal every available target before waiting for ANY acknowledgement. One
 # stalled copy must not prevent the other copy from receiving its stop request.
 foreach ($targetId in ($ProcessIds | Select-Object -Unique)) {
-    $handle = $request = $ack = [IntPtr]::Zero
+    $handle = $request = $ack = $controlAck = [IntPtr]::Zero
     $retained = $false
     try {
         $process = Get-Process -Id $targetId
@@ -43,8 +43,17 @@ foreach ($targetId in ($ProcessIds | Select-Object -Unique)) {
         $request = [EnemyRootChannelControl]::OpenEvent($requestRights, $false, $name)
         $ack = [EnemyRootChannelControl]::OpenEvent(0x100000, $false, "${name}_ACK")
         if ($request -eq [IntPtr]::Zero -or $ack -eq [IntPtr]::Zero) { throw 'Runtime stop events unavailable; no fallback memory write' }
+        $controlAck = [EnemyRootChannelControl]::OpenEvent(0x100000, $false, "${name}_CONTROL_CLOSED")
+        if ($controlAck -eq [IntPtr]::Zero) {
+            $controlError = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+            # Older images have only the native-writer ACK. Access failure is
+            # not evidence that a new image lacks the control-close contract.
+            if ($controlError -ne 2) { throw "Cannot inspect control-close event (error=$controlError)" }
+        }
+        # Signal even when the native ACK is already set: a frozen values-only
+        # control transport can outlive the stopped root writer in ENC2 v2.
         if (-not $InspectOnly -and -not [EnemyRootChannelControl]::SetEvent($request)) { throw 'Stop request failed' }
-        $pending += [pscustomobject]@{ Id = $targetId; Process = $handle; Request = $request; Ack = $ack }
+        $pending += [pscustomobject]@{ Id = $targetId; Process = $handle; Request = $request; Ack = $ack; ControlAck = $controlAck }
         $retained = $true
     } catch {
         $failures += "PID=${targetId}: $($_.Exception.Message)"
@@ -52,6 +61,7 @@ foreach ($targetId in ($ProcessIds | Select-Object -Unique)) {
         if (-not $retained) {
             if ($request -ne [IntPtr]::Zero) { [void][EnemyRootChannelControl]::CloseHandle($request) }
             if ($ack -ne [IntPtr]::Zero) { [void][EnemyRootChannelControl]::CloseHandle($ack) }
+            if ($controlAck -ne [IntPtr]::Zero) { [void][EnemyRootChannelControl]::CloseHandle($controlAck) }
             if ($handle -ne [IntPtr]::Zero) { [void][EnemyRootChannelControl]::CloseHandle($handle) }
         }
     }
@@ -61,13 +71,23 @@ foreach ($target in $pending) {
         $waitMs = if ($InspectOnly) { 0 } else { 5000 }
         $state = [EnemyRootChannelControl]::WaitForSingleObject($target.Ack, $waitMs)
         if ($state -ne 0 -and $state -ne 258) { throw 'Acknowledgement wait failed' }
-        Write-Output "PID=$($target.Id) inspectOnly=$InspectOnly stoppedAndQuiescent=$($state -eq 0)"
+        $controlSupported = $target.ControlAck -ne [IntPtr]::Zero
+        $controlState = if ($controlSupported) {
+            [EnemyRootChannelControl]::WaitForSingleObject($target.ControlAck, $waitMs)
+        } else { 258 }
+        if ($controlState -ne 0 -and $controlState -ne 258) { throw 'Control-close acknowledgement wait failed' }
+        $controlClosed = if ($controlSupported) { [string]($controlState -eq 0) } else { 'unsupported-old-image' }
+        Write-Output "PID=$($target.Id) inspectOnly=$InspectOnly stoppedAndQuiescent=$($state -eq 0) nativeOnly=True controlClosed=$controlClosed"
         if (-not $InspectOnly -and $state -ne 0) { throw 'Stop requested but not yet acknowledged; do not assume the writer is quiescent' }
+        if (-not $InspectOnly -and $controlSupported -and $controlState -ne 0) {
+            throw 'Native writer is quiescent but control socket has not acknowledged closure'
+        }
     } catch {
         $failures += "PID=$($target.Id): $($_.Exception.Message)"
     } finally {
         [void][EnemyRootChannelControl]::CloseHandle($target.Request)
         [void][EnemyRootChannelControl]::CloseHandle($target.Ack)
+        if ($target.ControlAck -ne [IntPtr]::Zero) { [void][EnemyRootChannelControl]::CloseHandle($target.ControlAck) }
         [void][EnemyRootChannelControl]::CloseHandle($target.Process)
     }
 }

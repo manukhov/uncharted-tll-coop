@@ -14,7 +14,45 @@ Full campaign co-op between two game copies. Current user-directed order:
   full shots/B damage authority remains separate. No rawHP/AI-pause fallback.
 - Complete combat authority and remaining player/appearance work separately.
 
-## P0 CURRENT: Enemy positions after confirmed Player sync (2026-10-24)
+## P0 CURRENT: authoritative shared world after Player sync (2026-10-26)
+
+SOURCE-ONLY progress, NOT gameplay success: ENC2v2 frozen numeric control book
+continues initial-life event receipts/reports after root admission stops. Native
+HumanDead result, storage receipt and refusal are separate; no write rearm.
+CONTROL_CLOSED is separate from native stop ACK. Objectcompile/wire-shape and
+isolated named-event checks PASS; no newDLLlinked/game. Last0C0E still rejected.
+Initial<=32 once/world only; no dynamic lives/recovery/full combat implemented.
+
+NEXT NATIVE IMPLEMENTATION GATES (see detailed STATIC2026-10-26 registry):
+
+1. Resolve BehaviorOpen dynamic child+68 from exit140476610 and actual callers
+   of shooting logic+88/1405ECFD0. Selector41F1A0 false means EXIT, not thinkskip;
+   CombatSkill+38/14066EB00 does not stop independent shootingFSM1405ECDA0.
+   Do not enable generic selector/AI/manager skip or ClearB0-only ownership.
+2. Typed A action stream + B apply TOGETHER with scoped ownership. Proven
+   plainMoveTo141DE4D20 ->AddCommand141E15030 accepted-copy1564E owns values;
+   earlyPointWs15136 is not acceptance. Strict field-defined48B params profile
+   in COOP_STATUS; AP/spline/facing/subcategory/inheritedstrafe unsupported.
+   PointWs lookaim140542970 clones Vec4 via1405CD2F0 but needs Script priority
+   exclusion/cleanup. No raw native bytes/pointers on wire, no worker nativecall.
+3. Candidate builder phase after actual nav acquire141DE8911/return8916 on
+   SAME fiber; NOT D20 entry or NavSMUpdate8CB1 (scope already ended8ABE/8AF8).
+   No mod lock over native query/wait, no cached actor/navptr across query;
+   fresh native self/world/weak after. JLS1415BF460 mutates recursive scope,
+   not ownership probe. Preserve stock callbacks/physics/animation once.
+4. VALUE baseline at atomic journal cut S, ACK then deltas>S. Multi-frame native
+   census is not atomic snapshot. Observe dynamic lives at native publish;
+   owner-aware B creation or typedMissingLife refusal, never guessed spawn.
+   Bounded overflow ->resnapshot-required, NOT resetstopped/rearm/largerarray.
+5. ShotId causality before synchronousInit/worker hits:141519B20 job contains
+   original SpawnInfo*/Process** references, parentwaits. Pointercollision/
+   lifetime-safe causal scope and typed consequences remain unimplemented.
+
+No integrated native ownership/recovery test earned yet. Do not relink/relaunch
+the old root-only exam as full-world progress. SoleIDB saved2195functions/
+110data/3types, saveTrue; MCP readbackPASS. PreservePlayer/menu/Nadine removal.
+
+## Previous enemy-position handoffs (historical, superseded)
 
 SUPERSEDING FULL-WORLD HANDOFF2026-10-25: latest0C0E is USER-REJECTED overall.
 A nativeDead/events5, B deathReceived0/attempt0 aftercensusStop1/apply1743;
@@ -35,11 +73,11 @@ Exactworld/life/shot/child/eventIDs, snapshotbaseline+journal, nativeowner-aware
 spawn/despawn and typed world objects are REQUIRED, notimplemented. Preserve
 Player sync/menu safeguards/appearancePARKED. No claim fullworld solved.
 
-CURRENT12:39MSK: source5c24a0c fresh0C0EB1B6...build/linkPASS, A11680/B22172
+HISTORICAL12:39MSK (REJECTED): source5c24a0c fresh0C0EB1B6...build/linkPASS, A11680/B22172
 launchedRoot+Combat. BothfullCOOP-BOOT missing000/event1; initialworldEpoch0/
 livesReady0/observer0/apply0 beforeload. reports/enemy-relocation-death-20261025093911Z
 exactDLL/PDB+launch+bootlogs; userSAMEenemycheckpoint and ONEpromptA/ChloeINSAS
-kill, Bnoshooting within30s effectslice. Visibledeath/stableroots PENDING. Old
+kill, Bnoshooting within30s effectslice. LateruserREJECTED; notpending. Old
 A270pair agentclosedintentionally afterexactidentitycheck+archive. Newfixsameweak/
 gen/fullKey addressrefresh+revision only, notdeclaredcauseofoldrun/successyet.
 No fullshots/Bauthority, no unchangedretry/rearm/limitraise.

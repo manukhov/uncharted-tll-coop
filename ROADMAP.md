@@ -1,6 +1,6 @@
 # Shared-world co-op roadmap
 
-Updated 2026-10-25. Implementation direction, NOT a list of working features.
+Updated 2026-10-26. Implementation direction, NOT a list of working features.
 Addresses/findings: `COOP_STATUS.md`. Immediate work: `TASK_POOL.md`.
 
 ## P0: one shared campaign world
@@ -31,8 +31,9 @@ movement prediction does not authorize a second enemy/damage/script simulation.
    new waves and dynamic native owners, not only the first32 lives. Missing rows
    and HP0 are not inferred deaths. Delayed loading needs a current baseline,
    not stale root replay or a larger teleport threshold.
-2. **Reliable journal:** world/life/event/revision/causal-action IDs; ACK only
-   after native commit. Explicit snapshot-to-journal cutover. Root samples may
+2. **Reliable journal:** world/life/event/revision/causal-action IDs; commit ACK
+   only after native commit, separate from storage receipts/refusals. Explicit
+   snapshot-to-journal cutover. Root samples may
    drop; critical gameplay events must not disappear with a deferred root census.
    Safety refusal must be explicit, not apparent full-world readiness.
 3. **Campaign replica control:** replace B decisions with A action inputs before
@@ -54,6 +55,25 @@ movement prediction does not authorize a second enemy/damage/script simulation.
    world changes. No stale pointers, reset stopped flags or resurrected write
    admissions. Resnapshot/rejoin must be designed native transitions.
 
+## Implemented foundation / current limits (2026-10-26)
+
+SOURCE ONLY: ENC2v2 keeps frozen numeric initial-life event delivery/reporting
+separate from stopped native root admission. Storage receipt, native HumanDead
+result and typed refusal are distinct. Dedicated socket-closed ACK is separate
+from native-work quiescence. This does NOT authorize writes after stop or make
+B enemies die. Object compile/packet shapes/isolated event API checks passed;
+no new DLL linked, game launched or visible behavior validated.
+
+Still <=32 initial lives/once-world/one death per life; no dynamic baseline,
+journal, resnapshot, action stream or one-authority combat yet. Both ENC2 peers
+must use v2. READY/binding/receipt counters are not full-world readiness.
+
+Baseline design: canonical owned VALUE model at atomic journal cut S; baseline
+ACK precedes deltas>S. A multi-frame live census is not an atomic snapshot.
+Native publication supplies dynamic generations; B needs owner-aware create or
+typed MissingLife refusal. Bounded overflow requires an explicit resnapshot
+transition, never clearing absorbing native stops or merely enlarging32 rows.
+
 ## Evidence and immediate native gates
 
 - `14027A270 PublishAttackEventToTarget` is campaign-reachable; regular bullets
@@ -62,6 +82,15 @@ movement prediction does not authorize a second enemy/damage/script simulation.
 - Skill selection `1404201E7 -> 14041F1A0`, current Skill execution `+28` at
   `14041CBD4`, and ordered OnExit `+38` are ownership boundaries to investigate.
   The surrounding helper/lookaim/animation update must remain active.
+- Selector eligibility=false performs ordered EXIT, including ScriptSkill
+  cleanup, not a safe think skip. CombatSkill OnExit `14066EB00` does not stop
+  independent shooting FSM `1405ECDA0`, which runs before the selector. Nested
+  BehaviorOpen child cleanup and separate fire callback ownership are unresolved.
+- Plain MoveTo `141DE4D20 ->141E15030` owns value fields at accepted copy
+  `141E1564E`; early PointWs conversion is not acceptance. Restricted params
+  profile/PointWs aim descriptor are resolved, not yet integrated replica input.
+  Native nav-query phase is after actual acquire `141DE8911` on the same fiber,
+  not D20 entry or later NavSMUpdate. Full contracts are in COOP_STATUS.md.
 - NPC virtual `+E48` returns actor `+15A0`. Campaign ctor zeros it; generator/
   `net-anim-layer` construction is multiplayer-only. NetSkill is authored29-only.
   No safe campaign replica toggle is established; custom campaign action inputs
